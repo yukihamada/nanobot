@@ -1,60 +1,77 @@
 # nanobot
 
-AI Agent Platform — Deploy intelligent AI agents to LINE and Telegram in minutes.
+AIエージェントプラットフォーム — LINE・TelegramにAIボットを数分でデプロイ。
 
-**Live:** [https://chatweb.ai](https://chatweb.ai)
+**サイト:** [https://chatweb.ai](https://chatweb.ai)
+**API:** [https://api.chatweb.ai](https://api.chatweb.ai)
 
-## Features
+## 特徴
 
-- **Multi-Model** — GPT-4o, Claude, Gemini. Switch anytime.
-- **Multi-Channel** — LINE, Telegram, REST API
-- **Serverless** — Rust on AWS Lambda. Sub-second cold starts.
-- **Persistent Memory** — Context across conversations
-- **Freemium** — Start free, scale as you grow
+- **マルチモデル** — GPT-4o, Claude, Gemini を切り替え可能
+- **マルチチャネル** — LINE, Telegram, REST API
+- **サーバーレス** — Rust製、AWS Lambda / Fly.io 対応
+- **会話メモリ** — セッションを跨いで文脈を記憶
+- **無料プラン** — 登録不要ですぐに使える
 
-## Quick Start
+## クイックスタート
 
 ```bash
-# Chat via API
+# APIでチャット
 curl -X POST https://api.chatweb.ai/api/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello!", "session_id": "user-123"}'
+  -d '{"message": "こんにちは"}'
 ```
 
-## Architecture
+## アーキテクチャ
 
 ```
-LINE / Telegram / API
+LINE / Telegram / Web
         │
-   API Gateway
+   API Gateway or Fly.io
         │
-   AWS Lambda (Rust, ARM64)
+   Rust バイナリ (ARM64)
         │
-   DynamoDB (sessions, memory, config)
+   DynamoDB (セッション・メモリ)
 ```
 
-## Deploy
+## デプロイ
+
+### AWS Lambda
 
 ```bash
-# Prerequisites
 brew install aws-sam-cli zig
 cargo install cargo-zigbuild
 rustup target add aarch64-unknown-linux-gnu
 
-# Deploy
-./infra/deploy.sh
-
-# Set up webhooks
-./infra/setup-webhook.sh
+./infra/deploy.sh           # ビルド＆デプロイ
+./infra/setup-webhook.sh    # Webhook設定
 ```
 
-## Development
+### Fly.io
 
 ```bash
-cargo test -p nanobot-core
-cargo run  # local server on :3000
+fly launch --no-deploy
+fly deploy
 ```
 
-## License
+## 開発
+
+```bash
+cargo test -p nanobot-core  # テスト実行
+cargo run                   # ローカルサーバー (:3000)
+```
+
+## ディレクトリ構成
+
+```
+crates/
+  nanobot-core/    # コアライブラリ（チャネル, AI, セッション）
+  nanobot-lambda/  # AWS Lambda ハンドラー
+infra/             # SAMテンプレート, デプロイスクリプト
+web/               # フロントエンド (SPA)
+src/               # ローカルサーバー
+```
+
+## ライセンス
 
 MIT
