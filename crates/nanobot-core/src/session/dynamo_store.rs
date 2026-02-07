@@ -26,14 +26,13 @@ impl DynamoSessionStore {
     }
 
     fn load_from_dynamo(&self, key: &str) -> Option<Session> {
-        // Use blocking runtime to call async from sync context
         let rt = tokio::runtime::Handle::try_current().ok()?;
         let client = self.client.clone();
         let table = self.table_name.clone();
         let tenant = self.tenant_id.clone();
         let key = key.to_string();
 
-        let result = std::thread::scope(|_| {
+        std::thread::spawn(move || {
             rt.block_on(async {
                 let resp = client
                     .get_item()
@@ -57,9 +56,10 @@ impl DynamoSessionStore {
                     }
                 }
             })
-        });
-
-        result
+        })
+        .join()
+        .ok()
+        .flatten()
     }
 
     fn save_to_dynamo(&self, session: &Session) {
@@ -71,34 +71,23 @@ impl DynamoSessionStore {
         let client = self.client.clone();
         let table = self.table_name.clone();
         let tenant = self.tenant_id.clone();
-
+        let session_key = session.key.clone();
         let messages_json = serde_json::to_string(&session.messages).unwrap_or_default();
+        let created_at = session.created_at.to_rfc3339();
+        let updated_at = session.updated_at.to_rfc3339();
+        let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string();
 
-        let _ = std::thread::scope(|_| {
+        let _ = std::thread::spawn(move || {
             rt.block_on(async {
                 let result = client
                     .put_item()
                     .table_name(&table)
                     .item("tenant_id", AttributeValue::S(tenant))
-                    .item(
-                        "session_key",
-                        AttributeValue::S(session.key.clone()),
-                    )
+                    .item("session_key", AttributeValue::S(session_key))
                     .item("messages", AttributeValue::S(messages_json))
-                    .item(
-                        "created_at",
-                        AttributeValue::S(session.created_at.to_rfc3339()),
-                    )
-                    .item(
-                        "updated_at",
-                        AttributeValue::S(session.updated_at.to_rfc3339()),
-                    )
-                    .item(
-                        "ttl",
-                        AttributeValue::N(
-                            (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string(),
-                        ),
-                    )
+                    .item("created_at", AttributeValue::S(created_at))
+                    .item("updated_at", AttributeValue::S(updated_at))
+                    .item("ttl", AttributeValue::N(ttl))
                     .send()
                     .await;
 
@@ -106,7 +95,8 @@ impl DynamoSessionStore {
                     warn!("DynamoDB put_item error: {}", e);
                 }
             })
-        });
+        })
+        .join();
     }
 }
 
@@ -144,7 +134,7 @@ impl SessionStore for DynamoSessionStore {
         let tenant = self.tenant_id.clone();
         let key = key.to_string();
 
-        std::thread::scope(|_| {
+        std::thread::spawn(move || {
             rt.block_on(async {
                 client
                     .delete_item()
@@ -156,6 +146,8 @@ impl SessionStore for DynamoSessionStore {
                     .is_ok()
             })
         })
+        .join()
+        .unwrap_or(false)
     }
 
     fn list_sessions(&self) -> Vec<serde_json::Value> {
@@ -168,7 +160,7 @@ impl SessionStore for DynamoSessionStore {
         let table = self.table_name.clone();
         let tenant = self.tenant_id.clone();
 
-        std::thread::scope(|_| {
+        std::thread::spawn(move || {
             rt.block_on(async {
                 let resp = client
                     .query()
@@ -218,6 +210,8 @@ impl SessionStore for DynamoSessionStore {
                 }
             })
         })
+        .join()
+        .unwrap_or_default()
     }
 }
 

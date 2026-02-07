@@ -43,14 +43,13 @@ impl OpenAiCompatProvider {
 
     /// Normalize model name for the API (strip provider prefixes).
     fn normalize_model(&self, model: &str) -> String {
-        let m = model.to_string();
-        // Strip common prefixes like "openrouter/", "deepseek/", etc.
-        // OpenRouter expects the model name without prefix
-        if let Some(rest) = m.strip_prefix("openrouter/") {
-            rest.to_string()
-        } else {
-            m
+        // Strip common provider prefixes
+        for prefix in &["openrouter/", "openai/", "deepseek/", "groq/", "moonshot/"] {
+            if let Some(rest) = model.strip_prefix(prefix) {
+                return rest.to_string();
+            }
         }
+        model.to_string()
     }
 }
 

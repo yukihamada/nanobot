@@ -32,10 +32,7 @@ async fn main() -> Result<(), Error> {
 
     let session_store = DynamoSessionStore::new(dynamo_client, table_name, tenant_id);
 
-    let state = Arc::new(AppState {
-        config: cfg,
-        sessions: tokio::sync::Mutex::new(Box::new(session_store)),
-    });
+    let state = Arc::new(AppState::with_provider(cfg, Box::new(session_store)));
 
     let router = create_router(state);
 
