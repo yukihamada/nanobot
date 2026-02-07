@@ -150,7 +150,7 @@ async fn handle_link_command(
             let code: String = raw.chars().filter(|c| c.is_ascii_alphanumeric()).take(6).collect();
             let code = code.to_uppercase();
 
-            let ttl = (chrono::Utc::now().timestamp() + 300).to_string(); // 5 min
+            let ttl = (chrono::Utc::now().timestamp() + 1800).to_string(); // 30 min
 
             let result = dynamo
                 .put_item()
@@ -164,7 +164,7 @@ async fn handle_link_command(
 
             match result {
                 Ok(_) => LinkResult::CodeGenerated(
-                    format!("リンクコード: {}\n別のチャネル（LINE/Telegram/Web）で「/link {}」と送信してください。\n有効期限: 5分", code, code)
+                    format!("リンクコード: {}\n別のチャネル（LINE/Telegram/Web）で「/link {}」と送信してください。\n有効期限: 30分", code, code)
                 ),
                 Err(e) => {
                     tracing::error!("Failed to store link code: {}", e);
@@ -296,18 +296,111 @@ async fn handle_link_command(
 #[cfg(feature = "dynamodb-backend")]
 fn parse_link_command(text: &str) -> Option<Option<&str>> {
     let trimmed = text.trim();
+    // Exact "/link" command
     if trimmed == "/link" {
-        Some(None)
-    } else if let Some(rest) = trimmed.strip_prefix("/link ") {
+        return Some(None);
+    }
+    // "/link CODE" at the start
+    if let Some(rest) = trimmed.strip_prefix("/link ") {
         let code = rest.trim();
         if !code.is_empty() {
-            Some(Some(code))
-        } else {
-            Some(None)
+            // Extract just the 6-char code (first word)
+            let first_word = code.split_whitespace().next().unwrap_or(code);
+            return Some(Some(first_word));
         }
-    } else {
-        None
+        return Some(None);
     }
+    // Search for "/link XXXXXX" anywhere in the text (for copy-paste)
+    if let Some(pos) = trimmed.find("/link ") {
+        let after = &trimmed[pos + 6..];
+        let code = after.trim();
+        if !code.is_empty() {
+            let first_word = code.split_whitespace().next().unwrap_or(code);
+            // Only match if it looks like a 6-char alphanumeric code
+            if first_word.len() == 6 && first_word.chars().all(|c| c.is_ascii_alphanumeric()) {
+                return Some(Some(first_word));
+            }
+        }
+    }
+    None
+}
+
+/// Check if text looks like a web session ID (e.g. "api:xxxx-xxxx-...").
+/// Used for auto-linking when users send their session ID to LINE/Telegram.
+#[cfg(feature = "dynamodb-backend")]
+fn is_session_id(text: &str) -> bool {
+    let t = text.trim();
+    t.starts_with("api:") && t.len() > 10
+}
+
+/// Auto-link a channel to a web session ID.
+/// Creates LINK# records for both the channel_key and session_id,
+/// merging sessions under a unified user_id.
+#[cfg(feature = "dynamodb-backend")]
+async fn auto_link_session(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    channel_key: &str,
+    web_session_id: &str,
+    sessions: &Mutex<Box<dyn SessionStore>>,
+) -> String {
+    // Check if either side already has a unified user
+    let existing_ch = resolve_session_key(dynamo, config_table, channel_key).await;
+    let existing_web = resolve_session_key(dynamo, config_table, web_session_id).await;
+
+    let user_id = if existing_ch.starts_with("user:") {
+        existing_ch.clone()
+    } else if existing_web.starts_with("user:") {
+        existing_web.clone()
+    } else {
+        format!("user:{}", uuid::Uuid::new_v4())
+    };
+
+    let now = chrono::Utc::now().to_rfc3339();
+    for ck in [channel_key, web_session_id] {
+        let _ = dynamo
+            .put_item()
+            .table_name(config_table)
+            .item("pk", AttributeValue::S(format!("LINK#{}", ck)))
+            .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
+            .item("user_id", AttributeValue::S(user_id.clone()))
+            .item("linked_at", AttributeValue::S(now.clone()))
+            .send()
+            .await;
+    }
+
+    // Merge session histories
+    {
+        let mut store = sessions.lock().await;
+        let old_key_ch = if existing_ch.starts_with("user:") { existing_ch.clone() } else { channel_key.to_string() };
+        let old_key_web = if existing_web.starts_with("user:") { existing_web.clone() } else { web_session_id.to_string() };
+
+        let mut all_msgs: Vec<(String, String)> = Vec::new();
+        {
+            let session = store.get_or_create(&old_key_ch);
+            for m in &session.messages {
+                all_msgs.push((m.role.clone(), m.content.clone()));
+            }
+        }
+        if old_key_web != old_key_ch {
+            let session = store.get_or_create(&old_key_web);
+            for m in &session.messages {
+                all_msgs.push((m.role.clone(), m.content.clone()));
+            }
+        }
+        if !all_msgs.is_empty() {
+            let unified = store.get_or_create(&user_id);
+            if unified.messages.is_empty() {
+                for (role, content) in &all_msgs {
+                    unified.add_message(role, content);
+                }
+            }
+            store.save_by_key(&user_id);
+        }
+    }
+
+    info!("Auto-linked: {} <-> {} => {}", channel_key, web_session_id, user_id);
+    user_id
 }
 
 // ---------------------------------------------------------------------------
@@ -564,6 +657,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/status", get(handle_status))
         // Admin
         .route("/admin", get(handle_admin))
+        // Install script
+        .route("/install.sh", get(handle_install_sh))
         // Health
         .route("/health", get(handle_health))
         .layer(
@@ -895,7 +990,7 @@ async fn handle_line_webhook(
         // Handle follow event (friend added)
         if event.event_type == "follow" {
             if let Some(ref reply_token) = &event.reply_token {
-                let welcome = "友だち追加ありがとうございます！\n\nchatweb.ai へようこそ。何でも気軽に聞いてください。\n\n使い方:\n- 何でも質問OK\n- /link でWeb・Telegramと会話を同期\n\nhttps://chatweb.ai";
+                let welcome = "友だち追加ありがとうございます！\n\nchatweb.ai へようこそ。何でも気軽に聞いてください。\n\n使い方:\n- 何でも質問OK\n- /link でWeb・Telegramと会話を同期\n- WebのセッションIDを送信で自動連携\n\nhttps://chatweb.ai";
                 if let Err(e) = LineChannel::reply(&access_token, reply_token, welcome).await {
                     tracing::error!("Failed to send LINE welcome: {}", e);
                 }
@@ -913,6 +1008,20 @@ async fn handle_line_webhook(
                         .and_then(|s| s.user_id.as_deref())
                         .unwrap_or("unknown");
                     let channel_key = format!("line:{}", user_id);
+
+                    // Auto-link if user sends a web session ID
+                    #[cfg(feature = "dynamodb-backend")]
+                    if is_session_id(text) {
+                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                            let web_sid = text.trim();
+                            auto_link_session(dynamo, table, &channel_key, web_sid, &state.sessions).await;
+                            let reply = "連携完了！Webとの会話が同期されました。\nこれからどのチャネルでも同じ会話を続けられます。";
+                            if let Err(e) = LineChannel::reply(&access_token, reply_token, reply).await {
+                                tracing::error!("Failed to reply to LINE: {}", e);
+                            }
+                            continue;
+                        }
+                    }
 
                     // Resolve unified session key
                     let session_key = {
@@ -1065,14 +1174,54 @@ async fn handle_telegram_webhook(
     let chat_id = message.chat.id.to_string();
     let channel_key = format!("tg:{}", sender_id);
 
-    // Handle /start command (welcome message)
+    // Handle /start command (welcome or deep-link auto-link)
     if text.trim() == "/start" || text.starts_with("/start ") {
-        let welcome = "Welcome to chatweb.ai! 🤖\n\nI'm your AI assistant. Ask me anything!\n\nCommands:\n/link - Sync with Web & LINE\n/start - Show this message\n\nhttps://chatweb.ai";
+        // Check for deep-link payload: /start api_xxxx (Telegram replaces : with _)
+        let payload = text.strip_prefix("/start ").map(|s| s.trim()).unwrap_or("");
+        let web_session_id = if payload.starts_with("api_") {
+            // Telegram deep links can't contain ':', so we use '_' and convert back
+            Some(payload.replacen("api_", "api:", 1))
+        } else if payload.starts_with("api:") {
+            Some(payload.to_string())
+        } else {
+            None
+        };
+
+        if let Some(ref sid) = web_session_id {
+            // Auto-link via deep link
+            #[cfg(feature = "dynamodb-backend")]
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                auto_link_session(dynamo, table, &channel_key, sid, &state.sessions).await;
+                let reply = "Link complete! Your Web and Telegram conversations are now synced.\nYou can continue the same conversation on any channel.";
+                let client = reqwest::Client::new();
+                if let Err(e) = TelegramChannel::send_message_static(&client, token, &chat_id, reply).await {
+                    tracing::error!("Failed to send Telegram link reply: {}", e);
+                }
+                return StatusCode::OK;
+            }
+        }
+
+        let welcome = "Welcome to chatweb.ai!\n\nI'm your AI assistant. Ask me anything!\n\nCommands:\n/link - Sync with Web & LINE\n/start - Show this message\n\nTip: Send your Web session ID to auto-link.\n\nhttps://chatweb.ai";
         let client = reqwest::Client::new();
         if let Err(e) = TelegramChannel::send_message_static(&client, token, &chat_id, welcome).await {
             tracing::error!("Failed to send Telegram welcome: {}", e);
         }
         return StatusCode::OK;
+    }
+
+    // Auto-link if user sends a web session ID
+    #[cfg(feature = "dynamodb-backend")]
+    if is_session_id(text) {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let web_sid = text.trim();
+            auto_link_session(dynamo, table, &channel_key, web_sid, &state.sessions).await;
+            let reply = "Link complete! Your Web and Telegram conversations are now synced.";
+            let client = reqwest::Client::new();
+            if let Err(e) = TelegramChannel::send_message_static(&client, token, &chat_id, reply).await {
+                tracing::error!("Failed to send Telegram link reply: {}", e);
+            }
+            return StatusCode::OK;
+        }
     }
 
     // Resolve unified session key
@@ -1492,9 +1641,18 @@ async fn handle_integrations() -> impl IntoResponse {
     }))
 }
 
-/// GET / — Root landing page
-async fn handle_root() -> impl IntoResponse {
-    axum::response::Html(include_str!("../../../../web/index.html"))
+/// GET / — Root landing page (host-based routing)
+async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
+    let host = headers.get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    if host.starts_with("api.") {
+        // Serve API docs for api.chatweb.ai
+        axum::response::Html(include_str!("../../../../web/api-docs.html"))
+    } else {
+        axum::response::Html(include_str!("../../../../web/index.html"))
+    }
 }
 
 /// GET /pricing — Pricing page
@@ -1515,6 +1673,14 @@ async fn handle_status() -> impl IntoResponse {
 /// GET /admin — Admin dashboard
 async fn handle_admin() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/admin.html"))
+}
+
+/// GET /install.sh — CLI install script
+async fn handle_install_sh() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        include_str!("../../../../web/install.sh"),
+    )
 }
 
 /// GET /health — Health check

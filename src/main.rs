@@ -20,6 +20,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Chat with AI via chatweb.ai (no config needed)
+    Chat {
+        /// Message to send (or omit for interactive mode)
+        message: Vec<String>,
+        /// API endpoint
+        #[arg(long, default_value = "https://chatweb.ai/api/v1/chat")]
+        api: String,
+    },
     /// Initialize nanobot configuration and workspace
     Onboard,
     /// Interact with the agent directly
@@ -108,6 +116,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Chat { message, api } => cmd_chat(message, api).await?,
         Commands::Onboard => cmd_onboard()?,
         Commands::Agent { message, session } => cmd_agent(message, session).await?,
         Commands::Gateway { port, verbose, http, http_port } => cmd_gateway(port, verbose, http, http_port).await?,
@@ -131,6 +140,70 @@ async fn main() -> Result<()> {
 }
 
 // ====== Commands ======
+
+/// Chat with chatweb.ai API directly — no config or API key needed.
+async fn cmd_chat(message: Vec<String>, api_url: String) -> Result<()> {
+    // Generate or load session ID
+    let data_dir = config::get_data_dir();
+    std::fs::create_dir_all(&data_dir)?;
+    let session_file = data_dir.join("cli_session_id");
+    let session_id = if session_file.exists() {
+        std::fs::read_to_string(&session_file)?
+    } else {
+        let id = format!("cli:{}", uuid::Uuid::new_v4());
+        std::fs::write(&session_file, &id)?;
+        id
+    };
+
+    let client = reqwest::Client::new();
+
+    if message.is_empty() {
+        // Interactive mode
+        println!("{} chatweb.ai CLI (Ctrl+C to exit)\n", nanobot_core::LOGO);
+        loop {
+            use std::io::Write;
+            print!("You: ");
+            std::io::stdout().flush()?;
+
+            let mut input = String::new();
+            if std::io::stdin().read_line(&mut input)? == 0 {
+                break;
+            }
+            let input = input.trim();
+            if input.is_empty() {
+                continue;
+            }
+
+            match chat_api(&client, &api_url, input, &session_id).await {
+                Ok(resp) => println!("\n{} {}\n", nanobot_core::LOGO, resp),
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+    } else {
+        // Single message mode
+        let msg = message.join(" ");
+        match chat_api(&client, &api_url, &msg, &session_id).await {
+            Ok(resp) => println!("{}", resp),
+            Err(e) => eprintln!("Error: {}", e),
+        }
+    }
+
+    Ok(())
+}
+
+async fn chat_api(client: &reqwest::Client, api_url: &str, message: &str, session_id: &str) -> Result<String> {
+    let resp = client
+        .post(api_url)
+        .json(&serde_json::json!({
+            "message": message,
+            "session_id": session_id,
+        }))
+        .send()
+        .await?;
+
+    let body: serde_json::Value = resp.json().await?;
+    Ok(body["response"].as_str().unwrap_or("No response").to_string())
+}
 
 fn cmd_onboard() -> Result<()> {
     let config_path = config::get_config_path();

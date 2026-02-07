@@ -656,9 +656,11 @@
 </head>
 <body>
   <nav>
-    <div class="logo"><span>chat</span>web.ai</div>
+    <a href="/" class="logo" style="text-decoration:none"><span>chat</span>web.ai</a>
     <div class="nav-right">
       <a href="/pricing" id="nav-pricing">Pricing</a>
+      <a href="/status" id="nav-status">Status</a>
+      <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
       <div class="lang-sw">
         <button onclick="setLang('ja')" id="l-ja">JA</button>
         <button onclick="setLang('en')" id="l-en">EN</button>
@@ -693,6 +695,16 @@
         <div class="stat-value" id="stat-channels">3</div>
         <div class="stat-label" id="stat-channels-label">チャネル</div>
       </div>
+    </div>
+
+    <!-- CLI install -->
+    <div class="fade-up fade-up-d1" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;margin-bottom:20px;text-align:center;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;" id="t-cli-title">CLI</div>
+      <div style="background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:'SF Mono','Fira Code',monospace;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="navigator.clipboard.writeText('curl -fsSL https://chatweb.ai/install.sh | sh');this.querySelector('.cp').textContent='Copied!';setTimeout(()=>this.querySelector('.cp').textContent='Copy',1500)">
+        <span style="color:var(--muted);">$</span> <span style="flex:1;text-align:left;">curl -fsSL https://chatweb.ai/install.sh | sh</span>
+        <span class="cp" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;" id="t-cli-sub"></div>
     </div>
 
     <div class="trust-bar fade-up fade-up-d2">
@@ -740,13 +752,13 @@
       <div class="sync-steps" id="sync-steps">
         <div class="sync-step">
           <div class="step-number">1</div>
-          <div class="step-title" id="t-step1-title">コード生成</div>
-          <div class="step-desc" id="t-step1-desc">どのチャネルでも <code>/link</code> と送信</div>
+          <div class="step-title" id="t-step1-title">友だち追加</div>
+          <div class="step-desc" id="t-step1-desc">上のボタンからLINE/Telegramで友だち追加</div>
         </div>
         <div class="sync-step">
           <div class="step-number">2</div>
-          <div class="step-title" id="t-step2-title">別チャネルで入力</div>
-          <div class="step-desc" id="t-step2-desc"><code>/link ABC123</code> のようにコードを送信</div>
+          <div class="step-title" id="t-step2-title">IDで自動連携</div>
+          <div class="step-desc" id="t-step2-desc">ボタンを押すだけで自動連携されます</div>
         </div>
         <div class="sync-step">
           <div class="step-number">3</div>
@@ -754,17 +766,22 @@
           <div class="step-desc" id="t-step3-desc">全チャネルの会話が統合されます</div>
         </div>
       </div>
+      <div style="margin-top:16px;position:relative;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;" id="t-session-label">あなたのセッションID:</div>
+        <div id="session-id-display" style="font-family:'SF Mono','Fira Code',monospace;font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;display:inline-block;color:var(--accent-hover);word-break:break-all;" onclick="navigator.clipboard.writeText(this.textContent);this.style.opacity=0.5;setTimeout(()=>this.style.opacity=1,300)"></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;" id="t-session-hint">クリックでコピー。LINE/Telegramに貼り付けで連携</div>
+      </div>
     </div>
 
     <div class="channels fade-up fade-up-d4">
-      <button onclick="showModal('line')" class="ch-btn line">
+      <a id="line-link-btn" onclick="openChannelLink('line');return false;" href="#" class="ch-btn line">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#fff"/></svg>
         <span id="t-line">LINEで使う</span>
-      </button>
-      <button onclick="showModal('tg')" class="ch-btn tg">
+      </a>
+      <a id="tg-link-btn" onclick="openChannelLink('tg');return false;" href="#" class="ch-btn tg">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z" fill="#fff"/></svg>
         <span id="t-tg">Telegramで使う</span>
-      </button>
+      </a>
     </div>
 
     <div class="bottom-cta fade-up fade-up-d4">
@@ -789,6 +806,7 @@
 
   <footer>
     <a href="/pricing" id="footer-pricing">Pricing</a> &middot;
+    <a href="/status">Status</a> &middot;
     <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
     <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
     chatweb.ai &copy; 2025-2026
@@ -879,7 +897,7 @@
             + '<a href="' + tgDeepLink + '" target="_blank" class="dl-tg">Telegram</a>'
             + '</div>'
             + '<img class="link-qr-img" src="' + qrUrl + '" alt="QR" title="' + (l === 'ja' ? 'QRコードをスキャン' : 'Scan QR code') + '">'
-            + '<div style="margin-top:6px;color:var(--muted);font-size:11px;">' + (l === 'ja' ? '有効期限: 5分' : 'Expires in 5 min') + '</div>';
+            + '<div style="margin-top:6px;color:var(--muted);font-size:11px;">' + (l === 'ja' ? '有効期限: 30分' : 'Expires in 30 min') + '</div>';
           msgs.appendChild(d);
           msgs.scrollTop = msgs.scrollHeight;
           startPolling();
@@ -1072,15 +1090,17 @@
         welcome: 'こんにちは！何でもお任せください。下のカードから選ぶか、自由に入力してください。',
         line: 'LINEで使う', tg: 'Telegramで使う',
         ph: '何でも聞いてください...', send: '送信',
-        heroTry: '無料で試す', heroPlans: 'プランを見る', pricing: '料金',
+        heroTry: '無料で試す', heroPlans: 'プランを見る', pricing: '料金', status: 'ステータス',
         chatStatus: 'オンライン',
         statsUptime: '稼働率', statsSpeed: '平均応答', statsModels: 'AIモデル', statsChannels: 'チャネル',
         trustSsl: 'SSL暗号化', trustStripe: 'Stripe決済', trustNocard: 'カード不要で開始',
         syncTitle: 'どのチャネルでも同じ会話',
         syncDesc: 'Web・LINE・Telegramの会話をリンクして、どこからでも続きを。',
-        step1Title: 'コード生成', step1Desc: 'どのチャネルでも <code>/link</code> と送信',
-        step2Title: '別チャネルで入力', step2Desc: '<code>/link CODE</code> のようにコードを送信',
+        step1Title: '友だち追加', step1Desc: '上のボタンからLINE/Telegramで友だち追加',
+        step2Title: 'IDで自動連携', step2Desc: 'ボタンを押すだけで自動連携されます',
         step3Title: '同期完了', step3Desc: '全チャネルの会話が統合されます',
+        sessionLabel: 'あなたのセッションID:', sessionHint: 'クリックでコピー。LINE/Telegramに貼り付けで連携',
+        cliTitle: 'コマンドラインでも使える', cliSub: 'nanobot chat "こんにちは!" | macOS, Linux',
         bottomTitle: 'もっとパワフルに使いたい？',
         bottomSub: 'GPT-4o、Claude Sonnet、Claude Opusなど最先端モデルを月額$9から。',
         bottomCta: 'プランを比較する',
@@ -1092,15 +1112,17 @@
         welcome: 'Hi! Pick a task below or type anything you need.',
         line: 'Use on LINE', tg: 'Use on Telegram',
         ph: 'Ask me anything...', send: 'Send',
-        heroTry: 'Try Free', heroPlans: 'View Plans', pricing: 'Pricing',
+        heroTry: 'Try Free', heroPlans: 'View Plans', pricing: 'Pricing', status: 'Status',
         chatStatus: 'Online',
         statsUptime: 'Uptime', statsSpeed: 'Avg Response', statsModels: 'AI Models', statsChannels: 'Channels',
         trustSsl: 'SSL Encrypted', trustStripe: 'Stripe Payments', trustNocard: 'No card required',
         syncTitle: 'Same conversation, any channel',
         syncDesc: 'Link your Web, LINE, and Telegram chats. Continue from anywhere.',
-        step1Title: 'Generate code', step1Desc: 'Type <code>/link</code> in any channel',
-        step2Title: 'Enter on another', step2Desc: 'Send <code>/link CODE</code> on the other channel',
+        step1Title: 'Add friend', step1Desc: 'Tap LINE/Telegram buttons above',
+        step2Title: 'Auto-link', step2Desc: 'Just tap the button to auto-link',
         step3Title: 'Synced!', step3Desc: 'All conversations are unified',
+        sessionLabel: 'Your session ID:', sessionHint: 'Click to copy. Paste in LINE/Telegram to link',
+        cliTitle: 'Use from command line', cliSub: 'nanobot chat "Hello!" | macOS, Linux',
         bottomTitle: 'Need more power?',
         bottomSub: 'Access GPT-4o, Claude Sonnet, Claude Opus and more from $9/month.',
         bottomCta: 'Compare Plans',
@@ -1152,6 +1174,7 @@
       document.getElementById('t-hero-try').textContent = t.heroTry;
       document.getElementById('t-hero-plans').textContent = t.heroPlans;
       document.getElementById('nav-pricing').textContent = t.pricing;
+      document.getElementById('nav-status').textContent = t.status;
       document.getElementById('footer-pricing').textContent = t.pricing;
       document.getElementById('t-chat-status').textContent = t.chatStatus;
       document.getElementById('stat-uptime-label').textContent = t.statsUptime;
@@ -1169,6 +1192,10 @@
       document.getElementById('t-step2-desc').innerHTML = t.step2Desc;
       document.getElementById('t-step3-title').textContent = t.step3Title;
       document.getElementById('t-step3-desc').textContent = t.step3Desc;
+      document.getElementById('t-session-label').textContent = t.sessionLabel;
+      document.getElementById('t-session-hint').textContent = t.sessionHint;
+      document.getElementById('t-cli-title').textContent = t.cliTitle;
+      document.getElementById('t-cli-sub').innerHTML = t.cliSub;
       document.getElementById('t-bottom-title').textContent = t.bottomTitle;
       document.getElementById('t-bottom-sub').textContent = t.bottomSub;
       document.getElementById('t-bottom-cta').textContent = t.bottomCta;
@@ -1176,27 +1203,48 @@
       renderRecipes(l);
     }
 
+    // Show session ID
+    document.getElementById('session-id-display').textContent = webSessionId;
+
+    // Channel deep links with auto-link session ID
+    function getLineDeepLink() {
+      // LINE OA message deep link with session ID prefilled
+      return 'https://line.me/R/oaMessage/@619jcqqh/?' + encodeURIComponent(webSessionId);
+    }
+    function getTgDeepLink() {
+      // Telegram deep link: /start payload (replace : with _ for Telegram)
+      const payload = webSessionId.replace(':', '_');
+      return 'https://t.me/chatweb_ai_bot?start=' + payload;
+    }
+
+    function openChannelLink(ch) {
+      if (ch === 'line') {
+        window.open(getLineDeepLink(), '_blank');
+      } else {
+        window.open(getTgDeepLink(), '_blank');
+      }
+    }
+
     const CHANNELS = {
       line: {
-        url: 'https://line.me/R/ti/p/@619jcqqh',
-        ja: { title: 'LINEで友だち追加', desc: 'QRコードをLINEで読み取ると、すぐにAIチャットが使えます。', link: 'LINEで開く' },
-        en: { title: 'Add on LINE', desc: 'Scan this QR code with LINE to start chatting with AI.', link: 'Open in LINE' },
+        ja: { title: 'LINEで友だち追加', desc: 'ボタンを押すとLINEが開き、自動でこのWebの会話と連携されます。', link: 'LINEで開く' },
+        en: { title: 'Add on LINE', desc: 'Tap the button to open LINE. Your Web conversation will be auto-linked.', link: 'Open in LINE' },
       },
       tg: {
-        url: 'https://t.me/chatweb_ai_bot',
-        ja: { title: 'Telegramで開始', desc: 'QRコードを読み取るか、下のボタンからTelegramで直接チャット。', link: 'Telegramで開く' },
-        en: { title: 'Start on Telegram', desc: 'Scan the QR code or tap the button to chat on Telegram.', link: 'Open in Telegram' },
+        ja: { title: 'Telegramで開始', desc: 'ボタンを押すとTelegramが開き、自動でこのWebの会話と連携されます。', link: 'Telegramで開く' },
+        en: { title: 'Start on Telegram', desc: 'Tap the button to open Telegram. Your Web conversation will be auto-linked.', link: 'Open in Telegram' },
       }
     };
     function showModal(ch) {
       const c = CHANNELS[ch];
       const l = document.documentElement.lang || 'ja';
       const t = c[l] || c.ja;
+      const deepLink = ch === 'line' ? getLineDeepLink() : getTgDeepLink();
       document.getElementById('modal-title').textContent = t.title;
       document.getElementById('modal-desc').textContent = t.desc;
-      document.getElementById('modal-qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(c.url);
+      document.getElementById('modal-qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
       const link = document.getElementById('modal-link');
-      link.href = c.url;
+      link.href = deepLink;
       link.textContent = t.link;
       link.className = 'modal-link ' + (ch === 'line' ? 'line-bg' : 'tg-bg');
       document.getElementById('modal').classList.add('show');
