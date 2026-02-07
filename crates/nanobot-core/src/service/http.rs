@@ -289,8 +289,64 @@ async fn handle_line_webhook(
             {
                 if message.msg_type == "text" {
                     let text = message.text.as_deref().unwrap_or("");
-                    // For now, echo back. Full integration with AgentLoop will come later.
-                    let reply = format!("Received: {}", text);
+                    let user_id = event.source.as_ref()
+                        .and_then(|s| s.user_id.as_deref())
+                        .unwrap_or("unknown");
+                    let session_key = format!("line:{}", user_id);
+
+                    let reply = match &state.provider {
+                        Some(provider) => {
+                            let mut messages = vec![
+                                Message::system(
+                                    "あなたはchatweb.ai、高速で賢いAIアシスタントです。\
+                                     日本語で質問されたら日本語で、英語なら英語で答えてください。\
+                                     簡潔で役に立つ回答をしてください。LINEでのチャットなので短めに。"
+                                ),
+                            ];
+
+                            // Get session history
+                            {
+                                let mut sessions = state.sessions.lock().await;
+                                let session = sessions.get_or_create(&session_key);
+                                let history = session.get_history(10);
+                                for msg in &history {
+                                    let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                                    let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                                    match role {
+                                        "user" => messages.push(Message::user(content)),
+                                        "assistant" => messages.push(Message::assistant(content)),
+                                        _ => {}
+                                    }
+                                }
+                            }
+
+                            messages.push(Message::user(text));
+
+                            let model = &state.config.agents.defaults.model;
+                            let max_tokens = state.config.agents.defaults.max_tokens;
+                            let temperature = state.config.agents.defaults.temperature;
+
+                            match provider.chat(&messages, None, model, max_tokens, temperature).await {
+                                Ok(completion) => {
+                                    let resp = completion.content.unwrap_or_default();
+                                    // Save to session
+                                    {
+                                        let mut sessions = state.sessions.lock().await;
+                                        let session = sessions.get_or_create(&session_key);
+                                        session.add_message("user", text);
+                                        session.add_message("assistant", &resp);
+                                    }
+                                    resp
+                                }
+                                Err(e) => {
+                                    tracing::error!("LLM error for LINE: {}", e);
+                                    "すみません、エラーが発生しました。もう一度お試しください。".to_string()
+                                }
+                            }
+                        }
+                        None => "AI provider not configured.".to_string(),
+                    };
+
                     if let Err(e) =
                         LineChannel::reply(&access_token, reply_token, &reply).await
                     {
@@ -344,12 +400,62 @@ async fn handle_telegram_webhook(
         return StatusCode::OK;
     }
 
-    // Echo reply
     let token = &state.config.channels.telegram.token;
     let chat_id = message.chat.id.to_string();
-    let reply = format!("Received: {}", text);
-    let client = reqwest::Client::new();
+    let session_key = format!("tg:{}", sender_id);
 
+    let reply = match &state.provider {
+        Some(provider) => {
+            let mut messages = vec![
+                Message::system(
+                    "あなたはchatweb.ai、高速で賢いAIアシスタントです。\
+                     日本語で質問されたら日本語で、英語なら英語で答えてください。\
+                     簡潔で役に立つ回答をしてください。Telegramでのチャットなので短めに。"
+                ),
+            ];
+
+            {
+                let mut sessions = state.sessions.lock().await;
+                let session = sessions.get_or_create(&session_key);
+                let history = session.get_history(10);
+                for msg in &history {
+                    let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                    let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                    match role {
+                        "user" => messages.push(Message::user(content)),
+                        "assistant" => messages.push(Message::assistant(content)),
+                        _ => {}
+                    }
+                }
+            }
+
+            messages.push(Message::user(text));
+
+            let model = &state.config.agents.defaults.model;
+            let max_tokens = state.config.agents.defaults.max_tokens;
+            let temperature = state.config.agents.defaults.temperature;
+
+            match provider.chat(&messages, None, model, max_tokens, temperature).await {
+                Ok(completion) => {
+                    let resp = completion.content.unwrap_or_default();
+                    {
+                        let mut sessions = state.sessions.lock().await;
+                        let session = sessions.get_or_create(&session_key);
+                        session.add_message("user", text);
+                        session.add_message("assistant", &resp);
+                    }
+                    resp
+                }
+                Err(e) => {
+                    tracing::error!("LLM error for Telegram: {}", e);
+                    "Sorry, an error occurred. Please try again.".to_string()
+                }
+            }
+        }
+        None => "AI provider not configured.".to_string(),
+    };
+
+    let client = reqwest::Client::new();
     if let Err(e) = TelegramChannel::send_message_static(&client, token, &chat_id, &reply).await {
         tracing::error!("Failed to send Telegram reply: {}", e);
     }
