@@ -52,7 +52,7 @@ fi
 # Fall back to cargo install
 if command -v cargo >/dev/null 2>&1; then
   echo "Installing via cargo..."
-  cargo install --git "https://github.com/${REPO}" nanobot
+  cargo install --git "https://github.com/${REPO}" --branch feat/ai-webhooks nanobot
   echo ""
   echo "Installed! Run: nanobot chat \"Hello!\""
   exit 0
@@ -63,7 +63,7 @@ echo "Rust not found. Installing Rust first..."
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
 echo "Installing nanobot..."
-cargo install --git "https://github.com/${REPO}" nanobot
+cargo install --git "https://github.com/${REPO}" --branch feat/ai-webhooks nanobot
 echo ""
 echo "Installed! Run: nanobot chat \"Hello!\""
 
