@@ -91,6 +91,11 @@ impl SessionStore for FileSessionStore {
         self.cache.get_mut(key).unwrap()
     }
 
+    fn refresh(&mut self, key: &str) -> &mut Session {
+        self.cache.remove(key);
+        self.get_or_create(key)
+    }
+
     fn save(&self, session: &Session) {
         let path = self.session_path(&session.key);
         let mut lines = Vec::with_capacity(session.messages.len() + 1);
