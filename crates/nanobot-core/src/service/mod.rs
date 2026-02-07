@@ -4,6 +4,7 @@ pub mod gateway;
 pub mod auth;
 pub mod usage;
 pub mod saas_tools;
+pub mod integrations;
 
 #[cfg(feature = "http-api")]
 pub mod http;

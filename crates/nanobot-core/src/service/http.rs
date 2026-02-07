@@ -547,6 +547,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/usage", get(handle_usage))
         .route("/api/v1/account/{id}", get(handle_account))
         .route("/api/v1/providers", get(handle_providers))
+        .route("/api/v1/integrations", get(handle_integrations))
         // Billing
         .route("/api/v1/billing/checkout", post(handle_billing_checkout))
         .route("/api/v1/billing/portal", get(handle_billing_portal))
@@ -676,7 +677,10 @@ async fn handle_chat(
     let max_tokens = state.config.agents.defaults.max_tokens;
     let temperature = state.config.agents.defaults.temperature;
 
-    let response_text = match provider.chat(&messages, None, model, max_tokens, temperature).await {
+    // Get tool definitions for function calling
+    let tools = crate::service::integrations::get_tool_definitions();
+
+    let response_text = match provider.chat(&messages, Some(&tools), model, max_tokens, temperature).await {
         Ok(completion) => {
             // Deduct credits after successful LLM call
             #[cfg(feature = "dynamodb-backend")]
@@ -689,7 +693,58 @@ async fn handle_chat(
                     tracing::debug!("Deducted {} credits for user {}", credits, session_key);
                 }
             }
-            completion.content.unwrap_or_default()
+
+            // Handle tool calls if any
+            if completion.has_tool_calls() {
+                let mut tool_results = Vec::new();
+                for tool_call in &completion.tool_calls {
+                    let result = crate::service::integrations::execute_tool(
+                        &tool_call.name, &tool_call.arguments
+                    ).await;
+                    tool_results.push((tool_call.id.clone(), tool_call.name.clone(), result));
+                }
+
+                // Build follow-up messages with tool results
+                let mut followup = messages.clone();
+                // Add assistant message with tool calls
+                let tc_json: Vec<serde_json::Value> = completion.tool_calls.iter().map(|tc| {
+                    serde_json::json!({
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": serde_json::to_string(&tc.arguments).unwrap_or_default(),
+                        }
+                    })
+                }).collect();
+                followup.push(Message::assistant_with_tool_calls(completion.content.clone(), tc_json));
+
+                // Add tool results
+                for (id, name, result) in &tool_results {
+                    followup.push(Message::tool_result(id, name, result));
+                }
+
+                // Second LLM call with tool results
+                match provider.chat(&followup, Some(&tools), model, max_tokens, temperature).await {
+                    Ok(final_resp) => {
+                        #[cfg(feature = "dynamodb-backend")]
+                        {
+                            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                                deduct_credits(dynamo, table, &session_key, model,
+                                    final_resp.usage.prompt_tokens, final_resp.usage.completion_tokens).await;
+                            }
+                        }
+                        final_resp.content.unwrap_or_default()
+                    }
+                    Err(e) => {
+                        tracing::error!("LLM tool followup error: {}", e);
+                        // Fall back to tool results directly
+                        tool_results.iter().map(|(_, name, result)| format!("[{}] {}", name, result)).collect::<Vec<_>>().join("\n")
+                    }
+                }
+            } else {
+                completion.content.unwrap_or_default()
+            }
         }
         Err(e) => {
             tracing::error!("LLM error: {}", e);
@@ -1421,6 +1476,19 @@ async fn handle_providers(
         "load_balanced": has_lb,
         "total_providers": providers.len(),
         "default_model": state.config.agents.defaults.model,
+    }))
+}
+
+/// GET /api/v1/integrations — List available integrations
+async fn handle_integrations() -> impl IntoResponse {
+    let integrations = crate::service::integrations::list_integrations();
+    let tools = crate::service::integrations::get_tool_definitions();
+
+    Json(serde_json::json!({
+        "integrations": integrations,
+        "tools": tools,
+        "active_count": integrations.iter().filter(|i| i.enabled).count(),
+        "total_count": integrations.len(),
     }))
 }
 

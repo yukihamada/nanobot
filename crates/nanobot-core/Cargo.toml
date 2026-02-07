@@ -41,6 +41,9 @@ regex = "1"
 dirs = "6"
 cron = "0.15"
 
+# URL encoding
+urlencoding = "2"
+
 # Async trait support
 async-trait = "0.1"
 

@@ -153,6 +153,7 @@ docs/              # プレスリリース等
 | GET | `/api/v1/account/{id}` | ユーザープロファイル（プラン・クレジット残高） |
 | GET | `/api/v1/usage` | 利用状況（クレジット消費量） |
 | GET | `/api/v1/providers` | 利用可能なAIプロバイダー一覧 |
+| GET | `/api/v1/integrations` | 外部API連携一覧（ツール定義含む） |
 | POST | `/api/v1/billing/checkout` | Stripeチェックアウト |
 | GET | `/api/v1/billing/portal` | Stripe課金ポータル |
 | POST | `/api/v1/coupon/validate` | クーポンコード検証 |
