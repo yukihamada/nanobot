@@ -27,6 +27,14 @@ enum Commands {
         /// API endpoint
         #[arg(long, default_value = "https://chatweb.ai/api/v1/chat")]
         api: String,
+        /// Sync with a Web/LINE/Telegram session ID
+        #[arg(long)]
+        sync: Option<String>,
+    },
+    /// Link CLI with Web/LINE/Telegram session
+    Link {
+        /// Web session ID to link with (e.g. api:xxxx-xxxx)
+        session_id: Option<String>,
     },
     /// Initialize nanobot configuration and workspace
     Onboard,
@@ -116,7 +124,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Chat { message, api } => cmd_chat(message, api).await?,
+        Commands::Chat { message, api, sync } => cmd_chat(message, api, sync).await?,
+        Commands::Link { session_id } => cmd_link(session_id).await?,
         Commands::Onboard => cmd_onboard()?,
         Commands::Agent { message, session } => cmd_agent(message, session).await?,
         Commands::Gateway { port, verbose, http, http_port } => cmd_gateway(port, verbose, http, http_port).await?,
@@ -141,25 +150,40 @@ async fn main() -> Result<()> {
 
 // ====== Commands ======
 
-/// Chat with chatweb.ai API directly — no config or API key needed.
-async fn cmd_chat(message: Vec<String>, api_url: String) -> Result<()> {
-    // Generate or load session ID
+/// Get or create CLI session ID.
+fn get_cli_session_id() -> Result<String> {
     let data_dir = config::get_data_dir();
     std::fs::create_dir_all(&data_dir)?;
     let session_file = data_dir.join("cli_session_id");
-    let session_id = if session_file.exists() {
-        std::fs::read_to_string(&session_file)?
+    if session_file.exists() {
+        Ok(std::fs::read_to_string(&session_file)?.trim().to_string())
     } else {
         let id = format!("cli:{}", uuid::Uuid::new_v4());
         std::fs::write(&session_file, &id)?;
-        id
+        Ok(id)
+    }
+}
+
+/// Chat with chatweb.ai API directly — no config or API key needed.
+async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -> Result<()> {
+    let session_id = if let Some(ref sid) = sync {
+        // Use the provided session ID directly (sync with Web/LINE/Telegram)
+        sid.clone()
+    } else {
+        get_cli_session_id()?
     };
 
     let client = reqwest::Client::new();
 
     if message.is_empty() {
         // Interactive mode
-        println!("{} chatweb.ai CLI (Ctrl+C to exit)\n", nanobot_core::LOGO);
+        println!("{} chatweb.ai CLI (Ctrl+C to exit)", nanobot_core::LOGO);
+        println!("  Session: {}", session_id);
+        if sync.is_some() {
+            println!("  Synced with Web session");
+        }
+        println!();
+
         loop {
             use std::io::Write;
             print!("You: ");
@@ -185,6 +209,66 @@ async fn cmd_chat(message: Vec<String>, api_url: String) -> Result<()> {
         match chat_api(&client, &api_url, &msg, &session_id).await {
             Ok(resp) => println!("{}", resp),
             Err(e) => eprintln!("Error: {}", e),
+        }
+    }
+
+    Ok(())
+}
+
+/// Link CLI session with a Web/LINE/Telegram session.
+async fn cmd_link(session_id: Option<String>) -> Result<()> {
+    let cli_session = get_cli_session_id()?;
+    let client = reqwest::Client::new();
+    let api_base = "https://chatweb.ai";
+
+    match session_id {
+        Some(web_sid) => {
+            // Link CLI with the given Web session by sending /link command
+            // First generate a code from CLI session
+            let resp = client
+                .post(format!("{}/api/v1/chat", api_base))
+                .json(&serde_json::json!({
+                    "message": "/link",
+                    "session_id": cli_session,
+                }))
+                .send()
+                .await?;
+            let body: serde_json::Value = resp.json().await?;
+            let response = body["response"].as_str().unwrap_or("");
+
+            // Extract the code
+            let code = response.chars()
+                .collect::<String>()
+                .split_whitespace()
+                .find(|w| w.len() == 6 && w.chars().all(|c| c.is_ascii_alphanumeric()))
+                .map(|s| s.to_string());
+
+            if let Some(code) = code {
+                // Now link from the Web session side
+                let resp2 = client
+                    .post(format!("{}/api/v1/chat", api_base))
+                    .json(&serde_json::json!({
+                        "message": format!("/link {}", code),
+                        "session_id": web_sid,
+                    }))
+                    .send()
+                    .await?;
+                let body2: serde_json::Value = resp2.json().await?;
+                let result = body2["response"].as_str().unwrap_or("Link failed");
+                println!("{}", result);
+            } else {
+                eprintln!("Failed to generate link code");
+            }
+        }
+        None => {
+            // Show CLI session ID for linking
+            println!("{} CLI Session ID:", nanobot_core::LOGO);
+            println!();
+            println!("  {}", cli_session);
+            println!();
+            println!("To sync with Web: paste this ID on the chatweb.ai sync section");
+            println!("To sync with Web session: nanobot link <WEB_SESSION_ID>");
+            println!("To chat with synced session: nanobot chat --sync <SESSION_ID>");
         }
     }
 

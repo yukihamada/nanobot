@@ -325,12 +325,12 @@ fn parse_link_command(text: &str) -> Option<Option<&str>> {
     None
 }
 
-/// Check if text looks like a web session ID (e.g. "api:xxxx-xxxx-...").
-/// Used for auto-linking when users send their session ID to LINE/Telegram.
+/// Check if text looks like a session ID (e.g. "api:xxxx-xxxx-..." or "cli:xxxx-xxxx-...").
+/// Used for auto-linking when users send their session ID to LINE/Telegram/Web.
 #[cfg(feature = "dynamodb-backend")]
 fn is_session_id(text: &str) -> bool {
     let t = text.trim();
-    t.starts_with("api:") && t.len() > 10
+    (t.starts_with("api:") || t.starts_with("cli:")) && t.len() > 10
 }
 
 /// Auto-link a channel to a web session ID.
