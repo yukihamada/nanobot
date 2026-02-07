@@ -15,7 +15,9 @@ use crate::channel::line::LineChannel;
 use crate::channel::telegram::TelegramChannel;
 use crate::channel::{is_allowed};
 use crate::config::Config;
+use crate::provider::{self, LlmProvider};
 use crate::session::store::SessionStore;
+use crate::types::Message;
 #[cfg(feature = "stripe")]
 use crate::service::stripe::{process_webhook_event, verify_webhook_signature};
 
@@ -23,6 +25,24 @@ use crate::service::stripe::{process_webhook_event, verify_webhook_signature};
 pub struct AppState {
     pub config: Config,
     pub sessions: Mutex<Box<dyn SessionStore>>,
+    pub provider: Option<Arc<dyn LlmProvider>>,
+}
+
+impl AppState {
+    /// Create AppState with an LLM provider auto-configured from config.
+    pub fn with_provider(config: Config, sessions: Box<dyn SessionStore>) -> Self {
+        let provider = config.get_api_key(None).map(|key| {
+            let api_base = config.get_api_base(None).map(|s| s.to_string());
+            let model = &config.agents.defaults.model;
+            Arc::from(provider::create_provider(key, api_base.as_deref(), model))
+                as Arc<dyn LlmProvider>
+        });
+        Self {
+            config,
+            sessions: Mutex::new(sessions),
+            provider,
+        }
+    }
 }
 
 /// Request body for the chat endpoint.
@@ -111,14 +131,70 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 
 /// POST /api/v1/chat — Agent conversation
 async fn handle_chat(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<ChatRequest>,
 ) -> impl IntoResponse {
-    // TODO: Integrate with AgentLoop.process_single() in later phase
     info!("Chat request: session={}, message={}", req.session_id, req.message);
 
+    let provider = match &state.provider {
+        Some(p) => p,
+        None => {
+            return Json(ChatResponse {
+                response: "AI provider not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.".to_string(),
+                session_id: req.session_id,
+            });
+        }
+    };
+
+    // Build conversation with session history
+    let mut messages = vec![
+        Message::system(
+            "あなたはnanobot、高速で賢いAIアシスタントです。\
+             日本語で質問されたら日本語で、英語なら英語で答えてください。\
+             簡潔で役に立つ回答をしてください。"
+        ),
+    ];
+
+    // Get session history
+    {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions.get_or_create(&req.session_id);
+        let history = session.get_history(20);
+        for msg in &history {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            match role {
+                "user" => messages.push(Message::user(content)),
+                "assistant" => messages.push(Message::assistant(content)),
+                _ => {}
+            }
+        }
+    }
+
+    messages.push(Message::user(&req.message));
+
+    let model = &state.config.agents.defaults.model;
+    let max_tokens = state.config.agents.defaults.max_tokens;
+    let temperature = state.config.agents.defaults.temperature;
+
+    let response_text = match provider.chat(&messages, None, model, max_tokens, temperature).await {
+        Ok(completion) => completion.content.unwrap_or_default(),
+        Err(e) => {
+            tracing::error!("LLM error: {}", e);
+            format!("Error: {}", e)
+        }
+    };
+
+    // Save to session
+    {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions.get_or_create(&req.session_id);
+        session.add_message("user", &req.message);
+        session.add_message("assistant", &response_text);
+    }
+
     Json(ChatResponse {
-        response: format!("Echo: {}", req.message),
+        response: response_text,
         session_id: req.session_id,
     })
 }

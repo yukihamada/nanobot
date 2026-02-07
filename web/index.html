@@ -121,6 +121,29 @@
       40% { content: '..'; }
       60%, 100% { content: '...'; }
     }
+    /* Suggest buttons */
+    .suggests {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 20px 0;
+    }
+    .suggest-btn {
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.2);
+      color: var(--accent);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .suggest-btn:hover {
+      background: rgba(99,102,241,0.2);
+      border-color: var(--accent);
+    }
+
     .chat-input {
       display: flex;
       border-top: 1px solid var(--border);
@@ -226,6 +249,7 @@
     <div class="chat-box">
       <div class="chat-messages" id="messages">
         <div class="msg bot" id="t-welcome">こんにちは！何でも聞いてください。</div>
+        <div class="suggests" id="suggests"></div>
       </div>
       <div class="chat-input">
         <input type="text" id="input" placeholder="メッセージを入力..." data-ph-ja="メッセージを入力..." data-ph-en="Type a message..." autocomplete="off">
@@ -278,10 +302,17 @@
 
     input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) send(); });
 
+    function sendSuggest(text) {
+      input.value = text;
+      send();
+    }
+
     async function send() {
       const text = input.value.trim();
       if (!text) return;
       input.value = '';
+      const sg = document.getElementById('suggests');
+      if (sg) sg.style.display = 'none';
       addMsg(text, 'user');
 
       const typing = document.createElement('div');
@@ -318,23 +349,39 @@
     const T = {
       ja: {
         title: 'AIと話してみよう',
-        sub: '下のチャットですぐに試せます。無料。',
-        welcome: 'こんにちは！何でも聞いてください。',
+        sub: 'OpenClawがやることを、Rust製で高速に。無料。',
+        welcome: 'こんにちは！タップして試してみてください。',
         line: 'LINEで使う',
         tg: 'Telegramで使う',
-        i1: '無料', i1d: '登録不要ですぐに使える',
-        i2: '賢い', i2d: 'GPT-4o / Claude / Gemini',
+        i1: '高速', i1d: 'Rust製 — 応答 <100ms',
+        i2: '賢い', i2d: 'Claude / GPT-4o / Gemini',
         i3: 'どこでも', i3d: 'LINE・Telegram・Web',
+        suggests: [
+          '今日のAI最新ニュースを教えて',
+          'この文を英語にして: 明日の会議は10時からです',
+          'Pythonでフィボナッチ数列を書いて',
+          'ビジネスメールの下書きを作って',
+          '来週の献立を考えて',
+          'nanobotとOpenClawの違いは？',
+        ],
       },
       en: {
         title: 'Chat with AI',
-        sub: 'Try it right here. Free.',
-        welcome: 'Hi! Ask me anything.',
+        sub: 'What OpenClaw does, but faster in Rust. Free.',
+        welcome: 'Hi! Tap a suggestion or type anything.',
         line: 'Use on LINE',
         tg: 'Use on Telegram',
-        i1: 'Free', i1d: 'No sign-up required',
-        i2: 'Smart', i2d: 'GPT-4o / Claude / Gemini',
+        i1: 'Fast', i1d: 'Rust-powered — <100ms',
+        i2: 'Smart', i2d: 'Claude / GPT-4o / Gemini',
         i3: 'Anywhere', i3d: 'LINE, Telegram, Web',
+        suggests: [
+          'Summarize today\'s AI news',
+          'Translate to Japanese: The meeting is at 10am',
+          'Write a Python fibonacci function',
+          'Draft a business email',
+          'Plan meals for next week',
+          'How is nanobot different from OpenClaw?',
+        ],
       }
     };
     function setLang(l) {
@@ -356,6 +403,17 @@
       document.getElementById('t-i3d').textContent = t.i3d;
       input.placeholder = l === 'ja' ? 'メッセージを入力...' : 'Type a message...';
       document.getElementById('send-btn').textContent = l === 'ja' ? '送信' : 'Send';
+      // Render suggest buttons
+      const sg = document.getElementById('suggests');
+      sg.innerHTML = '';
+      sg.style.display = 'flex';
+      (t.suggests || []).forEach(s => {
+        const b = document.createElement('button');
+        b.className = 'suggest-btn';
+        b.textContent = s;
+        b.onclick = () => sendSuggest(s);
+        sg.appendChild(b);
+      });
     }
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
   </script>
