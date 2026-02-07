@@ -1,0 +1,183 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-1
+  STACK_NAME: nanobot
+
+jobs:
+  # ---- Stage 1: テスト ----
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p nanobot-core
+
+  # ---- Stage 2: ビルド ----
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cross-compile deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          cargo install cargo-zigbuild
+          sudo snap install zig --classic --beta
+      - name: Build for Lambda ARM64
+        run: |
+          cargo zigbuild --manifest-path crates/nanobot-lambda/Cargo.toml \
+            --release --target aarch64-unknown-linux-gnu
+      - name: Package bootstrap
+        run: |
+          mkdir -p target/lambda/bootstrap
+          cp target/aarch64-unknown-linux-gnu/release/bootstrap target/lambda/bootstrap/
+          chmod +x target/lambda/bootstrap/bootstrap
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lambda-bootstrap
+          path: target/lambda/bootstrap/bootstrap
+
+  # ---- Stage 3: カナリアデプロイ (10%トラフィック) ----
+  canary:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: canary
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: lambda-bootstrap
+          path: target/lambda/bootstrap/
+      - run: chmod +x target/lambda/bootstrap/bootstrap
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/setup-sam@v2
+
+      # デプロイ (新バージョン発行)
+      - name: SAM Deploy
+        run: |
+          sam deploy \
+            --template-file infra/template.yaml \
+            --stack-name $STACK_NAME \
+            --region $AWS_REGION \
+            --capabilities CAPABILITY_IAM \
+            --resolve-s3 \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+
+      # 新バージョン発行 → カナリア (10%)
+      - name: Publish new version & canary 10%
+        id: canary
+        run: |
+          NEW_VER=$(aws lambda publish-version \
+            --function-name nanobot \
+            --query 'Version' --output text)
+          echo "new_version=$NEW_VER" >> "$GITHUB_OUTPUT"
+
+          # 現在のエイリアス確認、なければ作成
+          if aws lambda get-alias --function-name nanobot --name live 2>/dev/null; then
+            CURRENT_VER=$(aws lambda get-alias --function-name nanobot --name live \
+              --query 'FunctionVersion' --output text)
+            echo "current_version=$CURRENT_VER" >> "$GITHUB_OUTPUT"
+
+            # 90% current, 10% new
+            aws lambda update-alias \
+              --function-name nanobot \
+              --name live \
+              --function-version "$CURRENT_VER" \
+              --routing-config "AdditionalVersionWeights={$NEW_VER=0.1}"
+            echo "Canary: 10% → v$NEW_VER, 90% → v$CURRENT_VER"
+          else
+            aws lambda create-alias \
+              --function-name nanobot \
+              --name live \
+              --function-version "$NEW_VER"
+            echo "Created alias 'live' → v$NEW_VER (first deploy)"
+          fi
+
+      # ヘルスチェック (5回)
+      - name: Health check (canary)
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name $STACK_NAME \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+            --output text)
+          echo "Checking $API_URL/health ..."
+          PASS=0
+          for i in 1 2 3 4 5; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/health" || echo "000")
+            if [ "$CODE" = "200" ]; then
+              PASS=$((PASS+1))
+            fi
+            sleep 2
+          done
+          echo "Health: $PASS/5 passed"
+          if [ "$PASS" -lt 4 ]; then
+            echo "::error::Health check failed ($PASS/5). Rolling back."
+            exit 1
+          fi
+
+      # チャットAPIスモークテスト
+      - name: Smoke test (chat API)
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name $STACK_NAME \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+            --output text)
+          RESP=$(curl -s -X POST "$API_URL/api/v1/chat" \
+            -H "Content-Type: application/json" \
+            -d '{"message":"ping"}')
+          echo "Response: $RESP"
+          echo "$RESP" | grep -q "response" || { echo "::error::Smoke test failed"; exit 1; }
+
+    outputs:
+      new_version: ${{ steps.canary.outputs.new_version }}
+
+  # ---- Stage 4: 本番フルリリース (100%) ----
+  production:
+    needs: canary
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 100%に切り替え
+      - name: Promote to 100%
+        run: |
+          NEW_VER="${{ needs.canary.outputs.new_version }}"
+          aws lambda update-alias \
+            --function-name nanobot \
+            --name live \
+            --function-version "$NEW_VER" \
+            --routing-config '{}'
+          echo "Production: 100% → v$NEW_VER"
+
+      # 最終ヘルスチェック
+      - name: Final health check
+        run: |
+          sleep 3
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://api.chatweb.ai/health")
+          echo "api.chatweb.ai/health → HTTP $CODE"
+          [ "$CODE" = "200" ] || { echo "::warning::Health check returned $CODE"; }
