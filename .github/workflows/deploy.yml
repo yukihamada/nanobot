@@ -81,7 +81,10 @@ jobs:
             --capabilities CAPABILITY_IAM \
             --resolve-s3 \
             --no-confirm-changeset \
-            --no-fail-on-empty-changeset
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              "OpenaiApiKey=${{ secrets.OPENAI_API_KEY }}" \
+              "NanobotModel=openai/gpt-4o"
 
       # 新バージョン発行 → カナリア (10%)
       - name: Publish new version & canary 10%
