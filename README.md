@@ -146,15 +146,21 @@ docs/              # プレスリリース等
 
 | Method | Path | 説明 |
 |--------|------|------|
-| POST | `/api/v1/chat` | AIチャット |
+| POST | `/api/v1/chat` | AIチャット（クレジット消費あり） |
 | GET | `/api/v1/sessions/{id}` | セッション取得（リンク解決対応） |
 | GET | `/api/v1/sessions` | セッション一覧 |
 | DELETE | `/api/v1/sessions/{id}` | セッション削除 |
+| GET | `/api/v1/account/{id}` | ユーザープロファイル（プラン・クレジット残高） |
+| GET | `/api/v1/usage` | 利用状況（クレジット消費量） |
+| GET | `/api/v1/providers` | 利用可能なAIプロバイダー一覧 |
+| POST | `/api/v1/billing/checkout` | Stripeチェックアウト |
+| GET | `/api/v1/billing/portal` | Stripe課金ポータル |
 | POST | `/api/v1/coupon/validate` | クーポンコード検証 |
 | POST | `/webhooks/line` | LINE Webhook |
 | POST | `/webhooks/telegram` | Telegram Webhook |
-| POST | `/webhooks/stripe` | Stripe Webhook |
+| POST | `/webhooks/stripe` | Stripe Webhook（プラン更新・クレジットリセット） |
 | GET | `/health` | ヘルスチェック |
+| GET | `/status` | サービスステータスページ |
 
 ## ライセンス
 

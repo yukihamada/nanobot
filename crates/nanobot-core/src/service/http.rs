@@ -25,11 +25,26 @@ use crate::service::stripe::{process_webhook_event, verify_webhook_signature};
 #[cfg(feature = "dynamodb-backend")]
 use aws_sdk_dynamodb::types::AttributeValue;
 
+/// User profile for unified billing and identity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserProfile {
+    pub user_id: String,
+    pub plan: String,
+    pub credits_remaining: i64,
+    pub credits_used: i64,
+    pub channels: Vec<String>,
+    pub stripe_customer_id: Option<String>,
+    pub email: Option<String>,
+    pub created_at: String,
+}
+
 /// Shared application state for the HTTP API.
 pub struct AppState {
     pub config: Config,
     pub sessions: Mutex<Box<dyn SessionStore>>,
     pub provider: Option<Arc<dyn LlmProvider>>,
+    /// Load-balanced multi-provider for distributing requests
+    pub lb_provider: Option<Arc<dyn LlmProvider>>,
     #[cfg(feature = "dynamodb-backend")]
     pub dynamo_client: Option<aws_sdk_dynamodb::Client>,
     #[cfg(feature = "dynamodb-backend")]
@@ -45,15 +60,26 @@ impl AppState {
             Arc::from(provider::create_provider(key, api_base.as_deref(), model))
                 as Arc<dyn LlmProvider>
         });
+
+        // Try to create load-balanced provider from env
+        let lb_provider = provider::LoadBalancedProvider::from_env()
+            .map(|lb| Arc::new(lb) as Arc<dyn LlmProvider>);
+
         Self {
             config,
             sessions: Mutex::new(sessions),
             provider,
+            lb_provider,
             #[cfg(feature = "dynamodb-backend")]
             dynamo_client: None,
             #[cfg(feature = "dynamodb-backend")]
             config_table: None,
         }
+    }
+
+    /// Get the best provider for a request. Prefers load-balanced if available.
+    pub fn get_provider(&self) -> Option<&Arc<dyn LlmProvider>> {
+        self.lb_provider.as_ref().or(self.provider.as_ref())
     }
 }
 
@@ -284,6 +310,169 @@ fn parse_link_command(text: &str) -> Option<Option<&str>> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// User profile management (unified billing)
+// ---------------------------------------------------------------------------
+
+/// Get or create a user profile from DynamoDB.
+/// If the user_id starts with "user:", it's a unified user. Otherwise it's a channel key.
+#[cfg(feature = "dynamodb-backend")]
+async fn get_or_create_user(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    user_id: &str,
+) -> UserProfile {
+    let pk = format!("USER#{}", user_id);
+
+    // Try to get existing user
+    if let Ok(output) = dynamo
+        .get_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(pk.clone()))
+        .key("sk", AttributeValue::S("PROFILE".to_string()))
+        .send()
+        .await
+    {
+        if let Some(item) = output.item {
+            let plan = item.get("plan").and_then(|v| v.as_s().ok()).cloned().unwrap_or_else(|| "free".to_string());
+            let credits_remaining = item.get("credits_remaining").and_then(|v| v.as_n().ok())
+                .and_then(|n| n.parse::<i64>().ok()).unwrap_or_else(|| {
+                    plan.parse::<crate::service::auth::Plan>().map(|p| p.monthly_credits()).unwrap_or(1_000)
+                });
+            let credits_used = item.get("credits_used").and_then(|v| v.as_n().ok())
+                .and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
+            let channels: Vec<String> = item.get("channels").and_then(|v| v.as_l().ok())
+                .map(|list| list.iter().filter_map(|v| v.as_s().ok().cloned()).collect())
+                .unwrap_or_default();
+            let stripe_customer_id = item.get("stripe_customer_id").and_then(|v| v.as_s().ok()).cloned();
+            let email = item.get("email").and_then(|v| v.as_s().ok()).cloned();
+            let created_at = item.get("created_at").and_then(|v| v.as_s().ok()).cloned()
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+
+            return UserProfile {
+                user_id: user_id.to_string(),
+                plan,
+                credits_remaining,
+                credits_used,
+                channels,
+                stripe_customer_id,
+                email,
+                created_at,
+            };
+        }
+    }
+
+    // Create new user profile (free plan)
+    let now = chrono::Utc::now().to_rfc3339();
+    let free_credits = crate::service::auth::Plan::Free.monthly_credits();
+
+    let _ = dynamo
+        .put_item()
+        .table_name(config_table)
+        .item("pk", AttributeValue::S(pk))
+        .item("sk", AttributeValue::S("PROFILE".to_string()))
+        .item("user_id", AttributeValue::S(user_id.to_string()))
+        .item("plan", AttributeValue::S("free".to_string()))
+        .item("credits_remaining", AttributeValue::N(free_credits.to_string()))
+        .item("credits_used", AttributeValue::N("0".to_string()))
+        .item("channels", AttributeValue::L(vec![]))
+        .item("created_at", AttributeValue::S(now.clone()))
+        .item("updated_at", AttributeValue::S(now.clone()))
+        .send()
+        .await;
+
+    UserProfile {
+        user_id: user_id.to_string(),
+        plan: "free".to_string(),
+        credits_remaining: free_credits,
+        credits_used: 0,
+        channels: vec![],
+        stripe_customer_id: None,
+        email: None,
+        created_at: now,
+    }
+}
+
+/// Deduct credits from a user profile after an LLM call.
+#[cfg(feature = "dynamodb-backend")]
+async fn deduct_credits(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    user_id: &str,
+    model: &str,
+    input_tokens: u32,
+    output_tokens: u32,
+) -> i64 {
+    let credits = crate::service::auth::calculate_credits(model, input_tokens, output_tokens) as i64;
+    if credits == 0 {
+        return 0;
+    }
+
+    let pk = format!("USER#{}", user_id);
+
+    // Atomic update: decrement credits_remaining, increment credits_used
+    let _ = dynamo
+        .update_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S("PROFILE".to_string()))
+        .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
+        .expression_attribute_values(":c", AttributeValue::N(credits.to_string()))
+        .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+        .send()
+        .await;
+
+    // Also record usage for analytics
+    let usage_pk = format!("USAGE#{}#{}", user_id, chrono::Utc::now().format("%Y-%m-%d"));
+    let _ = dynamo
+        .put_item()
+        .table_name(config_table)
+        .item("pk", AttributeValue::S(usage_pk))
+        .item("sk", AttributeValue::S(format!("{}#{}", chrono::Utc::now().timestamp_millis(), model)))
+        .item("user_id", AttributeValue::S(user_id.to_string()))
+        .item("model", AttributeValue::S(model.to_string()))
+        .item("input_tokens", AttributeValue::N(input_tokens.to_string()))
+        .item("output_tokens", AttributeValue::N(output_tokens.to_string()))
+        .item("credits", AttributeValue::N(credits.to_string()))
+        .item("timestamp", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+        .send()
+        .await;
+
+    credits
+}
+
+/// Link a Stripe customer to a user profile and upgrade their plan.
+#[cfg(feature = "dynamodb-backend")]
+async fn link_stripe_to_user(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    user_id: &str,
+    stripe_customer_id: &str,
+    email: &str,
+    plan: &str,
+) {
+    let pk = format!("USER#{}", user_id);
+    let plan_obj: crate::service::auth::Plan = plan.parse().unwrap_or(crate::service::auth::Plan::Starter);
+    let new_credits = plan_obj.monthly_credits();
+
+    let _ = dynamo
+        .update_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S("PROFILE".to_string()))
+        .update_expression("SET #p = :plan, stripe_customer_id = :cus, email = :email, credits_remaining = :cr, updated_at = :now")
+        .expression_attribute_names("#p", "plan")
+        .expression_attribute_values(":plan", AttributeValue::S(plan.to_string()))
+        .expression_attribute_values(":cus", AttributeValue::S(stripe_customer_id.to_string()))
+        .expression_attribute_values(":email", AttributeValue::S(email.to_string()))
+        .expression_attribute_values(":cr", AttributeValue::N(new_credits.to_string()))
+        .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+        .send()
+        .await;
+
+    info!("Linked Stripe customer {} to user {} with plan {}", stripe_customer_id, user_id, plan);
+}
+
 /// Request body for the chat endpoint.
 #[derive(Debug, Deserialize)]
 pub struct ChatRequest {
@@ -356,6 +545,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/sessions/{id}", get(handle_get_session))
         .route("/api/v1/sessions/{id}", delete(handle_delete_session))
         .route("/api/v1/usage", get(handle_usage))
+        .route("/api/v1/account/{id}", get(handle_account))
+        .route("/api/v1/providers", get(handle_providers))
         // Billing
         .route("/api/v1/billing/checkout", post(handle_billing_checkout))
         .route("/api/v1/billing/portal", get(handle_billing_portal))
@@ -430,8 +621,8 @@ async fn handle_chat(
         }
     }
 
-    let provider = match &state.provider {
-        Some(p) => p,
+    let provider = match state.get_provider() {
+        Some(p) => p.clone(),
         None => {
             return Json(ChatResponse {
                 response: "AI provider not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.".to_string(),
@@ -439,6 +630,20 @@ async fn handle_chat(
             });
         }
     };
+
+    // Check user credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user = get_or_create_user(dynamo, table, &session_key).await;
+            if user.credits_remaining <= 0 {
+                return Json(ChatResponse {
+                    response: "クレジットが不足しています。プランをアップグレードしてください。\nYou've run out of credits. Please upgrade your plan at /pricing".to_string(),
+                    session_id: req.session_id,
+                });
+            }
+        }
+    }
 
     // Build conversation with session history
     let mut messages = vec![
@@ -472,7 +677,20 @@ async fn handle_chat(
     let temperature = state.config.agents.defaults.temperature;
 
     let response_text = match provider.chat(&messages, None, model, max_tokens, temperature).await {
-        Ok(completion) => completion.content.unwrap_or_default(),
+        Ok(completion) => {
+            // Deduct credits after successful LLM call
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    let credits = deduct_credits(
+                        dynamo, table, &session_key, model,
+                        completion.usage.prompt_tokens, completion.usage.completion_tokens,
+                    ).await;
+                    tracing::debug!("Deducted {} credits for user {}", credits, session_key);
+                }
+            }
+            completion.content.unwrap_or_default()
+        }
         Err(e) => {
             tracing::error!("LLM error: {}", e);
             format!("Error: {}", e)
@@ -552,14 +770,36 @@ async fn handle_delete_session(
 
 /// GET /api/v1/usage — Usage info
 async fn handle_usage(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    // TODO: Implement usage tracking in Phase 4
+    // Extract session/user ID from Authorization header or query
+    let user_id = headers.get("x-user-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("anonymous");
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let resolved = resolve_session_key(dynamo, table, user_id).await;
+            let user = get_or_create_user(dynamo, table, &resolved).await;
+            return Json(UsageResponse {
+                agent_runs: 0,
+                total_tokens: 0,
+                credits_used: user.credits_used as u64,
+                credits_remaining: user.credits_remaining as u64,
+            });
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = &state;
+
     Json(UsageResponse {
         agent_runs: 0,
         total_tokens: 0,
         credits_used: 0,
-        credits_remaining: 0,
+        credits_remaining: 1000,
     })
 }
 
@@ -650,8 +890,9 @@ async fn handle_line_webhook(
                         }
                     }
 
-                    let reply = match &state.provider {
+                    let reply = match state.get_provider() {
                         Some(provider) => {
+                            let provider = provider.clone();
                             let mut messages = vec![
                                 Message::system(
                                     "あなたはchatweb.ai、高速で賢いAIアシスタントです。\
@@ -684,6 +925,14 @@ async fn handle_line_webhook(
 
                             match provider.chat(&messages, None, model, max_tokens, temperature).await {
                                 Ok(completion) => {
+                                    // Deduct credits
+                                    #[cfg(feature = "dynamodb-backend")]
+                                    {
+                                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                                            deduct_credits(dynamo, table, &session_key, model,
+                                                completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
+                                        }
+                                    }
                                     let resp = completion.content.unwrap_or_default();
                                     // Save to session
                                     {
@@ -803,8 +1052,9 @@ async fn handle_telegram_webhook(
         }
     }
 
-    let reply = match &state.provider {
+    let reply = match state.get_provider() {
         Some(provider) => {
+            let provider = provider.clone();
             let mut messages = vec![
                 Message::system(
                     "あなたはchatweb.ai、高速で賢いAIアシスタントです。\
@@ -836,6 +1086,14 @@ async fn handle_telegram_webhook(
 
             match provider.chat(&messages, None, model, max_tokens, temperature).await {
                 Ok(completion) => {
+                    // Deduct credits
+                    #[cfg(feature = "dynamodb-backend")]
+                    {
+                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                            deduct_credits(dynamo, table, &session_key, model,
+                                completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
+                        }
+                    }
                     let resp = completion.content.unwrap_or_default();
                     {
                         let mut sessions = state.sessions.lock().await;
@@ -980,7 +1238,7 @@ async fn handle_stripe_webhook(
                         .item("sk", AttributeValue::S("CONFIG".to_string()))
                         .item("tenant_id", AttributeValue::S(customer_id.to_string()))
                         .item("email", AttributeValue::S(customer_email.to_string()))
-                        .item("plan", AttributeValue::S(plan_name))
+                        .item("plan", AttributeValue::S(plan_name.clone()))
                         .item("api_key_hash", AttributeValue::S(api_key_hash))
                         .item("created_at", AttributeValue::S(now.clone()))
                         .item("updated_at", AttributeValue::S(now))
@@ -995,6 +1253,24 @@ async fn handle_stripe_webhook(
 
                     // Log the API key (in production, send via email)
                     info!("API key generated for {}: {} (hash: ...)", customer_email, &api_key[..12]);
+
+                    // Try to find existing user by email or create new
+                    let user_id = format!("user:{}", uuid::Uuid::new_v4());
+                    let _ = get_or_create_user(client, table, &user_id).await;
+                    link_stripe_to_user(client, table, &user_id, customer_id, customer_email, &plan_name).await;
+                }
+            }
+
+            // Handle subscription updates (plan changes)
+            #[cfg(feature = "dynamodb-backend")]
+            if event_type == "customer.subscription.updated" || event_type == "invoice.paid" {
+                let customer_id = event
+                    .pointer("/data/object/customer")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                if !customer_id.is_empty() {
+                    info!("Subscription event for customer {}: {}", customer_id, event_type);
                 }
             }
         }
@@ -1057,6 +1333,94 @@ async fn handle_coupon_validate(
     Json(serde_json::json!({
         "valid": false,
         "code": code,
+    }))
+}
+
+/// GET /api/v1/account/:id — Get user profile (unified billing)
+async fn handle_account(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    // Resolve unified session key
+    let user_id = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                let resolved = resolve_session_key(dynamo, table, &id).await;
+                let user = get_or_create_user(dynamo, table, &resolved).await;
+                let allowed_models: Vec<String> = user.plan.parse::<crate::service::auth::Plan>()
+                    .unwrap_or(crate::service::auth::Plan::Free)
+                    .allowed_models().iter().map(|s| s.to_string()).collect();
+                return Json(serde_json::json!({
+                    "user_id": user.user_id,
+                    "plan": user.plan,
+                    "credits_remaining": user.credits_remaining,
+                    "credits_used": user.credits_used,
+                    "channels": user.channels,
+                    "stripe_customer_id": user.stripe_customer_id,
+                    "email": user.email,
+                    "created_at": user.created_at,
+                    "allowed_models": allowed_models,
+                }));
+            }
+            id.clone()
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        {
+            id.clone()
+        }
+    };
+
+    Json(serde_json::json!({
+        "user_id": user_id,
+        "plan": "free",
+        "credits_remaining": 1000,
+        "credits_used": 0,
+        "channels": [],
+        "allowed_models": ["gpt-4o-mini", "gemini-flash"],
+    }))
+}
+
+/// GET /api/v1/providers — List available AI providers and models
+async fn handle_providers(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let mut providers = Vec::new();
+
+    if std::env::var("OPENAI_API_KEY").is_ok() {
+        providers.push(serde_json::json!({
+            "id": "openai",
+            "name": "OpenAI",
+            "models": ["gpt-4o", "gpt-4o-mini"],
+            "status": "active",
+        }));
+    }
+
+    if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+        providers.push(serde_json::json!({
+            "id": "anthropic",
+            "name": "Anthropic",
+            "models": ["claude-sonnet", "claude-opus"],
+            "status": "active",
+        }));
+    }
+
+    if std::env::var("GEMINI_API_KEY").is_ok() {
+        providers.push(serde_json::json!({
+            "id": "gemini",
+            "name": "Google Gemini",
+            "models": ["gemini-2.0-flash", "gemini-pro"],
+            "status": "active",
+        }));
+    }
+
+    let has_lb = state.lb_provider.is_some();
+
+    Json(serde_json::json!({
+        "providers": providers,
+        "load_balanced": has_lb,
+        "total_providers": providers.len(),
+        "default_model": state.config.agents.defaults.model,
     }))
 }
 
