@@ -276,7 +276,7 @@ async fn cmd_gateway(port: u16, verbose: bool, http: bool, http_port: u16) -> Re
         // Already handled by env filter
     }
 
-    let cfg = config::load_config(None);
+    let cfg = config::load_config_from_env();
 
     #[cfg(feature = "http-api")]
     if http {
@@ -284,10 +284,10 @@ async fn cmd_gateway(port: u16, verbose: bool, http: bool, http_port: u16) -> Re
         use nanobot_core::session::file_store::FileSessionStore;
 
         let workspace = cfg.workspace_path();
-        let state = std::sync::Arc::new(AppState {
-            config: cfg.clone(),
-            sessions: tokio::sync::Mutex::new(Box::new(FileSessionStore::new(&workspace))),
-        });
+        let state = std::sync::Arc::new(AppState::with_provider(
+            cfg.clone(),
+            Box::new(FileSessionStore::new(&workspace)),
+        ));
 
         let addr = format!("0.0.0.0:{}", http_port);
         println!(

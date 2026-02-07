@@ -1,4 +1,4 @@
-app = "nanobot"
+app = "nanobot-ai"
 primary_region = "nrt"
 
 [build]
