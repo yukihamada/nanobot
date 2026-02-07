@@ -1,0 +1,21 @@
+[package]
+name = "nanobot-lambda"
+version = "0.1.0"
+edition = "2021"
+description = "AWS Lambda entry point for nanobot SaaS"
+license = "MIT"
+
+[[bin]]
+name = "bootstrap"
+path = "src/main.rs"
+
+[dependencies]
+nanobot-core = { path = "../nanobot-core", features = ["saas"] }
+lambda_http = "0.13"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+serde_json = "1"
+aws-config = "1"
+aws-sdk-dynamodb = "1"

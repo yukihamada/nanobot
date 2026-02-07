@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>nanobot - AI Agent Platform</title>
+  <meta name="description" content="Deploy AI agents to LINE, Telegram in minutes. Free to start.">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface2: #1a1a1a;
+      --border: #222;
+      --border2: #333;
+      --text: #e5e5e5;
+      --muted: #888;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --accent-dim: rgba(99,102,241,0.12);
+      --green: #22c55e;
+      --green-dim: rgba(34,197,94,0.12);
+      --line-green: #06C755;
+      --telegram-blue: #2AABEE;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    nav {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+      position: sticky;
+      top: 0;
+      background: rgba(10,10,10,0.92);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+    }
+    nav .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 4px; }
+    .nav-links a { color: var(--muted); text-decoration: none; padding: 6px 12px; font-size: 14px; border-radius: 6px; transition: all 0.2s; }
+    .nav-links a:hover { color: var(--text); background: var(--surface); }
+    .lang-toggle {
+      display: inline-flex;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-left: 8px;
+    }
+    .lang-toggle button {
+      background: none;
+      border: none;
+      color: var(--muted);
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .lang-toggle button.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 80px 0 60px;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: var(--green-dim);
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+      border: 1px solid rgba(34,197,94,0.2);
+    }
+    .hero h1 {
+      font-size: 52px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+    .hero h1 span { color: var(--accent); }
+    .hero p {
+      font-size: 18px;
+      color: var(--muted);
+      max-width: 580px;
+      margin: 0 auto 36px;
+      line-height: 1.7;
+    }
+    .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--muted); }
+    .btn-line { background: var(--line-green); color: #fff; }
+    .btn-line:hover { background: #05b34c; transform: translateY(-1px); }
+    .btn-telegram { background: var(--telegram-blue); color: #fff; }
+    .btn-telegram:hover { background: #229ed4; transform: translateY(-1px); }
+    .btn-sm { padding: 10px 20px; font-size: 14px; }
+    .btn-icon { font-size: 18px; }
+
+    /* Section headers */
+    .section-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .section-header h2 {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: -1px;
+    }
+    .section-header p {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    /* Channels */
+    .channels {
+      padding: 80px 0;
+      border-top: 1px solid var(--border);
+    }
+    .channel-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .channel-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px;
+      transition: border-color 0.2s;
+    }
+    .channel-card:hover { border-color: var(--border2); }
+    .channel-card-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .channel-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+    .channel-icon.line { background: rgba(6,199,85,0.15); }
+    .channel-icon.telegram { background: rgba(42,171,238,0.15); }
+    .channel-card h3 { font-size: 20px; font-weight: 700; }
+    .channel-card .channel-desc { font-size: 14px; color: var(--muted); margin-bottom: 24px; }
+    .channel-steps {
+      list-style: none;
+      margin-bottom: 24px;
+    }
+    .channel-steps li {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 10px 0;
+      font-size: 14px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .channel-steps li:last-child { border-bottom: none; }
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .channel-card .btn { width: 100%; justify-content: center; }
+
+    /* How it works */
+    .how-it-works {
+      padding: 80px 0;
+      border-top: 1px solid var(--border);
+    }
+    .steps-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+    }
+    .step-card {
+      text-align: center;
+      padding: 32px 24px;
+    }
+    .step-card .step-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: var(--accent-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin: 0 auto 20px;
+    }
+    .step-card h3 { font-size: 16px; margin-bottom: 8px; }
+    .step-card p { font-size: 14px; color: var(--muted); }
+
+    /* Features */
+    .features-section {
+      padding: 80px 0;
+      border-top: 1px solid var(--border);
+    }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .feature {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+    }
+    .feature h3 { font-size: 15px; margin-bottom: 6px; }
+    .feature p { font-size: 13px; color: var(--muted); }
+    .feature-icon { font-size: 24px; margin-bottom: 14px; }
+
+    /* Pricing */
+    .pricing {
+      padding: 80px 0;
+      border-top: 1px solid var(--border);
+    }
+    .plans {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .plan {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 24px;
+      text-align: left;
+      position: relative;
+    }
+    .plan.featured {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 8px 32px rgba(99,102,241,0.1);
+    }
+    .plan-badge {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 14px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+    .plan h3 { font-size: 18px; margin-bottom: 4px; }
+    .plan .price {
+      font-size: 40px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin: 12px 0;
+    }
+    .plan .price span { font-size: 14px; color: var(--muted); font-weight: 400; }
+    .plan .plan-desc {
+      font-size: 13px;
+      color: var(--accent);
+      margin-bottom: 20px;
+    }
+    .plan ul {
+      list-style: none;
+      margin-bottom: 24px;
+    }
+    .plan li {
+      font-size: 13px;
+      color: var(--muted);
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .plan li:last-child { border-bottom: none; }
+    .plan li::before {
+      content: "\2713 ";
+      color: var(--green);
+      font-weight: 700;
+    }
+    .plan .btn {
+      display: block;
+      text-align: center;
+      width: 100%;
+      padding: 12px;
+      font-size: 14px;
+    }
+    .pricing-note {
+      text-align: center;
+      margin-top: 32px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .pricing-note a { color: var(--accent); text-decoration: none; }
+
+    /* API Section */
+    .api-section {
+      padding: 80px 0;
+      border-top: 1px solid var(--border);
+    }
+    .code-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      overflow-x: auto;
+      line-height: 1.8;
+    }
+    .code-block .comment { color: #555; }
+    .code-block .string { color: #22c55e; }
+    .code-block .keyword { color: #6366f1; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 0;
+    }
+    .footer-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .footer-links { display: flex; gap: 20px; }
+    .footer-links a { color: var(--muted); text-decoration: none; font-size: 13px; }
+    .footer-links a:hover { color: var(--text); }
+
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 32px; letter-spacing: -1px; }
+      .hero p { font-size: 16px; }
+      .channel-grid { grid-template-columns: 1fr; }
+      .steps-row { grid-template-columns: 1fr; gap: 16px; }
+      .features { grid-template-columns: 1fr; }
+      .plans { grid-template-columns: 1fr; }
+      .section-header h2 { font-size: 28px; }
+      .footer-content { flex-direction: column; gap: 16px; }
+      .nav-links a { padding: 6px 8px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <div class="logo"><span>nano</span>bot</div>
+      <div class="nav-links">
+        <a href="#channels" data-i18n="nav_channels">Channels</a>
+        <a href="#features" data-i18n="nav_features">Features</a>
+        <a href="#pricing" data-i18n="nav_pricing">Pricing</a>
+        <a href="#api" data-i18n="nav_api">API</a>
+        <a href="https://github.com/valorad/nanobot" target="_blank">GitHub</a>
+        <div class="lang-toggle">
+          <button onclick="setLang('ja')" id="lang-ja">JA</button>
+          <button onclick="setLang('en')" id="lang-en">EN</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge" data-i18n="hero_badge">Free to start</div>
+      <h1 data-i18n-html="hero_title">AI Agent as a <span>Service</span></h1>
+      <p data-i18n="hero_desc">Deploy intelligent AI agents to LINE and Telegram in minutes. No server setup required. Start free, scale as you grow.</p>
+      <div class="hero-actions">
+        <a href="#channels" class="btn btn-primary" data-i18n="hero_cta_start">Start Free</a>
+        <a href="#api" class="btn btn-secondary" data-i18n="hero_cta_api">API Docs</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="how-it-works">
+    <div class="container">
+      <div class="section-header">
+        <h2 data-i18n="how_title">3 Steps to Launch</h2>
+        <p data-i18n="how_desc">Get your AI agent running in under 5 minutes</p>
+      </div>
+      <div class="steps-row">
+        <div class="step-card">
+          <div class="step-icon">1</div>
+          <h3 data-i18n="step1_title">Create Account</h3>
+          <p data-i18n="step1_desc">Sign up for free. No credit card required.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-icon">2</div>
+          <h3 data-i18n="step2_title">Connect Channel</h3>
+          <p data-i18n="step2_desc">Link your LINE or Telegram bot in one click.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-icon">3</div>
+          <h3 data-i18n="step3_title">Start Chatting</h3>
+          <p data-i18n="step3_desc">Your AI agent is live. Send a message and get a reply.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Channels -->
+  <section id="channels" class="channels">
+    <div class="container">
+      <div class="section-header">
+        <h2 data-i18n="ch_title">Connect Your Channel</h2>
+        <p data-i18n="ch_desc">Add your bot to LINE or Telegram and start using AI right away</p>
+      </div>
+      <div class="channel-grid">
+        <!-- LINE -->
+        <div class="channel-card">
+          <div class="channel-card-header">
+            <div class="channel-icon line">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#06C755"/><path d="M19.11 13.13c-.25 0-.45-.2-.45-.44V9.52l-2.24 3.3a.454.454 0 01-.76-.05.44.44 0 01-.06-.22V8.44c0-.25.2-.44.45-.44s.45.2.45.44v3.18l2.24-3.3c.11-.16.29-.25.48-.23.25.02.43.22.43.47v4.13c0 .25-.2.44-.44.44h-.1zM9.56 13.13c-.25 0-.45-.2-.45-.44V8.44c0-.25.2-.44.45-.44s.45.2.45.44v4.25c0 .25-.2.44-.45.44zM8.32 13.13H6.15a.44.44 0 01-.44-.44V8.44c0-.25.2-.44.44-.44s.45.2.45.44v3.81h1.72c.25 0 .44.2.44.44s-.2.44-.44.44zM14.15 13.13h-2.17a.44.44 0 01-.44-.44V8.44c0-.25.2-.44.44-.44h2.17c.25 0 .44.2.44.44s-.2.44-.44.44h-1.73v1.13h1.73c.25 0 .44.2.44.44s-.2.44-.44.44h-1.73v1.24h1.73c.25 0 .44.2.44.44s-.2.44-.44.44z" fill="#fff"/></svg>
+            </div>
+            <h3>LINE</h3>
+          </div>
+          <p class="channel-desc" data-i18n="line_desc">Connect your LINE Official Account to nanobot. Your bot will respond to messages automatically.</p>
+          <ol class="channel-steps">
+            <li>
+              <span class="step-num">1</span>
+              <span data-i18n="line_step1">Go to LINE Developers Console and create a Messaging API channel</span>
+            </li>
+            <li>
+              <span class="step-num">2</span>
+              <span data-i18n="line_step2">Copy your Channel Secret and Channel Access Token</span>
+            </li>
+            <li>
+              <span class="step-num">3</span>
+              <span data-i18n="line_step3">Set webhook URL to: <code>https://api.chatweb.ai/webhooks/line</code></span>
+            </li>
+            <li>
+              <span class="step-num">4</span>
+              <span data-i18n="line_step4">Enable "Use webhook" and click Verify</span>
+            </li>
+          </ol>
+          <a href="https://developers.line.biz/console/" target="_blank" class="btn btn-line btn-sm" data-i18n="line_cta">Open LINE Developers Console</a>
+        </div>
+
+        <!-- Telegram -->
+        <div class="channel-card">
+          <div class="channel-card-header">
+            <div class="channel-icon telegram">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path d="M5.43 11.87l11.03-4.27c.51-.18.96.13.79.9l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84z" fill="#fff"/></svg>
+            </div>
+            <h3>Telegram</h3>
+          </div>
+          <p class="channel-desc" data-i18n="tg_desc">Create a Telegram bot and connect it to nanobot. Messages are processed instantly via webhook.</p>
+          <ol class="channel-steps">
+            <li>
+              <span class="step-num">1</span>
+              <span data-i18n="tg_step1">Message @BotFather on Telegram and create a new bot</span>
+            </li>
+            <li>
+              <span class="step-num">2</span>
+              <span data-i18n="tg_step2">Copy the Bot Token from BotFather</span>
+            </li>
+            <li>
+              <span class="step-num">3</span>
+              <span data-i18n="tg_step3">Register webhook (auto-configured on deploy)</span>
+            </li>
+            <li>
+              <span class="step-num">4</span>
+              <span data-i18n="tg_step4">Send a message to your bot and get an AI reply</span>
+            </li>
+          </ol>
+          <a href="https://t.me/BotFather" target="_blank" class="btn btn-telegram btn-sm" data-i18n="tg_cta">Open BotFather</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="features-section">
+    <div class="container">
+      <div class="section-header">
+        <h2 data-i18n="feat_title">Why nanobot?</h2>
+        <p data-i18n="feat_desc">Everything you need to run AI agents in production</p>
+      </div>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">&#x1F916;</div>
+          <h3 data-i18n="f1_title">Multi-Model</h3>
+          <p data-i18n="f1_desc">GPT-4o, Claude, Gemini — choose the best model for each task. Switch anytime.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">&#x1F4AC;</div>
+          <h3 data-i18n="f2_title">Multi-Channel</h3>
+          <p data-i18n="f2_desc">LINE, Telegram, API. One agent, everywhere your users are.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">&#x26A1;</div>
+          <h3 data-i18n="f3_title">Instant Response</h3>
+          <p data-i18n="f3_desc">Built with Rust on AWS Lambda. Sub-second cold starts, auto-scaling.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">&#x1F9E0;</div>
+          <h3 data-i18n="f4_title">Persistent Memory</h3>
+          <p data-i18n="f4_desc">Your agent remembers context across conversations. Long-term and daily memory.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">&#x1F527;</div>
+          <h3 data-i18n="f5_title">Custom Tools</h3>
+          <p data-i18n="f5_desc">Web search, scheduling, file handling. Extend with your own tools via API.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">&#x1F512;</div>
+          <h3 data-i18n="f6_title">Secure</h3>
+          <p data-i18n="f6_desc">API key auth, usage tracking, rate limiting, allow-list access control.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section id="pricing" class="pricing">
+    <div class="container">
+      <div class="section-header">
+        <h2 data-i18n="price_title">Simple Pricing</h2>
+        <p data-i18n="price_desc">Start free. Upgrade when you need more.</p>
+      </div>
+      <div class="plans">
+        <div class="plan">
+          <h3>Free</h3>
+          <div class="price">$0<span>/mo</span></div>
+          <div class="plan-desc" data-i18n="free_desc">1,000 credits/mo</div>
+          <ul>
+            <li data-i18n="free_f1">100 agent runs/month</li>
+            <li data-i18n="free_f2">5 sessions</li>
+            <li data-i18n="free_f3">GPT-4o-mini</li>
+            <li data-i18n="free_f4">LINE &amp; Telegram</li>
+            <li data-i18n="free_f5">No credit card required</li>
+          </ul>
+          <a href="#channels" class="btn btn-primary btn-sm" data-i18n="free_cta">Start Free</a>
+        </div>
+        <div class="plan featured">
+          <div class="plan-badge" data-i18n="pro_badge">Most Popular</div>
+          <h3>Pro</h3>
+          <div class="price">$29<span>/mo</span></div>
+          <div class="plan-desc" data-i18n="pro_desc">50,000 credits/mo</div>
+          <ul>
+            <li data-i18n="pro_f1">5,000 agent runs/month</li>
+            <li data-i18n="pro_f2">Unlimited sessions</li>
+            <li data-i18n="pro_f3">GPT-4o, Claude, Gemini</li>
+            <li data-i18n="pro_f4">All channels</li>
+            <li data-i18n="pro_f5">Priority support</li>
+          </ul>
+          <a href="#" class="btn btn-primary btn-sm" onclick="checkout('pro')" data-i18n="pro_cta">Subscribe</a>
+        </div>
+        <div class="plan">
+          <h3>Enterprise</h3>
+          <div class="price" data-i18n="ent_price">Custom</div>
+          <div class="plan-desc" data-i18n="ent_desc">Unlimited credits</div>
+          <ul>
+            <li data-i18n="ent_f1">Unlimited agent runs</li>
+            <li data-i18n="ent_f2">Dedicated infrastructure</li>
+            <li data-i18n="ent_f3">All models + priority</li>
+            <li data-i18n="ent_f4">SLA guarantee</li>
+            <li data-i18n="ent_f5">Custom integrations</li>
+          </ul>
+          <a href="mailto:hello@chatweb.ai" class="btn btn-secondary btn-sm" data-i18n="ent_cta">Contact Sales</a>
+        </div>
+      </div>
+      <p class="pricing-note" data-i18n-html="price_note">Need something in between? <a href="mailto:hello@chatweb.ai">Let us know</a> and we'll create a custom plan.</p>
+    </div>
+  </section>
+
+  <!-- API -->
+  <section id="api" class="api-section">
+    <div class="container">
+      <div class="section-header" style="text-align:left; margin-bottom: 24px;">
+        <h2 data-i18n="api_title">API Quick Start</h2>
+      </div>
+      <div class="code-block">
+        <span class="comment"># Send a message to your agent</span><br>
+        <span class="keyword">curl</span> -X POST https://api.chatweb.ai/api/v1/chat \<br>
+        &nbsp;&nbsp;-H <span class="string">"Authorization: Bearer YOUR_API_KEY"</span> \<br>
+        &nbsp;&nbsp;-H <span class="string">"Content-Type: application/json"</span> \<br>
+        &nbsp;&nbsp;-d <span class="string">'{"message": "Hello!", "session_id": "user-123"}'</span><br>
+        <br>
+        <span class="comment"># Response</span><br>
+        {<br>
+        &nbsp;&nbsp;<span class="string">"response"</span>: <span class="string">"Hello! How can I help you today?"</span>,<br>
+        &nbsp;&nbsp;<span class="string">"session_id"</span>: <span class="string">"user-123"</span><br>
+        }<br>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="footer-content">
+        <div>nanobot &copy; 2025&ndash;2026. Built with Rust.</div>
+        <div class="footer-links">
+          <a href="https://github.com/valorad/nanobot" target="_blank">GitHub</a>
+          <a href="mailto:hello@chatweb.ai" data-i18n="footer_contact">Contact</a>
+          <a href="#api" data-i18n="footer_api">API Docs</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const API_BASE = window.location.hostname === 'localhost'
+      ? 'http://localhost:3000'
+      : 'https://api.chatweb.ai';
+
+    // ---- i18n ----
+    const translations = {
+      ja: {
+        nav_channels: 'Channels',
+        nav_features: 'Features',
+        nav_pricing: 'Pricing',
+        nav_api: 'API',
+        hero_badge: '無料で始められます',
+        hero_title: 'AIエージェントを<span>すぐに</span>デプロイ',
+        hero_desc: 'LINE・Telegramに対応したAIエージェントを数分で構築。サーバー不要、無料プランあり。',
+        hero_cta_start: '無料で始める',
+        hero_cta_api: 'APIドキュメント',
+        how_title: '3ステップで開始',
+        how_desc: '5分以内にAIエージェントを起動できます',
+        step1_title: 'アカウント作成',
+        step1_desc: '無料で登録。クレジットカード不要。',
+        step2_title: 'チャネル接続',
+        step2_desc: 'LINEまたはTelegramのボットを接続。',
+        step3_title: 'チャット開始',
+        step3_desc: 'AIエージェントが稼働。メッセージを送ると即座に返信。',
+        ch_title: 'チャネルを接続',
+        ch_desc: 'LINEやTelegramにボットを追加して、すぐにAIを使い始めましょう',
+        line_desc: 'LINE公式アカウントをnanobotに接続。ボットがメッセージに自動返信します。',
+        line_step1: 'LINE Developers Consoleで Messaging APIチャネルを作成',
+        line_step2: 'チャネルシークレットとアクセストークンをコピー',
+        line_step3: 'Webhook URLを設定: <code>https://api.chatweb.ai/webhooks/line</code>',
+        line_step4: '「Webhookの利用」をオンにして「検証」をクリック',
+        line_cta: 'LINE Developers Consoleを開く',
+        tg_desc: 'Telegramボットを作成してnanobotに接続。Webhookで即座にメッセージを処理します。',
+        tg_step1: 'Telegramで @BotFather にメッセージを送り、新しいボットを作成',
+        tg_step2: 'BotFatherから受け取ったボットトークンをコピー',
+        tg_step3: 'Webhookを登録（デプロイ時に自動設定）',
+        tg_step4: 'ボットにメッセージを送信 → AIが返信',
+        tg_cta: 'BotFatherを開く',
+        feat_title: 'なぜ nanobot？',
+        feat_desc: 'AIエージェントを本番運用するために必要なすべて',
+        f1_title: 'マルチモデル',
+        f1_desc: 'GPT-4o、Claude、Gemini — タスクに最適なモデルを選択。いつでも切替可能。',
+        f2_title: 'マルチチャネル',
+        f2_desc: 'LINE、Telegram、API。ひとつのエージェントを、ユーザーがいるすべての場所に。',
+        f3_title: '即座に応答',
+        f3_desc: 'RustとAWS Lambdaで構築。サブ秒のコールドスタート、自動スケーリング。',
+        f4_title: '永続メモリ',
+        f4_desc: '会話を超えてコンテキストを記憶。長期記憶とデイリーメモリ。',
+        f5_title: 'カスタムツール',
+        f5_desc: 'Web検索、スケジューリング、ファイル処理。APIで独自ツールを拡張。',
+        f6_title: 'セキュア',
+        f6_desc: 'APIキー認証、使用量トラッキング、レート制限、アクセス制御。',
+        price_title: 'シンプルな料金体系',
+        price_desc: '無料で始めて、必要に応じてアップグレード。',
+        free_desc: '1,000クレジット/月',
+        free_f1: '月100回のエージェント実行',
+        free_f2: '5セッション',
+        free_f3: 'GPT-4o-mini',
+        free_f4: 'LINE & Telegram対応',
+        free_f5: 'クレジットカード不要',
+        free_cta: '無料で始める',
+        pro_badge: '人気No.1',
+        pro_desc: '50,000クレジット/月',
+        pro_f1: '月5,000回のエージェント実行',
+        pro_f2: '無制限セッション',
+        pro_f3: 'GPT-4o, Claude, Gemini',
+        pro_f4: '全チャネル対応',
+        pro_f5: '優先サポート',
+        pro_cta: '申し込む',
+        ent_price: 'カスタム',
+        ent_desc: '無制限クレジット',
+        ent_f1: '無制限エージェント実行',
+        ent_f2: '専用インフラ',
+        ent_f3: '全モデル + 優先アクセス',
+        ent_f4: 'SLA保証',
+        ent_f5: 'カスタム連携',
+        ent_cta: 'お問い合わせ',
+        price_note: '中間のプランが必要ですか？<a href="mailto:hello@chatweb.ai">ご相談ください</a>。カスタムプランを作成します。',
+        api_title: 'APIクイックスタート',
+        footer_contact: 'お問い合わせ',
+        footer_api: 'APIドキュメント',
+      },
+      en: {
+        nav_channels: 'Channels',
+        nav_features: 'Features',
+        nav_pricing: 'Pricing',
+        nav_api: 'API',
+        hero_badge: 'Free to start',
+        hero_title: 'AI Agent as a <span>Service</span>',
+        hero_desc: 'Deploy intelligent AI agents to LINE and Telegram in minutes. No server setup required. Start free, scale as you grow.',
+        hero_cta_start: 'Start Free',
+        hero_cta_api: 'API Docs',
+        how_title: '3 Steps to Launch',
+        how_desc: 'Get your AI agent running in under 5 minutes',
+        step1_title: 'Create Account',
+        step1_desc: 'Sign up for free. No credit card required.',
+        step2_title: 'Connect Channel',
+        step2_desc: 'Link your LINE or Telegram bot in one click.',
+        step3_title: 'Start Chatting',
+        step3_desc: 'Your AI agent is live. Send a message and get a reply.',
+        ch_title: 'Connect Your Channel',
+        ch_desc: 'Add your bot to LINE or Telegram and start using AI right away',
+        line_desc: 'Connect your LINE Official Account to nanobot. Your bot will respond to messages automatically.',
+        line_step1: 'Go to LINE Developers Console and create a Messaging API channel',
+        line_step2: 'Copy your Channel Secret and Channel Access Token',
+        line_step3: 'Set webhook URL to: <code>https://api.chatweb.ai/webhooks/line</code>',
+        line_step4: 'Enable "Use webhook" and click Verify',
+        line_cta: 'Open LINE Developers Console',
+        tg_desc: 'Create a Telegram bot and connect it to nanobot. Messages are processed instantly via webhook.',
+        tg_step1: 'Message @BotFather on Telegram and create a new bot',
+        tg_step2: 'Copy the Bot Token from BotFather',
+        tg_step3: 'Register webhook (auto-configured on deploy)',
+        tg_step4: 'Send a message to your bot and get an AI reply',
+        tg_cta: 'Open BotFather',
+        feat_title: 'Why nanobot?',
+        feat_desc: 'Everything you need to run AI agents in production',
+        f1_title: 'Multi-Model',
+        f1_desc: 'GPT-4o, Claude, Gemini — choose the best model for each task. Switch anytime.',
+        f2_title: 'Multi-Channel',
+        f2_desc: 'LINE, Telegram, API. One agent, everywhere your users are.',
+        f3_title: 'Instant Response',
+        f3_desc: 'Built with Rust on AWS Lambda. Sub-second cold starts, auto-scaling.',
+        f4_title: 'Persistent Memory',
+        f4_desc: 'Your agent remembers context across conversations. Long-term and daily memory.',
+        f5_title: 'Custom Tools',
+        f5_desc: 'Web search, scheduling, file handling. Extend with your own tools via API.',
+        f6_title: 'Secure',
+        f6_desc: 'API key auth, usage tracking, rate limiting, allow-list access control.',
+        price_title: 'Simple Pricing',
+        price_desc: 'Start free. Upgrade when you need more.',
+        free_desc: '1,000 credits/mo',
+        free_f1: '100 agent runs/month',
+        free_f2: '5 sessions',
+        free_f3: 'GPT-4o-mini',
+        free_f4: 'LINE & Telegram',
+        free_f5: 'No credit card required',
+        free_cta: 'Start Free',
+        pro_badge: 'Most Popular',
+        pro_desc: '50,000 credits/mo',
+        pro_f1: '5,000 agent runs/month',
+        pro_f2: 'Unlimited sessions',
+        pro_f3: 'GPT-4o, Claude, Gemini',
+        pro_f4: 'All channels',
+        pro_f5: 'Priority support',
+        pro_cta: 'Subscribe',
+        ent_price: 'Custom',
+        ent_desc: 'Unlimited credits',
+        ent_f1: 'Unlimited agent runs',
+        ent_f2: 'Dedicated infrastructure',
+        ent_f3: 'All models + priority',
+        ent_f4: 'SLA guarantee',
+        ent_f5: 'Custom integrations',
+        ent_cta: 'Contact Sales',
+        price_note: 'Need something in between? <a href="mailto:hello@chatweb.ai">Let us know</a> and we\'ll create a custom plan.',
+        api_title: 'API Quick Start',
+        footer_contact: 'Contact',
+        footer_api: 'API Docs',
+      }
+    };
+
+    function setLang(lang) {
+      document.documentElement.lang = lang;
+      localStorage.setItem('nanobot_lang', lang);
+
+      document.getElementById('lang-ja').classList.toggle('active', lang === 'ja');
+      document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+
+      const t = translations[lang];
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (t[key]) el.textContent = t[key];
+      });
+      document.querySelectorAll('[data-i18n-html]').forEach(el => {
+        const key = el.getAttribute('data-i18n-html');
+        if (t[key]) el.innerHTML = t[key];
+      });
+      // Re-apply HTML content for steps that contain <code> tags
+      ['line_step3'].forEach(key => {
+        const el = document.querySelector(`[data-i18n="${key}"]`);
+        if (el && t[key]) el.innerHTML = t[key];
+      });
+    }
+
+    // Detect language
+    const savedLang = localStorage.getItem('nanobot_lang');
+    const browserLang = navigator.language.startsWith('ja') ? 'ja' : 'en';
+    setLang(savedLang || browserLang);
+
+    // Checkout
+    async function checkout(plan) {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/billing/checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plan }),
+        });
+        const data = await res.json();
+        if (data.checkout_url) {
+          window.location.href = data.checkout_url;
+        }
+      } catch (e) {
+        const lang = document.documentElement.lang;
+        alert(lang === 'ja' ? 'チェックアウトに失敗しました。もう一度お試しください。' : 'Failed to start checkout. Please try again.');
+      }
+    }
+
+    // Smooth scroll
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        const target = document.querySelector(a.getAttribute('href'));
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+  </script>
+</body>
+</html>

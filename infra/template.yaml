@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: nanobot - Lightweight AI agent framework (Lambda deployment)
+
+Parameters:
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+    Description: Anthropic API key
+    Default: ''
+  TelegramBotToken:
+    Type: String
+    NoEcho: true
+    Description: Telegram Bot API token
+    Default: ''
+  TelegramAllowFrom:
+    Type: String
+    Description: Comma-separated Telegram user IDs/usernames allowed
+    Default: ''
+  LineChannelSecret:
+    Type: String
+    NoEcho: true
+    Description: LINE channel secret
+    Default: ''
+  LineChannelAccessToken:
+    Type: String
+    NoEcho: true
+    Description: LINE channel access token
+    Default: ''
+  LineAllowFrom:
+    Type: String
+    Description: Comma-separated LINE user IDs allowed
+    Default: ''
+  NanobotModel:
+    Type: String
+    Description: Default LLM model
+    Default: 'anthropic/claude-sonnet-4-5-20250929'
+  TenantId:
+    Type: String
+    Description: Tenant ID for multi-tenant isolation
+    Default: 'default'
+
+Globals:
+  Function:
+    Timeout: 120
+    MemorySize: 1024
+
+Resources:
+  # ====== Lambda Function ======
+  NanobotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: nanobot
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - arm64
+      CodeUri: ../target/lambda/bootstrap/
+      Environment:
+        Variables:
+          RUST_LOG: nanobot=info
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
+          TELEGRAM_ALLOW_FROM: !Ref TelegramAllowFrom
+          LINE_CHANNEL_SECRET: !Ref LineChannelSecret
+          LINE_CHANNEL_ACCESS_TOKEN: !Ref LineChannelAccessToken
+          LINE_ALLOW_FROM: !Ref LineAllowFrom
+          NANOBOT_MODEL: !Ref NanobotModel
+          NANOBOT_TENANT_ID: !Ref TenantId
+          DYNAMODB_SESSIONS_TABLE: !Ref SessionsTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MemoryTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfigTable
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref NanobotApi
+
+  # ====== HTTP API Gateway v2 ======
+  NanobotApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: '$default'
+      Description: nanobot HTTP API
+
+  # ====== DynamoDB Tables ======
+  SessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'nanobot-sessions-${TenantId}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: tenant_id
+          AttributeType: S
+        - AttributeName: session_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tenant_id
+          KeyType: HASH
+        - AttributeName: session_key
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  MemoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'nanobot-memory-${TenantId}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: tenant_id
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tenant_id
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+
+  ConfigTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'nanobot-config-${TenantId}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: tenant_id
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tenant_id
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${NanobotApi}.execute-api.${AWS::Region}.amazonaws.com'
+  HealthEndpoint:
+    Description: Health check URL
+    Value: !Sub 'https://${NanobotApi}.execute-api.${AWS::Region}.amazonaws.com/health'
+  LineWebhookUrl:
+    Description: LINE webhook URL (set in LINE Developer Console)
+    Value: !Sub 'https://${NanobotApi}.execute-api.${AWS::Region}.amazonaws.com/webhooks/line'
+  TelegramWebhookUrl:
+    Description: Telegram webhook URL (use setup-webhook.sh to register)
+    Value: !Sub 'https://${NanobotApi}.execute-api.${AWS::Region}.amazonaws.com/webhooks/telegram'
+  SessionsTableName:
+    Description: DynamoDB sessions table name
+    Value: !Ref SessionsTable
+  FunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt NanobotFunction.Arn
