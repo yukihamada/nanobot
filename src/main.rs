@@ -69,6 +69,15 @@ enum Commands {
         #[command(subcommand)]
         command: ChannelCommands,
     },
+    /// Run background daemon (device monitoring + heartbeat)
+    Daemon {
+        /// Heartbeat interval in seconds
+        #[arg(long, default_value_t = 60)]
+        interval: u64,
+        /// API endpoint
+        #[arg(long, default_value = "https://chatweb.ai")]
+        api: String,
+    },
     /// Manage scheduled tasks
     Cron {
         #[command(subcommand)]
@@ -129,6 +138,7 @@ async fn main() -> Result<()> {
         Commands::Onboard => cmd_onboard()?,
         Commands::Agent { message, session } => cmd_agent(message, session).await?,
         Commands::Gateway { port, verbose, http, http_port } => cmd_gateway(port, verbose, http, http_port).await?,
+        Commands::Daemon { interval, api } => cmd_daemon(interval, api).await?,
         Commands::Status => cmd_status()?,
         Commands::Channels { command } => match command {
             ChannelCommands::Status => cmd_channels_status()?,
@@ -287,6 +297,89 @@ async fn chat_api(client: &reqwest::Client, api_url: &str, message: &str, sessio
 
     let body: serde_json::Value = resp.json().await?;
     Ok(body["response"].as_str().unwrap_or("No response").to_string())
+}
+
+/// Run background daemon that sends heartbeats to chatweb.ai.
+async fn cmd_daemon(interval: u64, api_base: String) -> Result<()> {
+    let session_id = get_cli_session_id()?;
+    let client = reqwest::Client::new();
+    let hostname = hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    println!("{} chatweb.ai daemon starting", nanobot_core::LOGO);
+    println!("  Session: {}", session_id);
+    println!("  Hostname: {}", hostname);
+    println!("  Heartbeat interval: {}s", interval);
+    println!();
+
+    loop {
+        let heartbeat = serde_json::json!({
+            "session_id": session_id,
+            "hostname": hostname,
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "uptime_secs": get_system_uptime(),
+        });
+
+        match client
+            .post(format!("{}/api/v1/devices/heartbeat", api_base))
+            .json(&heartbeat)
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    tracing::debug!("Heartbeat sent successfully");
+                } else {
+                    tracing::warn!("Heartbeat failed: {}", resp.status());
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Heartbeat error: {}", e);
+            }
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(interval)).await;
+    }
+}
+
+/// Get system uptime in seconds (best effort).
+fn get_system_uptime() -> u64 {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        if let Ok(output) = Command::new("sysctl").arg("-n").arg("kern.boottime").output() {
+            let s = String::from_utf8_lossy(&output.stdout);
+            // Parse "{ sec = 1234567890, usec = 0 } ..."
+            if let Some(sec_start) = s.find("sec = ") {
+                let rest = &s[sec_start + 6..];
+                if let Some(comma) = rest.find(',') {
+                    if let Ok(boot_sec) = rest[..comma].trim().parse::<u64>() {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0);
+                        return now.saturating_sub(boot_sec);
+                    }
+                }
+            }
+        }
+        0
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::fs::read_to_string("/proc/uptime")
+            .ok()
+            .and_then(|s| s.split_whitespace().next().map(|s| s.to_string()))
+            .and_then(|s| s.parse::<f64>().ok())
+            .map(|f| f as u64)
+            .unwrap_or(0)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        0
+    }
 }
 
 fn cmd_onboard() -> Result<()> {

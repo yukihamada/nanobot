@@ -194,6 +194,33 @@
       border-radius: 50%;
       animation: blink 2s ease-in-out infinite;
     }
+    #agent-select {
+      margin-left: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+    }
+    #agent-select:hover { border-color: var(--accent); }
+    .device-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .device-card .device-status { width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0; }
+    .device-card .device-info { flex:1; }
+    .device-card .device-name { font-size:13px;font-weight:600; }
+    .device-card .device-meta { font-size:11px;color:var(--muted); }
+    .agent-badge { display:inline-block;font-size:10px;background:var(--accent);color:#fff;padding:2px 6px;border-radius:4px;margin-left:8px;vertical-align:middle; }
     .chat-messages {
       height: 300px;
       overflow-y: auto;
@@ -726,6 +753,14 @@
       <div class="chat-header">
         <div class="dot"></div>
         <span id="t-chat-status">オンライン</span>
+        <select id="agent-select" onchange="selectAgent(this.value)">
+          <option value="auto" id="opt-auto">Auto</option>
+          <option value="assistant">Assistant</option>
+          <option value="researcher">Researcher</option>
+          <option value="coder">Coder</option>
+          <option value="analyst">Analyst</option>
+          <option value="creative">Creative</option>
+        </select>
       </div>
       <div class="chat-messages" id="messages">
         <div class="msg bot" id="t-welcome"></div>
@@ -770,6 +805,16 @@
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px;" id="t-session-label">あなたのセッションID:</div>
         <div id="session-id-display" style="font-family:'SF Mono','Fira Code',monospace;font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;display:inline-block;color:var(--accent-hover);word-break:break-all;" onclick="navigator.clipboard.writeText(this.textContent);this.style.opacity=0.5;setTimeout(()=>this.style.opacity=1,300)"></div>
         <div style="font-size:10px;color:var(--muted);margin-top:4px;" id="t-session-hint">クリックでコピー。LINE/Telegramに貼り付けで連携</div>
+      </div>
+    </div>
+
+    <!-- Device Monitoring Section -->
+    <div class="sync-section fade-up fade-up-d4" id="device-section" style="display:none;">
+      <h3 id="t-device-title">Connected Devices</h3>
+      <p class="sync-desc" id="t-device-desc">CLI daemon running on your machines.</p>
+      <div id="device-list" style="margin-top:12px;"></div>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted);" id="t-device-hint">
+        Install CLI and run <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> to connect your devices.
       </div>
     </div>
 
@@ -947,14 +992,17 @@
       msgs.scrollTop = msgs.scrollHeight;
 
       try {
+        const agentSel = document.getElementById('agent-select').value;
+        const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
         const r = await fetch(API + '/api/v1/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text, session_id: webSessionId }),
+          body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
         });
         const d = await r.json();
         typing.remove();
-        addMsg(d.response, 'bot', true);
+        const agentLabel = d.agent ? ('<span class="agent-badge">' + d.agent + '</span>') : '';
+        addMsg(d.response + agentLabel, 'bot', true);
         knownMsgCount += 2; // user + assistant messages
         startPolling();
       } catch {
@@ -1105,6 +1153,10 @@
         bottomSub: 'GPT-4o、Claude Sonnet、Claude Opusなど最先端モデルを月額$9から。',
         bottomCta: 'プランを比較する',
         bottomHint: 'Starter $9/月 &middot; Pro $29/月 &middot; いつでもキャンセル可能',
+        agentAuto: 'Auto (自動振り分け)',
+        deviceTitle: '接続デバイス',
+        deviceDesc: 'CLIデーモンで接続されたマシン一覧',
+        deviceHint: 'CLIをインストールして <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> で接続',
       },
       en: {
         title: 'Ask AI to do anything',
@@ -1127,6 +1179,10 @@
         bottomSub: 'Access GPT-4o, Claude Sonnet, Claude Opus and more from $9/month.',
         bottomCta: 'Compare Plans',
         bottomHint: 'Starter $9/mo &middot; Pro $29/mo &middot; Cancel anytime',
+        agentAuto: 'Auto (smart routing)',
+        deviceTitle: 'Connected Devices',
+        deviceDesc: 'Machines connected via CLI daemon',
+        deviceHint: 'Install CLI and run <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> to connect',
       }
     };
 
@@ -1200,6 +1256,10 @@
       document.getElementById('t-bottom-sub').textContent = t.bottomSub;
       document.getElementById('t-bottom-cta').textContent = t.bottomCta;
       document.getElementById('t-bottom-hint').innerHTML = t.bottomHint;
+      document.getElementById('opt-auto').textContent = t.agentAuto;
+      document.getElementById('t-device-title').textContent = t.deviceTitle;
+      document.getElementById('t-device-desc').textContent = t.deviceDesc;
+      document.getElementById('t-device-hint').innerHTML = t.deviceHint;
       renderRecipes(l);
     }
 
@@ -1224,6 +1284,37 @@
         window.open(getTgDeepLink(), '_blank');
       }
     }
+
+    // Agent selector
+    let selectedAgent = 'auto';
+    function selectAgent(val) { selectedAgent = val; }
+
+    // Device monitoring
+    async function pollDevices() {
+      try {
+        const r = await fetch(API + '/api/v1/devices', {
+          headers: { 'x-session-id': webSessionId }
+        });
+        const d = await r.json();
+        const section = document.getElementById('device-section');
+        const list = document.getElementById('device-list');
+        if (d.devices && d.devices.length > 0) {
+          section.style.display = '';
+          list.innerHTML = d.devices.map(dev => {
+            const memPct = (dev.memory_total && dev.memory_used) ? Math.round(dev.memory_used / dev.memory_total * 100) : null;
+            const meta = [dev.os + '/' + dev.arch, memPct !== null ? ('RAM ' + memPct + '%') : '', dev.uptime_secs ? ('up ' + formatUptime(dev.uptime_secs)) : ''].filter(Boolean).join(' · ');
+            return '<div class="device-card"><div class="device-status"></div><div class="device-info"><div class="device-name">' + dev.hostname + '</div><div class="device-meta">' + meta + '</div></div></div>';
+          }).join('');
+        }
+      } catch(e) { /* ignore */ }
+    }
+    function formatUptime(secs) {
+      if (secs < 3600) return Math.floor(secs/60) + 'm';
+      if (secs < 86400) return Math.floor(secs/3600) + 'h';
+      return Math.floor(secs/86400) + 'd';
+    }
+    setInterval(pollDevices, 30000);
+    setTimeout(pollDevices, 2000);
 
     const CHANNELS = {
       line: {

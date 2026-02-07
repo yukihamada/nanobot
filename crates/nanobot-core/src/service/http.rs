@@ -566,6 +566,164 @@ async fn link_stripe_to_user(
     info!("Linked Stripe customer {} to user {} with plan {}", stripe_customer_id, user_id, plan);
 }
 
+// ---------------------------------------------------------------------------
+// Multi-agent orchestration
+// ---------------------------------------------------------------------------
+
+/// Agent profile definitions.
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentProfile {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub description: &'static str,
+    pub system_prompt: &'static str,
+    pub tools_enabled: bool,
+    pub icon: &'static str,
+}
+
+const AGENTS: &[AgentProfile] = &[
+    AgentProfile {
+        id: "orchestrator",
+        name: "Orchestrator",
+        description: "Routes tasks to the best specialist agent",
+        system_prompt: "",  // handled specially
+        tools_enabled: false,
+        icon: "brain",
+    },
+    AgentProfile {
+        id: "assistant",
+        name: "Assistant",
+        description: "General-purpose AI assistant for everyday tasks",
+        system_prompt: "あなたはchatweb.ai、高速で賢いAIアシスタントです。\
+             日本語で質問されたら日本語で、英語なら英語で答えてください。\
+             簡潔で役に立つ回答をしてください。",
+        tools_enabled: true,
+        icon: "chat",
+    },
+    AgentProfile {
+        id: "researcher",
+        name: "Researcher",
+        description: "Web research, fact-checking, data gathering",
+        system_prompt: "あなたはリサーチ専門のAIエージェントです。\
+             ウェブ検索ツールを積極的に使って、正確で最新の情報を提供してください。\
+             情報源を明示し、複数の視点を提供してください。\
+             日本語で質問されたら日本語で、英語なら英語で答えてください。",
+        tools_enabled: true,
+        icon: "search",
+    },
+    AgentProfile {
+        id: "coder",
+        name: "Coder",
+        description: "Code writing, debugging, architecture design",
+        system_prompt: "あなたはプログラミング専門のAIエージェントです。\
+             コードを書く時は必ず言語を明示し、ベストプラクティスに従ってください。\
+             バグ修正、コードレビュー、アーキテクチャ設計が得意です。\
+             日本語で質問されたら日本語で、英語なら英語で答えてください。",
+        tools_enabled: false,
+        icon: "code",
+    },
+    AgentProfile {
+        id: "analyst",
+        name: "Analyst",
+        description: "Data analysis, business insights, financial analysis",
+        system_prompt: "あなたはデータ分析専門のAIエージェントです。\
+             数値データの分析、ビジネスインサイト、財務分析が得意です。\
+             計算ツールを活用し、グラフや表で分かりやすく説明してください。\
+             日本語で質問されたら日本語で、英語なら英語で答えてください。",
+        tools_enabled: true,
+        icon: "chart",
+    },
+    AgentProfile {
+        id: "creative",
+        name: "Creative",
+        description: "Writing, copywriting, brainstorming, translation",
+        system_prompt: "あなたはクリエイティブ専門のAIエージェントです。\
+             文章作成、コピーライティング、翻訳、アイデア出しが得意です。\
+             ターゲット読者に合わせた表現を心がけ、魅力的なコンテンツを作成してください。\
+             日本語で質問されたら日本語で、英語なら英語で答えてください。",
+        tools_enabled: false,
+        icon: "pen",
+    },
+];
+
+/// Detect which agent to use from message text.
+/// Supports @agent prefix or auto-routing via orchestrator.
+fn detect_agent(text: &str) -> (&'static AgentProfile, String) {
+    let trimmed = text.trim();
+
+    // Check for @agent prefix
+    if trimmed.starts_with('@') {
+        let parts: Vec<&str> = trimmed.splitn(2, ' ').collect();
+        let agent_id = &parts[0][1..]; // strip @
+        let remaining = if parts.len() > 1 { parts[1] } else { "" };
+
+        for agent in AGENTS {
+            if agent.id == agent_id {
+                return (agent, remaining.to_string());
+            }
+        }
+    }
+
+    // Auto-route based on keywords
+    let lower = trimmed.to_lowercase();
+
+    // Code-related keywords
+    if lower.contains("コード") || lower.contains("プログラム") || lower.contains("バグ")
+        || lower.contains("code") || lower.contains("debug") || lower.contains("function")
+        || lower.contains("rust") || lower.contains("python") || lower.contains("javascript")
+        || lower.contains("api") || lower.contains("実装") || lower.contains("エラー")
+    {
+        return (&AGENTS[3], trimmed.to_string()); // coder
+    }
+
+    // Research keywords
+    if lower.contains("調べ") || lower.contains("検索") || lower.contains("リサーチ")
+        || lower.contains("search") || lower.contains("research") || lower.contains("比較")
+        || lower.contains("最新") || lower.contains("ニュース") || lower.contains("天気")
+        || lower.contains("weather")
+    {
+        return (&AGENTS[2], trimmed.to_string()); // researcher
+    }
+
+    // Analysis keywords
+    if lower.contains("分析") || lower.contains("データ") || lower.contains("計算")
+        || lower.contains("analy") || lower.contains("calculate") || lower.contains("統計")
+        || lower.contains("グラフ") || lower.contains("予測")
+    {
+        return (&AGENTS[4], trimmed.to_string()); // analyst
+    }
+
+    // Creative keywords
+    if lower.contains("書いて") || lower.contains("翻訳") || lower.contains("メール")
+        || lower.contains("write") || lower.contains("translat") || lower.contains("コピー")
+        || lower.contains("キャッチ") || lower.contains("ブログ") || lower.contains("文章")
+    {
+        return (&AGENTS[5], trimmed.to_string()); // creative
+    }
+
+    // Default: general assistant
+    (&AGENTS[1], trimmed.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Device monitoring
+// ---------------------------------------------------------------------------
+
+/// Device heartbeat request body.
+#[derive(Debug, Deserialize)]
+pub struct DeviceHeartbeat {
+    pub session_id: String,
+    pub hostname: String,
+    pub os: String,
+    pub arch: String,
+    pub cpu_usage: Option<f64>,
+    pub memory_total: Option<u64>,
+    pub memory_used: Option<u64>,
+    pub disk_total: Option<u64>,
+    pub disk_used: Option<u64>,
+    pub uptime_secs: Option<u64>,
+}
+
 /// Request body for the chat endpoint.
 #[derive(Debug, Deserialize)]
 pub struct ChatRequest {
@@ -589,6 +747,8 @@ fn default_channel() -> String {
 pub struct ChatResponse {
     pub response: String,
     pub session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
 }
 
 /// Response body for errors.
@@ -641,6 +801,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/account/{id}", get(handle_account))
         .route("/api/v1/providers", get(handle_providers))
         .route("/api/v1/integrations", get(handle_integrations))
+        // Agents
+        .route("/api/v1/agents", get(handle_agents))
+        // Devices
+        .route("/api/v1/devices", get(handle_devices))
+        .route("/api/v1/devices/heartbeat", post(handle_device_heartbeat))
         // Billing
         .route("/api/v1/billing/checkout", post(handle_billing_checkout))
         .route("/api/v1/billing/portal", get(handle_billing_portal))
@@ -713,6 +878,7 @@ async fn handle_chat(
             return Json(ChatResponse {
                 response,
                 session_id: req.session_id,
+                agent: None,
             });
         }
     }
@@ -723,6 +889,7 @@ async fn handle_chat(
             return Json(ChatResponse {
                 response: "AI provider not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.".to_string(),
                 session_id: req.session_id,
+                agent: None,
             });
         }
     };
@@ -736,18 +903,19 @@ async fn handle_chat(
                 return Json(ChatResponse {
                     response: "クレジットが不足しています。プランをアップグレードしてください。\nYou've run out of credits. Please upgrade your plan at /pricing".to_string(),
                     session_id: req.session_id,
+                    agent: None,
                 });
             }
         }
     }
 
+    // Multi-agent orchestration: route to best agent
+    let (agent, clean_message) = detect_agent(&req.message);
+    info!("Agent selected: {} for message", agent.id);
+
     // Build conversation with session history
     let mut messages = vec![
-        Message::system(
-            "あなたはchatweb.ai、高速で賢いAIアシスタントです。\
-             日本語で質問されたら日本語で、英語なら英語で答えてください。\
-             簡潔で役に立つ回答をしてください。"
-        ),
+        Message::system(agent.system_prompt),
     ];
 
     // Get session history (refresh to pick up messages from other channels)
@@ -766,16 +934,22 @@ async fn handle_chat(
         }
     }
 
-    messages.push(Message::user(&req.message));
+    messages.push(Message::user(&clean_message));
 
     let model = &state.config.agents.defaults.model;
     let max_tokens = state.config.agents.defaults.max_tokens;
     let temperature = state.config.agents.defaults.temperature;
 
-    // Get tool definitions for function calling
-    let tools = crate::service::integrations::get_tool_definitions();
+    // Get tool definitions for function calling (only if agent supports tools)
+    let tools = if agent.tools_enabled {
+        crate::service::integrations::get_tool_definitions()
+    } else {
+        vec![]
+    };
 
-    let response_text = match provider.chat(&messages, Some(&tools), model, max_tokens, temperature).await {
+    let tools_ref = if tools.is_empty() { None } else { Some(&tools[..]) };
+
+    let response_text = match provider.chat(&messages, tools_ref, model, max_tokens, temperature).await {
         Ok(completion) => {
             // Deduct credits after successful LLM call
             #[cfg(feature = "dynamodb-backend")]
@@ -820,7 +994,7 @@ async fn handle_chat(
                 }
 
                 // Second LLM call with tool results
-                match provider.chat(&followup, Some(&tools), model, max_tokens, temperature).await {
+                match provider.chat(&followup, tools_ref, model, max_tokens, temperature).await {
                     Ok(final_resp) => {
                         #[cfg(feature = "dynamodb-backend")]
                         {
@@ -859,7 +1033,166 @@ async fn handle_chat(
     Json(ChatResponse {
         response: response_text,
         session_id: req.session_id,
+        agent: Some(agent.id.to_string()),
     })
+}
+
+/// GET /api/v1/agents — List available agents
+async fn handle_agents() -> impl IntoResponse {
+    let agents: Vec<serde_json::Value> = AGENTS.iter()
+        .filter(|a| a.id != "orchestrator")
+        .map(|a| serde_json::json!({
+            "id": a.id,
+            "name": a.name,
+            "description": a.description,
+            "tools_enabled": a.tools_enabled,
+            "icon": a.icon,
+        }))
+        .collect();
+
+    Json(serde_json::json!({
+        "agents": agents,
+        "total": agents.len(),
+        "routing": "auto",
+        "hint": "Use @agent_id prefix to force a specific agent, e.g. '@coder fix this bug'",
+    }))
+}
+
+/// GET /api/v1/devices — List connected devices for a user
+async fn handle_devices(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let session_id = headers.get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("anonymous");
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            // Resolve unified user key
+            let user_key = resolve_session_key(dynamo, table, session_id).await;
+
+            // Query DEVICE# records for this user
+            let resp = dynamo
+                .query()
+                .table_name(table.as_str())
+                .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
+                .expression_attribute_values(":pk", AttributeValue::S(format!("DEVICE#{}", user_key)))
+                .expression_attribute_values(":sk", AttributeValue::S("HB#".to_string()))
+                .scan_index_forward(false)
+                .limit(20)
+                .send()
+                .await;
+
+            let devices: Vec<serde_json::Value> = match resp {
+                Ok(output) => {
+                    output.items.unwrap_or_default().iter().map(|item| {
+                        serde_json::json!({
+                            "hostname": item.get("hostname").and_then(|v| v.as_s().ok()).unwrap_or(&"unknown".to_string()),
+                            "os": item.get("os").and_then(|v| v.as_s().ok()).unwrap_or(&"unknown".to_string()),
+                            "arch": item.get("arch").and_then(|v| v.as_s().ok()).unwrap_or(&"unknown".to_string()),
+                            "cpu_usage": item.get("cpu_usage").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<f64>().ok()),
+                            "memory_total": item.get("memory_total").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()),
+                            "memory_used": item.get("memory_used").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()),
+                            "disk_total": item.get("disk_total").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()),
+                            "disk_used": item.get("disk_used").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()),
+                            "uptime_secs": item.get("uptime_secs").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()),
+                            "last_seen": item.get("last_seen").and_then(|v| v.as_s().ok()),
+                        })
+                    }).collect()
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to query devices: {}", e);
+                    vec![]
+                }
+            };
+
+            return Json(serde_json::json!({
+                "devices": devices,
+                "total": devices.len(),
+            }));
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = &state;
+    let _ = session_id;
+
+    Json(serde_json::json!({
+        "devices": [],
+        "total": 0,
+    }))
+}
+
+/// POST /api/v1/devices/heartbeat — Receive device heartbeat
+async fn handle_device_heartbeat(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<DeviceHeartbeat>,
+) -> impl IntoResponse {
+    info!("Device heartbeat: session={}, hostname={}", req.session_id, req.hostname);
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_key = resolve_session_key(dynamo, table, &req.session_id).await;
+            let now = chrono::Utc::now();
+
+            let mut item_builder = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(format!("DEVICE#{}", user_key)))
+                .item("sk", AttributeValue::S(format!("HB#{}", req.hostname)))
+                .item("session_id", AttributeValue::S(req.session_id.clone()))
+                .item("hostname", AttributeValue::S(req.hostname.clone()))
+                .item("os", AttributeValue::S(req.os.clone()))
+                .item("arch", AttributeValue::S(req.arch.clone()))
+                .item("last_seen", AttributeValue::S(now.to_rfc3339()))
+                .item("ttl", AttributeValue::N((now.timestamp() + 86400).to_string())); // 24h TTL
+
+            if let Some(cpu) = req.cpu_usage {
+                item_builder = item_builder.item("cpu_usage", AttributeValue::N(format!("{:.1}", cpu)));
+            }
+            if let Some(mem_total) = req.memory_total {
+                item_builder = item_builder.item("memory_total", AttributeValue::N(mem_total.to_string()));
+            }
+            if let Some(mem_used) = req.memory_used {
+                item_builder = item_builder.item("memory_used", AttributeValue::N(mem_used.to_string()));
+            }
+            if let Some(disk_total) = req.disk_total {
+                item_builder = item_builder.item("disk_total", AttributeValue::N(disk_total.to_string()));
+            }
+            if let Some(disk_used) = req.disk_used {
+                item_builder = item_builder.item("disk_used", AttributeValue::N(disk_used.to_string()));
+            }
+            if let Some(uptime) = req.uptime_secs {
+                item_builder = item_builder.item("uptime_secs", AttributeValue::N(uptime.to_string()));
+            }
+
+            match item_builder.send().await {
+                Ok(_) => {
+                    return (StatusCode::OK, Json(serde_json::json!({
+                        "status": "ok",
+                        "next_heartbeat_secs": 60,
+                    })));
+                }
+                Err(e) => {
+                    tracing::error!("Failed to store heartbeat: {}", e);
+                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                        "error": "Failed to store heartbeat",
+                    })));
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = &state;
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "ok",
+        "next_heartbeat_secs": 60,
+    })))
 }
 
 /// GET /api/v1/sessions — List sessions
