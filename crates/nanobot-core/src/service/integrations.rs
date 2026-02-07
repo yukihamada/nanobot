@@ -39,7 +39,7 @@ pub fn get_tool_definitions() -> Vec<serde_json::Value> {
             "type": "function",
             "function": {
                 "name": "web_search",
-                "description": "Search the web for current information. Use this when the user asks about recent events, prices, news, or anything that requires up-to-date data.",
+                "description": "Search the web for current information. ALWAYS use this tool when the user asks about prices, products, recent events, news, comparisons, or anything that requires up-to-date data. Returns titles, URLs, and snippets from real web pages. You can then use web_fetch to read specific pages for more detail.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -56,7 +56,7 @@ pub fn get_tool_definitions() -> Vec<serde_json::Value> {
             "type": "function",
             "function": {
                 "name": "web_fetch",
-                "description": "Fetch the content of a web page URL. Use this when the user provides a URL or when you need to read a specific web page.",
+                "description": "Fetch and read the content of a web page URL. Use this after web_search to get detailed content from specific pages (e.g., product pages for prices, articles for full text). Also use when the user provides a specific URL.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -139,44 +139,119 @@ pub async fn execute_tool(name: &str, arguments: &HashMap<String, serde_json::Va
 
 /// Web search using DuckDuckGo instant answer API.
 async fn execute_web_search(query: &str) -> String {
+    // Try Brave Search API first (if key is available), then fall back to DuckDuckGo HTML
+    if let Ok(brave_key) = std::env::var("BRAVE_API_KEY") {
+        if let Some(result) = brave_search(query, &brave_key).await {
+            return result;
+        }
+    }
+
+    // Fall back to direct site search (DuckDuckGo blocks cloud IPs with CAPTCHAs)
+    direct_site_search(query).await
+}
+
+/// Search using Brave Search API (returns high-quality results with URLs).
+async fn brave_search(query: &str, api_key: &str) -> Option<String> {
     let client = reqwest::Client::new();
     let url = format!(
-        "https://api.duckduckgo.com/?q={}&format=json&no_html=1",
+        "https://api.search.brave.com/res/v1/web/search?q={}&count=8",
         urlencoding::encode(query)
     );
 
-    match client.get(&url).send().await {
-        Ok(resp) => {
-            match resp.json::<serde_json::Value>().await {
-                Ok(data) => {
-                    let mut results = Vec::new();
+    let resp = client.get(&url)
+        .header("Accept", "application/json")
+        .header("X-Subscription-Token", api_key)
+        .send()
+        .await.ok()?;
 
-                    // Abstract (main answer)
-                    if let Some(abstract_text) = data.get("AbstractText").and_then(|v| v.as_str()) {
-                        if !abstract_text.is_empty() {
-                            results.push(format!("Answer: {}", abstract_text));
-                        }
-                    }
+    let data: serde_json::Value = resp.json().await.ok()?;
+    let mut results = Vec::new();
 
-                    // Related topics
-                    if let Some(topics) = data.get("RelatedTopics").and_then(|v| v.as_array()) {
-                        for (i, topic) in topics.iter().take(5).enumerate() {
-                            if let Some(text) = topic.get("Text").and_then(|v| v.as_str()) {
-                                results.push(format!("{}. {}", i + 1, text));
-                            }
-                        }
-                    }
-
-                    if results.is_empty() {
-                        format!("No results found for: {}", query)
-                    } else {
-                        results.join("\n\n")
-                    }
-                }
-                Err(e) => format!("Failed to parse search results: {}", e),
+    if let Some(web) = data.get("web").and_then(|v| v.get("results")).and_then(|v| v.as_array()) {
+        for (i, r) in web.iter().take(8).enumerate() {
+            let title = r.get("title").and_then(|v| v.as_str()).unwrap_or("");
+            let url = r.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            let desc = r.get("description").and_then(|v| v.as_str()).unwrap_or("");
+            if !title.is_empty() {
+                results.push(format!("{}. {} - {}\n   URL: {}\n   {}", i + 1, title, url, url, desc));
             }
         }
-        Err(e) => format!("Search failed: {}", e),
+    }
+
+    if results.is_empty() {
+        None
+    } else {
+        Some(format!("Search results for \"{}\":\n\n{}", query, results.join("\n\n")))
+    }
+}
+
+/// Fallback search: fetch kakaku.com (Japan's biggest price comparison site) for product info.
+/// This works even when search engines block cloud IPs with CAPTCHAs.
+async fn direct_site_search(query: &str) -> String {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    // Clean the query: strip "site:" prefixes and common search operators
+    let clean_query: String = query.split_whitespace()
+        .filter(|w| !w.starts_with("site:") && !w.starts_with("-"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let encoded = urlencoding::encode(&clean_query);
+
+    // Use kakaku.com (price comparison) and Amazon as primary sources
+    let search_urls = vec![
+        (format!("https://kakaku.com/search_results/{}/?query={}", encoded, encoded), "kakaku.com"),
+        (format!("https://www.amazon.co.jp/s?k={}", encoded), "Amazon.co.jp"),
+    ];
+
+    // Fetch in parallel
+    let mut handles = Vec::new();
+    for (url, source) in search_urls {
+        let client = client.clone();
+        let source = source.to_string();
+        handles.push(tokio::spawn(async move {
+            match client.get(&url)
+                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("Accept-Language", "ja,en;q=0.9")
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    let final_url = resp.url().to_string();
+                    if resp.status().is_success() {
+                        if let Ok(body) = resp.text().await {
+                            let text = strip_html_tags(&body);
+                            let cleaned: String = text.lines()
+                                .map(|l| l.trim())
+                                .filter(|l| !l.is_empty() && l.len() > 3)
+                                .take(40)
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            let snippet = if cleaned.len() > 1500 { &cleaned[..1500] } else { &cleaned };
+                            return Some(format!("[{}] URL: {}\n{}", source, final_url, snippet));
+                        }
+                    }
+                    None
+                }
+                Err(_) => None,
+            }
+        }));
+    }
+
+    let mut results = Vec::new();
+    for h in handles {
+        if let Ok(Some(result)) = h.await {
+            results.push(result);
+        }
+    }
+
+    if results.is_empty() {
+        format!("No results found for: {}. Try using web_fetch with specific product URLs.", query)
+    } else {
+        format!("Search results for \"{}\":\n\n{}", query, results.join("\n\n---\n\n"))
     }
 }
 
@@ -187,21 +262,38 @@ async fn execute_web_fetch(url: &str) -> String {
     }
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::limited(5))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
-    match client.get(url).send().await {
+    match client.get(url)
+        .header("User-Agent", "Mozilla/5.0 (compatible; chatweb.ai bot)")
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header("Accept-Language", "ja,en;q=0.9")
+        .send()
+        .await
+    {
         Ok(resp) => {
+            let status = resp.status();
+            if !status.is_success() {
+                return format!("HTTP {} for {}", status, url);
+            }
             match resp.text().await {
                 Ok(body) => {
                     // Simple HTML to text: strip tags
                     let text = strip_html_tags(&body);
+                    // Clean up excessive whitespace
+                    let cleaned: String = text.lines()
+                        .map(|l| l.trim())
+                        .filter(|l| !l.is_empty())
+                        .collect::<Vec<_>>()
+                        .join("\n");
                     // Limit length
-                    if text.len() > 3000 {
-                        format!("{}...\n\n[Truncated, {} chars total]", &text[..3000], text.len())
+                    if cleaned.len() > 8000 {
+                        format!("Content from {}:\n\n{}...\n\n[Truncated, {} chars total]", url, &cleaned[..8000], cleaned.len())
                     } else {
-                        text
+                        format!("Content from {}:\n\n{}", url, cleaned)
                     }
                 }
                 Err(e) => format!("Failed to read page: {}", e),

@@ -605,8 +605,10 @@ const AGENTS: &[AgentProfile] = &[
         name: "Researcher",
         description: "Web research, fact-checking, data gathering",
         system_prompt: "あなたはリサーチ専門のAIエージェントです。\
-             ウェブ検索ツールを積極的に使って、正確で最新の情報を提供してください。\
-             情報源を明示し、複数の視点を提供してください。\
+             質問には必ずweb_searchツールを使って実際に検索してから回答してください。\
+             価格比較の場合は各サイトをweb_fetchで確認し、具体的な価格とURLを含めてください。\
+             「見つかりません」と言わず、必ず検索を実行してください。\
+             情報源のURLを必ず明示してください。\
              日本語で質問されたら日本語で、英語なら英語で答えてください。",
         tools_enabled: true,
         icon: "search",
@@ -934,7 +936,16 @@ async fn handle_chat(
         }
     }
 
-    messages.push(Message::user(&clean_message));
+    // For tool-using agents, append instruction to actively use tools
+    if agent.tools_enabled {
+        let augmented = format!(
+            "{}\n\n[You MUST call web_search tool first to find current information. Never answer from memory alone for factual questions.]",
+            clean_message
+        );
+        messages.push(Message::user(&augmented));
+    } else {
+        messages.push(Message::user(&clean_message));
+    }
 
     let model = &state.config.agents.defaults.model;
     let max_tokens = state.config.agents.defaults.max_tokens;
@@ -949,8 +960,13 @@ async fn handle_chat(
 
     let tools_ref = if tools.is_empty() { None } else { Some(&tools[..]) };
 
+    info!("Calling LLM: model={}, tools={}, agent={}", model, tools.len(), agent.id);
+
     let response_text = match provider.chat(&messages, tools_ref, model, max_tokens, temperature).await {
         Ok(completion) => {
+            info!("LLM response: finish_reason={:?}, tool_calls={}, content_len={}",
+                completion.finish_reason, completion.tool_calls.len(),
+                completion.content.as_ref().map(|c| c.len()).unwrap_or(0));
             // Deduct credits after successful LLM call
             #[cfg(feature = "dynamodb-backend")]
             {
@@ -967,9 +983,11 @@ async fn handle_chat(
             if completion.has_tool_calls() {
                 let mut tool_results = Vec::new();
                 for tool_call in &completion.tool_calls {
+                    info!("Tool call: {} args={:?}", tool_call.name, tool_call.arguments);
                     let result = crate::service::integrations::execute_tool(
                         &tool_call.name, &tool_call.arguments
                     ).await;
+                    info!("Tool result ({}): {} chars", tool_call.name, result.len());
                     tool_results.push((tool_call.id.clone(), tool_call.name.clone(), result));
                 }
 
@@ -996,6 +1014,10 @@ async fn handle_chat(
                 // Second LLM call with tool results
                 match provider.chat(&followup, tools_ref, model, max_tokens, temperature).await {
                     Ok(final_resp) => {
+                        info!("Follow-up response: finish={:?}, content_len={}, tool_calls={}",
+                            final_resp.finish_reason,
+                            final_resp.content.as_ref().map(|c| c.len()).unwrap_or(0),
+                            final_resp.tool_calls.len());
                         #[cfg(feature = "dynamodb-backend")]
                         {
                             if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
@@ -1003,7 +1025,13 @@ async fn handle_chat(
                                     final_resp.usage.prompt_tokens, final_resp.usage.completion_tokens).await;
                             }
                         }
-                        final_resp.content.unwrap_or_default()
+                        // If content is empty but we have tool calls again, return tool results directly
+                        let content = final_resp.content.unwrap_or_default();
+                        if content.is_empty() && !tool_results.is_empty() {
+                            tool_results.iter().map(|(_, name, result)| format!("[{}]\n{}", name, result)).collect::<Vec<_>>().join("\n\n")
+                        } else {
+                            content
+                        }
                     }
                     Err(e) => {
                         tracing::error!("LLM tool followup error: {}", e);

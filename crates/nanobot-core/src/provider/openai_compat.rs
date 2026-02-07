@@ -97,11 +97,23 @@ impl LlmProvider for OpenAiCompatProvider {
         if let Some(tools) = tools {
             if !tools.is_empty() {
                 body["tools"] = json!(tools);
-                body["tool_choice"] = json!("auto");
+                // If this is a follow-up call (has tool results), use "auto".
+                // Otherwise force tool usage with "required" so the model actually searches.
+                let has_tool_results = messages.iter().any(|m| m.role == crate::types::Role::Tool);
+                body["tool_choice"] = if has_tool_results {
+                    json!("auto")
+                } else {
+                    json!("required")
+                };
             }
         }
 
         debug!("OpenAI-compat request to {} with model {}", url, model_name);
+        if body.get("tools").is_some() {
+            let tc = body.get("tool_choice").map(|v| v.to_string()).unwrap_or_default();
+            let num_tools = body.get("tools").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+            tracing::info!("Tools: {} definitions, tool_choice={}", num_tools, tc);
+        }
 
         let response = http::client()
             .post(&url)

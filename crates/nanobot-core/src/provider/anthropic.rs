@@ -169,6 +169,12 @@ impl LlmProvider for AnthropicProvider {
         if let Some(tools) = tools {
             if !tools.is_empty() {
                 body["tools"] = json!(self.convert_tools(tools));
+                let has_tool_results = messages.iter().any(|m| m.role == crate::types::Role::Tool);
+                body["tool_choice"] = if has_tool_results {
+                    json!({"type": "auto"})
+                } else {
+                    json!({"type": "any"})
+                };
             }
         }
 
