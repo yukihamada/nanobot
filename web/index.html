@@ -210,6 +210,66 @@
     .ch-btn.tg { background: var(--tg); }
     .ch-btn svg { flex-shrink: 0; }
 
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      text-align: center;
+      max-width: 360px;
+      width: 90%;
+    }
+    .modal h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .modal p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+    .modal img {
+      width: 200px;
+      height: 200px;
+      border-radius: 12px;
+      background: #fff;
+      margin-bottom: 16px;
+    }
+    .modal .modal-link {
+      display: inline-block;
+      padding: 10px 24px;
+      border-radius: 8px;
+      color: #fff;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    .modal .modal-link.line-bg { background: var(--line); }
+    .modal .modal-link.tg-bg { background: var(--tg); }
+    .modal .close-btn {
+      display: block;
+      margin-top: 12px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .modal .close-btn:hover { color: var(--text); }
+
     /* Footer */
     footer {
       text-align: center;
@@ -258,14 +318,25 @@
 
     <!-- Channel buttons -->
     <div class="channels">
-      <a href="https://line.me/R/ti/p/@619jcqqh" class="ch-btn line" target="_blank">
+      <button onclick="showModal('line')" class="ch-btn line">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#fff"/></svg>
         <span id="t-line">LINEで使う</span>
-      </a>
-      <a href="https://t.me/chatweb_ai_bot" class="ch-btn tg" target="_blank">
+      </button>
+      <button onclick="showModal('tg')" class="ch-btn tg">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z" fill="#fff"/></svg>
         <span id="t-tg">Telegramで使う</span>
-      </a>
+      </button>
+    </div>
+
+    <!-- QR Modal -->
+    <div class="modal-overlay" id="modal" onclick="closeModal(event)">
+      <div class="modal" id="modal-content">
+        <h3 id="modal-title"></h3>
+        <p id="modal-desc"></p>
+        <img id="modal-qr" alt="QR Code">
+        <a id="modal-link" class="modal-link" target="_blank"></a>
+        <button class="close-btn" onclick="document.getElementById('modal').classList.remove('show')">閉じる</button>
+      </div>
     </div>
   </div>
 
@@ -458,6 +529,38 @@
       document.getElementById('send-btn').textContent = t.send;
       renderRecipes(l);
     }
+    // Modal
+    const CHANNELS = {
+      line: {
+        url: 'https://line.me/R/ti/p/@619jcqqh',
+        ja: { title: 'LINEで友だち追加', desc: 'QRコードをLINEで読み取ると、すぐにAIチャットが使えます。', link: 'LINEで開く' },
+        en: { title: 'Add on LINE', desc: 'Scan this QR code with LINE to start chatting with AI.', link: 'Open in LINE' },
+      },
+      tg: {
+        url: 'https://t.me/chatweb_ai_bot',
+        ja: { title: 'Telegramで開始', desc: 'QRコードを読み取るか、下のボタンからTelegramで直接チャット。', link: 'Telegramで開く' },
+        en: { title: 'Start on Telegram', desc: 'Scan the QR code or tap the button to chat on Telegram.', link: 'Open in Telegram' },
+      }
+    };
+    function showModal(ch) {
+      const c = CHANNELS[ch];
+      const l = document.documentElement.lang || 'ja';
+      const t = c[l] || c.ja;
+      document.getElementById('modal-title').textContent = t.title;
+      document.getElementById('modal-desc').textContent = t.desc;
+      document.getElementById('modal-qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(c.url);
+      const link = document.getElementById('modal-link');
+      link.href = c.url;
+      link.textContent = t.link;
+      link.className = 'modal-link ' + (ch === 'line' ? 'line-bg' : 'tg-bg');
+      document.getElementById('modal').classList.add('show');
+    }
+    function closeModal(e) {
+      if (e.target === document.getElementById('modal')) {
+        document.getElementById('modal').classList.remove('show');
+      }
+    }
+
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
   </script>
 </body>
