@@ -8,6 +8,11 @@ Parameters:
     NoEcho: true
     Description: Anthropic API key
     Default: ''
+  OpenaiApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenAI API key
+    Default: ''
   TelegramBotToken:
     Type: String
     NoEcho: true
@@ -34,7 +39,7 @@ Parameters:
   NanobotModel:
     Type: String
     Description: Default LLM model
-    Default: 'anthropic/claude-sonnet-4-5-20250929'
+    Default: 'openai/gpt-4o'
   TenantId:
     Type: String
     Description: Tenant ID for multi-tenant isolation
@@ -60,6 +65,7 @@ Resources:
         Variables:
           RUST_LOG: nanobot=info
           ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          OPENAI_API_KEY: !Ref OpenaiApiKey
           TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
           TELEGRAM_ALLOW_FROM: !Ref TelegramAllowFrom
           LINE_CHANNEL_SECRET: !Ref LineChannelSecret
