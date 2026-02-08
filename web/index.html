@@ -5,6 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>chatweb.ai - AIチャット</title>
   <meta name="description" content="AIとすぐに話せる。LINE・Telegramでも使える。無料。">
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%236366f1'/%3E%3Ctext x='90' y='115' text-anchor='middle' font-size='80' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <!-- OGP -->
+  <meta property="og:title" content="chatweb.ai - AI Agent Platform">
+  <meta property="og:description" content="AI assistant with web search, tools, and multi-channel support. Use on Web, LINE, and Telegram.">
+  <meta property="og:image" content="https://chatweb.ai/og.svg">
+  <meta property="og:url" content="https://chatweb.ai">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="chatweb.ai">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="chatweb.ai - AI Agent Platform">
+  <meta name="twitter:description" content="AI assistant with web search, tools, and multi-channel support.">
+  <meta name="twitter:image" content="https://chatweb.ai/og.svg">
   <style>
     :root {
       --bg: #09090b;
@@ -443,6 +458,54 @@
     }
     .chat-input button:hover { transform: scale(1.05); box-shadow: 0 4px 15px var(--accent-glow); }
 
+    /* Capabilities section */
+    .cap-section {
+      margin-bottom: 32px;
+    }
+    .cap-section h2 {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      text-align: center;
+    }
+    .cap-section .cap-sub {
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 18px;
+    }
+    .cap-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .cap-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 14px;
+      text-align: center;
+      transition: all 0.25s;
+    }
+    .cap-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+    .cap-card .cap-icon { font-size: 24px; margin-bottom: 8px; }
+    .cap-card .cap-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .cap-card .cap-desc { font-size: 11px; color: var(--muted); line-height: 1.4; }
+    .cap-card .cap-badge {
+      display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 4px;
+      font-size: 10px; font-weight: 700;
+    }
+    .cap-badge.built-in { background: rgba(34,197,94,0.15); color: var(--green); }
+    .cap-badge.mcp-ext { background: rgba(99,102,241,0.15); color: var(--accent-hover); }
+    .cap-mcp-note {
+      text-align: center; font-size: 11px; color: var(--muted); margin-top: 4px;
+      padding: 10px; background: rgba(99,102,241,0.05); border-radius: 10px;
+      border: 1px solid rgba(99,102,241,0.1);
+    }
+    .cap-mcp-note a { color: var(--accent-hover); text-decoration: none; font-weight: 600; }
+    .cap-mcp-note a:hover { text-decoration: underline; }
+
     /* Recipe cards */
     .recipes { margin-bottom: 32px; }
     .recipes h2 {
@@ -734,6 +797,7 @@
       .bottom-cta h2 { font-size: 20px; }
       .sync-steps { grid-template-columns: 1fr; }
       .sync-flow { gap: 8px; }
+      .cap-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -777,6 +841,10 @@
       <div class="stat-item">
         <div class="stat-value" id="stat-channels">3</div>
         <div class="stat-label" id="stat-channels-label">チャネル</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-tools">4+MCP</div>
+        <div class="stat-label" id="stat-tools-label">ツール</div>
       </div>
     </div>
 
@@ -834,6 +902,72 @@
       <div class="chat-input">
         <input type="text" id="input" placeholder="何でも聞いてください..." autocomplete="off">
         <button onclick="send()" id="send-btn">送信</button>
+      </div>
+    </div>
+
+    <!-- Capabilities section -->
+    <div class="cap-section fade-up fade-up-d3" id="cap-section">
+      <h2 id="t-cap-title">AI + ツールで、なんでも自動化</h2>
+      <p class="cap-sub" id="t-cap-sub">内蔵ツール + MCP拡張で無限の可能性</p>
+      <div class="cap-grid">
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F50D;</div>
+          <div class="cap-name" id="cap-search">Web検索</div>
+          <div class="cap-desc" id="cap-search-d">リアルタイムの情報を検索・収集</div>
+          <div class="cap-badge built-in" id="cap-search-b">Built-in</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F310;</div>
+          <div class="cap-name" id="cap-fetch">Webページ取得</div>
+          <div class="cap-desc" id="cap-fetch-d">任意のURLからコンテンツを取得</div>
+          <div class="cap-badge built-in" id="cap-fetch-b">Built-in</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F9EE;</div>
+          <div class="cap-name" id="cap-calc">電卓</div>
+          <div class="cap-desc" id="cap-calc-d">数式の計算・通貨換算</div>
+          <div class="cap-badge built-in" id="cap-calc-b">Built-in</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x26C5;</div>
+          <div class="cap-name" id="cap-weather">天気</div>
+          <div class="cap-desc" id="cap-weather-d">世界中の天気・予報を取得</div>
+          <div class="cap-badge built-in" id="cap-weather-b">Built-in</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F4C1;</div>
+          <div class="cap-name" id="cap-file">ファイル操作</div>
+          <div class="cap-desc" id="cap-file-d">ファイルの読み書き・編集</div>
+          <div class="cap-badge mcp-ext">MCP</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F4BB;</div>
+          <div class="cap-name" id="cap-shell">シェル実行</div>
+          <div class="cap-desc" id="cap-shell-d">コマンドの実行・自動化</div>
+          <div class="cap-badge mcp-ext">MCP</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F30F;</div>
+          <div class="cap-name" id="cap-browser">ブラウザ</div>
+          <div class="cap-desc" id="cap-browser-d">Webページの自動操作</div>
+          <div class="cap-badge mcp-ext">MCP</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F5BC;</div>
+          <div class="cap-name" id="cap-image">画像解析</div>
+          <div class="cap-desc" id="cap-image-d">画像認識・マルチモーダル</div>
+          <div class="cap-badge mcp-ext">MCP</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F9E0;</div>
+          <div class="cap-name" id="cap-memory">永続メモリ</div>
+          <div class="cap-desc" id="cap-memory-d">会話横断で記憶を保持</div>
+          <div class="cap-badge mcp-ext">MCP</div>
+        </div>
+      </div>
+      <div class="cap-mcp-note" id="cap-note">
+        <span id="cap-note-text">MCPツールはModel Context Protocolで無限に拡張可能。</span>
+        <a href="#chat-area" onclick="document.getElementById('input').value='使えるツールを教えて';document.getElementById('input').focus();return false;" id="cap-note-link">ツール一覧を聞いてみる →</a>
       </div>
     </div>
 
@@ -928,6 +1062,7 @@
   <footer>
     <a href="/pricing" id="footer-pricing">Pricing</a> &middot;
     <a href="/status">Status</a> &middot;
+    <a href="/comparison" id="footer-comparison">Comparison</a> &middot;
     <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
     <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
     chatweb.ai &copy; 2025-2026
@@ -940,7 +1075,7 @@
 
     let webSessionId = localStorage.getItem('webSessionId');
     if (!webSessionId) {
-      webSessionId = 'api:' + crypto.randomUUID();
+      webSessionId = 'webchat:' + crypto.randomUUID();
       localStorage.setItem('webSessionId', webSessionId);
     }
 
@@ -1245,7 +1380,7 @@
         ph: '何でも聞いてください...', send: '送信',
         heroTry: '無料で試す', heroPlans: 'プランを見る', pricing: '料金', status: 'ステータス',
         chatStatus: 'オンライン',
-        statsUptime: '稼働率', statsSpeed: '平均応答', statsModels: 'AIモデル', statsChannels: 'チャネル',
+        statsUptime: '稼働率', statsSpeed: '平均応答', statsModels: 'AIモデル', statsChannels: 'チャネル', statsTools: 'ツール',
         trustSsl: 'SSL暗号化', trustStripe: 'Stripe決済', trustNocard: 'カード不要で開始',
         syncTitle: 'どのチャネルでも同じ会話',
         syncDesc: 'Web・LINE・Telegramの会話をリンクして、どこからでも続きを。',
@@ -1262,6 +1397,19 @@
         deviceTitle: '接続デバイス',
         deviceDesc: 'CLIデーモンで接続されたマシン一覧',
         deviceHint: 'CLIをインストールして <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> で接続',
+        capTitle: 'AI + ツールで、なんでも自動化',
+        capSub: '内蔵ツール + MCP拡張で無限の可能性',
+        capSearch: 'Web検索', capSearchD: 'リアルタイムの情報を検索・収集',
+        capFetch: 'Webページ取得', capFetchD: '任意のURLからコンテンツを取得',
+        capCalc: '電卓', capCalcD: '数式の計算・通貨換算',
+        capWeather: '天気', capWeatherD: '世界中の天気・予報を取得',
+        capFile: 'ファイル操作', capFileD: 'ファイルの読み書き・編集',
+        capShell: 'シェル実行', capShellD: 'コマンドの実行・自動化',
+        capBrowser: 'ブラウザ', capBrowserD: 'Webページの自動操作',
+        capImage: '画像解析', capImageD: '画像認識・マルチモーダル',
+        capMemory: '永続メモリ', capMemoryD: '会話横断で記憶を保持',
+        capNote: 'MCPツールはModel Context Protocolで無限に拡張可能。',
+        capNoteLink: 'ツール一覧を聞いてみる →',
       },
       en: {
         title: 'Ask AI to do anything',
@@ -1273,7 +1421,7 @@
         ph: 'Ask me anything...', send: 'Send',
         heroTry: 'Try Free', heroPlans: 'View Plans', pricing: 'Pricing', status: 'Status',
         chatStatus: 'Online',
-        statsUptime: 'Uptime', statsSpeed: 'Avg Response', statsModels: 'AI Models', statsChannels: 'Channels',
+        statsUptime: 'Uptime', statsSpeed: 'Avg Response', statsModels: 'AI Models', statsChannels: 'Channels', statsTools: 'Tools',
         trustSsl: 'SSL Encrypted', trustStripe: 'Stripe Payments', trustNocard: 'No card required',
         syncTitle: 'Same conversation, any channel',
         syncDesc: 'Link your Web, LINE, and Telegram chats. Continue from anywhere.',
@@ -1290,6 +1438,19 @@
         deviceTitle: 'Connected Devices',
         deviceDesc: 'Machines connected via CLI daemon',
         deviceHint: 'Install CLI and run <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> to connect',
+        capTitle: 'AI + Tools = Automate Anything',
+        capSub: 'Built-in tools + unlimited MCP extensions',
+        capSearch: 'Web Search', capSearchD: 'Search & gather real-time information',
+        capFetch: 'Web Fetch', capFetchD: 'Retrieve content from any URL',
+        capCalc: 'Calculator', capCalcD: 'Math, conversions & calculations',
+        capWeather: 'Weather', capWeatherD: 'Global weather & forecasts',
+        capFile: 'File Operations', capFileD: 'Read, write & edit files',
+        capShell: 'Shell Exec', capShellD: 'Run commands & automate tasks',
+        capBrowser: 'Browser', capBrowserD: 'Automate web pages',
+        capImage: 'Image Analysis', capImageD: 'Vision & multimodal AI',
+        capMemory: 'Memory', capMemoryD: 'Persistent cross-session memory',
+        capNote: 'MCP tools are infinitely extensible via Model Context Protocol.',
+        capNoteLink: 'Ask about available tools →',
       }
     };
 
@@ -1348,6 +1509,7 @@
       document.getElementById('stat-speed-label').textContent = t.statsSpeed;
       document.getElementById('stat-models-label').textContent = t.statsModels;
       document.getElementById('stat-channels-label').textContent = t.statsChannels;
+      document.getElementById('stat-tools-label').textContent = t.statsTools;
       document.getElementById('trust-ssl').textContent = t.trustSsl;
       document.getElementById('trust-stripe').textContent = t.trustStripe;
       document.getElementById('trust-nocard').textContent = t.trustNocard;
@@ -1371,6 +1533,29 @@
       document.getElementById('t-device-title').textContent = t.deviceTitle;
       document.getElementById('t-device-desc').textContent = t.deviceDesc;
       document.getElementById('t-device-hint').innerHTML = t.deviceHint;
+      // Capabilities section
+      document.getElementById('t-cap-title').textContent = t.capTitle;
+      document.getElementById('t-cap-sub').textContent = t.capSub;
+      document.getElementById('cap-search').textContent = t.capSearch;
+      document.getElementById('cap-search-d').textContent = t.capSearchD;
+      document.getElementById('cap-fetch').textContent = t.capFetch;
+      document.getElementById('cap-fetch-d').textContent = t.capFetchD;
+      document.getElementById('cap-calc').textContent = t.capCalc;
+      document.getElementById('cap-calc-d').textContent = t.capCalcD;
+      document.getElementById('cap-weather').textContent = t.capWeather;
+      document.getElementById('cap-weather-d').textContent = t.capWeatherD;
+      document.getElementById('cap-file').textContent = t.capFile;
+      document.getElementById('cap-file-d').textContent = t.capFileD;
+      document.getElementById('cap-shell').textContent = t.capShell;
+      document.getElementById('cap-shell-d').textContent = t.capShellD;
+      document.getElementById('cap-browser').textContent = t.capBrowser;
+      document.getElementById('cap-browser-d').textContent = t.capBrowserD;
+      document.getElementById('cap-image').textContent = t.capImage;
+      document.getElementById('cap-image-d').textContent = t.capImageD;
+      document.getElementById('cap-memory').textContent = t.capMemory;
+      document.getElementById('cap-memory-d').textContent = t.capMemoryD;
+      document.getElementById('cap-note-text').textContent = t.capNote;
+      document.getElementById('cap-note-link').textContent = t.capNoteLink;
       renderRecipes(l);
     }
 

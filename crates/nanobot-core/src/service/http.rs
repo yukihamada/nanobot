@@ -336,7 +336,7 @@ fn parse_link_command(text: &str) -> Option<Option<&str>> {
 #[cfg(feature = "dynamodb-backend")]
 fn is_session_id(text: &str) -> bool {
     let t = text.trim();
-    (t.starts_with("api:") || t.starts_with("cli:")) && t.len() > 10
+    (t.starts_with("api:") || t.starts_with("cli:") || t.starts_with("webchat:")) && t.len() > 10
 }
 
 /// Auto-link a channel to a web session ID.
@@ -830,6 +830,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/status", get(handle_status))
         // Admin
         .route("/admin", get(handle_admin))
+        // OG image
+        .route("/og.svg", get(handle_og_svg))
         // Install script
         .route("/install.sh", get(handle_install_sh))
         // Health
@@ -1650,10 +1652,12 @@ async fn handle_telegram_webhook(
     if text.trim() == "/start" || text.starts_with("/start ") {
         // Check for deep-link payload: /start api_xxxx (Telegram replaces : with _)
         let payload = text.strip_prefix("/start ").map(|s| s.trim()).unwrap_or("");
-        let web_session_id = if payload.starts_with("api_") {
-            // Telegram deep links can't contain ':', so we use '_' and convert back
+        let web_session_id = if payload.starts_with("webchat_") {
+            Some(payload.replacen("webchat_", "webchat:", 1))
+        } else if payload.starts_with("api_") {
+            // Legacy: Telegram deep links can't contain ':', so we use '_' and convert back
             Some(payload.replacen("api_", "api:", 1))
-        } else if payload.starts_with("api:") {
+        } else if payload.starts_with("api:") || payload.starts_with("webchat:") {
             Some(payload.to_string())
         } else {
             None
@@ -2147,6 +2151,14 @@ async fn handle_status() -> impl IntoResponse {
 /// GET /admin — Admin dashboard
 async fn handle_admin() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/admin.html"))
+}
+
+/// GET /og.svg — OGP image
+async fn handle_og_svg() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
+        include_str!("../../../../web/og.svg"),
+    )
 }
 
 /// GET /install.sh — CLI install script

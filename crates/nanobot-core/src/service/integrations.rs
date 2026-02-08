@@ -320,21 +320,37 @@ pub async fn execute_tool(name: &str, arguments: &HashMap<String, serde_json::Va
     }
 }
 
-/// Web search: try Brave API → Bing HTML → Jina Reader fallback.
+/// Web search: try Brave API → Bing HTML → Jina search fallback.
 async fn execute_web_search(query: &str) -> String {
+    tracing::info!("execute_web_search: query={}", query);
+
     // Try Brave Search API first (if key is available)
     if let Ok(brave_key) = std::env::var("BRAVE_API_KEY") {
-        if let Some(result) = brave_search(query, &brave_key).await {
-            return result;
+        tracing::info!("web_search: trying Brave API");
+        match brave_search(query, &brave_key).await {
+            Some(result) => return result,
+            None => tracing::warn!("web_search: Brave API returned no results"),
         }
+    } else {
+        tracing::info!("web_search: BRAVE_API_KEY not set, skipping");
     }
 
     // Try Bing HTML search (works from most cloud IPs, server-rendered)
-    if let Some(result) = bing_search(query).await {
+    tracing::info!("web_search: trying Bing HTML");
+    match bing_search(query).await {
+        Some(result) => return result,
+        None => tracing::warn!("web_search: Bing returned no results"),
+    }
+
+    // Try Jina search as general-purpose fallback
+    tracing::info!("web_search: trying Jina search fallback");
+    let result = jina_search(query).await;
+    if result.starts_with("Search results") {
         return result;
     }
 
-    // Fall back to Jina Reader on specific sites
+    // Last resort: kakaku.com specific search
+    tracing::info!("web_search: trying kakaku.com fallback");
     direct_site_search(query).await
 }
 
@@ -445,19 +461,40 @@ async fn bing_search(query: &str) -> Option<String> {
 
 /// Search using Brave Search API (returns high-quality results with URLs).
 async fn brave_search(query: &str, api_key: &str) -> Option<String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .ok()?;
     let url = format!(
         "https://api.search.brave.com/res/v1/web/search?q={}&count=8",
         urlencoding::encode(query)
     );
 
-    let resp = client.get(&url)
+    let resp = match client.get(&url)
         .header("Accept", "application/json")
         .header("X-Subscription-Token", api_key)
         .send()
-        .await.ok()?;
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("brave_search: request failed: {}", e);
+            return None;
+        }
+    };
 
-    let data: serde_json::Value = resp.json().await.ok()?;
+    if !resp.status().is_success() {
+        tracing::warn!("brave_search: HTTP {}", resp.status());
+        return None;
+    }
+
+    let data: serde_json::Value = match resp.json().await {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!("brave_search: JSON parse error: {}", e);
+            return None;
+        }
+    };
     let mut results = Vec::new();
 
     if let Some(web) = data.get("web").and_then(|v| v.get("results")).and_then(|v| v.as_array()) {
@@ -475,6 +512,65 @@ async fn brave_search(query: &str, api_key: &str) -> Option<String> {
         None
     } else {
         Some(format!("Search results for \"{}\":\n\n{}", query, results.join("\n\n")))
+    }
+}
+
+/// General-purpose search fallback using Jina Reader + DuckDuckGo lite.
+async fn jina_search(query: &str) -> String {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    // Use Jina Reader to fetch DuckDuckGo lite (server-rendered, no JS)
+    let ddg_url = format!("https://lite.duckduckgo.com/lite/?q={}", urlencoding::encode(query));
+    let jina_url = format!("https://r.jina.ai/{}", ddg_url);
+
+    tracing::info!("jina_search: fetching {}", jina_url);
+
+    match client.get(&jina_url)
+        .header("Accept", "text/plain")
+        .header("X-Return-Format", "text")
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            let status = resp.status();
+            if !status.is_success() {
+                tracing::warn!("jina_search: HTTP {} from Jina", status);
+                return format!("Search temporarily unavailable (HTTP {}). Try asking in a different way.", status);
+            }
+            match resp.text().await {
+                Ok(body) => {
+                    tracing::info!("jina_search: got {} bytes", body.len());
+                    let useful: String = body.lines()
+                        .map(|l| l.trim())
+                        .filter(|l| {
+                            l.len() > 10 && l.len() < 500
+                            && !l.starts_with("![") && !l.starts_with("[Image")
+                            && !l.starts_with("[![")
+                            && !l.contains("DuckDuckGo") && !l.contains("privacy")
+                        })
+                        .take(30)
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    if useful.len() > 50 {
+                        let snippet = if useful.len() > 4000 { &useful[..4000] } else { &useful };
+                        return format!("Search results for \"{}\":\n\n{}", query, snippet);
+                    }
+                    tracing::warn!("jina_search: response too small ({} useful chars)", useful.len());
+                    format!("No results found for \"{}\". Try a more specific query.", query)
+                }
+                Err(e) => {
+                    tracing::warn!("jina_search: body read error: {}", e);
+                    format!("Search error: {}", e)
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("jina_search: request failed: {}", e);
+            format!("Search unavailable: {}", e)
+        }
     }
 }
 
@@ -587,36 +683,51 @@ async fn execute_web_fetch(url: &str) -> String {
         return "No URL provided".to_string();
     }
 
+    tracing::info!("web_fetch: url={}", url);
+
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(12))
+        .timeout(std::time::Duration::from_secs(15))
         .redirect(reqwest::redirect::Policy::limited(5))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
     // Try Jina Reader first for JS rendering
     let jina_url = format!("https://r.jina.ai/{}", url);
-    if let Ok(resp) = client.get(&jina_url)
+    tracing::info!("web_fetch: trying Jina Reader");
+    match client.get(&jina_url)
         .header("Accept", "text/plain")
         .header("X-Return-Format", "text")
         .send()
         .await
     {
-        if resp.status().is_success() {
-            if let Ok(body) = resp.text().await {
-                let cleaned: String = body.lines()
-                    .map(|l| l.trim())
-                    .filter(|l| !l.is_empty() && !l.starts_with("!["))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if cleaned.len() > 100 {
-                    let snippet = if cleaned.len() > 8000 { &cleaned[..8000] } else { &cleaned };
-                    return format!("Content from {}:\n\n{}", url, snippet);
+        Ok(resp) => {
+            let status = resp.status();
+            if status.is_success() {
+                match resp.text().await {
+                    Ok(body) => {
+                        tracing::info!("web_fetch: Jina returned {} bytes", body.len());
+                        let cleaned: String = body.lines()
+                            .map(|l| l.trim())
+                            .filter(|l| !l.is_empty() && !l.starts_with("!["))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        if cleaned.len() > 100 {
+                            let snippet = if cleaned.len() > 8000 { &cleaned[..8000] } else { &cleaned };
+                            return format!("Content from {}:\n\n{}", url, snippet);
+                        }
+                        tracing::warn!("web_fetch: Jina response too small ({} chars), trying direct", cleaned.len());
+                    }
+                    Err(e) => tracing::warn!("web_fetch: Jina body read error: {}", e),
                 }
+            } else {
+                tracing::warn!("web_fetch: Jina HTTP {}", status);
             }
         }
+        Err(e) => tracing::warn!("web_fetch: Jina request failed: {}", e),
     }
 
     // Fallback: direct fetch with HTML stripping
+    tracing::info!("web_fetch: trying direct fetch");
     match client.get(url)
         .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
         .header("Accept-Language", "ja,en;q=0.9")
@@ -625,10 +736,12 @@ async fn execute_web_fetch(url: &str) -> String {
     {
         Ok(resp) => {
             if !resp.status().is_success() {
+                tracing::warn!("web_fetch: direct fetch HTTP {} for {}", resp.status(), url);
                 return format!("HTTP {} for {}", resp.status(), url);
             }
             match resp.text().await {
                 Ok(body) => {
+                    tracing::info!("web_fetch: direct fetch got {} bytes", body.len());
                     let text = strip_html_tags(&body);
                     let cleaned: String = text.lines()
                         .map(|l| l.trim())
