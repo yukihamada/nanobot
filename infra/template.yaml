@@ -81,9 +81,6 @@ Resources:
       Architectures:
         - arm64
       CodeUri: ../target/lambda/bootstrap/
-      AutoPublishAlias: live
-      ProvisionedConcurrencyConfig:
-        ProvisionedConcurrentExecutions: 10
       Environment:
         Variables:
           RUST_LOG: nanobot=info

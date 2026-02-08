@@ -4,313 +4,312 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Comparison - chatweb.ai</title>
-  <meta name="description" content="chatweb.ai vs ChatGPT, Gemini, Perplexity - feature comparison">
+  <meta name="description" content="chatweb.ai vs ChatGPT, Gemini, Perplexity - detailed feature comparison">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
   <style>
-    :root {
-      --bg: #0a0a0a;
-      --surface: #141414;
-      --border: #1e1e1e;
-      --text: #e5e5e5;
-      --muted: #777;
-      --accent: #6366f1;
-      --accent-hover: #818cf8;
-      --green: #22c55e;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-    }
-    nav {
-      padding: 16px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; text-decoration: none; color: var(--text); }
-    .logo span { color: var(--accent); }
-    .nav-links { display: flex; align-items: center; gap: 16px; }
-    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
-    .nav-links a:hover { color: var(--text); }
-    .lang-sw {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-      display: flex;
-    }
-    .lang-sw button {
-      background: none; border: none; color: var(--muted);
-      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
-    }
-    .lang-sw button.on { background: var(--accent); color: #fff; }
-    .main {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 40px 24px 80px;
-    }
-    .hero {
-      text-align: center;
-      margin-bottom: 48px;
-    }
-    .hero h1 {
-      font-size: 36px;
-      font-weight: 800;
-      letter-spacing: -1px;
-      margin-bottom: 12px;
-    }
-    .hero p {
-      color: var(--muted);
-      font-size: 16px;
-      max-width: 560px;
-      margin: 0 auto;
-    }
-    .compare-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 48px;
-    }
-    .compare-table th, .compare-table td {
-      padding: 14px 16px;
-      text-align: left;
-      border-bottom: 1px solid var(--border);
-      font-size: 14px;
-    }
-    .compare-table th {
-      color: var(--muted);
-      font-weight: 600;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .compare-table th:first-child { width: 200px; }
-    .compare-table td:first-child { font-weight: 600; }
-    .compare-table .highlight {
-      background: rgba(99,102,241,0.08);
-    }
-    .compare-table .highlight td:first-child {
-      color: var(--accent);
-    }
-    .check { color: var(--green); font-weight: 700; }
-    .cross { color: #ef4444; }
-    .partial { color: #f59e0b; }
-    .cta-section {
-      text-align: center;
-      padding: 40px 0;
-    }
-    .cta-btn {
-      display: inline-block;
-      background: var(--accent);
-      color: #fff;
-      padding: 12px 32px;
-      border-radius: 10px;
-      text-decoration: none;
-      font-weight: 700;
-      font-size: 16px;
-      transition: background 0.2s;
-    }
-    .cta-btn:hover { background: var(--accent-hover); }
-    footer {
-      text-align: center;
-      padding: 24px;
-      color: var(--muted);
-      font-size: 12px;
-      border-top: 1px solid var(--border);
-    }
-    footer a { color: var(--muted); text-decoration: none; }
-    footer a:hover { color: var(--text); }
-    @media (max-width: 768px) {
-      .compare-table { font-size: 12px; }
-      .compare-table th, .compare-table td { padding: 10px 8px; }
-      .hero h1 { font-size: 28px; }
+    :root{--bg:#0a0a0a;--s:#141414;--b:#1e1e1e;--t:#e5e5e5;--m:#777;--a:#6366f1;--ah:#818cf8;--g:#22c55e;--y:#f59e0b;--r:#ef4444}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;line-height:1.6}
+    nav{padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b)}
+    .logo{font-size:18px;font-weight:700;text-decoration:none;color:var(--t)}.logo span{color:var(--a)}
+    .nav-links{display:flex;align-items:center;gap:16px}
+    .nav-links a{color:var(--m);text-decoration:none;font-size:14px;font-weight:500}.nav-links a:hover{color:var(--t)}
+    .lang-sw{background:var(--s);border:1px solid var(--b);border-radius:6px;overflow:hidden;display:flex}
+    .lang-sw button{background:none;border:none;color:var(--m);padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer}
+    .lang-sw button.on{background:var(--a);color:#fff}
+    .main{max-width:1100px;margin:0 auto;padding:40px 24px 80px}
+    .hero{text-align:center;margin-bottom:48px}
+    .hero h1{font-size:36px;font-weight:800;letter-spacing:-1px;margin-bottom:12px}
+    .hero p{color:var(--m);font-size:16px;max-width:600px;margin:0 auto}
+    /* Stats bar */
+    .stats{display:flex;justify-content:center;gap:32px;margin:32px 0 48px;flex-wrap:wrap}
+    .stat{text-align:center}
+    .stat .num{font-size:32px;font-weight:800;color:var(--a)}
+    .stat .label{font-size:12px;color:var(--m);margin-top:2px}
+    /* Comparison table */
+    .tbl{width:100%;border-collapse:collapse;margin-bottom:40px}
+    .tbl th,.tbl td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--b);font-size:13px}
+    .tbl th{color:var(--m);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;background:var(--bg);z-index:2}
+    .tbl td:first-child{font-weight:600;white-space:nowrap}
+    .tbl .hl{background:rgba(99,102,241,.06)}
+    .tbl .hl td:first-child{color:var(--a)}
+    .ck{color:var(--g);font-weight:700}.cx{color:var(--r)}.cp{color:var(--y)}
+    .tbl .cat-row td{background:rgba(99,102,241,.12);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--a);padding:8px 14px;border:none}
+    /* Feature detail sections */
+    .sections{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;margin-bottom:48px}
+    .card{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:24px}
+    .card h3{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+    .card ul{list-style:none;padding:0}
+    .card li{font-size:13px;color:#ccc;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);display:flex;align-items:flex-start;gap:8px}
+    .card li:last-child{border:none}
+    .card li::before{content:"✓";color:var(--g);font-weight:700;flex-shrink:0;margin-top:1px}
+    .cta{text-align:center;padding:48px 0}
+    .cta-btn{display:inline-block;background:var(--a);color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;transition:all .2s}
+    .cta-btn:hover{background:var(--ah);transform:translateY(-1px)}
+    footer{text-align:center;padding:24px;color:var(--m);font-size:12px;border-top:1px solid var(--b)}
+    footer a{color:var(--m);text-decoration:none}.footer a:hover{color:var(--t)}
+    @media(max-width:768px){
+      .tbl{font-size:11px}.tbl th,.tbl td{padding:8px 6px}
+      .hero h1{font-size:26px}.stats{gap:16px}.stat .num{font-size:24px}
+      .sections{grid-template-columns:1fr}
     }
   </style>
 </head>
 <body>
-  <nav>
-    <a href="/" class="logo"><span>chat</span>web.ai</a>
-    <div class="nav-links">
-      <a href="/pricing" id="nav-pricing">Pricing</a>
-      <a href="/contact" id="nav-contact">Contact</a>
-      <div class="lang-sw">
-        <button onclick="setLang('ja')" id="btn-ja" class="on">JP</button>
-        <button onclick="setLang('en')" id="btn-en">EN</button>
-      </div>
+<nav>
+  <a href="/" class="logo"><span>chat</span>web.ai</a>
+  <div class="nav-links">
+    <a href="/">Chat</a>
+    <a href="/pricing" id="nav-pricing">Pricing</a>
+    <a href="/settings">Settings</a>
+    <a href="/contact" id="nav-contact">Contact</a>
+    <div class="lang-sw">
+      <button onclick="setLang('ja')" id="btn-ja" class="on">JP</button>
+      <button onclick="setLang('en')" id="btn-en">EN</button>
     </div>
-  </nav>
+  </div>
+</nav>
 
-  <div class="main">
-    <div class="hero">
-      <h1 id="t-title">AI サービス比較</h1>
-      <p id="t-subtitle">chatweb.ai と他の主要AIサービスの機能比較</p>
+<div class="main">
+  <div class="hero">
+    <h1 id="t-title">chatweb.ai 全機能一覧 & 比較</h1>
+    <p id="t-subtitle">オープンソースのマルチモデルAIプラットフォーム。9つのツール、6つのAIエージェント、5チャネル対応。</p>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="num">9</div><div class="label" id="s-tools">Built-in Tools</div></div>
+    <div class="stat"><div class="num">6</div><div class="label" id="s-agents">AI Agents</div></div>
+    <div class="stat"><div class="num">5</div><div class="label" id="s-channels">Channels</div></div>
+    <div class="stat"><div class="num">4</div><div class="label" id="s-providers">LLM Providers</div></div>
+    <div class="stat"><div class="num">20+</div><div class="label" id="s-api">API Endpoints</div></div>
+  </div>
+
+  <!-- Comparison table -->
+  <table class="tbl">
+    <thead><tr>
+      <th id="t-feature">機能</th>
+      <th class="hl">CHATWEB.AI</th>
+      <th>CHATGPT</th>
+      <th>GEMINI</th>
+      <th>PERPLEXITY</th>
+    </tr></thead>
+    <tbody>
+      <!-- AI Models -->
+      <tr class="cat-row"><td colspan="5" id="cat-models">AI Models</td></tr>
+      <tr><td id="f-multi">マルチモデル対応</td><td class="hl"><span class="ck">&#x2713;</span> GPT-4o, Claude, Gemini, DeepSeek</td><td><span class="cx">&#x2717;</span> GPT only</td><td><span class="cx">&#x2717;</span> Gemini only</td><td><span class="cp">&#x25CB;</span> Limited</td></tr>
+      <tr><td id="f-modelsel">モデル切り替え</td><td class="hl"><span class="ck">&#x2713;</span> 設定画面で自由に変更</td><td><span class="ck">&#x2713;</span> GPT内のみ</td><td><span class="cx">&#x2717;</span></td><td><span class="cp">&#x25CB;</span></td></tr>
+      <tr><td id="f-temp">Temperature調整</td><td class="hl"><span class="ck">&#x2713;</span> 0.0〜2.0スライダー</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-customkey">自分のAPIキーを使用</td><td class="hl"><span class="ck">&#x2713;</span> OpenAI/Anthropic/Google等</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-lb">ロードバランシング</td><td class="hl"><span class="ck">&#x2713;</span> 複数キーでラウンドロビン+フェイルオーバー</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+
+      <!-- Agents -->
+      <tr class="cat-row"><td colspan="5" id="cat-agents">AI Agents</td></tr>
+      <tr><td id="f-agent-orch">オーケストレーター</td><td class="hl"><span class="ck">&#x2713;</span> 最適なエージェントに自動ルーティング</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-agent-asst">アシスタント</td><td class="hl"><span class="ck">&#x2713;</span> 汎用、ツール対応</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-agent-res">リサーチャー</td><td class="hl"><span class="ck">&#x2713;</span> Web検索+ファクトチェック</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-agent-code">コーダー</td><td class="hl"><span class="ck">&#x2713;</span> コード生成・デバッグ特化</td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-agent-analyst">アナリスト</td><td class="hl"><span class="ck">&#x2713;</span> データ分析・ビジネスインサイト</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-agent-creative">クリエイター</td><td class="hl"><span class="ck">&#x2713;</span> ライティング・翻訳・ブレスト</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-agent-auto">自動エージェント選択</td><td class="hl"><span class="ck">&#x2713;</span> キーワード+@プレフィックスで切替</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+
+      <!-- Tools -->
+      <tr class="cat-row"><td colspan="5" id="cat-tools">Built-in Tools (9)</td></tr>
+      <tr><td>🔍 Web Search</td><td class="hl"><span class="ck">&#x2713;</span> Brave + Bing + Jinaフォールバック</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td>🌐 Web Fetch</td><td class="hl"><span class="ck">&#x2713;</span> Jina Reader対応</td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td>🧮 Calculator</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>🌤 Weather</td><td class="hl"><span class="ck">&#x2713;</span> Open-Meteo API</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td>🌍 Translate</td><td class="hl"><span class="ck">&#x2713;</span> MyMemory API</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>📚 Wikipedia</td><td class="hl"><span class="ck">&#x2713;</span> REST API + 検索フォールバック</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td>🕐 DateTime</td><td class="hl"><span class="ck">&#x2713;</span> 全タイムゾーン対応</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>📰 News Search</td><td class="hl"><span class="ck">&#x2713;</span> 最新ニュース検索</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td>📱 QR Code</td><td class="hl"><span class="ck">&#x2713;</span> QRコード生成</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-tool-toggle">ツール個別ON/OFF</td><td class="hl"><span class="ck">&#x2713;</span> 設定画面で切替</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+
+      <!-- Channels -->
+      <tr class="cat-row"><td colspan="5" id="cat-channels">Channels & Integration</td></tr>
+      <tr><td id="f-web">Web Chat</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-line">LINE連携</td><td class="hl"><span class="ck">&#x2713;</span> Webhook + 自動リンク</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-tg">Telegram Bot</td><td class="hl"><span class="ck">&#x2713;</span> Deep link + /start対応</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-sync">クロスチャネル同期</td><td class="hl"><span class="ck">&#x2713;</span> Web↔LINE↔Telegram</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-link">/link コマンド</td><td class="hl"><span class="ck">&#x2713;</span> コード発行→他チャネルで入力</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-qrlink">QRコードでリンク</td><td class="hl"><span class="ck">&#x2713;</span> スキャンで即連携</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-cli">CLI対応</td><td class="hl"><span class="ck">&#x2713;</span> nanobot chat --session で同期</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+
+      <!-- Settings & Customization -->
+      <tr class="cat-row"><td colspan="5" id="cat-settings">Settings & Customization</td></tr>
+      <tr><td id="f-settings">設定画面</td><td class="hl"><span class="ck">&#x2713;</span> /settings で全設定変更可</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td></tr>
+      <tr><td id="f-lang">多言語対応</td><td class="hl"><span class="ck">&#x2713;</span> JA/EN/ZH/KO/ES/FR/DE</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-dark">ダークモード</td><td class="hl"><span class="ck">&#x2713;</span> デフォルト</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-peruser">ユーザー別設定保存</td><td class="hl"><span class="ck">&#x2713;</span> DynamoDBで永続化</td><td><span class="ck">&#x2713;</span> アカウント必須</td><td><span class="ck">&#x2713;</span> アカウント必須</td><td><span class="ck">&#x2713;</span> アカウント必須</td></tr>
+
+      <!-- UX -->
+      <tr class="cat-row"><td colspan="5" id="cat-ux">UI/UX</td></tr>
+      <tr><td id="f-typing">タイプライター表示</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-thinking">段階的Thinking表示</td><td class="hl"><span class="ck">&#x2713;</span> 考え中→検索中→分析中→生成中</td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-toolbadge">ツール使用バッジ</td><td class="hl"><span class="ck">&#x2713;</span> 回答下部に表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-agentbadge">エージェントバッジ</td><td class="hl"><span class="ck">&#x2713;</span> どのエージェントが回答したか表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-elapsed">経過時間表示</td><td class="hl"><span class="ck">&#x2713;</span> リアルタイムで秒数表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+
+      <!-- API & Developer -->
+      <tr class="cat-row"><td colspan="5" id="cat-api">API & Developer</td></tr>
+      <tr><td id="f-restapi">REST API</td><td class="hl"><span class="ck">&#x2713;</span> 20+エンドポイント</td><td><span class="ck">&#x2713;</span> 有料</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span> 有料</td></tr>
+      <tr><td id="f-chatapi">Chat API</td><td class="hl"><span class="ck">&#x2713;</span> POST /api/v1/chat</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-sessionapi">Session API</td><td class="hl"><span class="ck">&#x2713;</span> CRUD操作</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-settingsapi">Settings API</td><td class="hl"><span class="ck">&#x2713;</span> GET/POST</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-webhookapi">Webhook API</td><td class="hl"><span class="ck">&#x2713;</span> LINE/Telegram/Stripe</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-billingapi">Billing API</td><td class="hl"><span class="ck">&#x2713;</span> Stripe統合</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+
+      <!-- Billing -->
+      <tr class="cat-row"><td colspan="5" id="cat-billing">Billing & Pricing</td></tr>
+      <tr><td id="f-free">無料プラン</td><td class="hl"><span class="ck">&#x2713;</span> 1,000クレジット/月</td><td><span class="ck">&#x2713;</span> Limited</td><td><span class="ck">&#x2713;</span> Limited</td><td><span class="ck">&#x2713;</span> Limited</td></tr>
+      <tr><td id="f-starter">Starter</td><td class="hl"><span class="ck">&#x2713;</span> $9/月 (25,000クレジット)</td><td>$20/月</td><td>$20/月</td><td>$20/月</td></tr>
+      <tr><td id="f-pro">Pro</td><td class="hl"><span class="ck">&#x2713;</span> $29/月 (300,000クレジット)</td><td>$200/月</td><td>$250/月</td><td>—</td></tr>
+      <tr><td id="f-credits">クレジット制</td><td class="hl"><span class="ck">&#x2713;</span> モデル別消費量</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-coupon">クーポン対応</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-stripe">Stripe決済</td><td class="hl"><span class="ck">&#x2713;</span> クレカ/Apple Pay等</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+
+      <!-- Infrastructure -->
+      <tr class="cat-row"><td colspan="5" id="cat-infra">Infrastructure</td></tr>
+      <tr><td id="f-oss">オープンソース</td><td class="hl"><span class="ck">&#x2713;</span> MIT License</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-selfhost">セルフホスト可</td><td class="hl"><span class="ck">&#x2713;</span> install.sh / Docker / Lambda</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-rust">Rustバックエンド</td><td class="hl"><span class="ck">&#x2713;</span> 高速・省メモリ</td><td>Python/Go</td><td>Internal</td><td>Internal</td></tr>
+      <tr><td id="f-gzip">gzip圧縮</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-hmac">HMAC署名検証</td><td class="hl"><span class="ck">&#x2713;</span> LINE/Stripe webhook</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td id="f-health">ヘルスチェック</td><td class="hl"><span class="ck">&#x2713;</span> /health</td><td>—</td><td>—</td><td>—</td></tr>
+
+      <!-- Security -->
+      <tr class="cat-row"><td colspan="5" id="cat-security">Security</td></tr>
+      <tr><td id="f-nosignup">サインアップ不要</td><td class="hl"><span class="ck">&#x2713;</span> セッションIDのみ</td><td><span class="cx">&#x2717;</span> アカウント必須</td><td><span class="cx">&#x2717;</span> Google必須</td><td><span class="cx">&#x2717;</span> アカウント必須</td></tr>
+      <tr><td id="f-allowlist">Allow List</td><td class="hl"><span class="ck">&#x2713;</span> チャネル別ユーザー制限</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-maskedid">セッションID マスク表示</td><td class="hl"><span class="ck">&#x2713;</span> webchat:****</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td id="f-ratelimit">同時リクエスト制限</td><td class="hl"><span class="ck">&#x2713;</span> Free:10 / Paid:1,000</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+    </tbody>
+  </table>
+
+  <!-- Feature detail cards -->
+  <div class="sections">
+    <div class="card">
+      <h3>🧠 AIモデル & プロバイダー</h3>
+      <ul>
+        <li>OpenAI GPT-4o / GPT-4o-mini</li>
+        <li>Anthropic Claude Sonnet / Opus</li>
+        <li>Google Gemini 2.0 Flash / Pro</li>
+        <li>DeepSeek Chat / Reasoner (R1)</li>
+        <li>複数APIキーでラウンドロビン分散</li>
+        <li>自動フェイルオーバー（1つ落ちても継続）</li>
+        <li>ユーザー自身のAPIキーも使用可能</li>
+      </ul>
     </div>
-
-    <table class="compare-table">
-      <thead>
-        <tr>
-          <th id="t-feature">Feature</th>
-          <th class="highlight">chatweb.ai</th>
-          <th>ChatGPT</th>
-          <th>Gemini</th>
-          <th>Perplexity</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td id="t-f-free">Free tier</td>
-          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-free">50 credits/day</span></td>
-          <td><span class="check">&#x2713;</span> Limited</td>
-          <td><span class="check">&#x2713;</span> Limited</td>
-          <td><span class="check">&#x2713;</span> Limited</td>
-        </tr>
-        <tr>
-          <td id="t-f-multi">Multi-model</td>
-          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-multi">GPT-4o, Claude, Gemini</span></td>
-          <td><span class="cross">&#x2717;</span> GPT only</td>
-          <td><span class="cross">&#x2717;</span> Gemini only</td>
-          <td><span class="partial">&#x25CB;</span> Limited</td>
-        </tr>
-        <tr>
-          <td id="t-f-search">Web search</td>
-          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-search">Built-in</span></td>
-          <td><span class="check">&#x2713;</span></td>
-          <td><span class="check">&#x2713;</span></td>
-          <td><span class="check">&#x2713;</span></td>
-        </tr>
-        <tr>
-          <td id="t-f-line">LINE integration</td>
-          <td class="highlight"><span class="check">&#x2713;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-        </tr>
-        <tr>
-          <td id="t-f-tg">Telegram integration</td>
-          <td class="highlight"><span class="check">&#x2713;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-        </tr>
-        <tr>
-          <td id="t-f-sync">Cross-channel sync</td>
-          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-sync">Web + LINE + Telegram</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-        </tr>
-        <tr>
-          <td id="t-f-tools">Tool calling</td>
-          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-tools">web_search, calculator, etc.</span></td>
-          <td><span class="check">&#x2713;</span></td>
-          <td><span class="partial">&#x25CB;</span></td>
-          <td><span class="partial">&#x25CB;</span></td>
-        </tr>
-        <tr>
-          <td id="t-f-api">API access</td>
-          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-api">REST API</span></td>
-          <td><span class="check">&#x2713;</span> <span>Paid</span></td>
-          <td><span class="check">&#x2713;</span></td>
-          <td><span class="check">&#x2713;</span> <span>Paid</span></td>
-        </tr>
-        <tr>
-          <td id="t-f-oss">Open source</td>
-          <td class="highlight"><span class="check">&#x2713;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-          <td><span class="cross">&#x2717;</span></td>
-        </tr>
-        <tr>
-          <td id="t-f-price">Paid plan</td>
-          <td class="highlight"><span id="t-v-price">$9/mo~</span></td>
-          <td>$20/mo</td>
-          <td>$20/mo</td>
-          <td>$20/mo</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="cta-section">
-      <a href="/" class="cta-btn" id="t-cta">Try chatweb.ai for free</a>
+    <div class="card">
+      <h3>🛠 9つのビルトインツール</h3>
+      <ul>
+        <li>🔍 Web Search — Brave/Bing/Jina 3段フォールバック</li>
+        <li>🌐 Web Fetch — JS対応ページもJina Readerで取得</li>
+        <li>🧮 Calculator — 数式計算</li>
+        <li>🌤 Weather — Open-Meteo APIで世界中の天気</li>
+        <li>🌍 Translate — MyMemory APIで多言語翻訳</li>
+        <li>📚 Wikipedia — 記事検索+要約取得</li>
+        <li>🕐 DateTime — 全タイムゾーンの現在時刻</li>
+        <li>📰 News Search — 最新ニュース検索</li>
+        <li>📱 QR Code — テキスト/URLからQR生成</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🤖 6つの専門エージェント</h3>
+      <ul>
+        <li>🎯 Orchestrator — 最適なエージェントへ自動振り分け</li>
+        <li>💬 Assistant — 日常的なタスク全般</li>
+        <li>🔬 Researcher — Web検索・ファクトチェック</li>
+        <li>💻 Coder — コード生成・デバッグ・設計</li>
+        <li>📊 Analyst — データ分析・ビジネスインサイト</li>
+        <li>✍️ Creative — ライティング・翻訳・ブレインストーミング</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>📱 マルチチャネル連携</h3>
+      <ul>
+        <li>Web — ブラウザで即座にチャット開始</li>
+        <li>LINE — LINEボットとして友達追加</li>
+        <li>Telegram — /start でボットを起動</li>
+        <li>/link コマンドで全チャネル同期</li>
+        <li>QRコードスキャンで即リンク</li>
+        <li>CLIからも同一セッションで利用可</li>
+        <li>3秒ポーリングでリアルタイム同期</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>⚙️ カスタマイズ</h3>
+      <ul>
+        <li>/settings でモデル・温度・ツール・言語を変更</li>
+        <li>自分のAPIキー設定（無制限利用）</li>
+        <li>ツール個別ON/OFF</li>
+        <li>7言語対応（日/英/中/韓/西/仏/独）</li>
+        <li>ダークモードUI</li>
+        <li>設定はDynamoDBで永続保存</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🔧 開発者向け</h3>
+      <ul>
+        <li>REST API — 20+エンドポイント</li>
+        <li>Chat/Sessions/Settings/Billing API</li>
+        <li>Webhook — LINE/Telegram/Stripe</li>
+        <li>オープンソース（MIT License）</li>
+        <li>Rustで高速・型安全</li>
+        <li>AWS Lambda / Fly.io / セルフホスト対応</li>
+        <li>install.sh ワンコマンドインストール</li>
+      </ul>
     </div>
   </div>
 
-  <footer>
-    <a href="/pricing">Pricing</a> &middot;
-    <a href="/status">Status</a> &middot;
-    <a href="/contact">Contact</a> &middot;
-    <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
-    chatweb.ai &copy; 2025-2026
-  </footer>
+  <div class="cta">
+    <a href="/" class="cta-btn" id="t-cta">無料で試してみる</a>
+  </div>
+</div>
 
-  <script>
-    const T = {
-      ja: {
-        title: 'AI サービス比較',
-        subtitle: 'chatweb.ai と他の主要AIサービスの機能比較',
-        feature: '機能',
-        fFree: '無料枠',  vFree: '50クレジット/日',
-        fMulti: 'マルチモデル', vMulti: 'GPT-4o, Claude, Gemini',
-        fSearch: 'Web検索', vSearch: '内蔵',
-        fLine: 'LINE連携', fTg: 'Telegram連携',
-        fSync: 'クロスチャネル同期', vSync: 'Web + LINE + Telegram',
-        fTools: 'ツール呼び出し', vTools: 'web_search, calculator等',
-        fApi: 'APIアクセス', vApi: 'REST API',
-        fOss: 'オープンソース',
-        fPrice: '有料プラン', vPrice: '$9/月〜',
-        cta: '無料で試してみる',
-        pricing: '料金', contact: 'お問い合わせ',
-      },
-      en: {
-        title: 'AI Service Comparison',
-        subtitle: 'How chatweb.ai compares to other major AI services',
-        feature: 'Feature',
-        fFree: 'Free tier',  vFree: '50 credits/day',
-        fMulti: 'Multi-model', vMulti: 'GPT-4o, Claude, Gemini',
-        fSearch: 'Web search', vSearch: 'Built-in',
-        fLine: 'LINE integration', fTg: 'Telegram integration',
-        fSync: 'Cross-channel sync', vSync: 'Web + LINE + Telegram',
-        fTools: 'Tool calling', vTools: 'web_search, calculator, etc.',
-        fApi: 'API access', vApi: 'REST API',
-        fOss: 'Open source',
-        fPrice: 'Paid plan', vPrice: '$9/mo~',
-        cta: 'Try chatweb.ai for free',
-        pricing: 'Pricing', contact: 'Contact',
-      }
-    };
-    function setLang(l) {
-      document.documentElement.lang = l;
-      localStorage.setItem('nl', l);
-      document.getElementById('btn-ja').className = l === 'ja' ? 'on' : '';
-      document.getElementById('btn-en').className = l === 'en' ? 'on' : '';
-      const t = T[l];
-      document.getElementById('t-title').textContent = t.title;
-      document.getElementById('t-subtitle').textContent = t.subtitle;
-      document.getElementById('t-feature').textContent = t.feature;
-      document.getElementById('t-f-free').textContent = t.fFree;
-      document.getElementById('t-v-free').textContent = t.vFree;
-      document.getElementById('t-f-multi').textContent = t.fMulti;
-      document.getElementById('t-v-multi').textContent = t.vMulti;
-      document.getElementById('t-f-search').textContent = t.fSearch;
-      document.getElementById('t-v-search').textContent = t.vSearch;
-      document.getElementById('t-f-line').textContent = t.fLine;
-      document.getElementById('t-f-tg').textContent = t.fTg;
-      document.getElementById('t-f-sync').textContent = t.fSync;
-      document.getElementById('t-v-sync').textContent = t.vSync;
-      document.getElementById('t-f-tools').textContent = t.fTools;
-      document.getElementById('t-v-tools').textContent = t.vTools;
-      document.getElementById('t-f-api').textContent = t.fApi;
-      document.getElementById('t-v-api').textContent = t.vApi;
-      document.getElementById('t-f-oss').textContent = t.fOss;
-      document.getElementById('t-f-price').textContent = t.fPrice;
-      document.getElementById('t-v-price').textContent = t.vPrice;
-      document.getElementById('t-cta').textContent = t.cta;
-      document.getElementById('nav-pricing').textContent = t.pricing;
-      document.getElementById('nav-contact').textContent = t.contact;
-    }
-    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
-  </script>
+<footer>
+  <a href="/">Chat</a> &middot;
+  <a href="/pricing">Pricing</a> &middot;
+  <a href="/settings">Settings</a> &middot;
+  <a href="/contact">Contact</a> &middot;
+  <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
+  chatweb.ai &copy; 2025-2026
+</footer>
+
+<script>
+const T={
+  ja:{
+    title:'chatweb.ai 全機能一覧 & 比較',
+    subtitle:'オープンソースのマルチモデルAIプラットフォーム。9つのツール、6つのAIエージェント、5チャネル対応。',
+    feature:'機能',cta:'無料で試してみる',pricing:'料金',contact:'お問い合わせ',
+    sTools:'ビルトインツール',sAgents:'AIエージェント',sChannels:'チャネル',sProviders:'LLMプロバイダー',sApi:'APIエンドポイント',
+  },
+  en:{
+    title:'chatweb.ai — Full Feature List & Comparison',
+    subtitle:'Open-source multi-model AI platform. 9 tools, 6 AI agents, 5 channels.',
+    feature:'Feature',cta:'Try Free',pricing:'Pricing',contact:'Contact',
+    sTools:'Built-in Tools',sAgents:'AI Agents',sChannels:'Channels',sProviders:'LLM Providers',sApi:'API Endpoints',
+  }
+};
+function setLang(l){
+  document.documentElement.lang=l;localStorage.setItem('nl',l);
+  document.getElementById('btn-ja').className=l==='ja'?'on':'';
+  document.getElementById('btn-en').className=l==='en'?'on':'';
+  const t=T[l];
+  document.getElementById('t-title').textContent=t.title;
+  document.getElementById('t-subtitle').textContent=t.subtitle;
+  document.getElementById('t-feature').textContent=t.feature;
+  document.getElementById('t-cta').textContent=t.cta;
+  document.getElementById('nav-pricing').textContent=t.pricing;
+  document.getElementById('nav-contact').textContent=t.contact;
+  document.getElementById('s-tools').textContent=t.sTools;
+  document.getElementById('s-agents').textContent=t.sAgents;
+  document.getElementById('s-channels').textContent=t.sChannels;
+  document.getElementById('s-providers').textContent=t.sProviders;
+  document.getElementById('s-api').textContent=t.sApi;
+}
+setLang(localStorage.getItem('nl')||(navigator.language.startsWith('ja')?'ja':'en'));
+</script>
 </body>
 </html>
