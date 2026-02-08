@@ -5,26 +5,82 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>chatweb.ai - AIチャット</title>
   <meta name="description" content="AIとすぐに話せる。LINE・Telegramでも使える。無料。">
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%236366f1'/%3E%3Ctext x='90' y='115' text-anchor='middle' font-size='80' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <!-- OGP -->
+  <meta property="og:title" content="chatweb.ai - AI Agent Platform">
+  <meta property="og:description" content="AI assistant with web search, tools, and multi-channel support. Use on Web, LINE, and Telegram.">
+  <meta property="og:image" content="https://chatweb.ai/og.svg">
+  <meta property="og:url" content="https://chatweb.ai">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="chatweb.ai">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="chatweb.ai - AI Agent Platform">
+  <meta name="twitter:description" content="AI assistant with web search, tools, and multi-channel support.">
+  <meta name="twitter:image" content="https://chatweb.ai/og.svg">
+  <!-- Preconnect to API Gateway for faster first request -->
+  <link rel="preconnect" href="https://chatweb.ai">
+  <link rel="dns-prefetch" href="https://chatweb.ai">
   <style>
     :root {
-      --bg: #0a0a0a;
-      --surface: #141414;
-      --border: #1e1e1e;
-      --text: #e5e5e5;
-      --muted: #777;
+      --bg: #09090b;
+      --surface: #18181b;
+      --surface2: #1e1e24;
+      --border: #27272a;
+      --text: #fafafa;
+      --muted: #71717a;
       --accent: #6366f1;
       --accent-hover: #818cf8;
+      --accent-glow: rgba(99,102,241,0.25);
       --green: #22c55e;
       --line: #06C755;
       --tg: #2AABEE;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', 'Inter', sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
+      overflow-x: hidden;
     }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px var(--accent-glow); }
+      50% { box-shadow: 0 0 40px var(--accent-glow), 0 0 60px rgba(99,102,241,0.1); }
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+    .fade-up { animation: fadeUp 0.6s ease-out both; }
+    .fade-up-d1 { animation-delay: 0.1s; }
+    .fade-up-d2 { animation-delay: 0.2s; }
+    .fade-up-d3 { animation-delay: 0.3s; }
+    .fade-up-d4 { animation-delay: 0.4s; }
 
     /* Nav */
     nav {
@@ -32,19 +88,24 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      animation: fadeIn 0.5s ease-out;
     }
-    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
-    .logo span { color: var(--accent); }
+    .logo { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo span { background: linear-gradient(135deg, var(--accent), #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .nav-right { display: flex; align-items: center; gap: 16px; }
+    .nav-right a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+    .nav-right a:hover { color: var(--text); }
     .lang-sw {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       overflow: hidden;
       display: flex;
     }
     .lang-sw button {
       background: none; border: none; color: var(--muted);
-      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+      padding: 5px 12px; font-size: 11px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s;
     }
     .lang-sw button.on { background: var(--accent); color: #fff; }
 
@@ -52,77 +113,449 @@
     .main {
       max-width: 800px;
       margin: 0 auto;
-      padding: 40px 24px 80px;
+      padding: 30px 24px 80px;
     }
 
     /* Hero */
     .hero {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
+      position: relative;
     }
     .hero h1 {
-      font-size: 32px;
-      font-weight: 800;
-      letter-spacing: -1px;
-      margin-bottom: 8px;
+      font-size: 42px;
+      font-weight: 900;
+      letter-spacing: -1.5px;
+      margin-bottom: 12px;
+      line-height: 1.15;
+      background: linear-gradient(135deg, #fff 0%, #a5a5ff 50%, #fff 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: shimmer 3s ease-in-out infinite;
     }
     .hero p {
       color: var(--muted);
-      font-size: 15px;
+      font-size: 17px;
+      margin-bottom: 24px;
+      line-height: 1.6;
     }
+    .hero-cta {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .hero-cta a {
+      padding: 14px 32px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .hero-cta .cta-primary {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: #fff;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+    .hero-cta .cta-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--accent-glow); }
+    .hero-cta .cta-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .hero-cta .cta-secondary:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin-bottom: 32px;
+      padding: 20px 0;
+      flex-wrap: wrap;
+    }
+    .stat-item { text-align: center; }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--green), #4ade80);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
 
     /* Chat widget */
     .chat-box {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 16px;
+      border-radius: 20px;
       overflow: hidden;
-      margin-bottom: 24px;
+      margin-bottom: 28px;
+      animation: pulse-glow 4s ease-in-out infinite;
+      position: relative;
     }
+    .chat-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .chat-header .dot {
+      width: 8px; height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: blink 2s ease-in-out infinite;
+    }
+    #agent-select {
+      margin-left: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+    }
+    #agent-select:hover { border-color: var(--accent); }
+
+    /* Channel bar in chat header */
+    .ch-bar { display: flex; gap: 6px; margin-left: 8px; }
+    .ch-bar-btn {
+      display: flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      color: #fff; cursor: pointer; border: none; transition: all 0.2s;
+      text-decoration: none;
+    }
+    .ch-bar-btn.line-bar { background: var(--line); }
+    .ch-bar-btn.tg-bar { background: var(--tg); }
+    .ch-bar-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
+    .ch-bar-btn .ch-check { display: none; margin-left: 2px; }
+    .ch-bar-btn.connected .ch-check { display: inline; }
+    .ch-bar-btn.connected { opacity: 0.85; }
+    .ch-bar-btn svg { width: 14px; height: 14px; }
+
+    /* Channel cards (larger CTA) */
+    .channel-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 28px; }
+    .channel-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 20px; cursor: pointer; transition: all 0.25s; text-decoration: none; color: var(--text);
+    }
+    .channel-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+    .channel-card.line-card { border-color: rgba(6,199,85,0.3); }
+    .channel-card.line-card:hover { border-color: var(--line); }
+    .channel-card.tg-card { border-color: rgba(42,171,238,0.3); }
+    .channel-card.tg-card:hover { border-color: var(--tg); }
+    .channel-card .cc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .channel-card .cc-icon {
+      width: 36px; height: 36px; border-radius: 10px; display: flex;
+      align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .channel-card.line-card .cc-icon { background: var(--line); }
+    .channel-card.tg-card .cc-icon { background: var(--tg); }
+    .channel-card .cc-name { font-size: 15px; font-weight: 700; }
+    .channel-card .cc-desc { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+    .channel-card .cc-action {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 13px; font-weight: 600; color: #fff;
+      padding: 8px 16px; border-radius: 8px;
+    }
+    .channel-card.line-card .cc-action { background: var(--line); }
+    .channel-card.tg-card .cc-action { background: var(--tg); }
+    .channel-card .cc-connected {
+      display: none; font-size: 11px; color: var(--green); font-weight: 600;
+      margin-top: 6px;
+    }
+    .channel-card.connected .cc-connected { display: block; }
+    .channel-card.connected .cc-action { opacity: 0.6; }
+
+    /* Tools badge */
+    .tools-count { font-size: 11px; color: var(--muted); text-align: center; margin-top: -20px; margin-bottom: 20px; }
+    .tools-count span { color: var(--accent-hover); font-weight: 700; }
+
+    .device-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .device-card .device-status { width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0; }
+    .device-card .device-info { flex:1; }
+    .device-card .device-name { font-size:13px;font-weight:600; }
+    .device-card .device-meta { font-size:11px;color:var(--muted); }
+    .agent-badge { display:inline-block;font-size:10px;background:var(--accent);color:#fff;padding:2px 6px;border-radius:4px;margin-left:8px;vertical-align:middle; }
     .chat-messages {
-      height: 320px;
+      height: 300px;
       overflow-y: auto;
       padding: 20px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 14px;
+      scroll-behavior: smooth;
     }
     .msg {
       max-width: 80%;
-      padding: 10px 14px;
-      border-radius: 12px;
+      padding: 12px 16px;
+      border-radius: 16px;
       font-size: 14px;
-      line-height: 1.5;
+      line-height: 1.6;
       word-break: break-word;
       white-space: pre-wrap;
+      animation: slideIn 0.3s ease-out both;
     }
     .msg.bot {
-      background: #1a1a2e;
+      background: var(--surface2);
       align-self: flex-start;
       border-bottom-left-radius: 4px;
     }
     .msg.user {
-      background: var(--accent);
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
       color: #fff;
       align-self: flex-end;
       border-bottom-right-radius: 4px;
     }
     .msg.typing {
-      background: #1a1a2e;
+      background: var(--surface2);
       align-self: flex-start;
       border-bottom-left-radius: 4px;
       color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    @keyframes dots {
-      0%, 20% { content: '.'; }
-      40% { content: '..'; }
-      60%, 100% { content: '...'; }
+    .msg.typing .thinking-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      animation: fadeIn 0.3s ease-out;
+    }
+    .msg.typing .thinking-icon {
+      font-size: 14px;
+      animation: pulse-glow 2s ease-in-out infinite;
+      display: inline-block;
+    }
+    .msg.typing .thinking-text {
+      transition: opacity 0.3s ease;
+    }
+    .msg.typing .thinking-elapsed {
+      font-size: 11px;
+      color: var(--muted);
+      opacity: 0.6;
+      font-variant-numeric: tabular-nums;
+    }
+    .msg.typing .shimmer-bar {
+      height: 3px;
+      width: 60px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--surface2) 25%, var(--accent) 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+    /* Tool badge on response */
+    .tool-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: var(--accent-hover);
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 12px;
+      padding: 2px 8px;
+      margin-top: 6px;
+      margin-right: 4px;
+    }
+    .tool-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
     }
 
-    /* Recipe cards */
-    .recipes {
+    /* Channel badge */
+    .msg .channel-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .msg .channel-badge.ch-line { background: rgba(6,199,85,0.2); color: var(--line); }
+    .msg .channel-badge.ch-telegram { background: rgba(42,171,238,0.2); color: var(--tg); }
+    .msg .channel-badge.ch-web { background: rgba(99,102,241,0.15); color: var(--accent-hover); }
+
+    /* QR in link code response */
+    .link-qr-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .link-qr-row a {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      color: #fff;
+      transition: transform 0.15s;
+    }
+    .link-qr-row a:hover { transform: scale(1.05); }
+    .link-qr-row a.dl-line { background: var(--line); }
+    .link-qr-row a.dl-tg { background: var(--tg); }
+    .link-qr-img {
+      width: 120px;
+      height: 120px;
+      border-radius: 8px;
+      background: #fff;
+      margin-top: 8px;
+    }
+
+    /* Link code display */
+    .msg .link-code {
+      display: inline-block;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: #fff;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 4px;
+      padding: 10px 24px;
+      border-radius: 10px;
+      margin: 8px 0;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .msg .link-code:hover { transform: scale(1.05); }
+    .msg .link-steps {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+    .msg .link-steps .step-num {
+      display: inline-flex;
+      width: 18px; height: 18px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 700;
+      align-items: center;
+      justify-content: center;
+      margin-right: 4px;
+    }
+    .msg.link-success {
+      background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05));
+      border: 1px solid rgba(34,197,94,0.3);
+    }
+
+    /* Typewriter cursor */
+    .typewriter-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: var(--accent);
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: blink 0.8s step-end infinite;
+    }
+
+    .chat-input {
+      display: flex;
+      border-top: 1px solid var(--border);
+      align-items: center;
+    }
+    .chat-input input {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--text);
+      padding: 18px 20px;
+      font-size: 15px;
+      outline: none;
+    }
+    .chat-input input::placeholder { color: var(--muted); }
+    .chat-input button {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      border: none;
+      color: #fff;
+      padding: 10px 20px;
+      margin-right: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 10px;
+      transition: all 0.2s;
+    }
+    .chat-input button:hover { transform: scale(1.05); box-shadow: 0 4px 15px var(--accent-glow); }
+
+    /* Capabilities section */
+    .cap-section {
       margin-bottom: 32px;
     }
+    .cap-section h2 {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      text-align: center;
+    }
+    .cap-section .cap-sub {
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 18px;
+    }
+    .cap-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .cap-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 14px;
+      text-align: center;
+      transition: all 0.25s;
+    }
+    .cap-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+    .cap-card .cap-icon { font-size: 24px; margin-bottom: 8px; }
+    .cap-card .cap-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .cap-card .cap-desc { font-size: 11px; color: var(--muted); line-height: 1.4; }
+    .cap-card .cap-badge {
+      display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 4px;
+      font-size: 10px; font-weight: 700;
+    }
+    .cap-badge.built-in { background: rgba(34,197,94,0.15); color: var(--green); }
+    .cap-badge.mcp-ext { background: rgba(99,102,241,0.15); color: var(--accent-hover); }
+    .cap-mcp-note {
+      text-align: center; font-size: 11px; color: var(--muted); margin-top: 4px;
+      padding: 10px; background: rgba(99,102,241,0.05); border-radius: 10px;
+      border: 1px solid rgba(99,102,241,0.1);
+    }
+    .cap-mcp-note a { color: var(--accent-hover); text-decoration: none; font-weight: 600; }
+    .cap-mcp-note a:hover { text-decoration: underline; }
+
+    /* Recipe cards */
+    .recipes { margin-bottom: 32px; }
     .recipes h2 {
       font-size: 16px;
       font-weight: 700;
@@ -140,82 +573,212 @@
     .recipe-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
+      border-radius: 14px;
+      padding: 16px;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.25s ease;
+      position: relative;
+      overflow: hidden;
     }
-    .recipe-card:hover {
-      border-color: var(--accent);
-      transform: translateY(-1px);
+    .recipe-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(135deg, rgba(99,102,241,0.05), transparent);
+      opacity: 0;
+      transition: opacity 0.25s;
     }
-    .recipe-card h4 {
+    .recipe-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+    .recipe-card:hover::before { opacity: 1; }
+    .recipe-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; position: relative; }
+    .recipe-card p { font-size: 11px; color: var(--muted); line-height: 1.4; position: relative; }
+
+    /* Sync section */
+    .sync-section {
+      background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.05));
+      border: 1px solid rgba(99,102,241,0.15);
+      border-radius: 20px;
+      padding: 32px;
+      margin-bottom: 28px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .sync-section::before {
+      content: '';
+      position: absolute;
+      top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background: radial-gradient(circle, rgba(99,102,241,0.06) 0%, transparent 60%);
+      animation: float 6s ease-in-out infinite;
+    }
+    .sync-section h3 {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .sync-section .sync-desc {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .sync-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      position: relative;
+    }
+    .sync-flow .channel-icon {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 18px;
+      border-radius: 12px;
       font-size: 13px;
       font-weight: 600;
+      color: #fff;
+      transition: transform 0.2s;
+    }
+    .sync-flow .channel-icon:hover { transform: scale(1.05); }
+    .sync-flow .channel-icon.web-icon { background: var(--accent); }
+    .sync-flow .channel-icon.line-icon { background: var(--line); }
+    .sync-flow .channel-icon.tg-icon { background: var(--tg); }
+    .sync-flow .sync-arrow {
+      color: var(--accent);
+      font-size: 18px;
+      animation: blink 2s ease-in-out infinite;
+    }
+    .sync-steps {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      position: relative;
+    }
+    .sync-step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 12px;
+      transition: all 0.2s;
+    }
+    .sync-step:hover { border-color: var(--accent); }
+    .sync-step .step-number {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 800;
+      color: #fff;
+      margin: 0 auto 8px;
+    }
+    .sync-step .step-title {
+      font-size: 12px;
+      font-weight: 700;
       margin-bottom: 4px;
     }
-    .recipe-card p {
+    .sync-step .step-desc {
       font-size: 11px;
       color: var(--muted);
       line-height: 1.4;
     }
-
-    .chat-input {
-      display: flex;
-      border-top: 1px solid var(--border);
+    .sync-step code {
+      background: rgba(99,102,241,0.15);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--accent-hover);
     }
-    .chat-input input {
-      flex: 1;
-      background: none;
-      border: none;
-      color: var(--text);
-      padding: 16px 20px;
-      font-size: 15px;
-      outline: none;
-    }
-    .chat-input input::placeholder { color: var(--muted); }
-    .chat-input button {
-      background: none;
-      border: none;
-      color: var(--accent);
-      padding: 16px 20px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .chat-input button:hover { color: var(--accent-hover); }
 
     /* Channel buttons */
     .channels {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
     }
     .ch-btn {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 10px;
-      padding: 16px;
-      border-radius: 12px;
+      padding: 18px;
+      border-radius: 14px;
       font-size: 15px;
       font-weight: 600;
       text-decoration: none;
       color: #fff;
-      transition: transform 0.15s, opacity 0.15s;
+      transition: all 0.25s ease;
+      position: relative;
+      overflow: hidden;
     }
-    .ch-btn:hover { transform: translateY(-2px); opacity: 0.9; }
-    .ch-btn.line { background: var(--line); }
-    .ch-btn.tg { background: var(--tg); }
+    .ch-btn::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%; width: 200%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      transition: left 0.5s;
+    }
+    .ch-btn:hover::before { left: 100%; }
+    .ch-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+    .ch-btn.line { background: linear-gradient(135deg, var(--line), #05b34a); }
+    .ch-btn.tg { background: linear-gradient(135deg, var(--tg), #1a95d0); }
     .ch-btn svg { flex-shrink: 0; }
+
+    /* Trust bar */
+    .trust-bar {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      padding: 12px 0;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .trust-item { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+    .trust-item svg { width: 14px; height: 14px; fill: var(--green); }
+
+    /* Bottom CTA */
+    .bottom-cta {
+      background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.08), rgba(34,197,94,0.04));
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 20px;
+      padding: 40px 32px;
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .bottom-cta h2 { font-size: 24px; font-weight: 800; margin-bottom: 10px; }
+    .bottom-cta p { color: var(--muted); font-size: 14px; margin-bottom: 20px; max-width: 480px; margin-left: auto; margin-right: auto; }
+    .bottom-cta .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .bottom-cta a {
+      padding: 14px 32px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .bottom-cta .cta-primary {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: #fff;
+    }
+    .bottom-cta .cta-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px var(--accent-glow); }
+    .bottom-cta .price-hint { font-size: 12px; color: var(--muted); margin-top: 12px; }
 
     /* Modal */
     .modal-overlay {
       display: none;
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.7);
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(8px);
       z-index: 100;
       align-items: center;
       justify-content: center;
@@ -224,41 +787,30 @@
     .modal {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px;
+      border-radius: 20px;
+      padding: 36px;
       text-align: center;
-      max-width: 360px;
+      max-width: 380px;
       width: 90%;
+      animation: fadeUp 0.3s ease-out;
     }
-    .modal h3 {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    .modal p {
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 16px;
-    }
-    .modal img {
-      width: 200px;
-      height: 200px;
-      border-radius: 12px;
-      background: #fff;
-      margin-bottom: 16px;
-    }
+    .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .modal p { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+    .modal img { width: 200px; height: 200px; border-radius: 14px; background: #fff; margin-bottom: 16px; }
     .modal .modal-link {
       display: inline-block;
-      padding: 10px 24px;
-      border-radius: 8px;
+      padding: 12px 28px;
+      border-radius: 10px;
       color: #fff;
       text-decoration: none;
       font-weight: 600;
       font-size: 14px;
       margin-bottom: 8px;
+      transition: transform 0.2s;
     }
-    .modal .modal-link.line-bg { background: var(--line); }
-    .modal .modal-link.tg-bg { background: var(--tg); }
+    .modal .modal-link:hover { transform: scale(1.05); }
+    .modal .modal-link.line-bg { background: linear-gradient(135deg, var(--line), #05b34a); }
+    .modal .modal-link.tg-bg { background: linear-gradient(135deg, var(--tg), #1a95d0); }
     .modal .close-btn {
       display: block;
       margin-top: 12px;
@@ -267,45 +819,138 @@
       color: var(--muted);
       font-size: 13px;
       cursor: pointer;
+      transition: color 0.2s;
     }
     .modal .close-btn:hover { color: var(--text); }
 
     /* Footer */
-    footer {
-      text-align: center;
-      padding: 24px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    footer a { color: var(--muted); }
+    footer { text-align: center; padding: 32px 24px; font-size: 12px; color: var(--muted); }
+    footer a { color: var(--muted); transition: color 0.2s; }
+    footer a:hover { color: var(--text); }
+
+    /* Scrollbar */
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-track { background: transparent; }
+    .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
     @media (max-width: 600px) {
-      .hero h1 { font-size: 24px; }
+      .hero h1 { font-size: 30px; }
       .channels { grid-template-columns: 1fr; }
+      .channel-cards { grid-template-columns: 1fr; }
       .recipe-grid { grid-template-columns: 1fr; }
-      .chat-messages { height: 260px; }
+      .chat-messages { height: 240px; }
+      .stats-bar { gap: 20px; }
+      .stat-value { font-size: 20px; }
+      .bottom-cta { padding: 28px 20px; }
+      .bottom-cta h2 { font-size: 20px; }
+      .sync-steps { grid-template-columns: 1fr; }
+      .sync-flow { gap: 8px; }
+      .cap-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
 <body>
   <nav>
-    <div class="logo"><span>chat</span>web.ai</div>
-    <div class="lang-sw">
-      <button onclick="setLang('ja')" id="l-ja">JA</button>
-      <button onclick="setLang('en')" id="l-en">EN</button>
+    <a href="/" class="logo" style="text-decoration:none"><span>chat</span>web.ai</a>
+    <div class="nav-right">
+      <a href="/pricing" id="nav-pricing">Pricing</a>
+      <a href="/status" id="nav-status">Status</a>
+      <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+      <div class="lang-sw">
+        <button onclick="setLang('ja')" id="l-ja">JA</button>
+        <button onclick="setLang('en')" id="l-en">EN</button>
+      </div>
     </div>
   </nav>
 
   <div class="main">
-    <div class="hero">
+    <div class="hero fade-up">
       <h1 id="t-title">AIに何でも頼んでみよう</h1>
       <p id="t-sub">24時間稼働のAIアシスタント。リサーチ・自動化・開発まで。</p>
+      <div class="hero-cta">
+        <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="document.getElementById('input').focus();return false;">無料で試す</a>
+        <a href="/pricing" class="cta-secondary" id="t-hero-plans">プランを見る</a>
+      </div>
     </div>
 
-    <!-- Live chat -->
-    <div class="chat-box">
+    <div class="stats-bar fade-up fade-up-d1">
+      <div class="stat-item">
+        <div class="stat-value" id="stat-uptime">99.9%</div>
+        <div class="stat-label" id="stat-uptime-label">稼働率</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-speed">&lt;2s</div>
+        <div class="stat-label" id="stat-speed-label">平均応答</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-models">5+</div>
+        <div class="stat-label" id="stat-models-label">AIモデル</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-channels">3</div>
+        <div class="stat-label" id="stat-channels-label">チャネル</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-tools">4+MCP</div>
+        <div class="stat-label" id="stat-tools-label">ツール</div>
+      </div>
+    </div>
+
+    <!-- CLI install -->
+    <div class="fade-up fade-up-d1" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;margin-bottom:20px;text-align:center;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;" id="t-cli-title">CLI</div>
+      <div style="background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:'SF Mono','Fira Code',monospace;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="navigator.clipboard.writeText('curl -fsSL https://chatweb.ai/install.sh | sh');this.querySelector('.cp').textContent='Copied!';setTimeout(()=>this.querySelector('.cp').textContent='Copy',1500)">
+        <span style="color:var(--muted);">$</span> <span style="flex:1;text-align:left;">curl -fsSL https://chatweb.ai/install.sh | sh</span>
+        <span class="cp" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;" id="t-cli-sub"></div>
+      <div id="cli-sync-cmd" style="margin-top:10px;background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-family:'SF Mono','Fira Code',monospace;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="copyCliSync(this)">
+        <span style="color:var(--muted);">$</span> <span id="cli-sync-text" style="flex:1;text-align:left;word-break:break-all;"></span>
+        <span class="cp2" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;" id="t-cli-sync-hint"></div>
+    </div>
+
+    <div class="trust-bar fade-up fade-up-d2">
+      <div class="trust-item">
+        <svg viewBox="0 0 16 16"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>
+        <span id="trust-ssl">SSL</span>
+      </div>
+      <div class="trust-item">
+        <svg viewBox="0 0 16 16"><path d="M8 1L1 5v6l7 4 7-4V5L8 1zm0 1.5L13.5 6 8 9.5 2.5 6 8 2.5z"/></svg>
+        <span id="trust-stripe">Stripe</span>
+      </div>
+      <div class="trust-item">
+        <svg viewBox="0 0 16 16"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm3.5 6.5l-4 4a.75.75 0 0 1-1 0l-2-2a.75.75 0 1 1 1-1L7 9l3.5-3.5a.75.75 0 1 1 1 1z"/></svg>
+        <span id="trust-nocard">No card required</span>
+      </div>
+    </div>
+
+    <div class="chat-box fade-up fade-up-d2" id="chat-area">
+      <div class="chat-header">
+        <div class="dot"></div>
+        <span id="t-chat-status">オンライン</span>
+        <div class="ch-bar">
+          <a class="ch-bar-btn line-bar" id="ch-bar-line" onclick="openChannelLink('line');return false;" href="#">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#fff"/></svg>
+            LINE <span class="ch-check">&#x2713;</span>
+          </a>
+          <a class="ch-bar-btn tg-bar" id="ch-bar-tg" onclick="openChannelLink('tg');return false;" href="#">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z" fill="#fff"/></svg>
+            TG <span class="ch-check">&#x2713;</span>
+          </a>
+        </div>
+        <select id="agent-select" onchange="selectAgent(this.value)">
+          <option value="auto" id="opt-auto">Auto</option>
+          <option value="assistant">Assistant</option>
+          <option value="researcher">Researcher</option>
+          <option value="coder">Coder</option>
+          <option value="analyst">Analyst</option>
+          <option value="creative">Creative</option>
+        </select>
+      </div>
       <div class="chat-messages" id="messages">
-        <div class="msg bot" id="t-welcome">こんにちは！何でもお任せください。下のカードから選ぶか、自由に入力してください。</div>
+        <div class="msg bot" id="t-welcome"></div>
       </div>
       <div class="chat-input">
         <input type="text" id="input" placeholder="何でも聞いてください..." autocomplete="off">
@@ -313,22 +958,149 @@
       </div>
     </div>
 
-    <!-- Recipe cards -->
-    <div id="recipe-section"></div>
-
-    <!-- Channel buttons -->
-    <div class="channels">
-      <button onclick="showModal('line')" class="ch-btn line">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#fff"/></svg>
-        <span id="t-line">LINEで使う</span>
-      </button>
-      <button onclick="showModal('tg')" class="ch-btn tg">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z" fill="#fff"/></svg>
-        <span id="t-tg">Telegramで使う</span>
-      </button>
+    <!-- Capabilities section -->
+    <div class="cap-section fade-up fade-up-d3" id="cap-section">
+      <h2 id="t-cap-title">AI + ツールで、なんでも自動化</h2>
+      <p class="cap-sub" id="t-cap-sub">内蔵ツール + MCP拡張で無限の可能性</p>
+      <div class="cap-grid">
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F50D;</div>
+          <div class="cap-name" id="cap-search">Web検索</div>
+          <div class="cap-desc" id="cap-search-d">リアルタイムの情報を検索・収集</div>
+          <div class="cap-badge built-in" id="cap-search-b">Built-in</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F310;</div>
+          <div class="cap-name" id="cap-fetch">Webページ取得</div>
+          <div class="cap-desc" id="cap-fetch-d">任意のURLからコンテンツを取得</div>
+          <div class="cap-badge built-in" id="cap-fetch-b">Built-in</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F9EE;</div>
+          <div class="cap-name" id="cap-calc">電卓</div>
+          <div class="cap-desc" id="cap-calc-d">数式の計算・通貨換算</div>
+          <div class="cap-badge built-in" id="cap-calc-b">Built-in</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x26C5;</div>
+          <div class="cap-name" id="cap-weather">天気</div>
+          <div class="cap-desc" id="cap-weather-d">世界中の天気・予報を取得</div>
+          <div class="cap-badge built-in" id="cap-weather-b">Built-in</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F4C1;</div>
+          <div class="cap-name" id="cap-file">ファイル操作</div>
+          <div class="cap-desc" id="cap-file-d">ファイルの読み書き・編集</div>
+          <div class="cap-badge mcp-ext">MCP</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F4BB;</div>
+          <div class="cap-name" id="cap-shell">シェル実行</div>
+          <div class="cap-desc" id="cap-shell-d">コマンドの実行・自動化</div>
+          <div class="cap-badge mcp-ext">MCP</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F30F;</div>
+          <div class="cap-name" id="cap-browser">ブラウザ</div>
+          <div class="cap-desc" id="cap-browser-d">Webページの自動操作</div>
+          <div class="cap-badge mcp-ext">MCP</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F5BC;</div>
+          <div class="cap-name" id="cap-image">画像解析</div>
+          <div class="cap-desc" id="cap-image-d">画像認識・マルチモーダル</div>
+          <div class="cap-badge mcp-ext">MCP</div>
+        </div>
+        <div class="cap-card">
+          <div class="cap-icon">&#x1F9E0;</div>
+          <div class="cap-name" id="cap-memory">永続メモリ</div>
+          <div class="cap-desc" id="cap-memory-d">会話横断で記憶を保持</div>
+          <div class="cap-badge mcp-ext">MCP</div>
+        </div>
+      </div>
+      <div class="cap-mcp-note" id="cap-note">
+        <span id="cap-note-text">MCPツールはModel Context Protocolで無限に拡張可能。</span>
+        <a href="#chat-area" onclick="document.getElementById('input').value='使えるツールを教えて';document.getElementById('input').focus();return false;" id="cap-note-link">ツール一覧を聞いてみる →</a>
+      </div>
     </div>
 
-    <!-- QR Modal -->
+    <div id="recipe-section" class="fade-up fade-up-d3"></div>
+
+    <!-- Sync section -->
+    <div class="sync-section fade-up fade-up-d3" id="sync-section">
+      <h3 id="t-sync-title">どのチャネルでも同じ会話</h3>
+      <p class="sync-desc" id="t-sync-desc">Web・LINE・Telegramの会話をリンクして、どこからでも続きを。</p>
+      <div class="sync-flow">
+        <div class="channel-icon web-icon">Web</div>
+        <div class="sync-arrow">&#x21C4;</div>
+        <div class="channel-icon line-icon">LINE</div>
+        <div class="sync-arrow">&#x21C4;</div>
+        <div class="channel-icon tg-icon">Telegram</div>
+      </div>
+      <div class="sync-steps" id="sync-steps">
+        <div class="sync-step">
+          <div class="step-number">1</div>
+          <div class="step-title" id="t-step1-title">友だち追加</div>
+          <div class="step-desc" id="t-step1-desc">上のボタンからLINE/Telegramで友だち追加</div>
+        </div>
+        <div class="sync-step">
+          <div class="step-number">2</div>
+          <div class="step-title" id="t-step2-title">IDで自動連携</div>
+          <div class="step-desc" id="t-step2-desc">ボタンを押すだけで自動連携されます</div>
+        </div>
+        <div class="sync-step">
+          <div class="step-number">3</div>
+          <div class="step-title" id="t-step3-title">同期完了</div>
+          <div class="step-desc" id="t-step3-desc">全チャネルの会話が統合されます</div>
+        </div>
+      </div>
+      <div style="margin-top:16px;position:relative;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;" id="t-session-label">あなたのセッションID:</div>
+        <div id="session-id-display" style="font-family:'SF Mono','Fira Code',monospace;font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;display:inline-block;color:var(--accent-hover);word-break:break-all;" onclick="navigator.clipboard.writeText(this.textContent);this.style.opacity=0.5;setTimeout(()=>this.style.opacity=1,300)"></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;" id="t-session-hint">クリックでコピー。LINE/Telegramに貼り付けで連携</div>
+      </div>
+    </div>
+
+    <!-- Device Monitoring Section -->
+    <div class="sync-section fade-up fade-up-d4" id="device-section" style="display:none;">
+      <h3 id="t-device-title">Connected Devices</h3>
+      <p class="sync-desc" id="t-device-desc">CLI daemon running on your machines.</p>
+      <div id="device-list" style="margin-top:12px;"></div>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted);" id="t-device-hint">
+        Install CLI and run <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> to connect your devices.
+      </div>
+    </div>
+
+    <div class="channel-cards fade-up fade-up-d4">
+      <a class="channel-card line-card" id="line-card" onclick="openChannelLink('line');return false;" href="#">
+        <div class="cc-header">
+          <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#fff"/></svg></div>
+          <div class="cc-name">LINE</div>
+        </div>
+        <div class="cc-desc" id="t-line-desc">1タップで友だち追加 → 自動連携</div>
+        <div class="cc-action" id="t-line">LINEで使う</div>
+        <div class="cc-connected" id="t-line-connected">&#x2713; Connected</div>
+      </a>
+      <a class="channel-card tg-card" id="tg-card" onclick="openChannelLink('tg');return false;" href="#">
+        <div class="cc-header">
+          <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z" fill="#fff"/></svg></div>
+          <div class="cc-name">Telegram</div>
+        </div>
+        <div class="cc-desc" id="t-tg-desc">ボタンを押すだけ → 今すぐ開始</div>
+        <div class="cc-action" id="t-tg">Telegramで使う</div>
+        <div class="cc-connected" id="t-tg-connected">&#x2713; Connected</div>
+      </a>
+    </div>
+
+    <div class="bottom-cta fade-up fade-up-d4">
+      <h2 id="t-bottom-title">もっとパワフルに使いたい？</h2>
+      <p id="t-bottom-sub">GPT-4o、Claude Sonnet、Claude Opusなど最先端モデルを月額$9から。</p>
+      <div class="cta-row">
+        <a href="/pricing" class="cta-primary" id="t-bottom-cta">プランを比較する</a>
+      </div>
+      <div class="price-hint" id="t-bottom-hint">Starter $9/月 &middot; Pro $29/月 &middot; いつでもキャンセル可能</div>
+    </div>
+
     <div class="modal-overlay" id="modal" onclick="closeModal(event)">
       <div class="modal" id="modal-content">
         <h3 id="modal-title"></h3>
@@ -341,8 +1113,11 @@
   </div>
 
   <footer>
+    <a href="/pricing" id="footer-pricing">Pricing</a> &middot;
+    <a href="/status">Status</a> &middot;
+    <a href="/comparison" id="footer-comparison">Comparison</a> &middot;
     <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
-    <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
+    <a href="/contact">Contact</a> &middot;
     chatweb.ai &copy; 2025-2026
   </footer>
 
@@ -351,12 +1126,182 @@
     const msgs = document.getElementById('messages');
     const input = document.getElementById('input');
 
+    let webSessionId = localStorage.getItem('webSessionId');
+    // Migrate old api: prefix to webchat:
+    if (webSessionId && webSessionId.startsWith('api:')) {
+      webSessionId = 'webchat:' + webSessionId.slice(4);
+      localStorage.setItem('webSessionId', webSessionId);
+    }
+    if (!webSessionId) {
+      webSessionId = 'webchat:' + crypto.randomUUID();
+      localStorage.setItem('webSessionId', webSessionId);
+    }
+
     input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) send(); });
+
+    // Typewriter effect
+    function typewriter(el, text, speed = 20) {
+      return new Promise(resolve => {
+        el.textContent = '';
+        const cursor = document.createElement('span');
+        cursor.className = 'typewriter-cursor';
+        el.appendChild(cursor);
+        let i = 0;
+        function tick() {
+          if (i < text.length) {
+            el.insertBefore(document.createTextNode(text[i]), cursor);
+            i++;
+            msgs.scrollTop = msgs.scrollHeight;
+            setTimeout(tick, speed);
+          } else {
+            setTimeout(() => { cursor.remove(); resolve(); }, 500);
+          }
+        }
+        tick();
+      });
+    }
+
+    // Format /link responses with rich UI
+    function isLinkCodeResponse(text) {
+      return text.includes('\u30EA\u30F3\u30AF\u30B3\u30FC\u30C9:') || text.includes('Link code:');
+    }
+    function isLinkSuccess(text) {
+      return text.includes('\u30EA\u30F3\u30AF\u5B8C\u4E86') || text.includes('Link complete');
+    }
+    function formatLinkCode(text) {
+      const match = text.match(/[:\uff1a]\s*([A-Z0-9]{6})/);
+      if (!match) return null;
+      return match[1];
+    }
+
+    function addMsg(text, who, useTypewriter = false, channel = null, agentName = null, toolsUsed = null) {
+      const d = document.createElement('div');
+      d.className = 'msg ' + who;
+
+      // Show channel badge for messages from other channels
+      if (channel && channel !== 'web' && who === 'user') {
+        const badge = document.createElement('div');
+        badge.className = 'channel-badge ch-' + channel;
+        badge.textContent = channel === 'line' ? 'LINE' : channel === 'telegram' ? 'Telegram' : channel;
+        d.appendChild(badge);
+      }
+
+      if (who === 'bot' && isLinkCodeResponse(text)) {
+        const code = formatLinkCode(text);
+        if (code) {
+          const l = document.documentElement.lang || 'ja';
+          const lineDeepLink = 'https://line.me/R/oaMessage/@619jcqqh/?%2Flink%20' + code;
+          const tgDeepLink = 'https://t.me/chatweb_ai_bot?text=%2Flink%20' + code;
+          const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent('/link ' + code);
+          d.innerHTML = (l === 'ja'
+            ? '<div style="font-size:13px;margin-bottom:4px;">リンクコードを生成しました</div>'
+            : '<div style="font-size:13px;margin-bottom:4px;">Link code generated</div>')
+            + '<div class="link-code" onclick="navigator.clipboard.writeText(\'' + code + '\');this.style.opacity=0.6;setTimeout(()=>this.style.opacity=1,300)">' + code + '</div>'
+            + '<div class="link-steps">'
+            + (l === 'ja'
+              ? '<div><span class="step-num">1</span>下のボタンを押すだけ！</div>'
+                + '<div><span class="step-num">2</span>開いたアプリで送信ボタンを押す</div>'
+                + '<div><span class="step-num">3</span>会話が同期されます！</div>'
+              : '<div><span class="step-num">1</span>Tap a button below!</div>'
+                + '<div><span class="step-num">2</span>Press send in the app</div>'
+                + '<div><span class="step-num">3</span>Conversations will sync!</div>')
+            + '</div>'
+            + '<div class="link-qr-row">'
+            + '<a href="' + lineDeepLink + '" target="_blank" class="dl-line">LINE</a>'
+            + '<a href="' + tgDeepLink + '" target="_blank" class="dl-tg">Telegram</a>'
+            + '</div>'
+            + '<img class="link-qr-img" src="' + qrUrl + '" alt="QR" title="' + (l === 'ja' ? 'QRコードをスキャン' : 'Scan QR code') + '">'
+            + '<div style="margin-top:6px;color:var(--muted);font-size:11px;">' + (l === 'ja' ? '有効期限: 30分' : 'Expires in 30 min') + '</div>';
+          msgs.appendChild(d);
+          msgs.scrollTop = msgs.scrollHeight;
+          startPolling();
+          return;
+        }
+      }
+
+      if (who === 'bot' && isLinkSuccess(text)) {
+        d.classList.add('link-success');
+        const l = document.documentElement.lang || 'ja';
+        d.innerHTML = '<div style="font-size:20px;margin-bottom:8px;">&#x2705;</div>'
+          + '<div style="font-weight:700;">' + (l === 'ja' ? 'リンク完了！' : 'Link complete!') + '</div>'
+          + '<div style="font-size:13px;color:var(--muted);margin-top:4px;">'
+          + (l === 'ja' ? 'これからどのチャネルでも同じ会話を続けられます。' : 'You can now continue the same conversation on any channel.') + '</div>';
+        msgs.appendChild(d);
+        msgs.scrollTop = msgs.scrollHeight;
+        startPolling();
+        return;
+      }
+
+      // Helper to append agent badge and tool badges after text
+      function appendBadges() {
+        if (agentName && who === 'bot') {
+          const badge = document.createElement('span');
+          badge.className = 'agent-badge';
+          badge.textContent = agentName;
+          d.appendChild(badge);
+        }
+        if (toolsUsed && toolsUsed.length > 0 && who === 'bot') {
+          const container = document.createElement('div');
+          container.className = 'tool-badges';
+          const lang = document.documentElement.lang || 'ja';
+          toolsUsed.forEach(tool => {
+            const tb = document.createElement('span');
+            tb.className = 'tool-badge';
+            const info = TOOL_LABELS[tool] || { icon: '\uD83D\uDD27', ja: tool, en: tool };
+            tb.textContent = info.icon + ' ' + (lang === 'ja' ? info.ja : info.en);
+            container.appendChild(tb);
+          });
+          d.appendChild(container);
+        }
+      }
+
+      if (who === 'bot' && useTypewriter && !channel) {
+        msgs.appendChild(d);
+        typewriter(d, text).then(appendBadges);
+      } else {
+        const textNode = document.createTextNode(text);
+        d.appendChild(textNode);
+        appendBadges();
+        msgs.appendChild(d);
+        msgs.scrollTop = msgs.scrollHeight;
+      }
+    }
 
     function sendRecipe(text) {
       input.value = text;
       send();
     }
+
+    // Staged thinking status messages
+    const THINKING_STAGES = {
+      ja: [
+        { time: 0,    icon: '\u26A1', text: '\u8003\u3048\u4E2D...' },
+        { time: 1500, icon: '\uD83D\uDD0D', text: '\u60C5\u5831\u3092\u691C\u7D22\u4E2D...' },
+        { time: 4000, icon: '\uD83D\uDCCA', text: '\u30C7\u30FC\u30BF\u3092\u5206\u6790\u4E2D...' },
+        { time: 8000, icon: '\u270D\uFE0F', text: '\u56DE\u7B54\u3092\u751F\u6210\u4E2D...' },
+        { time: 15000, icon: '\u23F3', text: '\u3082\u3046\u5C11\u3057\u304A\u5F85\u3061...' },
+      ],
+      en: [
+        { time: 0,    icon: '\u26A1', text: 'Thinking...' },
+        { time: 1500, icon: '\uD83D\uDD0D', text: 'Searching...' },
+        { time: 4000, icon: '\uD83D\uDCCA', text: 'Analyzing data...' },
+        { time: 8000, icon: '\u270D\uFE0F', text: 'Generating response...' },
+        { time: 15000, icon: '\u23F3', text: 'Almost there...' },
+      ]
+    };
+
+    // Tool name display mapping
+    const TOOL_LABELS = {
+      web_search: { icon: '\uD83D\uDD0D', ja: 'Web\u691C\u7D22', en: 'Web Search' },
+      web_fetch: { icon: '\uD83C\uDF10', ja: '\u30DA\u30FC\u30B8\u53D6\u5F97', en: 'Page Fetch' },
+      calculator: { icon: '\uD83E\uDDEE', ja: '\u8A08\u7B97', en: 'Calculator' },
+      weather: { icon: '\u26C5', ja: '\u5929\u6C17', en: 'Weather' },
+      translate: { icon: '\uD83C\uDF0D', ja: '\u7FFB\u8A33', en: 'Translate' },
+      wikipedia: { icon: '\uD83D\uDCDA', ja: 'Wikipedia', en: 'Wikipedia' },
+      datetime: { icon: '\uD83D\uDD52', ja: '\u65E5\u6642', en: 'DateTime' },
+      qr_code: { icon: '\uD83D\uDCF1', ja: 'QR\u30B3\u30FC\u30C9', en: 'QR Code' },
+      news_search: { icon: '\uD83D\uDCF0', ja: '\u30CB\u30E5\u30FC\u30B9', en: 'News' },
+    };
 
     async function send() {
       const text = input.value.trim();
@@ -366,68 +1311,157 @@
 
       const typing = document.createElement('div');
       typing.className = 'msg typing';
-      typing.textContent = '...';
+      const lang = document.documentElement.lang || 'ja';
+      const stages = THINKING_STAGES[lang] || THINKING_STAGES.ja;
+      typing.innerHTML = '<div class="thinking-status">'
+        + '<span class="thinking-icon">' + stages[0].icon + '</span>'
+        + '<span class="thinking-text">' + stages[0].text + '</span>'
+        + '<span class="thinking-elapsed">(0.0s)</span>'
+        + '</div>'
+        + '<div class="shimmer-bar"></div>';
       msgs.appendChild(typing);
       msgs.scrollTop = msgs.scrollHeight;
 
+      // Staged status transitions
+      const startTime = Date.now();
+      let stageIdx = 0;
+      const statusInterval = setInterval(() => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const elapsedEl = typing.querySelector('.thinking-elapsed');
+        if (elapsedEl) elapsedEl.textContent = '(' + elapsed + 's)';
+
+        const elapsedMs = Date.now() - startTime;
+        const nextStage = stages[stageIdx + 1];
+        if (nextStage && elapsedMs >= nextStage.time) {
+          stageIdx++;
+          const iconEl = typing.querySelector('.thinking-icon');
+          const textEl = typing.querySelector('.thinking-text');
+          if (iconEl) iconEl.textContent = stages[stageIdx].icon;
+          if (textEl) {
+            textEl.style.opacity = '0';
+            setTimeout(() => {
+              textEl.textContent = stages[stageIdx].text;
+              textEl.style.opacity = '1';
+            }, 150);
+          }
+        }
+      }, 100);
+
       try {
+        const agentSel = document.getElementById('agent-select').value;
+        const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
         const r = await fetch(API + '/api/v1/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text }),
+          body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
         });
         const d = await r.json();
+        clearInterval(statusInterval);
         typing.remove();
-        addMsg(d.response, 'bot');
+        addMsg(d.response, 'bot', true, null, d.agent || null, d.tools_used || null);
+        knownMsgCount += 2; // user + assistant messages
+        startPolling();
       } catch {
+        clearInterval(statusInterval);
         typing.remove();
-        const lang = document.documentElement.lang;
-        addMsg(lang === 'ja' ? 'エラーが発生しました。もう一度お試しください。' : 'Something went wrong. Please try again.', 'bot');
+        addMsg(lang === 'ja' ? '\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002' : 'Something went wrong. Please try again.', 'bot');
       }
     }
 
-    function addMsg(text, who) {
-      const d = document.createElement('div');
-      d.className = 'msg ' + who;
-      d.textContent = text;
-      msgs.appendChild(d);
-      msgs.scrollTop = msgs.scrollHeight;
+    // Session polling for cross-channel sync
+    let pollInterval = null;
+    let knownMsgCount = 0;
+    let isPolling = false;
+
+    function startPolling() {
+      if (pollInterval) return;
+      pollInterval = setInterval(pollSession, 3000);
     }
 
-    // Recipes data
+    function stopPolling() {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+
+    async function pollSession() {
+      if (isPolling) return;
+      isPolling = true;
+      try {
+        const r = await fetch(API + '/api/v1/sessions/' + encodeURIComponent(webSessionId));
+        const data = await r.json();
+        const serverMsgs = data.messages || [];
+        if (serverMsgs.length > knownMsgCount) {
+          const newMsgs = serverMsgs.slice(knownMsgCount);
+          for (const m of newMsgs) {
+            const ch = m.channel || 'web';
+            if (ch !== 'web') {
+              addMsg(m.content, m.role === 'user' ? 'user' : 'bot', false, ch);
+            }
+          }
+          knownMsgCount = serverMsgs.length;
+        }
+        // Update connected channel status
+        if (data.linked_channels) {
+          updateChannelStatus(data.linked_channels);
+        }
+      } catch(e) { /* ignore poll errors */ }
+      isPolling = false;
+    }
+
+    function updateChannelStatus(channels) {
+      const lineBar = document.getElementById('ch-bar-line');
+      const tgBar = document.getElementById('ch-bar-tg');
+      const lineCard = document.getElementById('line-card');
+      const tgCard = document.getElementById('tg-card');
+      if (channels.includes('line')) {
+        lineBar.classList.add('connected');
+        lineCard.classList.add('connected');
+      }
+      if (channels.includes('telegram')) {
+        tgBar.classList.add('connected');
+        tgCard.classList.add('connected');
+      }
+    }
+
+    // Pause polling when tab is hidden
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopPolling();
+      else if (knownMsgCount > 0) startPolling();
+    });
+
+    // Recipes data — organized by use case persona
     const R = {
       ja: {
         categories: [
           {
-            icon: '🔍', title: 'リサーチ・競合調査',
+            icon: '\uD83D\uDD0D', title: 'リサーチ・情報収集',
             items: [
-              { name: '競合の価格監視', desc: 'Amazon・楽天で商品の最安値をチェック', prompt: 'Amazon、楽天、ヨドバシカメラで「iPhone 16 Pro」の価格を比較して。最安値のURLと価格を教えて。' },
-              { name: '見込み顧客リスト作成', desc: 'AIスタートアップの資金調達情報を収集', prompt: '先月資金調達を発表した日本のAIスタートアップをリストアップして。会社名、CEO名、事業内容をまとめて。' },
-              { name: 'SEO順位チェック', desc: 'キーワードの検索順位を分析', prompt: '「AIエージェント」「SaaS構築」「Rust AWS」でGoogle検索の上位10サイトをリストして。SEO改善のアドバイスもお願い。' },
+              { name: '競合の価格を比較', desc: '複数サイトの価格を一発比較', prompt: 'Amazon、楽天、ヨドバシカメラで「iPhone 16 Pro」の価格を比較して。最安値のURLと価格を教えて。' },
+              { name: '会議の事前リサーチ', desc: '相手企業の情報を自動収集', prompt: '明日「株式会社サンプル」と会議があります。この会社の最新ニュース3件と事業概要、競合他社をまとめた事前準備レポートを作って。' },
+              { name: '旅行の格安プラン探し', desc: '予算内で最適プランを提案', prompt: '3月に2泊3日で京都旅行を計画中。予算は1人5万円。桜の名所を中心に、モデルコースを作って。おすすめの宿も教えて。' },
             ]
           },
           {
-            icon: '⚡', title: '業務自動化',
+            icon: '\u26A1', title: '業務効率化・自動化',
             items: [
-              { name: '請求書処理の自動化', desc: 'PDFの請求書を読み取って管理', prompt: '請求書の処理を自動化する方法を教えて。メール受信→OCR→データベース登録→承認依頼の流れを具体的に設計して。' },
-              { name: '会議の事前準備', desc: '相手企業の情報を自動収集', prompt: '明日「株式会社サンプル」と会議があります。この会社の最新ニュース、事業概要、競合他社をまとめた事前準備レポートを作って。' },
-              { name: '問い合わせ自動分類', desc: 'クレームと営業メールを振り分け', prompt: '顧客からの問い合わせを自動で分類するシステムを設計して。「クレーム」「質問」「営業メール」「パートナーシップ提案」に分けて、それぞれの対応テンプレートも作って。' },
+              { name: '議事録を3行に要約', desc: '決定事項・TODO・宿題に分類', prompt: '以下の会議議事録を「決定事項」「TODO」「次回までの宿題」の3つに分けて要約して。\n\n（ここに議事録を貼り付けてください）' },
+              { name: '上司への報告メール', desc: 'プロっぽい進捗報告を作成', prompt: 'プロジェクトの進捗報告メールを書いて。状況：開発フェーズ完了、テスト中に2件のバグ発見、来週修正予定。相手は部長。丁寧だけど簡潔に。' },
+              { name: '問い合わせ対応テンプレ', desc: 'クレーム・質問・営業を分類', prompt: '顧客からの問い合わせを「クレーム」「質問」「営業メール」「パートナーシップ提案」に分類するルールと、それぞれの返信テンプレートを作って。' },
             ]
           },
           {
-            icon: '🛠️', title: '開発・DevOps',
+            icon: '\uD83C\uDFE0', title: '生活・子育て・趣味',
             items: [
-              { name: 'コードレビュー自動化', desc: 'PRのコード品質を自動チェック', prompt: 'Rustのコードレビューチェックリストを作って。パフォーマンス、安全性、可読性の観点で。clippyのよくある警告と修正方法も含めて。' },
-              { name: '障害対応手順書', desc: 'エラー分析と自動復旧の設計', prompt: 'AWSでLambdaのエラー率が急上昇した時の障害対応手順書を作って。CloudWatchアラーム→ログ分析→原因特定→復旧→報告の流れで。' },
-              { name: 'API仕様書の自動生成', desc: 'コードからOpenAPIドキュメント作成', prompt: 'REST APIの設計をして。ユーザー管理（CRUD）、認証（JWT）、ファイルアップロードのエンドポイントをOpenAPI 3.0形式で書いて。' },
+              { name: '今晩の献立を考えて', desc: '冷蔵庫の中身からレシピ提案', prompt: '冷蔵庫に鶏もも肉、玉ねぎ、じゃがいも、卵、牛乳があります。30分以内で作れる夕食のレシピを2つ提案して。' },
+              { name: '子供にわかるように説明', desc: '難しいことを簡単な言葉で', prompt: '小学3年生にもわかるように「円安」を説明して。身近な例を使って。' },
+              { name: '確定申告の経費相談', desc: 'フリーランスの節税アドバイス', prompt: 'フリーランスのWebデザイナーです。自宅で仕事をしています。家賃・光熱費・通信費は経費にできますか？按分の目安を教えて。' },
             ]
           },
           {
-            icon: '🌍', title: 'プライベート・ライフスタイル',
+            icon: '\uD83D\uDEE0\uFE0F', title: '開発・エンジニア',
             items: [
-              { name: '格安チケットハンター', desc: '航空券の最安値を探す', prompt: '来月の週末で、東京発-沖縄行きの往復航空券をできるだけ安く取る方法を教えて。LCCも含めて比較して。' },
-              { name: '物件パトロール', desc: '条件に合う新着物件を検索', prompt: '世田谷区で2LDK、15万円以下、駅徒歩10分以内の賃貸物件を探すのに最適な方法を教えて。チェックすべきポイントも。' },
-              { name: '献立プランナー', desc: '1週間分の献立を自動作成', prompt: '来週の夕食の献立を月曜から金曜まで考えて。予算は1食500円以内、30分で作れるもの。買い物リストもまとめて。' },
+              { name: 'コードレビューを依頼', desc: 'バグ・性能・セキュリティをチェック', prompt: 'Rustのコードレビューチェックリストを作って。パフォーマンス、安全性、可読性の観点で。clippyのよくある警告と修正方法も含めて。' },
+              { name: '障害対応手順書を作成', desc: 'エラー発生時のフロー設計', prompt: 'AWSでLambdaのエラー率が急上昇した時の障害対応手順書を作って。CloudWatchアラーム→ログ分析→原因特定→復旧→報告の流れで。' },
+              { name: 'API仕様書を自動生成', desc: 'OpenAPI形式でドキュメント作成', prompt: 'REST APIの設計をして。ユーザー管理（CRUD）、認証（JWT）、ファイルアップロードのエンドポイントをOpenAPI 3.0形式で書いて。' },
             ]
           },
         ],
@@ -435,68 +1469,132 @@
       en: {
         categories: [
           {
-            icon: '🔍', title: 'Research & Analysis',
+            icon: '\uD83D\uDD0D', title: 'Research & Intelligence',
             items: [
-              { name: 'Competitor Price Watch', desc: 'Compare prices across major retailers', prompt: 'Compare prices for "iPhone 16 Pro" across Amazon, Best Buy, and Walmart. Show me the best deals with links.' },
-              { name: 'Lead Generation', desc: 'Find AI startups that raised funding', prompt: 'List AI startups that announced funding rounds last month. Include company name, CEO, and funding amount.' },
-              { name: 'SEO Rank Check', desc: 'Analyze search rankings for keywords', prompt: 'Analyze the top 10 Google results for "AI agent", "SaaS builder", "Rust AWS". Give SEO improvement advice.' },
+              { name: 'Compare competitor prices', desc: 'Instant multi-site price check', prompt: 'Compare prices for "iPhone 16 Pro" across Amazon, Best Buy, and Walmart. Show me the best deals with links.' },
+              { name: 'Meeting prep research', desc: 'Auto-gather company intel', prompt: 'I have a meeting with "Sample Corp" tomorrow. Create a prep report with their latest 3 news items, business overview, and competitors.' },
+              { name: 'Find travel deals', desc: 'Best plans within your budget', prompt: "I'm planning a 3-day trip to Kyoto in March. Budget is $500 per person. Focus on cherry blossom spots, create a day-by-day itinerary with hotel recommendations." },
             ]
           },
           {
-            icon: '⚡', title: 'Business Automation',
+            icon: '\u26A1', title: 'Work & Automation',
             items: [
-              { name: 'Invoice Processing', desc: 'Automate invoice reading and filing', prompt: 'Design an automated invoice processing workflow: email receipt → OCR → database entry → approval request. Be specific.' },
-              { name: 'Meeting Prep', desc: 'Auto-gather info about meeting partners', prompt: 'I have a meeting with "Sample Corp" tomorrow. Create a prep report with their latest news, business overview, and competitors.' },
-              { name: 'Inquiry Auto-Sort', desc: 'Classify customer inquiries automatically', prompt: 'Design a system to auto-classify customer inquiries into: complaint, question, sales email, partnership. Include response templates for each.' },
+              { name: 'Summarize meeting notes', desc: 'Decisions, TODOs, follow-ups', prompt: 'Summarize these meeting notes into "Decisions made", "Action items", and "Follow-ups for next meeting".\n\n(Paste your meeting notes here)' },
+              { name: 'Write a status update', desc: 'Professional report email', prompt: 'Write a project status update email. Situation: development phase complete, found 2 bugs during testing, fix planned for next week. Recipient is my director. Professional but concise.' },
+              { name: 'Customer inquiry templates', desc: 'Auto-classify and respond', prompt: 'Create rules to classify customer inquiries into: complaint, question, sales email, partnership. Include a response template for each category.' },
             ]
           },
           {
-            icon: '🛠️', title: 'Dev & DevOps',
+            icon: '\uD83C\uDFE0', title: 'Life & Family',
             items: [
-              { name: 'Code Review Automation', desc: 'Auto-check PR code quality', prompt: 'Create a Rust code review checklist covering performance, safety, and readability. Include common clippy warnings and fixes.' },
-              { name: 'Incident Response', desc: 'Error analysis and auto-recovery', prompt: 'Create an incident response playbook for AWS Lambda error rate spikes. Cover: CloudWatch alarm → log analysis → root cause → recovery → report.' },
-              { name: 'API Spec Generator', desc: 'Generate OpenAPI docs from requirements', prompt: 'Design a REST API with user management (CRUD), auth (JWT), and file upload endpoints in OpenAPI 3.0 format.' },
+              { name: 'Dinner ideas from fridge', desc: 'Recipes from what you have', prompt: 'I have chicken thighs, onions, potatoes, eggs, and milk in my fridge. Suggest 2 dinner recipes I can make in under 30 minutes.' },
+              { name: 'Explain it to a kid', desc: 'Complex topics made simple', prompt: 'Explain inflation to a 10-year-old using everyday examples they can relate to.' },
+              { name: 'Tax deduction advice', desc: 'Freelancer expense guidance', prompt: "I'm a freelance web designer working from home. Can I deduct rent, utilities, and internet costs? What's the typical home office deduction percentage?" },
             ]
           },
           {
-            icon: '🌍', title: 'Personal & Lifestyle',
+            icon: '\uD83D\uDEE0\uFE0F', title: 'Dev & Engineering',
             items: [
-              { name: 'Cheap Flight Hunter', desc: 'Find the best flight deals', prompt: 'Find the cheapest round-trip flights from Tokyo to Okinawa next month on weekends. Include budget airlines.' },
-              { name: 'Apartment Finder', desc: 'Search for rentals matching your criteria', prompt: 'What should I look for when searching for a 2BR apartment under $1500/month near downtown? Give me a checklist.' },
-              { name: 'Meal Planner', desc: 'Create a weekly dinner plan', prompt: 'Plan weekday dinners for next week. Budget: $10/meal, under 30 minutes to cook. Include a shopping list.' },
+              { name: 'Code review checklist', desc: 'Bugs, performance, security', prompt: 'Create a Rust code review checklist covering performance, safety, and readability. Include common clippy warnings and fixes.' },
+              { name: 'Incident response playbook', desc: 'Error handling workflow', prompt: 'Create an incident response playbook for AWS Lambda error rate spikes. Cover: CloudWatch alarm \u2192 log analysis \u2192 root cause \u2192 recovery \u2192 report.' },
+              { name: 'API spec generator', desc: 'OpenAPI docs from requirements', prompt: 'Design a REST API with user management (CRUD), auth (JWT), and file upload endpoints in OpenAPI 3.0 format.' },
             ]
           },
         ],
       }
     };
 
-    // i18n
     const T = {
       ja: {
         title: 'AIに何でも頼んでみよう',
         sub: '24時間稼働のAIアシスタント。リサーチ・自動化・開発まで。',
         welcome: 'こんにちは！何でもお任せください。下のカードから選ぶか、自由に入力してください。',
-        line: 'LINEで使う',
-        tg: 'Telegramで使う',
-        ph: '何でも聞いてください...',
-        send: '送信',
+        line: 'LINEで使う', tg: 'Telegramで使う',
+        lineDesc: '1タップで友だち追加 → 自動連携', tgDesc: 'ボタンを押すだけ → 今すぐ開始',
+        lineConnected: '&#x2713; 連携済み', tgConnected: '&#x2713; 連携済み',
+        ph: '何でも聞いてください...', send: '送信',
+        heroTry: '無料で試す', heroPlans: 'プランを見る', pricing: '料金', status: 'ステータス',
+        chatStatus: 'オンライン',
+        statsUptime: '稼働率', statsSpeed: '平均応答', statsModels: 'AIモデル', statsChannels: 'チャネル', statsTools: 'ツール',
+        trustSsl: 'SSL暗号化', trustStripe: 'Stripe決済', trustNocard: 'カード不要で開始',
+        syncTitle: 'どのチャネルでも同じ会話',
+        syncDesc: 'Web・LINE・Telegramの会話をリンクして、どこからでも続きを。',
+        step1Title: '友だち追加', step1Desc: '上のボタンからLINE/Telegramで友だち追加',
+        step2Title: 'IDで自動連携', step2Desc: 'ボタンを押すだけで自動連携されます',
+        step3Title: '同期完了', step3Desc: '全チャネルの会話が統合されます',
+        sessionLabel: 'あなたのセッションID:', sessionHint: 'クリックでコピー。LINE/Telegramに貼り付けで連携',
+        cliTitle: 'コマンドラインでも使える', cliSub: 'nanobot chat "こんにちは!" | macOS, Linux',
+        cliSyncHint: 'Webの会話と同期してCLIを使う',
+        bottomTitle: 'もっとパワフルに使いたい？',
+        bottomSub: 'GPT-4o、Claude Sonnet、Claude Opusなど最先端モデルを月額$9から。',
+        bottomCta: 'プランを比較する',
+        bottomHint: 'Starter $9/月 &middot; Pro $29/月 &middot; いつでもキャンセル可能',
+        agentAuto: 'Auto (自動振り分け)',
+        deviceTitle: '接続デバイス',
+        deviceDesc: 'CLIデーモンで接続されたマシン一覧',
+        deviceHint: 'CLIをインストールして <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> で接続',
+        capTitle: 'AI + ツールで、なんでも自動化',
+        capSub: '内蔵ツール + MCP拡張で無限の可能性',
+        capSearch: 'Web検索', capSearchD: 'リアルタイムの情報を検索・収集',
+        capFetch: 'Webページ取得', capFetchD: '任意のURLからコンテンツを取得',
+        capCalc: '電卓', capCalcD: '数式の計算・通貨換算',
+        capWeather: '天気', capWeatherD: '世界中の天気・予報を取得',
+        capFile: 'ファイル操作', capFileD: 'ファイルの読み書き・編集',
+        capShell: 'シェル実行', capShellD: 'コマンドの実行・自動化',
+        capBrowser: 'ブラウザ', capBrowserD: 'Webページの自動操作',
+        capImage: '画像解析', capImageD: '画像認識・マルチモーダル',
+        capMemory: '永続メモリ', capMemoryD: '会話横断で記憶を保持',
+        capNote: 'MCPツールはModel Context Protocolで無限に拡張可能。',
+        capNoteLink: 'ツール一覧を聞いてみる →',
       },
       en: {
         title: 'Ask AI to do anything',
         sub: '24/7 AI assistant. Research, automation, and development.',
         welcome: 'Hi! Pick a task below or type anything you need.',
-        line: 'Use on LINE',
-        tg: 'Use on Telegram',
-        ph: 'Ask me anything...',
-        send: 'Send',
+        line: 'Use on LINE', tg: 'Use on Telegram',
+        lineDesc: '1 tap to add friend → auto-link', tgDesc: 'Just tap → start now',
+        lineConnected: '&#x2713; Connected', tgConnected: '&#x2713; Connected',
+        ph: 'Ask me anything...', send: 'Send',
+        heroTry: 'Try Free', heroPlans: 'View Plans', pricing: 'Pricing', status: 'Status',
+        chatStatus: 'Online',
+        statsUptime: 'Uptime', statsSpeed: 'Avg Response', statsModels: 'AI Models', statsChannels: 'Channels', statsTools: 'Tools',
+        trustSsl: 'SSL Encrypted', trustStripe: 'Stripe Payments', trustNocard: 'No card required',
+        syncTitle: 'Same conversation, any channel',
+        syncDesc: 'Link your Web, LINE, and Telegram chats. Continue from anywhere.',
+        step1Title: 'Add friend', step1Desc: 'Tap LINE/Telegram buttons above',
+        step2Title: 'Auto-link', step2Desc: 'Just tap the button to auto-link',
+        step3Title: 'Synced!', step3Desc: 'All conversations are unified',
+        sessionLabel: 'Your session ID:', sessionHint: 'Click to copy. Paste in LINE/Telegram to link',
+        cliTitle: 'Use from command line', cliSub: 'nanobot chat "Hello!" | macOS, Linux',
+        cliSyncHint: 'Sync with your Web conversation from CLI',
+        bottomTitle: 'Need more power?',
+        bottomSub: 'Access GPT-4o, Claude Sonnet, Claude Opus and more from $9/month.',
+        bottomCta: 'Compare Plans',
+        bottomHint: 'Starter $9/mo &middot; Pro $29/mo &middot; Cancel anytime',
+        agentAuto: 'Auto (smart routing)',
+        deviceTitle: 'Connected Devices',
+        deviceDesc: 'Machines connected via CLI daemon',
+        deviceHint: 'Install CLI and run <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> to connect',
+        capTitle: 'AI + Tools = Automate Anything',
+        capSub: 'Built-in tools + unlimited MCP extensions',
+        capSearch: 'Web Search', capSearchD: 'Search & gather real-time information',
+        capFetch: 'Web Fetch', capFetchD: 'Retrieve content from any URL',
+        capCalc: 'Calculator', capCalcD: 'Math, conversions & calculations',
+        capWeather: 'Weather', capWeatherD: 'Global weather & forecasts',
+        capFile: 'File Operations', capFileD: 'Read, write & edit files',
+        capShell: 'Shell Exec', capShellD: 'Run commands & automate tasks',
+        capBrowser: 'Browser', capBrowserD: 'Automate web pages',
+        capImage: 'Image Analysis', capImageD: 'Vision & multimodal AI',
+        capMemory: 'Memory', capMemoryD: 'Persistent cross-session memory',
+        capNote: 'MCP tools are infinitely extensible via Model Context Protocol.',
+        capNoteLink: 'Ask about available tools →',
       }
     };
 
     function renderRecipes(l) {
       const section = document.getElementById('recipe-section');
       section.innerHTML = '';
-      const cats = R[l].categories;
-      cats.forEach(cat => {
+      R[l].categories.forEach(cat => {
         const h = document.createElement('div');
         h.className = 'recipes';
         h.innerHTML = '<h2>' + cat.icon + ' ' + cat.title + '</h2>';
@@ -522,35 +1620,180 @@
       const t = T[l];
       document.getElementById('t-title').textContent = t.title;
       document.getElementById('t-sub').textContent = t.sub;
-      document.getElementById('t-welcome').textContent = t.welcome;
+      // Typewriter welcome
+      const welcomeEl = document.getElementById('t-welcome');
+      if (!welcomeEl.dataset.typed) {
+        welcomeEl.dataset.typed = '1';
+        typewriter(welcomeEl, t.welcome, 25);
+      } else {
+        welcomeEl.textContent = t.welcome;
+      }
       document.getElementById('t-line').textContent = t.line;
       document.getElementById('t-tg').textContent = t.tg;
+      document.getElementById('t-line-desc').textContent = t.lineDesc;
+      document.getElementById('t-tg-desc').textContent = t.tgDesc;
+      document.getElementById('t-line-connected').innerHTML = t.lineConnected;
+      document.getElementById('t-tg-connected').innerHTML = t.tgConnected;
       input.placeholder = t.ph;
       document.getElementById('send-btn').textContent = t.send;
+      document.getElementById('t-hero-try').textContent = t.heroTry;
+      document.getElementById('t-hero-plans').textContent = t.heroPlans;
+      document.getElementById('nav-pricing').textContent = t.pricing;
+      document.getElementById('nav-status').textContent = t.status;
+      document.getElementById('footer-pricing').textContent = t.pricing;
+      document.getElementById('t-chat-status').textContent = t.chatStatus;
+      document.getElementById('stat-uptime-label').textContent = t.statsUptime;
+      document.getElementById('stat-speed-label').textContent = t.statsSpeed;
+      document.getElementById('stat-models-label').textContent = t.statsModels;
+      document.getElementById('stat-channels-label').textContent = t.statsChannels;
+      document.getElementById('stat-tools-label').textContent = t.statsTools;
+      document.getElementById('trust-ssl').textContent = t.trustSsl;
+      document.getElementById('trust-stripe').textContent = t.trustStripe;
+      document.getElementById('trust-nocard').textContent = t.trustNocard;
+      document.getElementById('t-sync-title').textContent = t.syncTitle;
+      document.getElementById('t-sync-desc').textContent = t.syncDesc;
+      document.getElementById('t-step1-title').textContent = t.step1Title;
+      document.getElementById('t-step1-desc').innerHTML = t.step1Desc;
+      document.getElementById('t-step2-title').textContent = t.step2Title;
+      document.getElementById('t-step2-desc').innerHTML = t.step2Desc;
+      document.getElementById('t-step3-title').textContent = t.step3Title;
+      document.getElementById('t-step3-desc').textContent = t.step3Desc;
+      document.getElementById('t-session-label').textContent = t.sessionLabel;
+      document.getElementById('t-session-hint').textContent = t.sessionHint;
+      document.getElementById('t-cli-title').textContent = t.cliTitle;
+      document.getElementById('t-cli-sub').innerHTML = t.cliSub;
+      document.getElementById('cli-sync-text').textContent = 'nanobot chat --session ' + webSessionId + ' "Hello"';
+      document.getElementById('t-cli-sync-hint').textContent = t.cliSyncHint;
+      document.getElementById('t-bottom-title').textContent = t.bottomTitle;
+      document.getElementById('t-bottom-sub').textContent = t.bottomSub;
+      document.getElementById('t-bottom-cta').textContent = t.bottomCta;
+      document.getElementById('t-bottom-hint').innerHTML = t.bottomHint;
+      document.getElementById('opt-auto').textContent = t.agentAuto;
+      document.getElementById('t-device-title').textContent = t.deviceTitle;
+      document.getElementById('t-device-desc').textContent = t.deviceDesc;
+      document.getElementById('t-device-hint').innerHTML = t.deviceHint;
+      // Capabilities section
+      document.getElementById('t-cap-title').textContent = t.capTitle;
+      document.getElementById('t-cap-sub').textContent = t.capSub;
+      document.getElementById('cap-search').textContent = t.capSearch;
+      document.getElementById('cap-search-d').textContent = t.capSearchD;
+      document.getElementById('cap-fetch').textContent = t.capFetch;
+      document.getElementById('cap-fetch-d').textContent = t.capFetchD;
+      document.getElementById('cap-calc').textContent = t.capCalc;
+      document.getElementById('cap-calc-d').textContent = t.capCalcD;
+      document.getElementById('cap-weather').textContent = t.capWeather;
+      document.getElementById('cap-weather-d').textContent = t.capWeatherD;
+      document.getElementById('cap-file').textContent = t.capFile;
+      document.getElementById('cap-file-d').textContent = t.capFileD;
+      document.getElementById('cap-shell').textContent = t.capShell;
+      document.getElementById('cap-shell-d').textContent = t.capShellD;
+      document.getElementById('cap-browser').textContent = t.capBrowser;
+      document.getElementById('cap-browser-d').textContent = t.capBrowserD;
+      document.getElementById('cap-image').textContent = t.capImage;
+      document.getElementById('cap-image-d').textContent = t.capImageD;
+      document.getElementById('cap-memory').textContent = t.capMemory;
+      document.getElementById('cap-memory-d').textContent = t.capMemoryD;
+      document.getElementById('cap-note-text').textContent = t.capNote;
+      document.getElementById('cap-note-link').textContent = t.capNoteLink;
       renderRecipes(l);
     }
-    // Modal
+
+    // CLI sync command copy helper
+    function copyCliSync(el) {
+      const cmd = 'nanobot chat --session ' + webSessionId + ' "Hello"';
+      navigator.clipboard.writeText(cmd);
+      const cp = el.querySelector('.cp2');
+      if (cp) { cp.textContent = 'Copied!'; setTimeout(() => cp.textContent = 'Copy', 1500); }
+    }
+
+    // Show session ID (masked for display, full ID on click to copy)
+    function maskSessionId(id) {
+      const parts = id.split(':');
+      if (parts.length === 2) {
+        const uuid = parts[1];
+        return parts[0] + ':' + uuid.substring(0, 8) + '********';
+      }
+      return id;
+    }
+    const sessionDisplay = document.getElementById('session-id-display');
+    sessionDisplay.textContent = maskSessionId(webSessionId);
+    sessionDisplay.title = webSessionId;
+    sessionDisplay.onclick = function() {
+      navigator.clipboard.writeText(webSessionId);
+      this.style.opacity = 0.5;
+      setTimeout(() => this.style.opacity = 1, 300);
+    };
+
+    // Channel deep links with auto-link session ID
+    function getLineDeepLink() {
+      // LINE OA message deep link with session ID prefilled
+      return 'https://line.me/R/oaMessage/@619jcqqh/?' + encodeURIComponent(webSessionId);
+    }
+    function getTgDeepLink() {
+      // Telegram deep link: /start payload (replace : with _ for Telegram)
+      const payload = webSessionId.replace(':', '_');
+      return 'https://t.me/chatweb_ai_bot?start=' + payload;
+    }
+
+    function openChannelLink(ch) {
+      if (ch === 'line') {
+        window.open(getLineDeepLink(), '_blank');
+      } else {
+        window.open(getTgDeepLink(), '_blank');
+      }
+    }
+
+    // Agent selector
+    let selectedAgent = 'auto';
+    function selectAgent(val) { selectedAgent = val; }
+
+    // Device monitoring
+    async function pollDevices() {
+      try {
+        const r = await fetch(API + '/api/v1/devices', {
+          headers: { 'x-session-id': webSessionId }
+        });
+        const d = await r.json();
+        const section = document.getElementById('device-section');
+        const list = document.getElementById('device-list');
+        if (d.devices && d.devices.length > 0) {
+          section.style.display = '';
+          list.innerHTML = d.devices.map(dev => {
+            const memPct = (dev.memory_total && dev.memory_used) ? Math.round(dev.memory_used / dev.memory_total * 100) : null;
+            const meta = [dev.os + '/' + dev.arch, memPct !== null ? ('RAM ' + memPct + '%') : '', dev.uptime_secs ? ('up ' + formatUptime(dev.uptime_secs)) : ''].filter(Boolean).join(' · ');
+            return '<div class="device-card"><div class="device-status"></div><div class="device-info"><div class="device-name">' + dev.hostname + '</div><div class="device-meta">' + meta + '</div></div></div>';
+          }).join('');
+        }
+      } catch(e) { /* ignore */ }
+    }
+    function formatUptime(secs) {
+      if (secs < 3600) return Math.floor(secs/60) + 'm';
+      if (secs < 86400) return Math.floor(secs/3600) + 'h';
+      return Math.floor(secs/86400) + 'd';
+    }
+    setInterval(pollDevices, 30000);
+    setTimeout(pollDevices, 2000);
+
     const CHANNELS = {
       line: {
-        url: 'https://line.me/R/ti/p/@619jcqqh',
-        ja: { title: 'LINEで友だち追加', desc: 'QRコードをLINEで読み取ると、すぐにAIチャットが使えます。', link: 'LINEで開く' },
-        en: { title: 'Add on LINE', desc: 'Scan this QR code with LINE to start chatting with AI.', link: 'Open in LINE' },
+        ja: { title: 'LINEで友だち追加', desc: 'ボタンを押すとLINEが開き、自動でこのWebの会話と連携されます。', link: 'LINEで開く' },
+        en: { title: 'Add on LINE', desc: 'Tap the button to open LINE. Your Web conversation will be auto-linked.', link: 'Open in LINE' },
       },
       tg: {
-        url: 'https://t.me/chatweb_ai_bot',
-        ja: { title: 'Telegramで開始', desc: 'QRコードを読み取るか、下のボタンからTelegramで直接チャット。', link: 'Telegramで開く' },
-        en: { title: 'Start on Telegram', desc: 'Scan the QR code or tap the button to chat on Telegram.', link: 'Open in Telegram' },
+        ja: { title: 'Telegramで開始', desc: 'ボタンを押すとTelegramが開き、自動でこのWebの会話と連携されます。', link: 'Telegramで開く' },
+        en: { title: 'Start on Telegram', desc: 'Tap the button to open Telegram. Your Web conversation will be auto-linked.', link: 'Open in Telegram' },
       }
     };
     function showModal(ch) {
       const c = CHANNELS[ch];
       const l = document.documentElement.lang || 'ja';
       const t = c[l] || c.ja;
+      const deepLink = ch === 'line' ? getLineDeepLink() : getTgDeepLink();
       document.getElementById('modal-title').textContent = t.title;
       document.getElementById('modal-desc').textContent = t.desc;
-      document.getElementById('modal-qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(c.url);
+      document.getElementById('modal-qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
       const link = document.getElementById('modal-link');
-      link.href = c.url;
+      link.href = deepLink;
       link.textContent = t.link;
       link.className = 'modal-link ' + (ch === 'line' ? 'line-bg' : 'tg-bg');
       document.getElementById('modal').classList.add('show');

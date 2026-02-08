@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact - chatweb.ai</title>
+  <meta name="description" content="Contact chatweb.ai - bug reports, feature requests, and feedback">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #1e1e1e;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --green: #22c55e;
+      --red: #ef4444;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    nav {
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; text-decoration: none; color: var(--text); }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 16px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: var(--text); }
+    .lang-sw {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+    }
+    .lang-sw button {
+      background: none; border: none; color: var(--muted);
+      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .lang-sw button.on { background: var(--accent); color: #fff; }
+    .main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .hero {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .hero h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      color: var(--muted);
+      font-size: 15px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: var(--accent);
+    }
+    .form-group textarea {
+      min-height: 140px;
+      resize: vertical;
+    }
+    .form-group select {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%23777'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+    .submit-btn {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .submit-btn:hover { background: var(--accent-hover); }
+    .submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .success-msg {
+      display: none;
+      text-align: center;
+      padding: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+    .success-msg.show { display: block; }
+    .success-msg .icon { font-size: 48px; margin-bottom: 12px; }
+    .success-msg h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .success-msg p { color: var(--muted); font-size: 14px; }
+    .error-msg {
+      color: var(--red);
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+    .category-pills {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .category-pill {
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .category-pill:hover { border-color: var(--accent); color: var(--text); }
+    .category-pill.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>chat</span>web.ai</a>
+    <div class="nav-links">
+      <a href="/pricing" id="nav-pricing">Pricing</a>
+      <a href="/comparison" id="nav-comparison">Comparison</a>
+      <div class="lang-sw">
+        <button onclick="setLang('ja')" id="btn-ja" class="on">JP</button>
+        <button onclick="setLang('en')" id="btn-en">EN</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="hero">
+      <h1 id="t-title">Contact</h1>
+      <p id="t-subtitle">Bug reports, feature requests, and feedback welcome.</p>
+    </div>
+
+    <form id="contact-form" onsubmit="submitForm(event)">
+      <div class="form-group">
+        <label id="t-cat-label">Category</label>
+        <div class="category-pills" id="category-pills">
+          <div class="category-pill active" data-value="bug" onclick="selectCat(this)" id="t-cat-bug">Bug Report</div>
+          <div class="category-pill" data-value="feature" onclick="selectCat(this)" id="t-cat-feature">Feature Request</div>
+          <div class="category-pill" data-value="question" onclick="selectCat(this)" id="t-cat-question">Question</div>
+          <div class="category-pill" data-value="other" onclick="selectCat(this)" id="t-cat-other">Other</div>
+        </div>
+        <input type="hidden" id="category" value="bug">
+      </div>
+
+      <div class="form-group">
+        <label for="name" id="t-name-label">Name (optional)</label>
+        <input type="text" id="name" placeholder="">
+      </div>
+
+      <div class="form-group">
+        <label for="email" id="t-email-label">Email (optional)</label>
+        <input type="email" id="email" placeholder="">
+      </div>
+
+      <div class="form-group">
+        <label for="message" id="t-msg-label">Message *</label>
+        <textarea id="message" required placeholder=""></textarea>
+      </div>
+
+      <button type="submit" class="submit-btn" id="submit-btn">Send</button>
+      <div class="error-msg" id="error-msg"></div>
+    </form>
+
+    <div class="success-msg" id="success-msg">
+      <div class="icon">&#x2705;</div>
+      <h3 id="t-success-title">Sent!</h3>
+      <p id="t-success-desc">Thank you for your feedback. We will review it promptly.</p>
+      <p style="margin-top:16px;"><a href="/" style="color:var(--accent);text-decoration:none;font-weight:600;" id="t-back-link">Back to chat</a></p>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/pricing">Pricing</a> &middot;
+    <a href="/status">Status</a> &middot;
+    <a href="/comparison">Comparison</a> &middot;
+    <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
+    chatweb.ai &copy; 2025-2026
+  </footer>
+
+  <script>
+    let selectedCategory = 'bug';
+
+    function selectCat(el) {
+      document.querySelectorAll('.category-pill').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      selectedCategory = el.dataset.value;
+      document.getElementById('category').value = selectedCategory;
+    }
+
+    async function submitForm(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submit-btn');
+      const errEl = document.getElementById('error-msg');
+      errEl.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      const body = {
+        category: selectedCategory,
+        name: document.getElementById('name').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        message: document.getElementById('message').value.trim(),
+        session_id: localStorage.getItem('webSessionId') || '',
+      };
+
+      if (!body.message) {
+        errEl.textContent = 'Please enter a message.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = T[document.documentElement.lang || 'ja'].submit;
+        return;
+      }
+
+      try {
+        const r = await fetch('/api/v1/contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (d.status === 'ok') {
+          document.getElementById('contact-form').style.display = 'none';
+          document.getElementById('success-msg').classList.add('show');
+        } else {
+          throw new Error(d.message || 'Failed');
+        }
+      } catch (err) {
+        errEl.textContent = err.message || 'An error occurred. Please try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = T[document.documentElement.lang || 'ja'].submit;
+      }
+    }
+
+    const T = {
+      ja: {
+        title: 'お問い合わせ',
+        subtitle: 'バグ報告、機能リクエスト、フィードバックをお待ちしています。',
+        catLabel: 'カテゴリ',
+        catBug: 'バグ報告',
+        catFeature: '機能リクエスト',
+        catQuestion: '質問',
+        catOther: 'その他',
+        nameLabel: '名前（任意）',
+        emailLabel: 'メール（任意）',
+        msgLabel: 'メッセージ *',
+        namePh: '',
+        emailPh: '',
+        msgPh: '問題の詳細や再現手順を教えてください...',
+        submit: '送信する',
+        successTitle: '送信完了！',
+        successDesc: 'ご連絡ありがとうございます。内容を確認の上、対応いたします。',
+        backLink: 'チャットに戻る',
+        pricing: '料金',
+        comparison: '比較',
+      },
+      en: {
+        title: 'Contact',
+        subtitle: 'Bug reports, feature requests, and feedback welcome.',
+        catLabel: 'Category',
+        catBug: 'Bug Report',
+        catFeature: 'Feature Request',
+        catQuestion: 'Question',
+        catOther: 'Other',
+        nameLabel: 'Name (optional)',
+        emailLabel: 'Email (optional)',
+        msgLabel: 'Message *',
+        namePh: '',
+        emailPh: '',
+        msgPh: 'Describe the issue or your request...',
+        submit: 'Send',
+        successTitle: 'Sent!',
+        successDesc: 'Thank you for your feedback. We will review it promptly.',
+        backLink: 'Back to chat',
+        pricing: 'Pricing',
+        comparison: 'Comparison',
+      }
+    };
+
+    function setLang(l) {
+      document.documentElement.lang = l;
+      localStorage.setItem('nl', l);
+      document.getElementById('btn-ja').className = l === 'ja' ? 'on' : '';
+      document.getElementById('btn-en').className = l === 'en' ? 'on' : '';
+      const t = T[l];
+      document.getElementById('t-title').textContent = t.title;
+      document.getElementById('t-subtitle').textContent = t.subtitle;
+      document.getElementById('t-cat-label').textContent = t.catLabel;
+      document.getElementById('t-cat-bug').textContent = t.catBug;
+      document.getElementById('t-cat-feature').textContent = t.catFeature;
+      document.getElementById('t-cat-question').textContent = t.catQuestion;
+      document.getElementById('t-cat-other').textContent = t.catOther;
+      document.getElementById('t-name-label').textContent = t.nameLabel;
+      document.getElementById('t-email-label').textContent = t.emailLabel;
+      document.getElementById('t-msg-label').textContent = t.msgLabel;
+      document.getElementById('name').placeholder = t.namePh;
+      document.getElementById('email').placeholder = t.emailPh;
+      document.getElementById('message').placeholder = t.msgPh;
+      document.getElementById('submit-btn').textContent = t.submit;
+      document.getElementById('t-success-title').textContent = t.successTitle;
+      document.getElementById('t-success-desc').textContent = t.successDesc;
+      document.getElementById('t-back-link').textContent = t.backLink;
+      document.getElementById('nav-pricing').textContent = t.pricing;
+      document.getElementById('nav-comparison').textContent = t.comparison;
+    }
+
+    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+  </script>
+</body>
+</html>

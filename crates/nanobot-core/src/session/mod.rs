@@ -61,6 +61,19 @@ impl Session {
         self.updated_at = chrono::Utc::now();
     }
 
+    /// Add a message with channel source tracking.
+    pub fn add_message_from_channel(&mut self, role: &str, content: &str, channel: &str) {
+        let mut extra = HashMap::new();
+        extra.insert("channel".to_string(), serde_json::json!(channel));
+        self.messages.push(SessionMessage {
+            role: role.to_string(),
+            content: content.to_string(),
+            timestamp: Some(crate::util::timestamp()),
+            extra,
+        });
+        self.updated_at = chrono::Utc::now();
+    }
+
     /// Get message history for LLM context (just role + content).
     pub fn get_history(&self, max_messages: usize) -> Vec<serde_json::Value> {
         let start = self.messages.len().saturating_sub(max_messages);
@@ -71,6 +84,27 @@ impl Session {
                     "role": m.role,
                     "content": m.content,
                 })
+            })
+            .collect()
+    }
+
+    /// Get full message history including channel and timestamp (for API responses).
+    pub fn get_full_history(&self, max_messages: usize) -> Vec<serde_json::Value> {
+        let start = self.messages.len().saturating_sub(max_messages);
+        self.messages[start..]
+            .iter()
+            .map(|m| {
+                let mut v = serde_json::json!({
+                    "role": m.role,
+                    "content": m.content,
+                });
+                if let Some(ts) = &m.timestamp {
+                    v["timestamp"] = serde_json::json!(ts);
+                }
+                if let Some(ch) = m.extra.get("channel") {
+                    v["channel"] = ch.clone();
+                }
+                v
             })
             .collect()
     }

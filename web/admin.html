@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>chatweb.ai - Admin Dashboard</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface2: #1a1a1a;
+      --border: #1e1e1e;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --orange: #f97316;
+      --cyan: #06b6d4;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'SF Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    nav {
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { font-size: 16px; font-weight: 700; }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; gap: 16px; font-size: 13px; }
+    .nav-links a { color: var(--muted); text-decoration: none; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--accent); }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .page-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Tab navigation */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab:hover { color: var(--text); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Cards grid */
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .card-value { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .card-sub { font-size: 12px; color: var(--muted); }
+    .card-value.green { color: var(--green); }
+    .card-value.yellow { color: var(--yellow); }
+    .card-value.red { color: var(--red); }
+    .card-value.blue { color: var(--blue); }
+
+    /* Table */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .table-title {
+      padding: 16px 20px;
+      font-size: 14px;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 10px 16px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .status-dot.green { background: var(--green); }
+    .status-dot.yellow { background: var(--yellow); }
+    .status-dot.red { background: var(--red); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-rust { background: #b7410e22; color: #e67e22; }
+    .badge-js { background: #f7df1e22; color: #f7df1e; }
+    .badge-green { background: #22c55e22; color: var(--green); }
+    .badge-blue { background: #3b82f622; color: var(--blue); }
+    .badge-orange { background: #f9731622; color: var(--orange); }
+    .badge-cyan { background: #06b6d422; color: var(--cyan); }
+    .badge-muted { background: #77777722; color: var(--muted); }
+
+    /* Architecture diagram */
+    .arch-diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      overflow-x: auto;
+    }
+    .arch-diagram h3 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+    .arch-flow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+    .arch-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      text-align: center;
+      min-width: 120px;
+    }
+    .arch-box.primary { border-color: var(--accent); }
+    .arch-box .box-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .arch-box .box-name { font-weight: 700; font-size: 13px; }
+    .arch-box .box-detail { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .arch-arrow { color: var(--muted); font-size: 16px; }
+
+    /* Session list */
+    .session-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .session-item:last-child { border-bottom: none; }
+    .session-key { font-weight: 600; font-size: 13px; }
+    .session-meta { font-size: 11px; color: var(--muted); }
+
+    /* Cost breakdown */
+    .cost-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .cost-row:last-child { border-bottom: none; }
+    .cost-row .cost-name { color: var(--text); }
+    .cost-row .cost-amount { font-weight: 700; font-family: 'SF Mono', monospace; }
+
+    .refresh-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .refresh-btn:hover { border-color: var(--accent); }
+
+    .latency-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border);
+      margin-top: 4px;
+    }
+    .latency-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    @media (max-width: 768px) {
+      .cards { grid-template-columns: 1fr 1fr; }
+      .arch-flow { flex-direction: column; }
+      .arch-arrow { transform: rotate(90deg); }
+    }
+    @media (max-width: 480px) {
+      .cards { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo" style="text-decoration:none"><span>chat</span>web.ai <span style="color:var(--muted);font-size:11px;font-weight:400">admin</span></a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/status">Status</a>
+      <a href="/admin" class="active">Dashboard</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-title">
+      Dashboard
+      <button class="refresh-btn" onclick="refreshAll()">Refresh</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('overview')">Overview</button>
+      <button class="tab" onclick="showTab('infra')">Infrastructure</button>
+      <button class="tab" onclick="showTab('sessions')">Sessions</button>
+      <button class="tab" onclick="showTab('costs')">Costs</button>
+    </div>
+
+    <!-- ========== OVERVIEW ========== -->
+    <div id="tab-overview" class="tab-content active">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Total Requests (today)</div>
+          <div class="card-value blue" id="stat-requests">--</div>
+          <div class="card-sub">API + Webhooks</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Active Sessions</div>
+          <div class="card-value green" id="stat-sessions">--</div>
+          <div class="card-sub">Web / LINE / Telegram</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Avg Latency</div>
+          <div class="card-value yellow" id="stat-latency">--</div>
+          <div class="card-sub">Lambda cold start ~120ms</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Monthly Cost (est.)</div>
+          <div class="card-value" id="stat-cost">--</div>
+          <div class="card-sub">AWS + Fly.io + CF Workers</div>
+        </div>
+      </div>
+
+      <!-- Latency by endpoint -->
+      <div class="table-wrap">
+        <div class="table-title">Endpoint Health</div>
+        <table>
+          <tr>
+            <th>Endpoint</th>
+            <th>URL</th>
+            <th>Status</th>
+            <th>Latency</th>
+          </tr>
+          <tbody id="health-table"></tbody>
+        </table>
+      </div>
+
+      <!-- Recent activity -->
+      <div class="table-wrap">
+        <div class="table-title">Service Channels</div>
+        <table>
+          <tr>
+            <th>Channel</th>
+            <th>Status</th>
+            <th>Users</th>
+            <th>AI Model</th>
+          </tr>
+          <tr>
+            <td>Web Chat (chatweb.ai)</td>
+            <td><span class="status-dot green"></span>Active</td>
+            <td id="ch-web">--</td>
+            <td><span class="badge badge-green">GPT-4o</span></td>
+          </tr>
+          <tr>
+            <td>LINE Bot (@619jcqqh)</td>
+            <td><span class="status-dot green"></span>Active</td>
+            <td id="ch-line">--</td>
+            <td><span class="badge badge-green">GPT-4o</span></td>
+          </tr>
+          <tr>
+            <td>Telegram (@chatweb_ai_bot)</td>
+            <td><span class="status-dot green"></span>Active</td>
+            <td id="ch-tg">--</td>
+            <td><span class="badge badge-green">GPT-4o</span></td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ========== INFRASTRUCTURE ========== -->
+    <div id="tab-infra" class="tab-content">
+      <!-- Architecture diagram -->
+      <div class="arch-diagram">
+        <h3>Request Flow</h3>
+        <div class="arch-flow">
+          <div class="arch-box">
+            <div class="box-label">Client</div>
+            <div class="box-name">Browser / LINE / TG</div>
+          </div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-box">
+            <div class="box-label">DNS</div>
+            <div class="box-name">Route53 / Cloudflare</div>
+            <div class="box-detail">chatweb.ai / teai.io</div>
+          </div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-box">
+            <div class="box-label">Edge</div>
+            <div class="box-name">CF Workers</div>
+            <div class="box-detail">Load balance + failover</div>
+          </div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-box primary">
+            <div class="box-label">Primary</div>
+            <div class="box-name">AWS Lambda</div>
+            <div class="box-detail">ap-northeast-1 (Tokyo)</div>
+          </div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-box">
+            <div class="box-label">LLM</div>
+            <div class="box-name">OpenAI API</div>
+            <div class="box-detail">GPT-4o</div>
+          </div>
+        </div>
+        <div class="arch-flow" style="margin-top:12px; padding-left: 280px;">
+          <div class="arch-arrow" style="transform:rotate(90deg)">&rarr;</div>
+          <div class="arch-box">
+            <div class="box-label">Fallback</div>
+            <div class="box-name">Fly.io</div>
+            <div class="box-detail">nrt (Tokyo)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Service details table -->
+      <div class="table-wrap">
+        <div class="table-title">Deployed Services</div>
+        <table>
+          <tr>
+            <th>Service</th>
+            <th>Provider</th>
+            <th>Region</th>
+            <th>Language</th>
+            <th>Runtime</th>
+            <th>URL</th>
+            <th>Status</th>
+          </tr>
+          <tr>
+            <td><strong>nanobot Lambda</strong></td>
+            <td>AWS Lambda</td>
+            <td>ap-northeast-1 (Tokyo)</td>
+            <td><span class="badge badge-rust">Rust</span></td>
+            <td>ARM64, provided.al2023, 1024MB</td>
+            <td><a href="https://api.chatweb.ai" style="color:var(--accent)">api.chatweb.ai</a></td>
+            <td><span class="status-dot green"></span>Live (v13)</td>
+          </tr>
+          <tr>
+            <td><strong>nanobot Fly</strong></td>
+            <td>Fly.io</td>
+            <td>nrt (Tokyo)</td>
+            <td><span class="badge badge-rust">Rust</span></td>
+            <td>Docker, shared-cpu-1x, 256MB</td>
+            <td><a href="https://nanobot-ai.fly.dev" style="color:var(--accent)">nanobot-ai.fly.dev</a></td>
+            <td><span class="status-dot green"></span>Live</td>
+          </tr>
+          <tr>
+            <td><strong>teai-edge Worker</strong></td>
+            <td>Cloudflare Workers</td>
+            <td>Edge (global)</td>
+            <td><span class="badge badge-js">JavaScript</span></td>
+            <td>V8 Isolate, 10ms CPU / req</td>
+            <td><a href="https://teai-edge.yukihamada.workers.dev" style="color:var(--accent)">teai-edge.*.workers.dev</a></td>
+            <td><span class="status-dot green"></span>Live</td>
+          </tr>
+          <tr>
+            <td><strong>API Gateway</strong></td>
+            <td>AWS API Gateway v2</td>
+            <td>ap-northeast-1</td>
+            <td><span class="badge badge-muted">Managed</span></td>
+            <td>HTTP API, auto-scale</td>
+            <td>chatweb.ai, teai.io</td>
+            <td><span class="status-dot green"></span>Live</td>
+          </tr>
+          <tr>
+            <td><strong>DynamoDB Sessions</strong></td>
+            <td>AWS DynamoDB</td>
+            <td>ap-northeast-1</td>
+            <td><span class="badge badge-muted">Managed</span></td>
+            <td>On-demand (PAY_PER_REQUEST)</td>
+            <td>nanobot-sessions</td>
+            <td><span class="status-dot green"></span>Active</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Domain routing -->
+      <div class="table-wrap">
+        <div class="table-title">Domain Routing</div>
+        <table>
+          <tr>
+            <th>Domain</th>
+            <th>DNS</th>
+            <th>Destination</th>
+            <th>Purpose</th>
+          </tr>
+          <tr>
+            <td><strong>chatweb.ai</strong></td>
+            <td>Cloudflare</td>
+            <td>API Gateway &rarr; Lambda</td>
+            <td>Main web UI + API</td>
+          </tr>
+          <tr>
+            <td><strong>api.chatweb.ai</strong></td>
+            <td>Cloudflare</td>
+            <td>API Gateway &rarr; Lambda</td>
+            <td>API endpoint</td>
+          </tr>
+          <tr>
+            <td><strong>teai.io</strong></td>
+            <td>Route53</td>
+            <td>API Gateway &rarr; Lambda</td>
+            <td>Alternate domain</td>
+          </tr>
+          <tr>
+            <td><strong>api.teai.io</strong></td>
+            <td>Route53</td>
+            <td>API Gateway &rarr; Lambda</td>
+            <td>API endpoint</td>
+          </tr>
+          <tr>
+            <td><strong>teai-edge.*.workers.dev</strong></td>
+            <td>Cloudflare</td>
+            <td>CF Worker &rarr; Lambda / Fly.io</td>
+            <td>Edge proxy with failover</td>
+          </tr>
+          <tr>
+            <td><strong>nanobot-ai.fly.dev</strong></td>
+            <td>Fly.io</td>
+            <td>Fly.io container</td>
+            <td>Fallback backend</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Tech stack -->
+      <div class="table-wrap">
+        <div class="table-title">Tech Stack Details</div>
+        <table>
+          <tr>
+            <th>Component</th>
+            <th>Technology</th>
+            <th>Version</th>
+            <th>Notes</th>
+          </tr>
+          <tr>
+            <td>Core Engine</td>
+            <td><span class="badge badge-rust">Rust</span></td>
+            <td>stable (2024)</td>
+            <td>nanobot-core crate, async with Tokio</td>
+          </tr>
+          <tr>
+            <td>HTTP Framework</td>
+            <td><span class="badge badge-rust">Axum</span></td>
+            <td>0.7+</td>
+            <td>Async web framework built on Tokio</td>
+          </tr>
+          <tr>
+            <td>Lambda Runtime</td>
+            <td><span class="badge badge-rust">lambda_http</span></td>
+            <td>latest</td>
+            <td>AWS Lambda custom runtime (provided.al2023)</td>
+          </tr>
+          <tr>
+            <td>Edge Proxy</td>
+            <td><span class="badge badge-js">JavaScript</span></td>
+            <td>ES2024</td>
+            <td>Cloudflare Workers V8 isolate</td>
+          </tr>
+          <tr>
+            <td>AI Provider</td>
+            <td><span class="badge badge-green">OpenAI</span></td>
+            <td>GPT-4o</td>
+            <td>Via OpenAI-compatible API</td>
+          </tr>
+          <tr>
+            <td>Session Store</td>
+            <td><span class="badge badge-orange">DynamoDB</span></td>
+            <td>On-demand</td>
+            <td>TTL-enabled, tenant-partitioned</td>
+          </tr>
+          <tr>
+            <td>IaC</td>
+            <td><span class="badge badge-orange">AWS SAM</span></td>
+            <td>latest</td>
+            <td>Infrastructure as Code (template.yaml)</td>
+          </tr>
+          <tr>
+            <td>CI/CD</td>
+            <td><span class="badge badge-muted">GitHub Actions</span></td>
+            <td>--</td>
+            <td>test &rarr; build &rarr; canary 10% &rarr; prod 100%</td>
+          </tr>
+          <tr>
+            <td>Cross-compile</td>
+            <td><span class="badge badge-rust">cargo-zigbuild</span></td>
+            <td>+zig</td>
+            <td>macOS &rarr; aarch64-linux (ARM64 Lambda)</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ========== SESSIONS ========== -->
+    <div id="tab-sessions" class="tab-content">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Web Sessions</div>
+          <div class="card-value blue" id="sess-web">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">LINE Sessions</div>
+          <div class="card-value green" id="sess-line">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Telegram Sessions</div>
+          <div class="card-value" style="color:var(--cyan)" id="sess-tg">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Total Sessions</div>
+          <div class="card-value" id="sess-total">--</div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-title">Active Sessions</div>
+        <div id="session-list" style="max-height: 400px; overflow-y: auto;">
+          <div style="padding: 16px; color: var(--muted); text-align: center;">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== COSTS ========== -->
+    <div id="tab-costs" class="tab-content">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">AWS Monthly (est.)</div>
+          <div class="card-value yellow" id="cost-aws">--</div>
+          <div class="card-sub">Lambda + API GW + DynamoDB</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Fly.io Monthly</div>
+          <div class="card-value green" id="cost-fly">$0</div>
+          <div class="card-sub">Free tier (shared-cpu-1x)</div>
+        </div>
+        <div class="card">
+          <div class="card-label">CF Workers Monthly</div>
+          <div class="card-value green" id="cost-cf">$0</div>
+          <div class="card-sub">Free tier (100K req/day)</div>
+        </div>
+        <div class="card">
+          <div class="card-label">OpenAI API Monthly (est.)</div>
+          <div class="card-value yellow" id="cost-openai">--</div>
+          <div class="card-sub">GPT-4o usage</div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-title">Cost Breakdown (Monthly Estimate)</div>
+        <div style="padding: 20px;">
+          <div class="cost-row"><span class="cost-name">AWS Lambda (1024MB, ARM64)</span><span class="cost-amount">~$0.50</span></div>
+          <div class="cost-row"><span class="cost-name">API Gateway HTTP API</span><span class="cost-amount">~$0.10</span></div>
+          <div class="cost-row"><span class="cost-name">DynamoDB (on-demand, sessions + memory)</span><span class="cost-amount">~$0.25</span></div>
+          <div class="cost-row"><span class="cost-name">Route53 (2 hosted zones)</span><span class="cost-amount">$1.00</span></div>
+          <div class="cost-row"><span class="cost-name">ACM Certificates</span><span class="cost-amount">$0.00</span></div>
+          <div class="cost-row"><span class="cost-name">CloudWatch Logs</span><span class="cost-amount">~$0.10</span></div>
+          <div class="cost-row" style="border-top: 1px solid var(--border); padding-top: 16px;"><span class="cost-name"><strong>AWS Subtotal</strong></span><span class="cost-amount" style="color:var(--yellow)">~$1.95</span></div>
+          <div class="cost-row"><span class="cost-name">Fly.io (shared-cpu-1x, 256MB)</span><span class="cost-amount" style="color:var(--green)">$0.00 (free tier)</span></div>
+          <div class="cost-row"><span class="cost-name">Cloudflare Workers (free plan)</span><span class="cost-amount" style="color:var(--green)">$0.00 (free tier)</span></div>
+          <div class="cost-row"><span class="cost-name">Cloudflare DNS (chatweb.ai)</span><span class="cost-amount" style="color:var(--green)">$0.00 (free)</span></div>
+          <div class="cost-row"><span class="cost-name">OpenAI API (GPT-4o, ~1000 req/mo)</span><span class="cost-amount" style="color:var(--yellow)">~$5.00</span></div>
+          <div class="cost-row"><span class="cost-name">Domain: chatweb.ai</span><span class="cost-amount">~$1.00/mo</span></div>
+          <div class="cost-row"><span class="cost-name">Domain: teai.io</span><span class="cost-amount">~$3.00/mo</span></div>
+          <div class="cost-row" style="border-top: 2px solid var(--accent); padding-top: 16px; font-size: 15px;"><span class="cost-name"><strong>Total Monthly Estimate</strong></span><span class="cost-amount" style="color:var(--accent); font-size: 18px;">~$10.95</span></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-title">Cost per Request Estimate</div>
+        <div style="padding: 20px;">
+          <div class="cost-row"><span class="cost-name">Lambda invocation (1024MB, ~2s avg)</span><span class="cost-amount">$0.0000333</span></div>
+          <div class="cost-row"><span class="cost-name">API Gateway per request</span><span class="cost-amount">$0.0000012</span></div>
+          <div class="cost-row"><span class="cost-name">DynamoDB read (session load)</span><span class="cost-amount">$0.0000013</span></div>
+          <div class="cost-row"><span class="cost-name">DynamoDB write (session save)</span><span class="cost-amount">$0.0000065</span></div>
+          <div class="cost-row"><span class="cost-name">OpenAI GPT-4o (~500 tokens)</span><span class="cost-amount">~$0.005</span></div>
+          <div class="cost-row" style="border-top: 2px solid var(--accent); padding-top: 16px;"><span class="cost-name"><strong>Total per AI chat request</strong></span><span class="cost-amount" style="color:var(--accent)">~$0.005</span></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-title">Latency Breakdown per Request</div>
+        <div style="padding: 20px;">
+          <div class="cost-row"><span class="cost-name">DNS resolution</span><span class="cost-amount">~5ms</span></div>
+          <div class="cost-row"><span class="cost-name">TLS handshake</span><span class="cost-amount">~20ms</span></div>
+          <div class="cost-row"><span class="cost-name">API Gateway routing</span><span class="cost-amount">~10ms</span></div>
+          <div class="cost-row"><span class="cost-name">Lambda cold start (Rust ARM64)</span><span class="cost-amount">~120ms (first req only)</span></div>
+          <div class="cost-row"><span class="cost-name">Lambda warm execution</span><span class="cost-amount">~2ms</span></div>
+          <div class="cost-row"><span class="cost-name">DynamoDB session load</span><span class="cost-amount">~5ms</span></div>
+          <div class="cost-row"><span class="cost-name">OpenAI GPT-4o API call</span><span class="cost-amount">~1000-5000ms</span></div>
+          <div class="cost-row"><span class="cost-name">DynamoDB session save</span><span class="cost-amount">~5ms</span></div>
+          <div class="cost-row" style="border-top: 2px solid var(--accent); padding-top: 16px;"><span class="cost-name"><strong>Total (warm, with AI)</strong></span><span class="cost-amount" style="color:var(--accent)">~1-5 seconds</span></div>
+          <div class="cost-row"><span class="cost-name"><strong>Total (health check, no AI)</strong></span><span class="cost-amount" style="color:var(--green)">~50ms</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+    const ENDPOINTS = [
+      { name: 'AWS Lambda (chatweb.ai)', url: 'https://chatweb.ai/health' },
+      { name: 'AWS Lambda (teai.io)', url: 'https://teai.io/health' },
+      { name: 'AWS Lambda (api.chatweb.ai)', url: 'https://api.chatweb.ai/health' },
+      { name: 'Fly.io (nanobot-ai)', url: 'https://nanobot-ai.fly.dev/health' },
+      { name: 'CF Workers (edge)', url: 'https://teai-edge.yukihamada.workers.dev/health' },
+    ];
+
+    // Tab switching
+    function showTab(id) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + id).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // Health check all endpoints
+    async function checkHealth() {
+      const tbody = document.getElementById('health-table');
+      tbody.innerHTML = '';
+      for (const ep of ENDPOINTS) {
+        const row = document.createElement('tr');
+        const start = performance.now();
+        try {
+          const r = await fetch(ep.url, { mode: 'cors' });
+          const latency = Math.round(performance.now() - start);
+          const data = await r.json().catch(() => ({}));
+          const color = latency < 200 ? 'var(--green)' : latency < 500 ? 'var(--yellow)' : 'var(--red)';
+          const dotClass = latency < 200 ? 'green' : latency < 500 ? 'yellow' : 'red';
+          row.innerHTML = '<td>' + ep.name + '</td><td style="font-size:11px;color:var(--muted)">' + ep.url + '</td>'
+            + '<td><span class="status-dot ' + dotClass + '"></span>' + (r.ok ? 'OK' : r.status) + '</td>'
+            + '<td style="color:' + color + ';font-weight:700">' + latency + 'ms</td>';
+        } catch(e) {
+          row.innerHTML = '<td>' + ep.name + '</td><td style="font-size:11px;color:var(--muted)">' + ep.url + '</td>'
+            + '<td><span class="status-dot red"></span>Error</td>'
+            + '<td style="color:var(--red)">--</td>';
+        }
+        tbody.appendChild(row);
+      }
+    }
+
+    // Load sessions
+    async function loadSessions() {
+      try {
+        const r = await fetch(API + '/api/v1/sessions');
+        const data = await r.json();
+        const list = Array.isArray(data) ? data : [];
+
+        let web = 0, line = 0, tg = 0;
+        list.forEach(s => {
+          const k = typeof s === 'string' ? s : (s.key || s);
+          if (k.startsWith('line:')) line++;
+          else if (k.startsWith('tg:')) tg++;
+          else web++;
+        });
+
+        document.getElementById('stat-sessions').textContent = list.length;
+        document.getElementById('sess-web').textContent = web;
+        document.getElementById('sess-line').textContent = line;
+        document.getElementById('sess-tg').textContent = tg;
+        document.getElementById('sess-total').textContent = list.length;
+        document.getElementById('ch-web').textContent = web;
+        document.getElementById('ch-line').textContent = line;
+        document.getElementById('ch-tg').textContent = tg;
+
+        const container = document.getElementById('session-list');
+        container.innerHTML = '';
+        if (list.length === 0) {
+          container.innerHTML = '<div style="padding:16px;color:var(--muted);text-align:center">No sessions yet</div>';
+          return;
+        }
+        list.forEach(s => {
+          const key = typeof s === 'string' ? s : (s.key || JSON.stringify(s));
+          const div = document.createElement('div');
+          div.className = 'session-item';
+          const channel = key.startsWith('line:') ? 'LINE' : key.startsWith('tg:') ? 'Telegram' : 'Web';
+          const badgeClass = key.startsWith('line:') ? 'badge-green' : key.startsWith('tg:') ? 'badge-cyan' : 'badge-blue';
+          div.innerHTML = '<div><div class="session-key">' + key + '</div></div>'
+            + '<span class="badge ' + badgeClass + '">' + channel + '</span>';
+          container.appendChild(div);
+        });
+      } catch(e) {
+        document.getElementById('session-list').innerHTML = '<div style="padding:16px;color:var(--red);text-align:center">Failed to load sessions</div>';
+      }
+    }
+
+    // Estimate costs from session count
+    function estimateCosts() {
+      document.getElementById('stat-cost').textContent = '~$11';
+      document.getElementById('cost-aws').textContent = '~$2';
+      document.getElementById('cost-openai').textContent = '~$5';
+    }
+
+    function refreshAll() {
+      checkHealth();
+      loadSessions();
+      estimateCosts();
+      document.getElementById('stat-requests').textContent = '--';
+      document.getElementById('stat-latency').textContent = '--';
+    }
+
+    // Init
+    refreshAll();
+  </script>
+</body>
+</html>

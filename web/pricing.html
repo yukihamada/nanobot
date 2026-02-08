@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pricing - chatweb.ai</title>
+  <meta name="description" content="chatweb.ai pricing plans. Free, Starter $9/mo, Pro $29/mo.">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #1e1e1e;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --green: #22c55e;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    nav {
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; text-decoration: none; color: var(--text); }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 16px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: var(--text); }
+    .lang-sw {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+    }
+    .lang-sw button {
+      background: none; border: none; color: var(--muted);
+      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .lang-sw button.on { background: var(--accent); color: #fff; }
+
+    .main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .hero {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .hero h1 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 48px;
+    }
+    .plan-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .plan-card.featured {
+      border-color: var(--accent);
+      box-shadow: 0 0 24px rgba(99,102,241,0.15);
+    }
+    .plan-badge {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 14px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .plan-name {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .plan-desc {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    .plan-price {
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      margin-bottom: 4px;
+    }
+    .plan-price .currency { font-size: 20px; font-weight: 600; }
+    .plan-price .period { font-size: 14px; font-weight: 400; color: var(--muted); }
+    .plan-features {
+      list-style: none;
+      margin: 24px 0;
+      flex: 1;
+    }
+    .plan-features li {
+      font-size: 14px;
+      padding: 6px 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .plan-features li::before {
+      content: '';
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      min-width: 16px;
+      margin-top: 2px;
+      background: var(--green);
+      border-radius: 50%;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6.5 11.5L3 8l1-1 2.5 2.5L11 5l1 1-5.5 5.5z' fill='white'/%3E%3C/svg%3E");
+      background-size: 12px;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+    .plan-features li.disabled {
+      color: var(--muted);
+    }
+    .plan-features li.disabled::before {
+      background: var(--border);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' stroke='%23555' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+      background-size: 12px;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+    .plan-cta {
+      display: block;
+      text-align: center;
+      padding: 14px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .plan-cta.primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .plan-cta.primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .plan-cta.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .plan-cta.secondary:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+    /* Coupon */
+    .coupon-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .coupon-section h3 { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+    .coupon-row {
+      display: flex;
+      gap: 8px;
+      max-width: 360px;
+      margin: 0 auto;
+    }
+    .coupon-row input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 12px 16px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      outline: none;
+      text-align: center;
+    }
+    .coupon-row input:focus { border-color: var(--accent); }
+    .coupon-row input::placeholder { letter-spacing: 0; text-transform: none; font-weight: 400; color: var(--muted); }
+    .coupon-row button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .coupon-row button:hover { background: var(--accent-hover); }
+    .coupon-msg {
+      font-size: 13px;
+      margin-top: 8px;
+      min-height: 20px;
+    }
+    .coupon-msg.success { color: var(--green); }
+    .coupon-msg.error { color: #ef4444; }
+
+    /* Guarantee */
+    .guarantee {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 20px;
+      margin-bottom: 40px;
+      background: rgba(34,197,94,0.06);
+      border: 1px solid rgba(34,197,94,0.15);
+      border-radius: 12px;
+    }
+    .guarantee svg { width: 28px; height: 28px; fill: var(--green); flex-shrink: 0; }
+    .guarantee-text { text-align: left; }
+    .guarantee-text strong { font-size: 14px; display: block; margin-bottom: 2px; }
+    .guarantee-text span { font-size: 12px; color: var(--muted); }
+
+    .faq { margin-bottom: 48px; }
+    .faq h2 { font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 24px; }
+    .faq-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 12px;
+    }
+    .faq-item h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+    .faq-item p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    footer a { color: var(--muted); }
+
+    @media (max-width: 768px) {
+      .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin-left: auto; margin-right: auto; }
+      .hero h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>chat</span>web.ai</a>
+    <div class="nav-links">
+      <a href="/" id="nav-home">Home</a>
+      <a href="/status">Status</a>
+      <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+      <div class="lang-sw">
+        <button onclick="setLang('ja')" id="l-ja">JA</button>
+        <button onclick="setLang('en')" id="l-en">EN</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="hero">
+      <h1 id="t-title">料金プラン</h1>
+      <p id="t-sub">無料で始めて、ビジネスの成長に合わせてスケール。</p>
+    </div>
+
+    <div class="pricing-grid">
+      <!-- Free -->
+      <div class="plan-card">
+        <div class="plan-name" id="p-free-name">Free</div>
+        <div class="plan-desc" id="p-free-desc">個人利用・お試しに</div>
+        <div class="plan-price"><span class="currency">$</span>0<span class="period" id="p-free-period">/月</span></div>
+        <ul class="plan-features" id="p-free-features"></ul>
+        <a href="/" class="plan-cta secondary" id="p-free-cta">今すぐ使う</a>
+      </div>
+
+      <!-- Starter -->
+      <div class="plan-card featured">
+        <div class="plan-badge" id="p-starter-badge">人気</div>
+        <div class="plan-name" id="p-starter-name">Starter</div>
+        <div class="plan-desc" id="p-starter-desc">小規模チーム・本格利用に</div>
+        <div class="plan-price"><span class="currency">$</span>9<span class="period" id="p-starter-period">/月</span></div>
+        <ul class="plan-features" id="p-starter-features"></ul>
+        <a href="#" class="plan-cta primary" id="p-starter-cta" data-plan="starter">Starterを始める</a>
+      </div>
+
+      <!-- Pro -->
+      <div class="plan-card">
+        <div class="plan-name" id="p-pro-name">Pro</div>
+        <div class="plan-desc" id="p-pro-desc">大規模利用・高性能モデルに</div>
+        <div class="plan-price"><span class="currency">$</span>29<span class="period" id="p-pro-period">/月</span></div>
+        <ul class="plan-features" id="p-pro-features"></ul>
+        <a href="#" class="plan-cta primary" id="p-pro-cta" data-plan="pro">Proを始める</a>
+      </div>
+    </div>
+
+    <!-- Coupon -->
+    <div class="coupon-section">
+      <h3 id="t-coupon-title">クーポンコードをお持ちですか？</h3>
+      <div class="coupon-row">
+        <input type="text" id="coupon-input" placeholder="コードを入力" maxlength="20" autocomplete="off">
+        <button onclick="applyCoupon()" id="coupon-btn">適用</button>
+      </div>
+      <div class="coupon-msg" id="coupon-msg"></div>
+    </div>
+
+    <!-- Guarantee -->
+    <div class="guarantee">
+      <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+      <div class="guarantee-text">
+        <strong id="t-guarantee-title">安心の返金保証</strong>
+        <span id="t-guarantee-desc">いつでもキャンセル可能。日割り計算で返金されます。</span>
+      </div>
+    </div>
+
+    <div class="faq" id="faq-section"></div>
+  </div>
+
+  <footer>
+    <a href="/" id="nav-home2">Home</a> &middot;
+    <a href="/status">Status</a> &middot;
+    <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
+    <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
+    chatweb.ai &copy; 2025-2026
+  </footer>
+
+  <script>
+    const PAYMENT_LINKS = {
+      starter: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o',
+      pro: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p',
+    };
+
+    let activeCoupon = null;
+
+    function applyCoupon() {
+      const input = document.getElementById('coupon-input');
+      const msg = document.getElementById('coupon-msg');
+      const code = input.value.trim().toUpperCase();
+      if (!code) return;
+
+      // Validate coupon via API
+      fetch((location.hostname === 'localhost' ? 'http://localhost:3000' : '') + '/api/v1/coupon/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code }),
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.valid) {
+          activeCoupon = data.stripe_promo_code || code;
+          msg.className = 'coupon-msg success';
+          const l = document.documentElement.lang || 'ja';
+          msg.textContent = l === 'ja'
+            ? (data.description_ja || data.description || 'クーポンが適用されました！')
+            : (data.description || 'Coupon applied!');
+          input.style.borderColor = 'var(--green)';
+        } else {
+          activeCoupon = null;
+          msg.className = 'coupon-msg error';
+          const l = document.documentElement.lang || 'ja';
+          msg.textContent = l === 'ja' ? '無効なクーポンコードです' : 'Invalid coupon code';
+          input.style.borderColor = '#ef4444';
+        }
+      })
+      .catch(() => {
+        msg.className = 'coupon-msg error';
+        msg.textContent = 'Error validating coupon';
+      });
+    }
+
+    document.getElementById('coupon-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') applyCoupon();
+    });
+
+    const T = {
+      ja: {
+        title: '料金プラン',
+        sub: '無料で始めて、ビジネスの成長に合わせてスケール。',
+        navHome: 'ホーム',
+        badge: '人気',
+        free: { name: 'Free', desc: '個人利用・お試しに', cta: '今すぐ使う', period: '/月' },
+        starter: { name: 'Starter', desc: '小規模チーム・本格利用に', cta: 'Starterを始める', period: '/月' },
+        pro: { name: 'Pro', desc: '大規模利用・高性能モデルに', cta: 'Proを始める', period: '/月' },
+        features: {
+          free: [
+            '1,000 クレジット/月',
+            '5 リクエスト/分',
+            'GPT-4o-mini, Gemini Flash',
+            '100 エージェント実行/月',
+            'Web・LINE・Telegram対応',
+          ],
+          starter: [
+            '25,000 クレジット/月',
+            '30 リクエスト/分',
+            'GPT-4o-mini, Gemini Flash',
+            '+ GPT-4o, Claude Sonnet',
+            '2,000 エージェント実行/月',
+            'Web・LINE・Telegram対応',
+            '優先サポート',
+          ],
+          pro: [
+            '300,000 クレジット/月',
+            '120 リクエスト/分',
+            '全モデル利用可能',
+            '+ Claude Opus',
+            '20,000 エージェント実行/月',
+            'Web・LINE・Telegram対応',
+            '優先サポート',
+            'カスタムエージェント',
+          ],
+        },
+        couponTitle: 'クーポンコードをお持ちですか？',
+        couponBtn: '適用',
+        couponPh: 'コードを入力',
+        guaranteeTitle: '安心の返金保証',
+        guaranteeDesc: 'いつでもキャンセル可能。日割り計算で返金されます。',
+        faqTitle: 'よくある質問',
+        faqs: [
+          { q: 'クレジットとは何ですか？', a: 'クレジットはAPIの利用量を表す単位です。モデルによって消費量が異なります。GPT-4o-miniは1K入力トークンで1クレジット、Claude Opusは30クレジットです。' },
+          { q: 'プランはいつでも変更できますか？', a: 'はい、いつでもアップグレード・ダウングレードが可能です。アップグレードは即座に反映され、差額が日割り計算されます。' },
+          { q: '無料プランに制限はありますか？', a: '無料プランでは月1,000クレジット、分5リクエストまで利用可能です。GPT-4o-miniとGemini Flashモデルが使えます。' },
+          { q: '支払い方法は何が使えますか？', a: 'Stripeを通じてVisa、Mastercard、American Express、JCBなど主要なクレジットカードとデビットカードに対応しています。' },
+        ],
+      },
+      en: {
+        title: 'Pricing',
+        sub: 'Start free, scale as your business grows.',
+        navHome: 'Home',
+        badge: 'Popular',
+        free: { name: 'Free', desc: 'For personal use & trial', cta: 'Get Started', period: '/mo' },
+        starter: { name: 'Starter', desc: 'For small teams & serious use', cta: 'Start Starter', period: '/mo' },
+        pro: { name: 'Pro', desc: 'For high-volume & advanced models', cta: 'Start Pro', period: '/mo' },
+        features: {
+          free: [
+            '1,000 credits/mo',
+            '5 requests/min',
+            'GPT-4o-mini, Gemini Flash',
+            '100 agent runs/mo',
+            'Web, LINE & Telegram',
+          ],
+          starter: [
+            '25,000 credits/mo',
+            '30 requests/min',
+            'GPT-4o-mini, Gemini Flash',
+            '+ GPT-4o, Claude Sonnet',
+            '2,000 agent runs/mo',
+            'Web, LINE & Telegram',
+            'Priority support',
+          ],
+          pro: [
+            '300,000 credits/mo',
+            '120 requests/min',
+            'All models available',
+            '+ Claude Opus',
+            '20,000 agent runs/mo',
+            'Web, LINE & Telegram',
+            'Priority support',
+            'Custom agents',
+          ],
+        },
+        couponTitle: 'Have a coupon code?',
+        couponBtn: 'Apply',
+        couponPh: 'Enter code',
+        guaranteeTitle: 'Money-back guarantee',
+        guaranteeDesc: 'Cancel anytime. Prorated refunds, no questions asked.',
+        faqTitle: 'FAQ',
+        faqs: [
+          { q: 'What are credits?', a: 'Credits measure API usage. Different models consume different amounts. GPT-4o-mini costs 1 credit per 1K input tokens, while Claude Opus costs 30 credits.' },
+          { q: 'Can I change plans anytime?', a: 'Yes, you can upgrade or downgrade anytime. Upgrades take effect immediately with prorated billing.' },
+          { q: 'Are there limits on the free plan?', a: 'The free plan includes 1,000 credits/month and 5 requests/minute. You can use GPT-4o-mini and Gemini Flash models.' },
+          { q: 'What payment methods are accepted?', a: 'We accept Visa, Mastercard, American Express, JCB and other major credit/debit cards via Stripe.' },
+        ],
+      },
+    };
+
+    function renderFeatures(planKey, features) {
+      const el = document.getElementById('p-' + planKey + '-features');
+      el.innerHTML = '';
+      features.forEach(f => {
+        const li = document.createElement('li');
+        li.textContent = f;
+        el.appendChild(li);
+      });
+    }
+
+    function renderFaq(lang) {
+      const t = T[lang];
+      const section = document.getElementById('faq-section');
+      let html = '<h2>' + t.faqTitle + '</h2>';
+      t.faqs.forEach(faq => {
+        html += '<div class="faq-item"><h3>' + faq.q + '</h3><p>' + faq.a + '</p></div>';
+      });
+      section.innerHTML = html;
+    }
+
+    function setLang(l) {
+      document.documentElement.lang = l;
+      localStorage.setItem('nl', l);
+      document.getElementById('l-ja').className = l === 'ja' ? 'on' : '';
+      document.getElementById('l-en').className = l === 'en' ? 'on' : '';
+
+      const t = T[l];
+      document.getElementById('t-title').textContent = t.title;
+      document.getElementById('t-sub').textContent = t.sub;
+      document.getElementById('nav-home').textContent = t.navHome;
+      document.getElementById('nav-home2').textContent = t.navHome;
+      document.getElementById('p-starter-badge').textContent = t.badge;
+
+      ['free', 'starter', 'pro'].forEach(p => {
+        document.getElementById('p-' + p + '-name').textContent = t[p].name;
+        document.getElementById('p-' + p + '-desc').textContent = t[p].desc;
+        document.getElementById('p-' + p + '-cta').textContent = t[p].cta;
+        document.getElementById('p-' + p + '-period').textContent = t[p].period;
+        renderFeatures(p, t.features[p]);
+      });
+
+      document.getElementById('t-coupon-title').textContent = t.couponTitle;
+      document.getElementById('coupon-btn').textContent = t.couponBtn;
+      document.getElementById('coupon-input').placeholder = t.couponPh;
+      document.getElementById('t-guarantee-title').textContent = t.guaranteeTitle;
+      document.getElementById('t-guarantee-desc').textContent = t.guaranteeDesc;
+      renderFaq(l);
+    }
+
+    // CTA clicks — apply coupon if active
+    document.querySelectorAll('[data-plan]').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const plan = this.dataset.plan;
+        let link = PAYMENT_LINKS[plan];
+        if (link) {
+          if (activeCoupon) {
+            link += (link.includes('?') ? '&' : '?') + 'prefilled_promo_code=' + encodeURIComponent(activeCoupon);
+          }
+          window.location.href = link;
+        } else {
+          fetch('/api/v1/billing/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plan: plan, coupon: activeCoupon }),
+          })
+          .then(r => r.json())
+          .then(d => { if (d.checkout_url) window.location.href = d.checkout_url; })
+          .catch(() => alert('Error creating checkout. Please try again.'));
+        }
+      });
+    });
+
+    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+  </script>
+</body>
+</html>

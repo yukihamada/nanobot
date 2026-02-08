@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comparison - chatweb.ai</title>
+  <meta name="description" content="chatweb.ai vs ChatGPT, Gemini, Perplexity - feature comparison">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #1e1e1e;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --green: #22c55e;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    nav {
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; text-decoration: none; color: var(--text); }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 16px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: var(--text); }
+    .lang-sw {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+    }
+    .lang-sw button {
+      background: none; border: none; color: var(--muted);
+      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .lang-sw button.on { background: var(--accent); color: #fff; }
+    .main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .hero {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .hero h1 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 48px;
+    }
+    .compare-table th, .compare-table td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .compare-table th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .compare-table th:first-child { width: 200px; }
+    .compare-table td:first-child { font-weight: 600; }
+    .compare-table .highlight {
+      background: rgba(99,102,241,0.08);
+    }
+    .compare-table .highlight td:first-child {
+      color: var(--accent);
+    }
+    .check { color: var(--green); font-weight: 700; }
+    .cross { color: #ef4444; }
+    .partial { color: #f59e0b; }
+    .cta-section {
+      text-align: center;
+      padding: 40px 0;
+    }
+    .cta-btn {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      padding: 12px 32px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 16px;
+      transition: background 0.2s;
+    }
+    .cta-btn:hover { background: var(--accent-hover); }
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+    @media (max-width: 768px) {
+      .compare-table { font-size: 12px; }
+      .compare-table th, .compare-table td { padding: 10px 8px; }
+      .hero h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>chat</span>web.ai</a>
+    <div class="nav-links">
+      <a href="/pricing" id="nav-pricing">Pricing</a>
+      <a href="/contact" id="nav-contact">Contact</a>
+      <div class="lang-sw">
+        <button onclick="setLang('ja')" id="btn-ja" class="on">JP</button>
+        <button onclick="setLang('en')" id="btn-en">EN</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="hero">
+      <h1 id="t-title">AI サービス比較</h1>
+      <p id="t-subtitle">chatweb.ai と他の主要AIサービスの機能比較</p>
+    </div>
+
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th id="t-feature">Feature</th>
+          <th class="highlight">chatweb.ai</th>
+          <th>ChatGPT</th>
+          <th>Gemini</th>
+          <th>Perplexity</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td id="t-f-free">Free tier</td>
+          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-free">50 credits/day</span></td>
+          <td><span class="check">&#x2713;</span> Limited</td>
+          <td><span class="check">&#x2713;</span> Limited</td>
+          <td><span class="check">&#x2713;</span> Limited</td>
+        </tr>
+        <tr>
+          <td id="t-f-multi">Multi-model</td>
+          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-multi">GPT-4o, Claude, Gemini</span></td>
+          <td><span class="cross">&#x2717;</span> GPT only</td>
+          <td><span class="cross">&#x2717;</span> Gemini only</td>
+          <td><span class="partial">&#x25CB;</span> Limited</td>
+        </tr>
+        <tr>
+          <td id="t-f-search">Web search</td>
+          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-search">Built-in</span></td>
+          <td><span class="check">&#x2713;</span></td>
+          <td><span class="check">&#x2713;</span></td>
+          <td><span class="check">&#x2713;</span></td>
+        </tr>
+        <tr>
+          <td id="t-f-line">LINE integration</td>
+          <td class="highlight"><span class="check">&#x2713;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+        </tr>
+        <tr>
+          <td id="t-f-tg">Telegram integration</td>
+          <td class="highlight"><span class="check">&#x2713;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+        </tr>
+        <tr>
+          <td id="t-f-sync">Cross-channel sync</td>
+          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-sync">Web + LINE + Telegram</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+        </tr>
+        <tr>
+          <td id="t-f-tools">Tool calling</td>
+          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-tools">web_search, calculator, etc.</span></td>
+          <td><span class="check">&#x2713;</span></td>
+          <td><span class="partial">&#x25CB;</span></td>
+          <td><span class="partial">&#x25CB;</span></td>
+        </tr>
+        <tr>
+          <td id="t-f-api">API access</td>
+          <td class="highlight"><span class="check">&#x2713;</span> <span id="t-v-api">REST API</span></td>
+          <td><span class="check">&#x2713;</span> <span>Paid</span></td>
+          <td><span class="check">&#x2713;</span></td>
+          <td><span class="check">&#x2713;</span> <span>Paid</span></td>
+        </tr>
+        <tr>
+          <td id="t-f-oss">Open source</td>
+          <td class="highlight"><span class="check">&#x2713;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+          <td><span class="cross">&#x2717;</span></td>
+        </tr>
+        <tr>
+          <td id="t-f-price">Paid plan</td>
+          <td class="highlight"><span id="t-v-price">$9/mo~</span></td>
+          <td>$20/mo</td>
+          <td>$20/mo</td>
+          <td>$20/mo</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="cta-section">
+      <a href="/" class="cta-btn" id="t-cta">Try chatweb.ai for free</a>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/pricing">Pricing</a> &middot;
+    <a href="/status">Status</a> &middot;
+    <a href="/contact">Contact</a> &middot;
+    <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
+    chatweb.ai &copy; 2025-2026
+  </footer>
+
+  <script>
+    const T = {
+      ja: {
+        title: 'AI サービス比較',
+        subtitle: 'chatweb.ai と他の主要AIサービスの機能比較',
+        feature: '機能',
+        fFree: '無料枠',  vFree: '50クレジット/日',
+        fMulti: 'マルチモデル', vMulti: 'GPT-4o, Claude, Gemini',
+        fSearch: 'Web検索', vSearch: '内蔵',
+        fLine: 'LINE連携', fTg: 'Telegram連携',
+        fSync: 'クロスチャネル同期', vSync: 'Web + LINE + Telegram',
+        fTools: 'ツール呼び出し', vTools: 'web_search, calculator等',
+        fApi: 'APIアクセス', vApi: 'REST API',
+        fOss: 'オープンソース',
+        fPrice: '有料プラン', vPrice: '$9/月〜',
+        cta: '無料で試してみる',
+        pricing: '料金', contact: 'お問い合わせ',
+      },
+      en: {
+        title: 'AI Service Comparison',
+        subtitle: 'How chatweb.ai compares to other major AI services',
+        feature: 'Feature',
+        fFree: 'Free tier',  vFree: '50 credits/day',
+        fMulti: 'Multi-model', vMulti: 'GPT-4o, Claude, Gemini',
+        fSearch: 'Web search', vSearch: 'Built-in',
+        fLine: 'LINE integration', fTg: 'Telegram integration',
+        fSync: 'Cross-channel sync', vSync: 'Web + LINE + Telegram',
+        fTools: 'Tool calling', vTools: 'web_search, calculator, etc.',
+        fApi: 'API access', vApi: 'REST API',
+        fOss: 'Open source',
+        fPrice: 'Paid plan', vPrice: '$9/mo~',
+        cta: 'Try chatweb.ai for free',
+        pricing: 'Pricing', contact: 'Contact',
+      }
+    };
+    function setLang(l) {
+      document.documentElement.lang = l;
+      localStorage.setItem('nl', l);
+      document.getElementById('btn-ja').className = l === 'ja' ? 'on' : '';
+      document.getElementById('btn-en').className = l === 'en' ? 'on' : '';
+      const t = T[l];
+      document.getElementById('t-title').textContent = t.title;
+      document.getElementById('t-subtitle').textContent = t.subtitle;
+      document.getElementById('t-feature').textContent = t.feature;
+      document.getElementById('t-f-free').textContent = t.fFree;
+      document.getElementById('t-v-free').textContent = t.vFree;
+      document.getElementById('t-f-multi').textContent = t.fMulti;
+      document.getElementById('t-v-multi').textContent = t.vMulti;
+      document.getElementById('t-f-search').textContent = t.fSearch;
+      document.getElementById('t-v-search').textContent = t.vSearch;
+      document.getElementById('t-f-line').textContent = t.fLine;
+      document.getElementById('t-f-tg').textContent = t.fTg;
+      document.getElementById('t-f-sync').textContent = t.fSync;
+      document.getElementById('t-v-sync').textContent = t.vSync;
+      document.getElementById('t-f-tools').textContent = t.fTools;
+      document.getElementById('t-v-tools').textContent = t.vTools;
+      document.getElementById('t-f-api').textContent = t.fApi;
+      document.getElementById('t-v-api').textContent = t.vApi;
+      document.getElementById('t-f-oss').textContent = t.fOss;
+      document.getElementById('t-f-price').textContent = t.fPrice;
+      document.getElementById('t-v-price').textContent = t.vPrice;
+      document.getElementById('t-cta').textContent = t.cta;
+      document.getElementById('nav-pricing').textContent = t.pricing;
+      document.getElementById('nav-contact').textContent = t.contact;
+    }
+    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+  </script>
+</body>
+</html>

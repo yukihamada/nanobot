@@ -111,6 +111,11 @@ impl SessionStore for DynamoSessionStore {
         self.cache.get_mut(key).unwrap()
     }
 
+    fn refresh(&mut self, key: &str) -> &mut Session {
+        self.cache.remove(key);
+        self.get_or_create(key)
+    }
+
     fn save(&self, session: &Session) {
         self.save_to_dynamo(session);
     }

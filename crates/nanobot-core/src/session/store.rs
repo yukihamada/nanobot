@@ -5,6 +5,9 @@ pub trait SessionStore: Send + Sync {
     /// Get an existing session or create a new one.
     fn get_or_create(&mut self, key: &str) -> &mut Session;
 
+    /// Force-reload session from storage (invalidate cache).
+    fn refresh(&mut self, key: &str) -> &mut Session;
+
     /// Save a session.
     fn save(&self, session: &Session);
 

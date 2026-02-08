@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome - chatweb.ai</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #1e1e1e;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --green: #22c55e;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    nav {
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; text-decoration: none; color: var(--text); }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 16px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: var(--text); }
+    .lang-sw {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+    }
+    .lang-sw button {
+      background: none; border: none; color: var(--muted);
+      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .lang-sw button.on { background: var(--accent); color: #fff; }
+
+    .main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      background: var(--green);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+    }
+    .success-icon svg { width: 32px; height: 32px; }
+    .hero {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .hero h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card h2 .step {
+      background: var(--accent);
+      color: #fff;
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .card p { font-size: 14px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+    .code-block {
+      background: #0d0d0d;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      overflow-x: auto;
+      position: relative;
+      margin-bottom: 12px;
+    }
+    .code-block .comment { color: var(--muted); }
+    .code-block .string { color: #a5d6a7; }
+    .code-block .key { color: #90caf9; }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+
+    .api-key-box {
+      background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(34,197,94,0.1));
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .api-key-box p { color: var(--text); font-weight: 600; margin-bottom: 8px; }
+    .api-key-box .note { font-size: 12px; color: var(--muted); font-weight: 400; }
+
+    .cta-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 32px;
+    }
+    .cta-row a {
+      flex: 1;
+      display: block;
+      text-align: center;
+      padding: 14px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+    .cta-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .cta-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .cta-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .cta-secondary:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    footer a { color: var(--muted); }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 24px; }
+      .cta-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>chat</span>web.ai</a>
+    <div class="nav-links">
+      <a href="/" id="nav-home">Home</a>
+      <a href="/pricing" id="nav-pricing">Pricing</a>
+      <a href="/status">Status</a>
+      <div class="lang-sw">
+        <button onclick="setLang('ja')" id="l-ja">JA</button>
+        <button onclick="setLang('en')" id="l-en">EN</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="success-icon">
+      <svg viewBox="0 0 32 32" fill="none"><path d="M12 22l-6-6 2-2 4 4 10-10 2 2L12 22z" fill="#fff"/></svg>
+    </div>
+    <div class="hero">
+      <h1 id="t-title">セットアップ完了！</h1>
+      <p id="t-sub">APIキーをメールでお送りしました。早速使い始めましょう。</p>
+    </div>
+
+    <div class="api-key-box">
+      <p id="t-key-note">APIキーはメールで送信されています</p>
+      <div class="note" id="t-key-warn">APIキーは安全に保管してください。再表示はできません。</div>
+    </div>
+
+    <!-- Step 1: Quick start -->
+    <div class="card">
+      <h2><span class="step">1</span> <span id="t-step1-title">APIを呼び出す</span></h2>
+      <p id="t-step1-desc">curlコマンドでAPIを試してみましょう。YOUR_API_KEYをメールで受け取ったキーに置き換えてください。</p>
+      <div class="code-block" id="code-chat">
+        <button class="copy-btn" onclick="copyCode('code-chat')">Copy</button>
+<span class="comment"># Send a chat message</span>
+curl -X POST https://chatweb.ai/api/v1/chat \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer YOUR_API_KEY"</span> \
+  -d <span class="string">'{
+    "message": "Hello, chatweb.ai!",
+    "session_id": "my-session-1"
+  }'</span></div>
+    </div>
+
+    <!-- Step 2: Check response -->
+    <div class="card">
+      <h2><span class="step">2</span> <span id="t-step2-title">レスポンスを確認</span></h2>
+      <p id="t-step2-desc">APIは以下の形式でJSON応答を返します。</p>
+      <div class="code-block">
+{
+  <span class="key">"response"</span>: <span class="string">"Hello! How can I help you today?"</span>,
+  <span class="key">"session_id"</span>: <span class="string">"my-session-1"</span>
+}</div>
+    </div>
+
+    <!-- Step 3: Check usage -->
+    <div class="card">
+      <h2><span class="step">3</span> <span id="t-step3-title">使用量を確認</span></h2>
+      <p id="t-step3-desc">いつでもAPIで使用量とクレジット残高を確認できます。</p>
+      <div class="code-block" id="code-usage">
+        <button class="copy-btn" onclick="copyCode('code-usage')">Copy</button>
+<span class="comment"># Check usage</span>
+curl https://chatweb.ai/api/v1/usage \
+  -H <span class="string">"Authorization: Bearer YOUR_API_KEY"</span></div>
+    </div>
+
+    <div class="cta-row">
+      <a href="/" class="cta-primary" id="t-cta-chat">チャットを試す</a>
+      <a href="https://github.com/yukihamada/nanobot" target="_blank" class="cta-secondary" id="t-cta-docs">ドキュメント</a>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/">Home</a> &middot;
+    <a href="/pricing" id="nav-pricing2">Pricing</a> &middot;
+    <a href="/status">Status</a> &middot;
+    <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
+    <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
+    chatweb.ai &copy; 2025-2026
+  </footer>
+
+  <script>
+    const T = {
+      ja: {
+        title: 'セットアップ完了！',
+        sub: 'APIキーをメールでお送りしました。早速使い始めましょう。',
+        pricing: '料金',
+        keyNote: 'APIキーはメールで送信されています',
+        keyWarn: 'APIキーは安全に保管してください。再表示はできません。',
+        step1Title: 'APIを呼び出す',
+        step1Desc: 'curlコマンドでAPIを試してみましょう。YOUR_API_KEYをメールで受け取ったキーに置き換えてください。',
+        step2Title: 'レスポンスを確認',
+        step2Desc: 'APIは以下の形式でJSON応答を返します。',
+        step3Title: '使用量を確認',
+        step3Desc: 'いつでもAPIで使用量とクレジット残高を確認できます。',
+        ctaChat: 'チャットを試す',
+        ctaDocs: 'ドキュメント',
+      },
+      en: {
+        title: 'Setup Complete!',
+        sub: 'Your API key has been sent to your email. Let\'s get started.',
+        pricing: 'Pricing',
+        keyNote: 'Your API key has been sent via email',
+        keyWarn: 'Keep your API key secure. It cannot be shown again.',
+        step1Title: 'Make your first API call',
+        step1Desc: 'Try the API with curl. Replace YOUR_API_KEY with the key from your email.',
+        step2Title: 'Check the response',
+        step2Desc: 'The API returns a JSON response in this format.',
+        step3Title: 'Monitor usage',
+        step3Desc: 'Check your usage and remaining credits anytime via the API.',
+        ctaChat: 'Try the Chat',
+        ctaDocs: 'Documentation',
+      },
+    };
+
+    function setLang(l) {
+      document.documentElement.lang = l;
+      localStorage.setItem('nl', l);
+      document.getElementById('l-ja').className = l === 'ja' ? 'on' : '';
+      document.getElementById('l-en').className = l === 'en' ? 'on' : '';
+
+      const t = T[l];
+      document.getElementById('t-title').textContent = t.title;
+      document.getElementById('t-sub').textContent = t.sub;
+      document.getElementById('nav-pricing').textContent = t.pricing;
+      document.getElementById('nav-pricing2').textContent = t.pricing;
+      document.getElementById('t-key-note').textContent = t.keyNote;
+      document.getElementById('t-key-warn').textContent = t.keyWarn;
+      document.getElementById('t-step1-title').textContent = t.step1Title;
+      document.getElementById('t-step1-desc').textContent = t.step1Desc;
+      document.getElementById('t-step2-title').textContent = t.step2Title;
+      document.getElementById('t-step2-desc').textContent = t.step2Desc;
+      document.getElementById('t-step3-title').textContent = t.step3Title;
+      document.getElementById('t-step3-desc').textContent = t.step3Desc;
+      document.getElementById('t-cta-chat').textContent = t.ctaChat;
+      document.getElementById('t-cta-docs').textContent = t.ctaDocs;
+    }
+
+    function copyCode(id) {
+      const block = document.getElementById(id);
+      const text = block.innerText.replace('Copy', '').trim();
+      navigator.clipboard.writeText(text);
+      const btn = block.querySelector('.copy-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    }
+
+    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+  </script>
+</body>
+</html>

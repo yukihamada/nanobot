@@ -30,9 +30,24 @@ async fn main() -> Result<(), Error> {
     let aws_config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
     let dynamo_client = aws_sdk_dynamodb::Client::new(&aws_config);
 
-    let session_store = DynamoSessionStore::new(dynamo_client, table_name, tenant_id);
+    let config_table = std::env::var("DYNAMODB_CONFIG_TABLE")
+        .unwrap_or_else(|_| "nanobot-config".to_string());
 
-    let state = Arc::new(AppState::with_provider(cfg, Box::new(session_store)));
+    let session_store = DynamoSessionStore::new(dynamo_client.clone(), table_name, tenant_id);
+
+    let mut app_state = AppState::with_provider(cfg, Box::new(session_store));
+    app_state.dynamo_client = Some(dynamo_client);
+    app_state.config_table = Some(config_table);
+
+    // Load MCP tools from environment
+    let mcp_tools = nanobot_core::mcp::client::load_mcp_tools_from_env().await;
+    if !mcp_tools.is_empty() {
+        info!("Loaded {} MCP tools", mcp_tools.len());
+        app_state.tool_registry.register_all(mcp_tools);
+    }
+    info!("Total tools registered: {}", app_state.tool_registry.len());
+
+    let state = Arc::new(app_state);
 
     let router = create_router(state);
 
