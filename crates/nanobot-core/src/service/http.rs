@@ -745,6 +745,28 @@ pub struct ChatRequest {
     pub session_id: String,
     #[serde(default = "default_channel")]
     pub channel: String,
+    /// Optional model override from user settings
+    pub model: Option<String>,
+}
+
+/// User settings stored in DynamoDB
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserSettings {
+    pub preferred_model: Option<String>,
+    pub temperature: Option<f64>,
+    pub enabled_tools: Option<Vec<String>>,
+    pub custom_api_keys: Option<std::collections::HashMap<String, String>>,
+    pub language: Option<String>,
+}
+
+/// Request body for updating settings (all fields optional for partial update)
+#[derive(Debug, Deserialize)]
+pub struct UpdateSettingsRequest {
+    pub preferred_model: Option<String>,
+    pub temperature: Option<f64>,
+    pub enabled_tools: Option<Vec<String>>,
+    pub custom_api_keys: Option<std::collections::HashMap<String, String>>,
+    pub language: Option<String>,
 }
 
 fn default_session_id() -> String {
@@ -822,6 +844,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/devices", get(handle_devices))
         .route("/api/v1/devices/heartbeat", post(handle_device_heartbeat))
         // Billing
+        // Settings
+        .route("/api/v1/settings/{id}", get(handle_get_settings))
+        .route("/api/v1/settings/{id}", post(handle_update_settings))
+        .route("/settings", get(handle_settings_page))
         .route("/api/v1/billing/checkout", post(handle_billing_checkout))
         .route("/api/v1/billing/portal", get(handle_billing_portal))
         // Coupon
@@ -855,6 +881,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                     http::Method::GET,
                     http::Method::POST,
                     http::Method::PUT,
+                    http::Method::PATCH,
                     http::Method::DELETE,
                     http::Method::OPTIONS,
                 ])
@@ -1028,13 +1055,72 @@ async fn handle_chat(
         messages.push(Message::user(&clean_message));
     }
 
-    let model = &state.config.agents.defaults.model;
+    // Load user settings for model/temperature/tools override
+    let user_settings: Option<UserSettings> = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                Some(get_user_settings(dynamo, table, &session_key).await)
+            } else {
+                None
+            }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { None }
+    };
+
+    // Use model from: request > user settings > global default
+    let default_model = state.config.agents.defaults.model.clone();
+    let model = req.model
+        .as_deref()
+        .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
+        .unwrap_or(&default_model);
+    let model = model.to_string();
     let max_tokens = state.config.agents.defaults.max_tokens;
-    let temperature = state.config.agents.defaults.temperature;
+    let temperature = user_settings.as_ref()
+        .and_then(|s| s.temperature)
+        .unwrap_or(state.config.agents.defaults.temperature);
+
+    // If user has custom API keys, create per-request provider
+    let custom_provider: Option<Arc<dyn LlmProvider>> = user_settings.as_ref()
+        .and_then(|s| s.custom_api_keys.as_ref())
+        .and_then(|keys| {
+            // Find the right API key for the selected model
+            let provider_name = if model.starts_with("openai/") || model.starts_with("gpt-") {
+                "openai"
+            } else if model.starts_with("anthropic/") || model.starts_with("claude-") {
+                "anthropic"
+            } else if model.starts_with("gemini") || model.starts_with("google/") {
+                "google"
+            } else {
+                "openai"
+            };
+            keys.get(provider_name)
+                .filter(|k| !k.contains("****") && !k.is_empty())
+                .map(|key| {
+                    Arc::from(provider::create_provider(key, None, &model))
+                        as Arc<dyn LlmProvider>
+                })
+        });
+
+    let active_provider = custom_provider.as_ref().unwrap_or(&provider);
 
     // Get tool definitions for function calling (only if agent supports tools)
+    let enabled_tool_names = user_settings.as_ref().and_then(|s| s.enabled_tools.clone());
     let tools = if agent.tools_enabled {
-        state.tool_registry.get_definitions()
+        let all_tools = state.tool_registry.get_definitions();
+        // Filter by user's enabled tools if set
+        if let Some(ref enabled) = enabled_tool_names {
+            all_tools.into_iter()
+                .filter(|t| {
+                    t.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str())
+                        .map(|name| enabled.contains(&name.to_string()))
+                        .unwrap_or(false)
+                })
+                .collect()
+        } else {
+            all_tools
+        }
     } else {
         vec![]
     };
@@ -1043,7 +1129,7 @@ async fn handle_chat(
 
     info!("Calling LLM: model={}, tools={}, agent={}", model, tools.len(), agent.id);
 
-    let (response_text, tools_used) = match provider.chat(&messages, tools_ref, model, max_tokens, temperature).await {
+    let (response_text, tools_used) = match active_provider.chat(&messages, tools_ref, &model, max_tokens, temperature).await {
         Ok(completion) => {
             info!("LLM response: finish_reason={:?}, tool_calls={}, content_len={}",
                 completion.finish_reason, completion.tool_calls.len(),
@@ -1053,7 +1139,7 @@ async fn handle_chat(
             {
                 if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
                     let credits = deduct_credits(
-                        dynamo, table, &session_key, model,
+                        dynamo, table, &session_key, &model,
                         completion.usage.prompt_tokens, completion.usage.completion_tokens,
                     ).await;
                     tracing::debug!("Deducted {} credits for user {}", credits, session_key);
@@ -1135,7 +1221,7 @@ async fn handle_chat(
                 }
 
                 // Follow-up call WITHOUT tools — force text generation
-                match provider.chat(&conversation, None, model, max_tokens, temperature).await {
+                match active_provider.chat(&conversation, None, &model, max_tokens, temperature).await {
                     Ok(resp) => {
                         info!("Follow-up: finish={:?}, content_len={}, tool_calls={}",
                             resp.finish_reason,
@@ -1144,7 +1230,7 @@ async fn handle_chat(
                         #[cfg(feature = "dynamodb-backend")]
                         {
                             if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
-                                deduct_credits(dynamo, table, &session_key, model,
+                                deduct_credits(dynamo, table, &session_key, &model,
                                     resp.usage.prompt_tokens, resp.usage.completion_tokens).await;
                             }
                         }
@@ -2192,11 +2278,20 @@ async fn handle_providers(
         }));
     }
 
-    if std::env::var("GEMINI_API_KEY").is_ok() {
+    if std::env::var("GEMINI_API_KEY").is_ok() || std::env::var("GOOGLE_API_KEY").is_ok() {
         providers.push(serde_json::json!({
-            "id": "gemini",
-            "name": "Google Gemini",
+            "id": "google",
+            "name": "Google Gemini / Vertex AI",
             "models": ["gemini-2.0-flash", "gemini-pro"],
+            "status": "active",
+        }));
+    }
+
+    if std::env::var("DEEPSEEK_API_KEY").is_ok() {
+        providers.push(serde_json::json!({
+            "id": "deepseek",
+            "name": "DeepSeek",
+            "models": ["deepseek-chat", "deepseek-reasoner"],
             "status": "active",
         }));
     }
@@ -2359,6 +2454,175 @@ async fn handle_health() -> impl IntoResponse {
         status: "ok".to_string(),
         version: crate::VERSION.to_string(),
     })
+}
+
+// ---------------------------------------------------------------------------
+// Settings API
+// ---------------------------------------------------------------------------
+
+/// GET /api/v1/settings/{id} — Get user settings
+async fn handle_get_settings(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let session_key = resolve_session_key(dynamo, table, &id).await;
+            let settings = get_user_settings(dynamo, table, &session_key).await;
+            return Json(serde_json::json!({
+                "settings": settings,
+                "session_id": session_key,
+            }));
+        }
+    }
+    Json(serde_json::json!({
+        "settings": UserSettings {
+            preferred_model: None,
+            temperature: None,
+            enabled_tools: None,
+            custom_api_keys: None,
+            language: None,
+        },
+        "session_id": id,
+    }))
+}
+
+/// POST /api/v1/settings/{id} — Update user settings
+async fn handle_update_settings(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateSettingsRequest>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let session_key = resolve_session_key(dynamo, table, &id).await;
+            save_user_settings(dynamo, table, &session_key, &req).await;
+            let settings = get_user_settings(dynamo, table, &session_key).await;
+            return Json(serde_json::json!({
+                "ok": true,
+                "settings": settings,
+            }));
+        }
+    }
+    Json(serde_json::json!({
+        "ok": false,
+        "error": "DynamoDB not configured",
+    }))
+}
+
+/// Get user settings from DynamoDB
+#[cfg(feature = "dynamodb-backend")]
+async fn get_user_settings(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    user_id: &str,
+) -> UserSettings {
+    let pk = format!("USER#{}", user_id);
+    if let Ok(output) = dynamo
+        .get_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S("SETTINGS".to_string()))
+        .send()
+        .await
+    {
+        if let Some(item) = output.item {
+            let preferred_model = item.get("preferred_model").and_then(|v| v.as_s().ok()).cloned();
+            let temperature = item.get("temperature").and_then(|v| v.as_n().ok())
+                .and_then(|n| n.parse::<f64>().ok());
+            let enabled_tools: Option<Vec<String>> = item.get("enabled_tools").and_then(|v| v.as_l().ok())
+                .map(|list| list.iter().filter_map(|v| v.as_s().ok().cloned()).collect());
+            let custom_api_keys: Option<std::collections::HashMap<String, String>> =
+                item.get("custom_api_keys").and_then(|v| v.as_m().ok())
+                    .map(|m| m.iter()
+                        .filter_map(|(k, v)| v.as_s().ok().map(|s| (k.clone(), mask_api_key(s))))
+                        .collect());
+            let language = item.get("language").and_then(|v| v.as_s().ok()).cloned();
+            return UserSettings { preferred_model, temperature, enabled_tools, custom_api_keys, language };
+        }
+    }
+    // Return defaults
+    UserSettings {
+        preferred_model: None,
+        temperature: None,
+        enabled_tools: Some(vec![
+            "web_search".to_string(), "calculator".to_string(), "weather".to_string(),
+            "translate".to_string(), "wikipedia".to_string(), "datetime".to_string(),
+            "news_search".to_string(),
+        ]),
+        custom_api_keys: None,
+        language: None,
+    }
+}
+
+/// Mask API key for safe display (show first 4 chars + ****)
+fn mask_api_key(key: &str) -> String {
+    if key.len() <= 4 {
+        "****".to_string()
+    } else {
+        format!("{}****", &key[..4])
+    }
+}
+
+/// Save user settings to DynamoDB (partial update)
+#[cfg(feature = "dynamodb-backend")]
+async fn save_user_settings(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    user_id: &str,
+    req: &UpdateSettingsRequest,
+) {
+    let pk = format!("USER#{}", user_id);
+    let mut update_expr = vec!["SET updated_at = :now".to_string()];
+    let mut expr_values = std::collections::HashMap::new();
+    expr_values.insert(":now".to_string(), AttributeValue::S(chrono::Utc::now().to_rfc3339()));
+
+    if let Some(ref model) = req.preferred_model {
+        update_expr.push("preferred_model = :model".to_string());
+        expr_values.insert(":model".to_string(), AttributeValue::S(model.clone()));
+    }
+    if let Some(temp) = req.temperature {
+        update_expr.push("temperature = :temp".to_string());
+        expr_values.insert(":temp".to_string(), AttributeValue::N(temp.to_string()));
+    }
+    if let Some(ref tools) = req.enabled_tools {
+        update_expr.push("enabled_tools = :tools".to_string());
+        expr_values.insert(":tools".to_string(), AttributeValue::L(
+            tools.iter().map(|t| AttributeValue::S(t.clone())).collect()
+        ));
+    }
+    if let Some(ref keys) = req.custom_api_keys {
+        update_expr.push("custom_api_keys = :keys".to_string());
+        let map: std::collections::HashMap<String, AttributeValue> = keys.iter()
+            .map(|(k, v)| (k.clone(), AttributeValue::S(v.clone())))
+            .collect();
+        expr_values.insert(":keys".to_string(), AttributeValue::M(map));
+    }
+    if let Some(ref lang) = req.language {
+        update_expr.push("language = :lang".to_string());
+        expr_values.insert(":lang".to_string(), AttributeValue::S(lang.clone()));
+    }
+
+    let update_expression = update_expr.join(", ");
+    let _ = dynamo
+        .update_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S("SETTINGS".to_string()))
+        .update_expression(&update_expression)
+        .set_expression_attribute_values(Some(expr_values))
+        .send()
+        .await;
+}
+
+/// GET /settings — Settings page
+async fn handle_settings_page() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        include_str!("../../../../web/settings.html"),
+    )
 }
 
 /// Start the HTTP server on the given address.

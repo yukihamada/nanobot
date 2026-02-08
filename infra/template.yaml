@@ -45,6 +45,21 @@ Parameters:
     NoEcho: true
     Description: Brave Search API key
     Default: ''
+  GoogleApiKey:
+    Type: String
+    NoEcho: true
+    Description: Google Vertex AI / Gemini API key
+    Default: ''
+  DeepseekApiKey:
+    Type: String
+    NoEcho: true
+    Description: DeepSeek API key
+    Default: ''
+  ResendApiKey:
+    Type: String
+    NoEcho: true
+    Description: Resend API key for email
+    Default: ''
   TenantId:
     Type: String
     Description: Tenant ID for multi-tenant isolation
@@ -81,6 +96,9 @@ Resources:
           LINE_ALLOW_FROM: !Ref LineAllowFrom
           NANOBOT_MODEL: !Ref NanobotModel
           BRAVE_API_KEY: !Ref BraveApiKey
+          GOOGLE_API_KEY: !Ref GoogleApiKey
+          DEEPSEEK_API_KEY: !Ref DeepseekApiKey
+          RESEND_API_KEY: !Ref ResendApiKey
           NANOBOT_TENANT_ID: !Ref TenantId
           DYNAMODB_SESSIONS_TABLE: !Ref SessionsTable
       Policies:

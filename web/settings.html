@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings - chatweb.ai</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#e0e0e0;min-height:100vh}
+.nav{display:flex;justify-content:space-between;align-items:center;padding:12px 24px;background:rgba(20,20,20,0.95);border-bottom:1px solid #222;position:sticky;top:0;z-index:100}
+.nav a{color:#999;text-decoration:none;font-size:14px;margin-left:16px;transition:color .2s}
+.nav a:hover,.nav a.active{color:#fff}
+.logo{font-size:18px;font-weight:700;color:#fff;text-decoration:none}
+.container{max-width:720px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:24px;font-weight:600;margin-bottom:8px}
+.subtitle{color:#888;font-size:14px;margin-bottom:32px}
+.section{background:#141414;border:1px solid #222;border-radius:12px;padding:24px;margin-bottom:24px}
+.section h2{font-size:16px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.section h2 .icon{font-size:20px}
+.field{margin-bottom:20px}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:13px;color:#999;margin-bottom:6px;font-weight:500}
+.field select,.field input[type="text"],.field input[type="password"],.field input[type="number"]{
+  width:100%;padding:10px 12px;background:#0a0a0a;border:1px solid #333;border-radius:8px;
+  color:#fff;font-size:14px;outline:none;transition:border-color .2s}
+.field select:focus,.field input:focus{border-color:#4f8fff}
+.field .hint{font-size:12px;color:#666;margin-top:4px}
+.field .key-row{display:flex;gap:8px}
+.field .key-row input{flex:1}
+.field .key-row .status{display:flex;align-items:center;font-size:12px;white-space:nowrap;padding:0 8px;border-radius:6px;background:#1a1a1a;border:1px solid #333}
+.field .key-row .status.set{color:#4caf50;border-color:#2a4a2a}
+.field .key-row .status.unset{color:#666}
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.tool-toggle{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#0a0a0a;border:1px solid #333;border-radius:8px;cursor:pointer;transition:all .2s;user-select:none}
+.tool-toggle:hover{border-color:#4f8fff}
+.tool-toggle.active{border-color:#4f8fff;background:rgba(79,143,255,0.08)}
+.tool-toggle input{display:none}
+.tool-toggle .check{width:18px;height:18px;border-radius:4px;border:2px solid #444;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+.tool-toggle.active .check{background:#4f8fff;border-color:#4f8fff}
+.tool-toggle.active .check::after{content:"✓";color:#fff;font-size:12px}
+.tool-toggle .tool-name{font-size:13px}
+.range-row{display:flex;align-items:center;gap:12px}
+.range-row input[type="range"]{flex:1;accent-color:#4f8fff}
+.range-row .range-val{font-size:14px;font-family:monospace;color:#4f8fff;min-width:32px;text-align:right}
+.btn-save{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#4f8fff,#3366cc);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .1s,opacity .2s}
+.btn-save:hover{transform:translateY(-1px)}
+.btn-save:active{transform:translateY(0)}
+.btn-save:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#2a2a2a;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;transition:transform .3s ease;z-index:1000;border:1px solid #333}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.session-id{font-family:monospace;font-size:12px;color:#666;margin-top:4px}
+@media(max-width:600px){
+  .tools-grid{grid-template-columns:1fr}
+  .container{padding:16px 12px 80px}
+}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a href="/" class="logo">chatweb.ai</a>
+  <div>
+    <a href="/">Chat</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/settings" class="active">Settings</a>
+  </div>
+</nav>
+<div class="container">
+  <h1 id="pageTitle">Settings</h1>
+  <p class="subtitle" id="pageSubtitle">Customize your AI experience</p>
+  <div class="session-id" id="sessionDisplay"></div>
+
+  <!-- Model Selection -->
+  <div class="section">
+    <h2><span class="icon">🧠</span> <span data-i18n="model_title">AI Model</span></h2>
+    <div class="field">
+      <label data-i18n="model_label">Preferred Model</label>
+      <select id="modelSelect">
+        <option value="">Default (auto)</option>
+        <optgroup label="OpenAI">
+          <option value="openai/gpt-4o">GPT-4o</option>
+          <option value="openai/gpt-4o-mini">GPT-4o Mini (Fast)</option>
+        </optgroup>
+        <optgroup label="Anthropic">
+          <option value="anthropic/claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+          <option value="anthropic/claude-opus-4-5-20250929">Claude Opus 4.5</option>
+        </optgroup>
+        <optgroup label="Google">
+          <option value="google/gemini-2.0-flash">Gemini 2.0 Flash</option>
+          <option value="google/gemini-pro">Gemini Pro</option>
+        </optgroup>
+        <optgroup label="DeepSeek">
+          <option value="deepseek/deepseek-chat">DeepSeek Chat</option>
+          <option value="deepseek/deepseek-reasoner">DeepSeek Reasoner (R1)</option>
+        </optgroup>
+      </select>
+      <div class="hint" data-i18n="model_hint">Choose which AI model responds to your messages. Higher-tier models use more credits.</div>
+    </div>
+    <div class="field">
+      <label data-i18n="temp_label">Temperature</label>
+      <div class="range-row">
+        <input type="range" id="tempRange" min="0" max="2" step="0.1" value="0.7">
+        <span class="range-val" id="tempVal">0.7</span>
+      </div>
+      <div class="hint" data-i18n="temp_hint">Lower = more focused and deterministic. Higher = more creative and varied.</div>
+    </div>
+  </div>
+
+  <!-- API Keys -->
+  <div class="section">
+    <h2><span class="icon">🔑</span> <span data-i18n="keys_title">API Keys</span></h2>
+    <p style="font-size:13px;color:#888;margin-bottom:16px" data-i18n="keys_desc">Use your own API keys for unlimited access. Keys are stored securely and never shared.</p>
+    <div class="field">
+      <label>OpenAI API Key</label>
+      <div class="key-row">
+        <input type="password" id="keyOpenai" placeholder="sk-...">
+        <span class="status unset" id="statusOpenai">Not set</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Anthropic API Key</label>
+      <div class="key-row">
+        <input type="password" id="keyAnthropic" placeholder="sk-ant-...">
+        <span class="status unset" id="statusAnthropic">Not set</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Google Vertex AI / Gemini API Key</label>
+      <div class="key-row">
+        <input type="password" id="keyGoogle" placeholder="AIza... or AQ...">
+        <span class="status unset" id="statusGoogle">Not set</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Brave Search API Key</label>
+      <div class="key-row">
+        <input type="password" id="keyBrave" placeholder="BSA...">
+        <span class="status unset" id="statusBrave">Not set</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Resend API Key (Email)</label>
+      <div class="key-row">
+        <input type="password" id="keyResend" placeholder="re_...">
+        <span class="status unset" id="statusResend">Not set</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tools -->
+  <div class="section">
+    <h2><span class="icon">🛠</span> <span data-i18n="tools_title">Tools</span></h2>
+    <p style="font-size:13px;color:#888;margin-bottom:16px" data-i18n="tools_desc">Enable or disable tools the AI can use during conversations.</p>
+    <div class="tools-grid" id="toolsGrid"></div>
+  </div>
+
+  <!-- Language -->
+  <div class="section">
+    <h2><span class="icon">🌐</span> <span data-i18n="lang_title">Language</span></h2>
+    <div class="field">
+      <label data-i18n="lang_label">Preferred Language</label>
+      <select id="langSelect">
+        <option value="">Auto-detect</option>
+        <option value="ja">日本語</option>
+        <option value="en">English</option>
+        <option value="zh">中文</option>
+        <option value="ko">한국어</option>
+        <option value="es">Español</option>
+        <option value="fr">Français</option>
+        <option value="de">Deutsch</option>
+      </select>
+    </div>
+  </div>
+
+  <button class="btn-save" id="btnSave" data-i18n="save_btn">Save Settings</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TOOLS = [
+  { id: 'web_search', name: 'Web Search', icon: '🔍' },
+  { id: 'web_fetch', name: 'Web Fetch', icon: '🌐' },
+  { id: 'calculator', name: 'Calculator', icon: '🧮' },
+  { id: 'weather', name: 'Weather', icon: '🌤' },
+  { id: 'translate', name: 'Translate', icon: '🌍' },
+  { id: 'wikipedia', name: 'Wikipedia', icon: '📚' },
+  { id: 'datetime', name: 'Date & Time', icon: '🕐' },
+  { id: 'news_search', name: 'News Search', icon: '📰' },
+  { id: 'qr_code', name: 'QR Code', icon: '📱' },
+];
+
+let currentSettings = {};
+let enabledTools = new Set(TOOLS.map(t => t.id)); // all enabled by default
+
+function getSessionId() {
+  let sid = localStorage.getItem('webSessionId');
+  if (!sid) {
+    sid = 'webchat:' + crypto.randomUUID().replace(/-/g, '').slice(0, 32);
+    localStorage.setItem('webSessionId', sid);
+  }
+  return sid;
+}
+
+function showToast(msg, ms = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), ms);
+}
+
+// Render tool toggles
+function renderTools() {
+  const grid = document.getElementById('toolsGrid');
+  grid.innerHTML = '';
+  TOOLS.forEach(tool => {
+    const div = document.createElement('div');
+    div.className = 'tool-toggle' + (enabledTools.has(tool.id) ? ' active' : '');
+    div.innerHTML = `<div class="check"></div><span class="tool-name">${tool.icon} ${tool.name}</span>`;
+    div.onclick = () => {
+      if (enabledTools.has(tool.id)) {
+        enabledTools.delete(tool.id);
+        div.classList.remove('active');
+      } else {
+        enabledTools.add(tool.id);
+        div.classList.add('active');
+      }
+    };
+    grid.appendChild(div);
+  });
+}
+
+// Load settings from API
+async function loadSettings() {
+  const sid = getSessionId();
+  document.getElementById('sessionDisplay').textContent = 'Session: ' + sid.slice(0, 16) + '****';
+  try {
+    const resp = await fetch('/api/v1/settings/' + encodeURIComponent(sid));
+    const data = await resp.json();
+    currentSettings = data.settings || {};
+    // Apply to UI
+    if (currentSettings.preferred_model) {
+      document.getElementById('modelSelect').value = currentSettings.preferred_model;
+    }
+    if (currentSettings.temperature != null) {
+      document.getElementById('tempRange').value = currentSettings.temperature;
+      document.getElementById('tempVal').textContent = currentSettings.temperature;
+    }
+    if (currentSettings.language) {
+      document.getElementById('langSelect').value = currentSettings.language;
+    }
+    if (currentSettings.enabled_tools) {
+      enabledTools = new Set(currentSettings.enabled_tools);
+    }
+    // Show API key status
+    if (currentSettings.custom_api_keys) {
+      const keys = currentSettings.custom_api_keys;
+      const keyMap = { openai: 'Openai', anthropic: 'Anthropic', google: 'Google', brave: 'Brave', resend: 'Resend' };
+      for (const [provider, uiName] of Object.entries(keyMap)) {
+        if (keys[provider] && keys[provider] !== '****') {
+          document.getElementById('status' + uiName).textContent = 'Set (' + keys[provider] + ')';
+          document.getElementById('status' + uiName).className = 'status set';
+        }
+      }
+    }
+    renderTools();
+  } catch (e) {
+    console.error('Failed to load settings:', e);
+    renderTools();
+  }
+}
+
+// Save settings
+async function saveSettings() {
+  const btn = document.getElementById('btnSave');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  const sid = getSessionId();
+
+  const body = {
+    preferred_model: document.getElementById('modelSelect').value || null,
+    temperature: parseFloat(document.getElementById('tempRange').value),
+    enabled_tools: Array.from(enabledTools),
+    language: document.getElementById('langSelect').value || null,
+  };
+
+  // Collect API keys (only send non-empty ones)
+  const customKeys = {};
+  const keyFields = [
+    { id: 'keyOpenai', provider: 'openai' },
+    { id: 'keyAnthropic', provider: 'anthropic' },
+    { id: 'keyGoogle', provider: 'google' },
+    { id: 'keyBrave', provider: 'brave' },
+    { id: 'keyResend', provider: 'resend' },
+  ];
+  let hasKeys = false;
+  for (const { id, provider } of keyFields) {
+    const val = document.getElementById(id).value.trim();
+    if (val) {
+      customKeys[provider] = val;
+      hasKeys = true;
+    }
+  }
+  if (hasKeys) body.custom_api_keys = customKeys;
+
+  try {
+    const resp = await fetch('/api/v1/settings/' + encodeURIComponent(sid), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      showToast('Settings saved!');
+      // Reload to reflect saved state
+      await loadSettings();
+      // Clear key inputs after save
+      keyFields.forEach(({ id }) => document.getElementById(id).value = '');
+    } else {
+      showToast('Error: ' + (data.error || 'Unknown'));
+    }
+  } catch (e) {
+    showToast('Failed to save: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = 'Save Settings';
+}
+
+// Temperature slider live update
+document.getElementById('tempRange').addEventListener('input', (e) => {
+  document.getElementById('tempVal').textContent = e.target.value;
+});
+
+document.getElementById('btnSave').addEventListener('click', saveSettings);
+
+// i18n
+const I18N = {
+  ja: {
+    pageTitle: '設定', pageSubtitle: 'AIの動作をカスタマイズ',
+    model_title: 'AIモデル', model_label: '使用モデル',
+    model_hint: 'メッセージに応答するAIモデルを選択。上位モデルはクレジット消費が多くなります。',
+    temp_label: '温度 (Temperature)', temp_hint: '低い = 正確で決定的。高い = 創造的で多様。',
+    keys_title: 'APIキー', keys_desc: '自分のAPIキーを使うと無制限にアクセスできます。キーは安全に保存され、共有されません。',
+    tools_title: 'ツール', tools_desc: 'AIが会話中に使えるツールを有効/無効にします。',
+    lang_title: '言語', lang_label: '優先言語', save_btn: '設定を保存',
+  }
+};
+function applyI18n() {
+  const lang = navigator.language?.slice(0, 2) || 'en';
+  if (lang === 'ja' && I18N.ja) {
+    document.getElementById('pageTitle').textContent = I18N.ja.pageTitle;
+    document.getElementById('pageSubtitle').textContent = I18N.ja.pageSubtitle;
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (I18N.ja[key]) el.textContent = I18N.ja[key];
+    });
+    document.getElementById('btnSave').textContent = I18N.ja.save_btn;
+  }
+}
+
+applyI18n();
+loadSettings();
+</script>
+</body>
+</html>
