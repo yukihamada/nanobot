@@ -6,6 +6,18 @@ set -e
 REPO="yukihamada/nanobot"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
+# Helper: suggest adding to PATH if not already present
+ensure_path() {
+  case ":$PATH:" in
+    *":$INSTALL_DIR:"*) ;;
+    *)
+      echo ""
+      echo "Add to your PATH:"
+      echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+      ;;
+  esac
+}
+
 echo "  chatweb.ai CLI installer"
 echo ""
 
@@ -55,6 +67,7 @@ if command -v cargo >/dev/null 2>&1; then
   cargo install --git "https://github.com/${REPO}" --branch feat/ai-webhooks nanobot
   echo ""
   echo "Installed! Run: nanobot chat \"Hello!\""
+  ensure_path
   exit 0
 fi
 
@@ -66,14 +79,4 @@ echo "Installing nanobot..."
 cargo install --git "https://github.com/${REPO}" --branch feat/ai-webhooks nanobot
 echo ""
 echo "Installed! Run: nanobot chat \"Hello!\""
-
-ensure_path() {
-  case ":$PATH:" in
-    *":$INSTALL_DIR:"*) ;;
-    *)
-      echo ""
-      echo "Add to your PATH:"
-      echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
-      ;;
-  esac
-}
+ensure_path

@@ -166,6 +166,13 @@ pub struct ChannelsConfig {
     pub discord: DiscordConfig,
     pub feishu: FeishuConfig,
     pub line: LineConfig,
+    pub slack: SlackConfig,
+    pub signal: SignalConfig,
+    pub imessage: IMessageConfig,
+    pub teams: TeamsConfig,
+    pub google_chat: GoogleChatConfig,
+    pub matrix: MatrixConfig,
+    pub zalo: ZaloConfig,
 }
 
 impl Default for ChannelsConfig {
@@ -176,6 +183,13 @@ impl Default for ChannelsConfig {
             discord: DiscordConfig::default(),
             feishu: FeishuConfig::default(),
             line: LineConfig::default(),
+            slack: SlackConfig::default(),
+            signal: SignalConfig::default(),
+            imessage: IMessageConfig::default(),
+            teams: TeamsConfig::default(),
+            google_chat: GoogleChatConfig::default(),
+            matrix: MatrixConfig::default(),
+            zalo: ZaloConfig::default(),
         }
     }
 }
@@ -279,6 +293,146 @@ impl Default for FeishuConfig {
             app_secret: String::new(),
             encrypt_key: String::new(),
             verification_token: String::new(),
+            allow_from: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SlackConfig {
+    pub enabled: bool,
+    pub app_token: String,
+    pub bot_token: String,
+    pub allow_from: Vec<String>,
+}
+
+impl Default for SlackConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            app_token: String::new(),
+            bot_token: String::new(),
+            allow_from: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SignalConfig {
+    pub enabled: bool,
+    pub endpoint: String,
+    pub phone_number: String,
+    pub allow_from: Vec<String>,
+}
+
+impl Default for SignalConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: "http://localhost:8080".to_string(),
+            phone_number: String::new(),
+            allow_from: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct IMessageConfig {
+    pub enabled: bool,
+    pub bridge_url: String,
+    pub allow_from: Vec<String>,
+}
+
+impl Default for IMessageConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bridge_url: "http://localhost:1234".to_string(),
+            allow_from: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TeamsConfig {
+    pub enabled: bool,
+    pub app_id: String,
+    pub app_password: String,
+    pub allow_from: Vec<String>,
+}
+
+impl Default for TeamsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            app_id: String::new(),
+            app_password: String::new(),
+            allow_from: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GoogleChatConfig {
+    pub enabled: bool,
+    pub service_account_key: String,
+    pub webhook_token: String,
+    pub allow_from: Vec<String>,
+}
+
+impl Default for GoogleChatConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            service_account_key: String::new(),
+            webhook_token: String::new(),
+            allow_from: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MatrixConfig {
+    pub enabled: bool,
+    pub homeserver: String,
+    pub user_id: String,
+    pub access_token: String,
+    pub allow_from: Vec<String>,
+}
+
+impl Default for MatrixConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            homeserver: String::new(),
+            user_id: String::new(),
+            access_token: String::new(),
+            allow_from: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ZaloConfig {
+    pub enabled: bool,
+    pub bot_token: String,
+    pub secret_token: String,
+    pub allow_from: Vec<String>,
+}
+
+impl Default for ZaloConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bot_token: String::new(),
+            secret_token: String::new(),
             allow_from: Vec::new(),
         }
     }
@@ -468,6 +622,69 @@ pub fn load_config_from_env() -> Config {
     if let Ok(v) = std::env::var("DISCORD_BOT_TOKEN") {
         cfg.channels.discord.token = v;
         cfg.channels.discord.enabled = true;
+    }
+
+    // Slack
+    if let Ok(v) = std::env::var("SLACK_APP_TOKEN") {
+        cfg.channels.slack.app_token = v;
+    }
+    if let Ok(v) = std::env::var("SLACK_BOT_TOKEN") {
+        cfg.channels.slack.bot_token = v;
+        cfg.channels.slack.enabled = true;
+    }
+
+    // Signal
+    if let Ok(v) = std::env::var("SIGNAL_ENDPOINT") {
+        cfg.channels.signal.endpoint = v;
+    }
+    if let Ok(v) = std::env::var("SIGNAL_PHONE") {
+        cfg.channels.signal.phone_number = v;
+        cfg.channels.signal.enabled = true;
+    }
+
+    // iMessage
+    if let Ok(v) = std::env::var("IMESSAGE_BRIDGE_URL") {
+        cfg.channels.imessage.bridge_url = v;
+        cfg.channels.imessage.enabled = true;
+    }
+
+    // MS Teams
+    if let Ok(v) = std::env::var("TEAMS_APP_ID") {
+        cfg.channels.teams.app_id = v;
+    }
+    if let Ok(v) = std::env::var("TEAMS_APP_PASSWORD") {
+        cfg.channels.teams.app_password = v;
+        cfg.channels.teams.enabled = true;
+    }
+
+    // Google Chat
+    if let Ok(v) = std::env::var("GOOGLE_CHAT_SERVICE_ACCOUNT_KEY") {
+        cfg.channels.google_chat.service_account_key = v;
+        cfg.channels.google_chat.enabled = true;
+    }
+    if let Ok(v) = std::env::var("GOOGLE_CHAT_WEBHOOK_TOKEN") {
+        cfg.channels.google_chat.webhook_token = v;
+    }
+
+    // Matrix
+    if let Ok(v) = std::env::var("MATRIX_HOMESERVER") {
+        cfg.channels.matrix.homeserver = v;
+    }
+    if let Ok(v) = std::env::var("MATRIX_USER_ID") {
+        cfg.channels.matrix.user_id = v;
+    }
+    if let Ok(v) = std::env::var("MATRIX_ACCESS_TOKEN") {
+        cfg.channels.matrix.access_token = v;
+        cfg.channels.matrix.enabled = true;
+    }
+
+    // Zalo
+    if let Ok(v) = std::env::var("ZALO_BOT_TOKEN") {
+        cfg.channels.zalo.bot_token = v;
+        cfg.channels.zalo.enabled = true;
+    }
+    if let Ok(v) = std::env::var("ZALO_SECRET_TOKEN") {
+        cfg.channels.zalo.secret_token = v;
     }
 
     // Agent defaults

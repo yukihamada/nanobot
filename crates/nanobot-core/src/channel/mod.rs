@@ -3,6 +3,13 @@ pub mod discord;
 pub mod whatsapp;
 pub mod feishu;
 pub mod line;
+pub mod slack;
+pub mod signal;
+pub mod imessage;
+pub mod teams;
+pub mod google_chat;
+pub mod matrix;
+pub mod zalo;
 
 use async_trait::async_trait;
 use tokio::sync::mpsc;

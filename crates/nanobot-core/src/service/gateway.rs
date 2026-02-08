@@ -10,6 +10,13 @@ use crate::channel::discord::DiscordChannel;
 use crate::channel::whatsapp::WhatsAppChannel;
 use crate::channel::feishu::FeishuChannel;
 use crate::channel::line::LineChannel;
+use crate::channel::slack::SlackChannel;
+use crate::channel::signal::SignalChannel;
+use crate::channel::imessage::IMessageChannel;
+use crate::channel::teams::TeamsChannel;
+use crate::channel::google_chat::GoogleChatChannel;
+use crate::channel::matrix::MatrixChannel;
+use crate::channel::zalo::ZaloChannel;
 use crate::channel::Channel;
 use crate::config::Config;
 use crate::provider;
@@ -128,6 +135,62 @@ pub async fn run_gateway(config: Config) -> anyhow::Result<()> {
         info!("LINE channel enabled");
         channels.push(Box::new(LineChannel::new(
             config.channels.line.clone(),
+            inbound_tx.clone(),
+        )));
+    }
+
+    if config.channels.slack.enabled {
+        info!("Slack channel enabled");
+        channels.push(Box::new(SlackChannel::new(
+            config.channels.slack.clone(),
+            inbound_tx.clone(),
+        )));
+    }
+
+    if config.channels.signal.enabled {
+        info!("Signal channel enabled");
+        channels.push(Box::new(SignalChannel::new(
+            config.channels.signal.clone(),
+            inbound_tx.clone(),
+        )));
+    }
+
+    if config.channels.imessage.enabled {
+        info!("iMessage channel enabled");
+        channels.push(Box::new(IMessageChannel::new(
+            config.channels.imessage.clone(),
+            inbound_tx.clone(),
+        )));
+    }
+
+    if config.channels.teams.enabled {
+        info!("MS Teams channel enabled");
+        channels.push(Box::new(TeamsChannel::new(
+            config.channels.teams.clone(),
+            inbound_tx.clone(),
+        )));
+    }
+
+    if config.channels.google_chat.enabled {
+        info!("Google Chat channel enabled");
+        channels.push(Box::new(GoogleChatChannel::new(
+            config.channels.google_chat.clone(),
+            inbound_tx.clone(),
+        )));
+    }
+
+    if config.channels.matrix.enabled {
+        info!("Matrix channel enabled");
+        channels.push(Box::new(MatrixChannel::new(
+            config.channels.matrix.clone(),
+            inbound_tx.clone(),
+        )));
+    }
+
+    if config.channels.zalo.enabled {
+        info!("Zalo channel enabled");
+        channels.push(Box::new(ZaloChannel::new(
+            config.channels.zalo.clone(),
             inbound_tx.clone(),
         )));
     }
