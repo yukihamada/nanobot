@@ -76,11 +76,25 @@
       0%, 100% { transform: translateY(0); }
       50% { transform: translateY(-6px); }
     }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
     .fade-up { animation: fadeUp 0.6s ease-out both; }
     .fade-up-d1 { animation-delay: 0.1s; }
     .fade-up-d2 { animation-delay: 0.2s; }
     .fade-up-d3 { animation-delay: 0.3s; }
     .fade-up-d4 { animation-delay: 0.4s; }
+
+    /* Scroll-triggered animation */
+    .scroll-fade-up {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+    }
+    .scroll-fade-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
 
     /* Nav */
     nav {
@@ -506,6 +520,28 @@
     }
     .chat-input button:hover { transform: scale(1.05); box-shadow: 0 4px 15px var(--accent-glow); }
 
+    /* Chat login overlay */
+    .chat-login-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(9,9,11,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      cursor: pointer;
+      z-index: 5;
+      backdrop-filter: blur(4px);
+      transition: background 0.2s;
+    }
+    .chat-login-overlay:hover { background: rgba(9,9,11,0.75); }
+    .chat-login-overlay span {
+      color: var(--accent-hover);
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .chat-login-overlay.hidden { display: none; }
+
     /* Capabilities section */
     .cap-section {
       margin-bottom: 32px;
@@ -796,7 +832,33 @@
     }
     .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
     .modal p { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
-    .modal img { width: 200px; height: 200px; border-radius: 14px; background: #fff; margin-bottom: 16px; }
+    .modal .qr-wrapper {
+      position: relative;
+      display: inline-block;
+      width: 200px;
+      height: 200px;
+      margin-bottom: 16px;
+    }
+    .modal .qr-wrapper img {
+      width: 200px;
+      height: 200px;
+      border-radius: 14px;
+      background: #fff;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    .modal .qr-wrapper img.loaded { opacity: 1; }
+    .modal .qr-spinner {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 32px; height: 32px;
+      margin: -16px 0 0 -16px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .modal .qr-spinner.hidden { display: none; }
     .modal .modal-link {
       display: inline-block;
       padding: 12px 28px;
@@ -811,6 +873,10 @@
     .modal .modal-link:hover { transform: scale(1.05); }
     .modal .modal-link.line-bg { background: linear-gradient(135deg, var(--line), #05b34a); }
     .modal .modal-link.tg-bg { background: linear-gradient(135deg, var(--tg), #1a95d0); }
+    .modal .modal-link.whatsapp-bg { background: linear-gradient(135deg, #25D366, #128C7E); }
+    .modal .modal-link.discord-bg { background: linear-gradient(135deg, #5865F2, #4752C4); }
+    .modal .modal-link.slack-bg { background: linear-gradient(135deg, #4A154B, #611f69); }
+    .modal .modal-link.teams-bg { background: linear-gradient(135deg, #6264A7, #464775); }
     .modal .close-btn {
       display: block;
       margin-top: 12px;
@@ -823,6 +889,209 @@
     }
     .modal .close-btn:hover { color: var(--text); }
 
+    /* Card hover glow */
+    .cap-card, .recipe-card, .channel-card {
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .cap-card:hover, .recipe-card:hover, .channel-card:hover {
+      transform: translateY(-4px) scale(1.02);
+      box-shadow: 0 8px 30px var(--accent-glow), 0 0 0 1px rgba(99,102,241,0.15);
+    }
+
+    /* Sync icon float animation */
+    .sync-flow .channel-icon { animation: float 3s ease-in-out infinite; }
+    .sync-flow .channel-icon:nth-child(3) { animation-delay: 0.3s; }
+    .sync-flow .channel-icon:nth-child(5) { animation-delay: 0.6s; }
+
+    /* Chat input focus glow */
+    .chat-input input:focus {
+      box-shadow: 0 0 0 2px var(--accent-glow), 0 0 20px rgba(99,102,241,0.15);
+    }
+
+    /* Message slideIn */
+    .msg { animation: slideIn 0.3s ease-out; }
+
+    /* Auth nav */
+    .auth-nav-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 6px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .auth-nav-btn:hover { background: var(--accent-hover); }
+    .auth-nav-btn.logout-btn { background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-size: 12px; padding: 4px 10px; }
+    .user-menu { display: flex; align-items: center; gap: 8px; }
+    .user-name { font-size: 13px; color: var(--text); font-weight: 500; }
+
+    /* Auth modal */
+    .auth-modal { max-width: 360px; }
+    .auth-tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .auth-tab {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--muted);
+      padding: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .auth-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .auth-input {
+      display: block;
+      width: 100%;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .auth-input:focus { border-color: var(--accent); }
+    .auth-submit {
+      width: 100%;
+      padding: 10px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .auth-submit:hover { background: var(--accent-hover); }
+    .auth-divider {
+      display: flex;
+      align-items: center;
+      margin: 16px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .auth-divider::before, .auth-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .auth-divider span { padding: 0 12px; }
+    .auth-google-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px;
+      background: #fff;
+      color: #333;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .auth-google-btn:hover { background: #f5f5f5; }
+    .auth-error {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: #ef4444;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: -280px;
+      width: 280px;
+      height: 100vh;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      transition: left 0.3s ease;
+    }
+    .sidebar.open { left: 0; }
+    .sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header h3 { font-size: 16px; font-weight: 700; }
+    .sidebar-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 18px;
+      cursor: pointer;
+    }
+    .sidebar-new-btn {
+      margin: 12px 16px;
+      padding: 10px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .sidebar-new-btn:hover { background: var(--accent-hover); }
+    .sidebar-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 8px;
+    }
+    .sidebar-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text);
+      transition: background 0.2s;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sidebar-item:hover { background: var(--surface2); }
+    .sidebar-item.active { background: var(--accent-glow); color: var(--accent-hover); }
+    .sidebar-toggle {
+      position: fixed;
+      top: 16px;
+      left: 8px;
+      z-index: 150;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
     /* Footer */
     footer { text-align: center; padding: 32px 24px; font-size: 12px; color: var(--muted); }
     footer a { color: var(--muted); transition: color 0.2s; }
@@ -832,6 +1101,569 @@
     .chat-messages::-webkit-scrollbar { width: 4px; }
     .chat-messages::-webkit-scrollbar-track { background: transparent; }
     .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* ===== ChatGPT-like App Mode (authenticated) ===== */
+    body.app-mode { overflow: hidden; }
+    body.app-mode nav {
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: fixed; top: 0; left: 0; right: 0;
+      z-index: 100;
+      height: 48px;
+    }
+    body.app-mode .nav-right > a,
+    body.app-mode .nav-right > .lang-sw,
+    body.app-mode .nav-hamburger { display: none !important; }
+    body.app-mode .main { display: none; }
+    body.app-mode footer { display: none; }
+
+    /* App layout container */
+    .app-container {
+      display: none;
+      position: fixed;
+      top: 48px; left: 0; right: 0; bottom: 0;
+    }
+    body.app-mode .app-container { display: flex; }
+
+    /* App sidebar (always visible on desktop) */
+    .app-sidebar {
+      width: 260px;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .app-sidebar-header {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .app-sidebar-new {
+      width: 100%;
+      padding: 10px 12px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+    .app-sidebar-new:hover { background: var(--surface); }
+    .app-sidebar-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .app-sidebar-list::-webkit-scrollbar { width: 4px; }
+    .app-sidebar-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .app-conv-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--muted);
+      transition: background 0.2s, color 0.2s;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .app-conv-item:hover { background: var(--surface); color: var(--text); }
+    .app-conv-item.active { background: var(--surface); color: var(--text); }
+    .app-sidebar-channels {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+    }
+    .app-sidebar-channels-label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      padding: 0 4px;
+    }
+    .app-sidebar-channels-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .app-ch-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      position: relative;
+    }
+    .app-ch-btn:hover { background: var(--surface); border-color: var(--accent); transform: translateY(-1px); }
+    .app-ch-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+    .app-ch-btn .app-ch-name { font-size: 9px; color: var(--muted); font-weight: 600; }
+    .app-ch-btn.connected .app-ch-name { color: var(--green); }
+    .app-ch-btn .app-ch-check {
+      position: absolute;
+      top: 2px; right: 2px;
+      width: 12px; height: 12px;
+      background: var(--green);
+      border-radius: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      color: #fff;
+    }
+    .app-ch-btn.connected .app-ch-check { display: flex; }
+    .app-sidebar-footer {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .app-sidebar-user {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .app-sidebar-user:hover { background: var(--surface); }
+    .app-sidebar-user-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .app-sidebar-user-name {
+      flex: 1;
+      font-size: 13px;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* App chat area */
+    .app-chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      min-width: 0;
+    }
+    .app-chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scroll-behavior: smooth;
+    }
+    .app-chat-messages::-webkit-scrollbar { width: 6px; }
+    .app-chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .app-chat-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      gap: 16px;
+    }
+    .app-chat-empty-logo {
+      font-size: 36px;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .app-chat-empty-text { font-size: 16px; }
+    .app-chat-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      max-width: 600px;
+    }
+    .app-chat-suggestion {
+      padding: 8px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 13px;
+      color: var(--text);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .app-chat-suggestion:hover { border-color: var(--accent); background: var(--surface2); }
+    .app-chat-input-area {
+      padding: 16px 20px 20px;
+      max-width: 800px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .app-chat-input-box {
+      display: flex;
+      align-items: flex-end;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 8px;
+      transition: border-color 0.2s;
+    }
+    .app-chat-input-box:focus-within { border-color: var(--accent); }
+    .app-chat-input-box textarea {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 15px;
+      padding: 8px 12px;
+      resize: none;
+      outline: none;
+      max-height: 150px;
+      font-family: inherit;
+      line-height: 1.5;
+    }
+    .app-chat-input-box textarea::placeholder { color: var(--muted); }
+    .app-chat-send-btn {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    .app-chat-send-btn:hover { background: var(--accent-hover); }
+    .app-chat-send-btn:disabled { opacity: 0.4; cursor: default; }
+    .app-chat-model-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .app-chat-model-bar select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* Mic button (STT) */
+    .app-chat-mic-btn {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+      margin-right: 4px;
+    }
+    .app-chat-mic-btn:hover { background: var(--surface); color: var(--text); border-color: var(--accent); }
+    .app-chat-mic-btn.recording {
+      background: #ff4444;
+      border-color: #ff4444;
+      color: #fff;
+      animation: mic-pulse 1.2s infinite;
+    }
+    @keyframes mic-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,68,68,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(255,68,68,0); }
+    }
+    body.no-speech-api .app-chat-mic-btn { display: none; }
+
+    /* TTS button */
+    .app-tts-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      margin-top: 6px;
+      transition: all 0.2s;
+    }
+    .app-tts-btn:hover { background: var(--surface); color: var(--text); border-color: var(--accent); }
+    .app-tts-btn.playing {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    /* Credit display */
+    .credit-display {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+    }
+    .credit-display .credit-count {
+      font-weight: 600;
+      transition: color 0.3s;
+    }
+    .credit-flash .credit-count {
+      color: #f5a623;
+      animation: credit-pulse 0.5s ease-out;
+    }
+    @keyframes credit-pulse {
+      0% { transform: scale(1.3); color: #f5a623; }
+      100% { transform: scale(1); }
+    }
+
+    /* App mode message styling */
+    .app-chat-messages .app-msg {
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    .app-chat-messages .app-msg-user {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 4px;
+    }
+    .app-chat-messages .app-msg-user .app-msg-bubble {
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 18px 18px 4px 18px;
+      max-width: 70%;
+      font-size: 14px;
+      line-height: 1.6;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .app-chat-messages .app-msg-bot {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .app-chat-messages .app-msg-bot .app-msg-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .app-chat-messages .app-msg-bot .app-msg-content {
+      flex: 1;
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+      word-break: break-word;
+      white-space: pre-wrap;
+      min-width: 0;
+    }
+
+    /* API Keys modal */
+    .apikey-modal { max-width: 480px; text-align: left; }
+    .apikey-modal h3 { text-align: center; }
+    .apikey-list { margin: 12px 0; max-height: 200px; overflow-y: auto; }
+    .apikey-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 6px;
+    }
+    .apikey-item-info { flex: 1; min-width: 0; }
+    .apikey-item-name { font-size: 13px; font-weight: 600; }
+    .apikey-item-prefix { font-size: 11px; color: var(--muted); font-family: monospace; }
+    .apikey-item-date { font-size: 10px; color: var(--muted); }
+    .apikey-delete-btn {
+      background: none; border: none; color: #ef4444; cursor: pointer;
+      font-size: 16px; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;
+    }
+    .apikey-delete-btn:hover { background: rgba(239,68,68,0.1); }
+    .apikey-create-row { display: flex; gap: 8px; margin-top: 12px; }
+    .apikey-create-row input {
+      flex: 1; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 13px; outline: none;
+    }
+    .apikey-create-row input:focus { border-color: var(--accent); }
+    .apikey-create-row button {
+      padding: 8px 16px; background: var(--accent); color: #fff; border: none;
+      border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+      white-space: nowrap;
+    }
+    .apikey-new-key {
+      margin-top: 12px; padding: 12px; background: rgba(34,197,94,0.1);
+      border: 1px solid rgba(34,197,94,0.3); border-radius: 8px;
+    }
+    .apikey-new-key-label { font-size: 11px; color: var(--green); font-weight: 600; margin-bottom: 4px; }
+    .apikey-new-key-value {
+      font-family: monospace; font-size: 13px; word-break: break-all;
+      cursor: pointer; color: var(--text);
+    }
+    .apikey-new-key-hint { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+    /* App sidebar settings/docs links */
+    .app-sidebar-links {
+      padding: 4px 12px 8px;
+      display: flex;
+      gap: 6px;
+    }
+    .app-sidebar-link {
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .app-sidebar-link:hover { color: var(--text); border-color: var(--accent); }
+
+    /* App sidebar backdrop (mobile) */
+    .app-sidebar-backdrop {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 199;
+    }
+    .app-sidebar-backdrop.show { display: block; }
+
+    /* Mobile toggle for app sidebar */
+    .app-sidebar-toggle {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+
+    @media (max-width: 768px) {
+      .app-sidebar {
+        position: fixed;
+        top: 48px; left: -280px; bottom: 0;
+        width: 280px;
+        z-index: 200;
+        transition: left 0.3s ease;
+      }
+      .app-sidebar.open { left: 0; }
+      .app-sidebar-toggle { display: block; }
+      .app-chat-input-area { padding: 10px 12px 14px; }
+      .app-chat-input-box { border-radius: 12px; }
+      .app-chat-input-box textarea { font-size: 14px; padding: 6px 10px; }
+      .app-chat-messages .app-msg { padding: 0 8px; }
+      .app-chat-messages .app-msg-user .app-msg-bubble { max-width: 85%; font-size: 13px; }
+      .app-chat-messages .app-msg-bot .app-msg-content { font-size: 13px; }
+      .app-chat-empty-logo { font-size: 28px; }
+      .app-chat-empty-text { font-size: 14px; }
+      .app-chat-suggestion { font-size: 12px; padding: 6px 12px; }
+      body.app-mode nav { padding: 6px 10px; height: 44px; }
+      body.app-mode .logo { font-size: 16px; }
+      body.app-mode .user-name { font-size: 11px; max-width: 100px; }
+      body.app-mode .auth-nav-btn.logout-btn { font-size: 11px; padding: 3px 8px; }
+      .app-sidebar-channels-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
+      .app-ch-btn { padding: 6px 2px; }
+      .app-ch-btn svg { width: 18px; height: 18px; }
+      .app-ch-btn .app-ch-name { font-size: 8px; }
+    }
+    @media (max-width: 768px) {
+      .app-sidebar, .app-container { top: 44px; }
+    }
+
+    /* Mobile hamburger menu */
+    .nav-hamburger {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 22px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .nav-mobile-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      min-width: 180px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+      z-index: 50;
+    }
+    .nav-mobile-menu.show { display: block; }
+    .nav-mobile-menu a, .nav-mobile-menu button {
+      display: block;
+      width: 100%;
+      padding: 10px 14px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      border: none;
+      background: none;
+      text-align: left;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: background 0.2s, color 0.2s;
+    }
+    .nav-mobile-menu a:hover, .nav-mobile-menu button:hover {
+      background: var(--surface2);
+      color: var(--text);
+    }
 
     @media (max-width: 600px) {
       .hero h1 { font-size: 30px; }
@@ -846,11 +1678,37 @@
       .sync-steps { grid-template-columns: 1fr; }
       .sync-flow { gap: 8px; }
       .cap-grid { grid-template-columns: 1fr 1fr; }
+
+      /* Collapse nav to hamburger on mobile */
+      nav { padding: 12px 16px; position: relative; }
+      .nav-right > a,
+      .nav-right > .lang-sw { display: none; }
+      .nav-hamburger { display: block; }
+      .nav-right { gap: 8px; }
+      .auth-nav-btn { font-size: 12px; padding: 5px 12px; }
+      .user-name { font-size: 12px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /* Chat header: wrap to two rows on mobile */
+      .chat-header { flex-wrap: wrap; padding: 10px 14px; gap: 6px; }
+      .chat-header .dot { width: 6px; height: 6px; }
+      #t-chat-status { font-size: 11px; }
+      .ch-bar { margin-left: 0; }
+      .ch-bar-btn { padding: 3px 8px; font-size: 10px; }
+      .ch-bar-btn svg { width: 12px; height: 12px; }
+      #agent-select { font-size: 11px; padding: 4px 6px; margin-left: auto; }
+
+      /* CLI section on mobile */
+      #cli-sync-cmd { font-size: 10px !important; }
+      #cli-sync-cmd span { font-size: 10px !important; }
+
+      /* Simplify footer on mobile */
+      footer { padding: 20px 16px; font-size: 11px; line-height: 2; }
     }
   </style>
 </head>
 <body>
   <nav>
+    <button class="app-sidebar-toggle" id="app-sidebar-toggle" onclick="var s=document.getElementById('app-sidebar'),b=document.getElementById('app-sidebar-backdrop');s.classList.toggle('open');b.classList.toggle('show');" style="display:none;">&#x2630;</button>
     <a href="/" class="logo" style="text-decoration:none"><span>chat</span>web.ai</a>
     <div class="nav-right">
       <a href="/pricing" id="nav-pricing">Pricing</a>
@@ -861,8 +1719,35 @@
         <button onclick="setLang('ja')" id="l-ja">JA</button>
         <button onclick="setLang('en')" id="l-en">EN</button>
       </div>
+      <div id="auth-nav">
+        <button class="auth-nav-btn" id="login-btn" onclick="openAuthModal()">Login</button>
+        <div class="user-menu" id="user-menu" style="display:none;">
+          <span class="user-name" id="user-display-name"></span>
+          <button class="auth-nav-btn logout-btn" onclick="logout()">Logout</button>
+        </div>
+      </div>
+      <button class="nav-hamburger" onclick="toggleMobileMenu()" aria-label="Menu">&#x2630;</button>
+      <div class="nav-mobile-menu" id="mobile-menu">
+        <a href="/pricing" id="mob-pricing">Pricing</a>
+        <a href="/settings">Settings</a>
+        <a href="/status" id="mob-status">Status</a>
+        <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+        <button onclick="setLang('ja');closeMobileMenu()">🇯🇵 日本語</button>
+        <button onclick="setLang('en');closeMobileMenu()">🇬🇧 English</button>
+      </div>
     </div>
   </nav>
+
+  <!-- Sidebar for conversation history -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h3 id="sidebar-title">Conversations</h3>
+      <button class="sidebar-close" onclick="toggleSidebar()">&#x2715;</button>
+    </div>
+    <button class="sidebar-new-btn" id="new-conv-btn" onclick="newConversation()">+ New Conversation</button>
+    <div class="sidebar-list" id="conv-list"></div>
+  </div>
+  <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" style="display:none;">&#x2630;</button>
 
   <div class="main">
     <div class="hero fade-up">
@@ -938,9 +1823,12 @@
       <div class="chat-messages" id="messages">
         <div class="msg bot" id="t-welcome"></div>
       </div>
-      <div class="chat-input">
+      <div class="chat-input" style="position:relative;">
         <input type="text" id="input" placeholder="何でも聞いてください..." autocomplete="off">
         <button onclick="send()" id="send-btn">送信</button>
+        <div id="chat-login-overlay" class="chat-login-overlay" onclick="openAuthModal()">
+          <span id="chat-login-text">ログインして会話を始める</span>
+        </div>
       </div>
     </div>
 
@@ -1077,37 +1965,41 @@
         <div class="cc-action" id="t-tg">Telegramで使う</div>
         <div class="cc-connected" id="t-tg-connected">&#x2713; Connected</div>
       </a>
-      <a class="channel-card" id="whatsapp-card" style="background:linear-gradient(135deg,#25D366 0%,#128C7E 100%);opacity:0.7;pointer-events:none;" href="#">
+      <a class="channel-card" id="whatsapp-card" style="background:linear-gradient(135deg,#25D366 0%,#128C7E 100%);" onclick="openChannelLink('whatsapp');return false;" href="#">
         <div class="cc-header">
           <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12c0 2.12.55 4.13 1.6 5.93L0 24l6.26-1.64C8.01 23.44 9.97 24 12 24c6.63 0 12-5.37 12-12S18.63 0 12 0zm5.8 16.9c-.24.68-1.41 1.3-1.95 1.38-.5.08-1.14.11-1.84-.12-.42-.14-.97-.33-1.67-.65-2.95-1.33-4.87-4.3-5.02-4.5-.15-.2-1.24-1.65-1.24-3.15s.78-2.23 1.06-2.54c.28-.3.62-.38.82-.38h.6c.19 0 .45-.07.7.54.26.62.87 2.13.95 2.28.08.15.13.33.03.53-.1.2-.15.33-.3.5-.15.18-.31.4-.45.53-.15.15-.3.31-.13.6.17.3.78 1.28 1.67 2.08 1.14.97 2.1 1.27 2.4 1.42.3.15.47.13.65-.08.17-.2.75-.87.95-1.17.2-.3.4-.25.67-.15.28.1 1.75.82 2.05.97.3.15.5.23.57.35.08.13.08.73-.16 1.4z" fill="#fff"/></svg></div>
           <div class="cc-name">WhatsApp</div>
         </div>
-        <div class="cc-desc">Coming Soon</div>
-        <div class="cc-action">WhatsAppで使う</div>
+        <div class="cc-desc" id="t-whatsapp-desc">番号を追加してチャット開始</div>
+        <div class="cc-action" id="t-whatsapp">WhatsAppで使う</div>
+        <div class="cc-connected" id="t-whatsapp-connected">&#x2713; Connected</div>
       </a>
-      <a class="channel-card" id="discord-card" style="background:linear-gradient(135deg,#5865F2 0%,#4752C4 100%);opacity:0.7;pointer-events:none;" href="#">
+      <a class="channel-card" id="discord-card" style="background:linear-gradient(135deg,#5865F2 0%,#4752C4 100%);" onclick="openChannelLink('discord');return false;" href="#">
         <div class="cc-header">
           <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52.07.07 0 0 0-.08.04c-.21.38-.45.87-.61 1.26a18.27 18.27 0 0 0-5.49 0 12.64 12.64 0 0 0-.62-1.26.07.07 0 0 0-.08-.04 19.74 19.74 0 0 0-4.89 1.52.07.07 0 0 0-.03.03C1.11 8.39.33 12.27.74 16.1a.08.08 0 0 0 .03.06 19.9 19.9 0 0 0 5.99 3.03.08.08 0 0 0 .08-.03c.46-.63.87-1.3 1.22-2a.08.08 0 0 0-.04-.11 13.1 13.1 0 0 1-1.87-.9.08.08 0 0 1-.01-.13c.13-.09.25-.19.37-.29a.07.07 0 0 1 .08-.01c3.93 1.8 8.18 1.8 12.07 0a.07.07 0 0 1 .08.01c.12.1.25.2.37.29a.08.08 0 0 1 0 .13c-.6.35-1.22.65-1.88.9a.08.08 0 0 0-.04.11c.36.7.77 1.37 1.22 2a.08.08 0 0 0 .08.03 19.83 19.83 0 0 0 6-3.03.08.08 0 0 0 .03-.05c.5-5.18-.84-9.68-3.55-13.67a.06.06 0 0 0-.03-.03zM8.02 13.63c-1.18 0-2.16-1.09-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.33-.96 2.42-2.16 2.42zm7.97 0c-1.18 0-2.16-1.09-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.33-.95 2.42-2.16 2.42z" fill="#fff"/></svg></div>
           <div class="cc-name">Discord</div>
         </div>
-        <div class="cc-desc">Coming Soon</div>
-        <div class="cc-action">Discordで使う</div>
+        <div class="cc-desc" id="t-discord-desc">Botをサーバーに追加</div>
+        <div class="cc-action" id="t-discord">Discordで使う</div>
+        <div class="cc-connected" id="t-discord-connected">&#x2713; Connected</div>
       </a>
-      <a class="channel-card" id="slack-card" style="background:linear-gradient(135deg,#4A154B 0%,#611f69 100%);opacity:0.7;pointer-events:none;" href="#">
+      <a class="channel-card" id="slack-card" style="background:linear-gradient(135deg,#4A154B 0%,#611f69 100%);" onclick="openChannelLink('slack');return false;" href="#">
         <div class="cc-header">
           <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M5.04 15.24a2.52 2.52 0 1 1-2.52-2.52h2.52v2.52zm1.27 0a2.52 2.52 0 1 1 5.04 0v6.3a2.52 2.52 0 1 1-5.04 0v-6.3zM8.83 5.04a2.52 2.52 0 1 1 2.52-2.52v2.52H8.83zm0 1.27a2.52 2.52 0 1 1 0 5.04h-6.3a2.52 2.52 0 1 1 0-5.04h6.3zm10.2 2.52a2.52 2.52 0 1 1 2.52 2.52h-2.52V8.83zm-1.27 0a2.52 2.52 0 1 1-5.04 0v-6.3a2.52 2.52 0 1 1 5.04 0v6.3zm-2.52 10.2a2.52 2.52 0 1 1-2.52 2.52v-2.52h2.52zm0-1.27a2.52 2.52 0 1 1 0-5.04h6.3a2.52 2.52 0 1 1 0 5.04h-6.3z" fill="#fff"/></svg></div>
           <div class="cc-name">Slack</div>
         </div>
-        <div class="cc-desc">Coming Soon</div>
-        <div class="cc-action">Slackで使う</div>
+        <div class="cc-desc" id="t-slack-desc">ワークスペースにアプリを追加</div>
+        <div class="cc-action" id="t-slack">Slackで使う</div>
+        <div class="cc-connected" id="t-slack-connected">&#x2713; Connected</div>
       </a>
-      <a class="channel-card" id="teams-card" style="background:linear-gradient(135deg,#6264A7 0%,#464775 100%);opacity:0.7;pointer-events:none;" href="#">
+      <a class="channel-card" id="teams-card" style="background:linear-gradient(135deg,#6264A7 0%,#464775 100%);" onclick="openChannelLink('teams');return false;" href="#">
         <div class="cc-header">
           <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20.5 7h-3V5.5a2.5 2.5 0 0 0-5 0V7h-1a1.5 1.5 0 0 0-1.5 1.5v8a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 20.5 7zM15 5.5a1 1 0 0 1 2 0V7h-2V5.5z" fill="#fff"/><circle cx="16" cy="3" r="2" fill="#fff"/><path d="M8 10H2.5A1.5 1.5 0 0 0 1 11.5v5A1.5 1.5 0 0 0 2.5 18H8v-8z" fill="#fff" opacity="0.7"/><circle cx="5" cy="7" r="2" fill="#fff" opacity="0.7"/></svg></div>
           <div class="cc-name">MS Teams</div>
         </div>
-        <div class="cc-desc">Coming Soon</div>
-        <div class="cc-action">Teamsで使う</div>
+        <div class="cc-desc" id="t-teams-desc">Teamsにボットを追加</div>
+        <div class="cc-action" id="t-teams">Teamsで使う</div>
+        <div class="cc-connected" id="t-teams-connected">&#x2713; Connected</div>
       </a>
     </div>
 
@@ -1135,13 +2027,153 @@
       <div class="price-hint" id="t-bottom-hint">Starter $9/月 &middot; Pro $29/月 &middot; いつでもキャンセル可能</div>
     </div>
 
-    <div class="modal-overlay" id="modal" onclick="closeModal(event)">
-      <div class="modal" id="modal-content">
-        <h3 id="modal-title"></h3>
-        <p id="modal-desc"></p>
+    <!-- Auth Modal -->
+  </div>
+
+  <!-- Modals (outside .main so they work in app mode) -->
+  <div class="modal-overlay" id="auth-modal" onclick="closeAuthModal(event)" style="z-index:300;">
+    <div class="modal auth-modal" onclick="event.stopPropagation()">
+      <h3 id="auth-modal-title">ログイン</h3>
+      <div class="auth-error" id="auth-error" style="display:none;"></div>
+      <div id="auth-form-email">
+        <input type="email" class="auth-input" id="login-email" placeholder="Email" onkeydown="if(event.key==='Enter')emailAuth()">
+        <button class="auth-submit" id="email-auth-btn" onclick="emailAuth()">メールでログイン</button>
+      </div>
+      <div class="auth-divider"><span>or</span></div>
+      <button class="auth-google-btn" onclick="googleLogin()">
+        <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+        Sign in with Google
+      </button>
+      <button class="close-btn" onclick="closeAuthModal()">Close</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal" onclick="closeModal(event)" style="z-index:300;">
+    <div class="modal" id="modal-content">
+      <h3 id="modal-title"></h3>
+      <p id="modal-desc"></p>
+      <div class="qr-wrapper">
+        <div class="qr-spinner" id="qr-spinner"></div>
         <img id="modal-qr" alt="QR Code">
-        <a id="modal-link" class="modal-link" target="_blank"></a>
-        <button class="close-btn" onclick="document.getElementById('modal').classList.remove('show')">閉じる</button>
+      </div>
+      <a id="modal-link" class="modal-link" target="_blank"></a>
+      <button class="close-btn" onclick="document.getElementById('modal').classList.remove('show')">閉じる</button>
+    </div>
+  </div>
+
+  <!-- API Keys Modal -->
+  <div class="modal-overlay" id="apikey-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
+    <div class="modal apikey-modal" onclick="event.stopPropagation()">
+      <h3 id="apikey-modal-title">API Keys</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;" id="apikey-modal-desc">Use API keys to access chatweb.ai from your applications.</p>
+      <div class="apikey-list" id="apikey-list"></div>
+      <div class="apikey-new-key" id="apikey-new-key" style="display:none;">
+        <div class="apikey-new-key-label" id="apikey-new-label">New API Key Created</div>
+        <div class="apikey-new-key-value" id="apikey-new-value" onclick="navigator.clipboard.writeText(this.textContent);this.style.opacity=0.5;setTimeout(()=>this.style.opacity=1,300)"></div>
+        <div class="apikey-new-key-hint" id="apikey-new-hint">Click to copy. This key will only be shown once.</div>
+      </div>
+      <div class="apikey-create-row">
+        <input type="text" id="apikey-name-input" placeholder="Key name (e.g. my-app)">
+        <button onclick="createApiKey()" id="apikey-create-btn">Create</button>
+      </div>
+      <div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:11px;color:var(--muted);line-height:1.6;">
+        <strong>Usage:</strong><br>
+        <code style="color:var(--accent-hover);">curl -H "Authorization: Bearer cw_..." https://api.chatweb.ai/api/v1/chat -d '{"message":"Hello"}'</code>
+      </div>
+      <button class="close-btn" onclick="document.getElementById('apikey-modal').classList.remove('show')">Close</button>
+    </div>
+  </div>
+
+  <!-- App Mode Container (shown when authenticated) -->
+  <div class="app-container" id="app-container">
+    <div class="app-sidebar-backdrop" id="app-sidebar-backdrop" onclick="document.getElementById('app-sidebar').classList.remove('open');this.classList.remove('show');"></div>
+    <div class="app-sidebar" id="app-sidebar">
+      <div class="app-sidebar-header">
+        <button class="app-sidebar-new" id="app-new-conv" onclick="appNewConversation()">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span id="app-new-conv-text">New chat</span>
+        </button>
+      </div>
+      <div class="app-sidebar-list" id="app-conv-list"></div>
+      <div class="app-sidebar-channels">
+        <div class="app-sidebar-channels-label" id="app-channels-label">Channels</div>
+        <div class="app-sidebar-channels-grid">
+          <button class="app-ch-btn" id="app-ch-line" onclick="openChannelLink('line')">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#06C755"/></svg>
+            <span class="app-ch-name">LINE</span>
+            <span class="app-ch-check">&#x2713;</span>
+          </button>
+          <button class="app-ch-btn" id="app-ch-tg" onclick="openChannelLink('tg')">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z" fill="#2AABEE"/></svg>
+            <span class="app-ch-name">Telegram</span>
+            <span class="app-ch-check">&#x2713;</span>
+          </button>
+          <button class="app-ch-btn" id="app-ch-whatsapp" onclick="openChannelLink('whatsapp')">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12c0 2.12.55 4.13 1.6 5.93L0 24l6.26-1.64C8.01 23.44 9.97 24 12 24c6.63 0 12-5.37 12-12S18.63 0 12 0zm5.8 16.9c-.24.68-1.41 1.3-1.95 1.38-.5.08-1.14.11-1.84-.12-.42-.14-.97-.33-1.67-.65-2.95-1.33-4.87-4.3-5.02-4.5-.15-.2-1.24-1.65-1.24-3.15s.78-2.23 1.06-2.54c.28-.3.62-.38.82-.38h.6c.19 0 .45-.07.7.54.26.62.87 2.13.95 2.28.08.15.13.33.03.53-.1.2-.15.33-.3.5-.15.18-.31.4-.45.53-.15.15-.3.31-.13.6.17.3.78 1.28 1.67 2.08 1.14.97 2.1 1.27 2.4 1.42.3.15.47.13.65-.08.17-.2.75-.87.95-1.17.2-.3.4-.25.67-.15.28.1 1.75.82 2.05.97.3.15.5.23.57.35.08.13.08.73-.16 1.4z" fill="#25D366"/></svg>
+            <span class="app-ch-name">WhatsApp</span>
+            <span class="app-ch-check">&#x2713;</span>
+          </button>
+          <button class="app-ch-btn" id="app-ch-discord" onclick="openChannelLink('discord')">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52.07.07 0 0 0-.08.04c-.21.38-.45.87-.61 1.26a18.27 18.27 0 0 0-5.49 0 12.64 12.64 0 0 0-.62-1.26.07.07 0 0 0-.08-.04 19.74 19.74 0 0 0-4.89 1.52.07.07 0 0 0-.03.03C1.11 8.39.33 12.27.74 16.1a.08.08 0 0 0 .03.06 19.9 19.9 0 0 0 5.99 3.03.08.08 0 0 0 .08-.03c.46-.63.87-1.3 1.22-2a.08.08 0 0 0-.04-.11 13.1 13.1 0 0 1-1.87-.9.08.08 0 0 1-.01-.13c.13-.09.25-.19.37-.29a.07.07 0 0 1 .08-.01c3.93 1.8 8.18 1.8 12.07 0a.07.07 0 0 1 .08.01c.12.1.25.2.37.29a.08.08 0 0 1 0 .13c-.6.35-1.22.65-1.88.9a.08.08 0 0 0-.04.11c.36.7.77 1.37 1.22 2a.08.08 0 0 0 .08.03 19.83 19.83 0 0 0 6-3.03.08.08 0 0 0 .03-.05c.5-5.18-.84-9.68-3.55-13.67a.06.06 0 0 0-.03-.03zM8.02 13.63c-1.18 0-2.16-1.09-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.33-.96 2.42-2.16 2.42zm7.97 0c-1.18 0-2.16-1.09-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.33-.95 2.42-2.16 2.42z" fill="#5865F2"/></svg>
+            <span class="app-ch-name">Discord</span>
+            <span class="app-ch-check">&#x2713;</span>
+          </button>
+          <button class="app-ch-btn" id="app-ch-slack" onclick="openChannelLink('slack')">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5.04 15.24a2.52 2.52 0 1 1-2.52-2.52h2.52v2.52zm1.27 0a2.52 2.52 0 1 1 5.04 0v6.3a2.52 2.52 0 1 1-5.04 0v-6.3zM8.83 5.04a2.52 2.52 0 1 1 2.52-2.52v2.52H8.83zm0 1.27a2.52 2.52 0 1 1 0 5.04h-6.3a2.52 2.52 0 1 1 0-5.04h6.3zm10.2 2.52a2.52 2.52 0 1 1 2.52 2.52h-2.52V8.83zm-1.27 0a2.52 2.52 0 1 1-5.04 0v-6.3a2.52 2.52 0 1 1 5.04 0v6.3zm-2.52 10.2a2.52 2.52 0 1 1-2.52 2.52v-2.52h2.52zm0-1.27a2.52 2.52 0 1 1 0-5.04h6.3a2.52 2.52 0 1 1 0 5.04h-6.3z" fill="#E01E5A"/></svg>
+            <span class="app-ch-name">Slack</span>
+            <span class="app-ch-check">&#x2713;</span>
+          </button>
+          <button class="app-ch-btn" id="app-ch-teams" onclick="openChannelLink('teams')">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20.5 7h-3V5.5a2.5 2.5 0 0 0-5 0V7h-1a1.5 1.5 0 0 0-1.5 1.5v8a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 20.5 7zM15 5.5a1 1 0 0 1 2 0V7h-2V5.5z" fill="#6264A7"/><circle cx="16" cy="3" r="2" fill="#6264A7"/><path d="M8 10H2.5A1.5 1.5 0 0 0 1 11.5v5A1.5 1.5 0 0 0 2.5 18H8v-8z" fill="#6264A7" opacity="0.7"/><circle cx="5" cy="7" r="2" fill="#6264A7" opacity="0.7"/></svg>
+            <span class="app-ch-name">Teams</span>
+            <span class="app-ch-check">&#x2713;</span>
+          </button>
+        </div>
+      </div>
+      <div class="app-sidebar-links">
+        <button class="app-sidebar-link" onclick="openApiKeysModal()" id="app-link-apikeys">API Keys</button>
+        <a class="app-sidebar-link" href="/docs" id="app-link-docs">API Docs</a>
+        <a class="app-sidebar-link" href="/settings" id="app-link-settings">Settings</a>
+      </div>
+      <div class="app-sidebar-footer">
+        <div class="credit-display" id="credit-display" style="display:none;">
+          <span>&#9889;</span> <span class="credit-count" id="credit-count">--</span> <span style="font-size:11px;">credits</span>
+        </div>
+        <div class="app-sidebar-user" onclick="logout()">
+          <div class="app-sidebar-user-avatar" id="app-user-avatar"></div>
+          <div class="app-sidebar-user-name" id="app-user-name"></div>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;color:var(--muted);"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+    </div>
+    <div class="app-chat">
+      <div class="app-chat-messages" id="app-messages">
+        <div class="app-chat-empty" id="app-empty">
+          <div class="app-chat-empty-logo">chatweb.ai</div>
+          <div class="app-chat-empty-text" id="app-empty-text">How can I help you today?</div>
+          <div class="app-chat-suggestions" id="app-suggestions"></div>
+        </div>
+      </div>
+      <div class="app-chat-input-area">
+        <div class="app-chat-input-box">
+          <textarea id="app-input" rows="1" placeholder="Message chatweb.ai..." onkeydown="appInputKeydown(event)"></textarea>
+          <button class="app-chat-mic-btn" id="app-mic-btn" onclick="toggleSpeechRecognition()" title="Voice input">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1a2.5 2.5 0 00-2.5 2.5v4a2.5 2.5 0 005 0v-4A2.5 2.5 0 008 1z" fill="currentColor"/><path d="M4 6.5v1a4 4 0 008 0v-1M8 12.5v2M6 14.5h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          </button>
+          <button class="app-chat-send-btn" id="app-send-btn" onclick="appSend()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14l12-6L2 2v5l8 1-8 1v5z" fill="currentColor"/></svg>
+          </button>
+        </div>
+        <div class="app-chat-model-bar">
+          <select id="app-agent-select">
+            <option value="auto" id="app-opt-auto">Auto</option>
+            <option value="assistant">Assistant</option>
+            <option value="researcher">Researcher</option>
+            <option value="coder">Coder</option>
+            <option value="analyst">Analyst</option>
+            <option value="creative">Creative</option>
+          </select>
+        </div>
       </div>
     </div>
   </div>
@@ -1339,6 +2371,11 @@
     };
 
     async function send() {
+      // Require login to chat
+      if (!currentUser) {
+        openAuthModal();
+        return;
+      }
       const text = input.value.trim();
       if (!text) return;
       input.value = '';
@@ -1455,6 +2492,12 @@
         tgBar.classList.add('connected');
         tgCard.classList.add('connected');
       }
+      // Also update app-mode sidebar channel buttons
+      const chMap = { line: 'app-ch-line', telegram: 'app-ch-tg', whatsapp: 'app-ch-whatsapp', discord: 'app-ch-discord', slack: 'app-ch-slack', teams: 'app-ch-teams' };
+      channels.forEach(ch => {
+        const el = document.getElementById(chMap[ch]);
+        if (el) el.classList.add('connected');
+      });
     }
 
     // Pause polling when tab is hidden
@@ -1581,6 +2624,13 @@
         capMemory: '永続メモリ', capMemoryD: '会話横断で記憶を保持',
         capNote: 'MCPツールはModel Context Protocolで無限に拡張可能。',
         capNoteLink: 'ツール一覧を聞いてみる →',
+        loginBtn: 'ログイン',
+        chatLoginPrompt: 'ログインして会話を始める',
+        sidebarTitle: '会話履歴',
+        newConv: '+ 新しい会話',
+        appNewChat: '新しいチャット',
+        appEmptyText: '何をお手伝いしましょうか？',
+        appPlaceholder: 'メッセージを入力...',
       },
       en: {
         title: 'Ask AI to do anything',
@@ -1623,6 +2673,13 @@
         capMemory: 'Memory', capMemoryD: 'Persistent cross-session memory',
         capNote: 'MCP tools are infinitely extensible via Model Context Protocol.',
         capNoteLink: 'Ask about available tools →',
+        loginBtn: 'Login',
+        chatLoginPrompt: 'Login to start chatting',
+        sidebarTitle: 'Conversations',
+        newConv: '+ New Conversation',
+        appNewChat: 'New chat',
+        appEmptyText: 'How can I help you today?',
+        appPlaceholder: 'Message chatweb.ai...',
       }
     };
 
@@ -1730,6 +2787,24 @@
       document.getElementById('cap-memory-d').textContent = t.capMemoryD;
       document.getElementById('cap-note-text').textContent = t.capNote;
       document.getElementById('cap-note-link').textContent = t.capNoteLink;
+      // Auth UI translations
+      if (!currentUser) document.getElementById('login-btn').textContent = t.loginBtn;
+      document.getElementById('chat-login-text').textContent = t.chatLoginPrompt;
+      const lang2 = document.documentElement.lang || 'ja';
+      document.getElementById('auth-modal-title').textContent = lang2 === 'ja' ? 'ログイン' : 'Login';
+      document.getElementById('email-auth-btn').textContent = lang2 === 'ja' ? 'メールでログイン' : 'Login with Email';
+      document.getElementById('sidebar-title').textContent = t.sidebarTitle;
+      document.getElementById('new-conv-btn').textContent = t.newConv;
+      // App mode translations
+      const appNewConvText = document.getElementById('app-new-conv-text');
+      if (appNewConvText) appNewConvText.textContent = t.appNewChat;
+      const appEmptyText = document.querySelector('.app-chat-empty-text');
+      if (appEmptyText) appEmptyText.textContent = t.appEmptyText;
+      const appInput = document.getElementById('app-input');
+      if (appInput) appInput.placeholder = t.appPlaceholder;
+      const appChLabel = document.getElementById('app-channels-label');
+      if (appChLabel) appChLabel.textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
+      if (document.body.classList.contains('app-mode')) appRenderSuggestions();
       renderRecipes(l);
     }
 
@@ -1770,12 +2845,20 @@
       return 'https://t.me/chatweb_ai_bot?start=' + payload;
     }
 
+    function getWhatsAppDeepLink() {
+      return 'https://wa.me/message/chatweb_ai';
+    }
+    function getDiscordDeepLink() {
+      return 'https://discord.com/invite/chatweb';
+    }
+    function getSlackDeepLink() {
+      return 'https://slack.com/oauth/v2/authorize?client_id=chatweb&scope=chat:write,commands';
+    }
+    function getTeamsDeepLink() {
+      return 'https://teams.microsoft.com/l/app/chatweb-ai';
+    }
     function openChannelLink(ch) {
-      if (ch === 'line') {
-        window.open(getLineDeepLink(), '_blank');
-      } else {
-        window.open(getTgDeepLink(), '_blank');
-      }
+      showModal(ch);
     }
 
     // Agent selector
@@ -1813,24 +2896,66 @@
       line: {
         ja: { title: 'LINEで友だち追加', desc: 'ボタンを押すとLINEが開き、自動でこのWebの会話と連携されます。', link: 'LINEで開く' },
         en: { title: 'Add on LINE', desc: 'Tap the button to open LINE. Your Web conversation will be auto-linked.', link: 'Open in LINE' },
+        bg: 'line-bg',
       },
       tg: {
         ja: { title: 'Telegramで開始', desc: 'ボタンを押すとTelegramが開き、自動でこのWebの会話と連携されます。', link: 'Telegramで開く' },
         en: { title: 'Start on Telegram', desc: 'Tap the button to open Telegram. Your Web conversation will be auto-linked.', link: 'Open in Telegram' },
-      }
+        bg: 'tg-bg',
+      },
+      whatsapp: {
+        ja: { title: 'WhatsAppで開始', desc: 'WhatsAppでchatweb.aiにメッセージを送ると、このWebの会話と連携されます。', link: 'WhatsAppで開く' },
+        en: { title: 'Start on WhatsApp', desc: 'Send a message to chatweb.ai on WhatsApp. Your Web conversation will be auto-linked.', link: 'Open in WhatsApp' },
+        bg: 'whatsapp-bg',
+      },
+      discord: {
+        ja: { title: 'Discordに追加', desc: 'Botをサーバーに招待して、Discordから直接AIを使えます。', link: 'Discordで開く' },
+        en: { title: 'Add to Discord', desc: 'Invite the bot to your server and use AI directly from Discord.', link: 'Open in Discord' },
+        bg: 'discord-bg',
+      },
+      slack: {
+        ja: { title: 'Slackに追加', desc: 'ワークスペースにアプリをインストールして、Slackから直接AIを使えます。', link: 'Slackで開く' },
+        en: { title: 'Add to Slack', desc: 'Install the app to your workspace and use AI directly from Slack.', link: 'Open in Slack' },
+        bg: 'slack-bg',
+      },
+      teams: {
+        ja: { title: 'Teamsに追加', desc: 'Microsoft TeamsにBotを追加して、Teams内でAIを使えます。', link: 'Teamsで開く' },
+        en: { title: 'Add to Teams', desc: 'Add the bot to Microsoft Teams and use AI directly from Teams.', link: 'Open in Teams' },
+        bg: 'teams-bg',
+      },
     };
+    function getDeepLink(ch) {
+      switch(ch) {
+        case 'line': return getLineDeepLink();
+        case 'tg': return getTgDeepLink();
+        case 'whatsapp': return getWhatsAppDeepLink();
+        case 'discord': return getDiscordDeepLink();
+        case 'slack': return getSlackDeepLink();
+        case 'teams': return getTeamsDeepLink();
+        default: return '#';
+      }
+    }
     function showModal(ch) {
       const c = CHANNELS[ch];
+      if (!c) return;
       const l = document.documentElement.lang || 'ja';
       const t = c[l] || c.ja;
-      const deepLink = ch === 'line' ? getLineDeepLink() : getTgDeepLink();
+      const deepLink = getDeepLink(ch);
       document.getElementById('modal-title').textContent = t.title;
       document.getElementById('modal-desc').textContent = t.desc;
-      document.getElementById('modal-qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
+      const qrImg = document.getElementById('modal-qr');
+      const qrSpinner = document.getElementById('qr-spinner');
+      qrImg.classList.remove('loaded');
+      qrSpinner.classList.remove('hidden');
+      qrImg.onload = function() {
+        qrSpinner.classList.add('hidden');
+        qrImg.classList.add('loaded');
+      };
+      qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
       const link = document.getElementById('modal-link');
       link.href = deepLink;
       link.textContent = t.link;
-      link.className = 'modal-link ' + (ch === 'line' ? 'line-bg' : 'tg-bg');
+      link.className = 'modal-link ' + (c.bg || 'tg-bg');
       document.getElementById('modal').classList.add('show');
     }
     function closeModal(e) {
@@ -1838,6 +2963,717 @@
         document.getElementById('modal').classList.remove('show');
       }
     }
+
+    // ---------------------------------------------------------------------------
+    // Auth functions
+    // ---------------------------------------------------------------------------
+    let authToken = localStorage.getItem('authToken');
+    let currentUser = null;
+
+    function openAuthModal() {
+      document.getElementById('auth-modal').classList.add('show');
+      document.getElementById('auth-error').style.display = 'none';
+    }
+    function closeAuthModal(e) {
+      if (!e || e.target === document.getElementById('auth-modal')) {
+        document.getElementById('auth-modal').classList.remove('show');
+      }
+    }
+    function showAuthError(msg) {
+      const el = document.getElementById('auth-error');
+      el.textContent = msg;
+      el.style.display = '';
+    }
+
+    async function emailAuth() {
+      const email = document.getElementById('login-email').value.trim();
+      if (!email) return showAuthError('メールアドレスを入力してください');
+      try {
+        const r = await fetch(API + '/api/v1/auth/email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, session_id: webSessionId }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          localStorage.setItem('authToken', d.token);
+          authToken = d.token;
+          closeAuthModal();
+          await checkAuth();
+        } else {
+          showAuthError(d.error || 'Login failed');
+        }
+      } catch(e) { showAuthError('Network error'); }
+    }
+
+    function googleLogin() {
+      window.location.href = API + '/auth/google?sid=' + encodeURIComponent(webSessionId);
+    }
+
+    function logout() {
+      localStorage.removeItem('authToken');
+      authToken = null;
+      currentUser = null;
+      document.getElementById('login-btn').style.display = '';
+      document.getElementById('user-menu').style.display = 'none';
+      document.getElementById('sidebar-toggle').style.display = 'none';
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('chat-login-overlay').classList.remove('hidden');
+      exitAppMode();
+    }
+
+    async function checkAuth() {
+      // Check for token in URL (from Google OAuth callback)
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlToken = urlParams.get('token');
+      if (urlToken) {
+        localStorage.setItem('authToken', urlToken);
+        authToken = urlToken;
+        // Clean URL
+        window.history.replaceState({}, '', '/');
+      }
+
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/auth/me', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        if (d.authenticated) {
+          currentUser = d;
+          document.getElementById('login-btn').style.display = 'none';
+          document.getElementById('user-menu').style.display = '';
+          document.getElementById('user-display-name').textContent = d.display_name || d.email || 'User';
+          document.getElementById('chat-login-overlay').classList.add('hidden');
+          // Show credits if available
+          if (d.credits_remaining !== undefined) {
+            updateCredits(d.credits_remaining);
+          }
+          // Enter ChatGPT-like app mode
+          enterAppMode();
+        } else {
+          localStorage.removeItem('authToken');
+          authToken = null;
+        }
+      } catch(e) { /* ignore */ }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Sidebar / Conversation history
+    // ---------------------------------------------------------------------------
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+    }
+
+    async function loadConversations() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        const list = document.getElementById('conv-list');
+        list.innerHTML = '';
+        (d.conversations || []).forEach(conv => {
+          const item = document.createElement('div');
+          item.className = 'sidebar-item';
+          item.textContent = conv.title || 'New conversation';
+          item.title = conv.created_at;
+          item.onclick = () => loadConversation(conv.id, conv.session_id);
+          list.appendChild(item);
+        });
+      } catch(e) { /* ignore */ }
+    }
+
+    async function loadConversation(convId, sessionId) {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations/' + encodeURIComponent(convId) + '/messages', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        // Update session
+        if (d.session_id) {
+          webSessionId = d.session_id;
+          localStorage.setItem('webSessionId', webSessionId);
+        }
+        // Clear and re-render messages
+        msgs.innerHTML = '';
+        (d.messages || []).forEach(m => {
+          addMsg(m.content, m.role === 'user' ? 'user' : 'bot');
+        });
+        knownMsgCount = (d.messages || []).length;
+        // Highlight active
+        document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+        event.target.classList.add('active');
+        toggleSidebar();
+      } catch(e) { /* ignore */ }
+    }
+
+    async function newConversation() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        if (d.ok) {
+          webSessionId = d.session_id;
+          localStorage.setItem('webSessionId', webSessionId);
+          msgs.innerHTML = '<div class="msg bot" id="t-welcome"></div>';
+          knownMsgCount = 0;
+          const lang = document.documentElement.lang || 'ja';
+          const t = T[lang];
+          typewriter(document.getElementById('t-welcome'), t.welcome, 25);
+          loadConversations();
+          toggleSidebar();
+        }
+      } catch(e) { /* ignore */ }
+    }
+
+    // Mobile menu
+    function toggleMobileMenu() {
+      document.getElementById('mobile-menu').classList.toggle('show');
+    }
+    function closeMobileMenu() {
+      document.getElementById('mobile-menu').classList.remove('show');
+    }
+    document.addEventListener('click', e => {
+      const menu = document.getElementById('mobile-menu');
+      const btn = document.querySelector('.nav-hamburger');
+      if (!menu.contains(e.target) && e.target !== btn) menu.classList.remove('show');
+    });
+
+    // ---------------------------------------------------------------------------
+    // App Mode (ChatGPT-like UI for authenticated users)
+    // ---------------------------------------------------------------------------
+    let appConversations = [];
+    let appCurrentConvId = null;
+
+    // ---------------------------------------------------------------------------
+    // API Key management
+    // ---------------------------------------------------------------------------
+    function openApiKeysModal() {
+      document.getElementById('apikey-modal').classList.add('show');
+      document.getElementById('apikey-new-key').style.display = 'none';
+      loadApiKeys();
+      // i18n
+      const l = document.documentElement.lang || 'ja';
+      document.getElementById('apikey-modal-title').textContent = 'API Keys';
+      document.getElementById('apikey-modal-desc').textContent = l === 'ja'
+        ? 'APIキーでchatweb.aiをアプリから利用できます。'
+        : 'Use API keys to access chatweb.ai from your applications.';
+      document.getElementById('apikey-create-btn').textContent = l === 'ja' ? '作成' : 'Create';
+      document.getElementById('apikey-name-input').placeholder = l === 'ja' ? 'キー名 (例: my-app)' : 'Key name (e.g. my-app)';
+      document.getElementById('apikey-new-label').textContent = l === 'ja' ? '新しいAPIキー' : 'New API Key Created';
+      document.getElementById('apikey-new-hint').textContent = l === 'ja' ? 'クリックでコピー。このキーは一度だけ表示されます。' : 'Click to copy. This key will only be shown once.';
+    }
+
+    async function loadApiKeys() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/apikeys', { headers: { 'Authorization': 'Bearer ' + authToken } });
+        const d = await r.json();
+        const list = document.getElementById('apikey-list');
+        const l = document.documentElement.lang || 'ja';
+        if (!d.api_keys || d.api_keys.length === 0) {
+          list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px;">' + (l === 'ja' ? 'APIキーがありません' : 'No API keys yet') + '</div>';
+          return;
+        }
+        list.innerHTML = d.api_keys.map(k => '<div class="apikey-item">'
+          + '<div class="apikey-item-info">'
+          + '<div class="apikey-item-name">' + (k.name || 'default') + '</div>'
+          + '<div class="apikey-item-prefix">' + k.key_prefix + '</div>'
+          + '</div>'
+          + '<button class="apikey-delete-btn" onclick="deleteApiKey(\'' + k.id + '\')" title="Delete">&#x2715;</button>'
+          + '</div>').join('');
+      } catch(e) { /* ignore */ }
+    }
+
+    async function createApiKey() {
+      if (!authToken) return;
+      const name = document.getElementById('apikey-name-input').value.trim() || 'default';
+      try {
+        const r = await fetch(API + '/api/v1/apikeys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ name }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          document.getElementById('apikey-new-value').textContent = d.api_key;
+          document.getElementById('apikey-new-key').style.display = '';
+          document.getElementById('apikey-name-input').value = '';
+          loadApiKeys();
+        }
+      } catch(e) { /* ignore */ }
+    }
+
+    async function deleteApiKey(id) {
+      if (!authToken) return;
+      try {
+        await fetch(API + '/api/v1/apikeys/' + encodeURIComponent(id), {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        loadApiKeys();
+      } catch(e) { /* ignore */ }
+    }
+
+    function enterAppMode() {
+      document.body.classList.add('app-mode');
+      document.getElementById('app-sidebar-toggle').style.display = '';
+      // Hide old sidebar toggle
+      document.getElementById('sidebar-toggle').style.display = 'none';
+      document.getElementById('sidebar').classList.remove('open');
+      // Set user info in sidebar
+      const name = currentUser.display_name || currentUser.email || 'User';
+      document.getElementById('app-user-name').textContent = name;
+      document.getElementById('app-user-avatar').textContent = name.charAt(0).toUpperCase();
+      // Load conversations into app sidebar
+      appLoadConversations();
+      // Render suggestions
+      appRenderSuggestions();
+      // Set i18n
+      const l = document.documentElement.lang || 'ja';
+      document.getElementById('app-new-conv-text').textContent = l === 'ja' ? '新しいチャット' : 'New chat';
+      document.getElementById('app-empty-text').textContent = l === 'ja' ? '何をお手伝いしましょうか？' : 'How can I help you today?';
+      document.getElementById('app-input').placeholder = l === 'ja' ? 'メッセージを入力...' : 'Message chatweb.ai...';
+      document.getElementById('app-channels-label').textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
+    }
+
+    function exitAppMode() {
+      document.body.classList.remove('app-mode');
+      document.getElementById('app-sidebar-toggle').style.display = 'none';
+    }
+
+    function appRenderSuggestions() {
+      const l = document.documentElement.lang || 'ja';
+      const suggestions = l === 'ja' ? [
+        '今日の天気を教えて',
+        '英語メールを書いて',
+        'Pythonでスクレイピング',
+        '旅行プランを立てて',
+      ] : [
+        "What's the weather today?",
+        'Write a professional email',
+        'Python web scraping',
+        'Plan a trip for me',
+      ];
+      const container = document.getElementById('app-suggestions');
+      container.innerHTML = '';
+      suggestions.forEach(s => {
+        const btn = document.createElement('div');
+        btn.className = 'app-chat-suggestion';
+        btn.textContent = s;
+        btn.onclick = () => { document.getElementById('app-input').value = s; appSend(); };
+        container.appendChild(btn);
+      });
+    }
+
+    async function appLoadConversations() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        appConversations = d.conversations || [];
+        const list = document.getElementById('app-conv-list');
+        list.innerHTML = '';
+        appConversations.forEach(conv => {
+          const item = document.createElement('div');
+          item.className = 'app-conv-item' + (conv.id === appCurrentConvId ? ' active' : '');
+          item.textContent = conv.title || (document.documentElement.lang === 'ja' ? '新しい会話' : 'New conversation');
+          item.onclick = () => appLoadConversation(conv.id, conv.session_id);
+          list.appendChild(item);
+        });
+      } catch(e) { /* ignore */ }
+    }
+
+    async function appLoadConversation(convId, sessionId) {
+      if (!authToken) return;
+      appCurrentConvId = convId;
+      try {
+        const r = await fetch(API + '/api/v1/conversations/' + encodeURIComponent(convId) + '/messages', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        if (d.session_id) {
+          webSessionId = d.session_id;
+          localStorage.setItem('webSessionId', webSessionId);
+        }
+        const msgsEl = document.getElementById('app-messages');
+        msgsEl.innerHTML = '';
+        document.getElementById('app-empty')?.remove();
+        (d.messages || []).forEach(m => {
+          appAddMsg(m.content, m.role === 'user' ? 'user' : 'bot');
+        });
+        knownMsgCount = (d.messages || []).length;
+        // Update active state
+        document.querySelectorAll('.app-conv-item').forEach(el => el.classList.remove('active'));
+        const items = document.querySelectorAll('.app-conv-item');
+        appConversations.forEach((conv, i) => {
+          if (conv.id === convId && items[i]) items[i].classList.add('active');
+        });
+        // Close sidebar on mobile
+        document.getElementById('app-sidebar').classList.remove('open');
+      } catch(e) { /* ignore */ }
+    }
+
+    async function appNewConversation() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        if (d.ok) {
+          webSessionId = d.session_id;
+          localStorage.setItem('webSessionId', webSessionId);
+          appCurrentConvId = d.conversation_id || null;
+          const msgsEl = document.getElementById('app-messages');
+          msgsEl.innerHTML = '';
+          // Re-add empty state
+          const empty = document.createElement('div');
+          empty.className = 'app-chat-empty';
+          empty.id = 'app-empty';
+          const l = document.documentElement.lang || 'ja';
+          empty.innerHTML = '<div class="app-chat-empty-logo">chatweb.ai</div>'
+            + '<div class="app-chat-empty-text">' + (l === 'ja' ? '何をお手伝いしましょうか？' : 'How can I help you today?') + '</div>'
+            + '<div class="app-chat-suggestions" id="app-suggestions"></div>';
+          msgsEl.appendChild(empty);
+          appRenderSuggestions();
+          knownMsgCount = 0;
+          appLoadConversations();
+          document.getElementById('app-sidebar').classList.remove('open');
+        }
+      } catch(e) { /* ignore */ }
+    }
+
+    function appAddMsg(text, who, agentName, toolsUsed) {
+      // Remove empty state if present
+      const empty = document.getElementById('app-empty');
+      if (empty) empty.remove();
+
+      const msgsEl = document.getElementById('app-messages');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'app-msg app-msg-' + who;
+
+      if (who === 'user') {
+        const bubble = document.createElement('div');
+        bubble.className = 'app-msg-bubble';
+        bubble.textContent = text;
+        wrapper.appendChild(bubble);
+      } else {
+        const avatar = document.createElement('div');
+        avatar.className = 'app-msg-avatar';
+        avatar.textContent = 'cw';
+        wrapper.appendChild(avatar);
+        const content = document.createElement('div');
+        content.className = 'app-msg-content';
+        content.textContent = text;
+        if (agentName) {
+          const badge = document.createElement('span');
+          badge.className = 'agent-badge';
+          badge.textContent = agentName;
+          content.appendChild(badge);
+        }
+        if (toolsUsed && toolsUsed.length > 0) {
+          const container = document.createElement('div');
+          container.className = 'tool-badges';
+          const lang = document.documentElement.lang || 'ja';
+          toolsUsed.forEach(tool => {
+            const tb = document.createElement('span');
+            tb.className = 'tool-badge';
+            const info = TOOL_LABELS[tool] || { icon: '\uD83D\uDD27', ja: tool, en: tool };
+            tb.textContent = info.icon + ' ' + (lang === 'ja' ? info.ja : info.en);
+            container.appendChild(tb);
+          });
+          content.appendChild(container);
+        }
+        // TTS button for bot messages
+        const ttsBtn = document.createElement('button');
+        ttsBtn.className = 'app-tts-btn';
+        ttsBtn.textContent = '\uD83D\uDD0A';
+        ttsBtn.dataset.text = text;
+        ttsBtn.onclick = function() { playTTS(this); };
+        content.appendChild(ttsBtn);
+        wrapper.appendChild(content);
+      }
+
+      msgsEl.appendChild(wrapper);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+
+    function appInputKeydown(e) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        appSend();
+      }
+      // Auto-resize textarea
+      setTimeout(() => {
+        e.target.style.height = 'auto';
+        e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px';
+      }, 0);
+    }
+
+    async function appSend() {
+      const textarea = document.getElementById('app-input');
+      const text = textarea.value.trim();
+      if (!text) return;
+      textarea.value = '';
+      textarea.style.height = 'auto';
+      appAddMsg(text, 'user');
+
+      // Show thinking indicator
+      const msgsEl = document.getElementById('app-messages');
+      const thinking = document.createElement('div');
+      thinking.className = 'app-msg app-msg-bot';
+      const lang = document.documentElement.lang || 'ja';
+      const stages = THINKING_STAGES[lang] || THINKING_STAGES.ja;
+      thinking.innerHTML = '<div class="app-msg-avatar">cw</div>'
+        + '<div class="app-msg-content" style="color:var(--muted);">'
+        + '<span class="thinking-icon">' + stages[0].icon + '</span> '
+        + '<span class="thinking-text">' + stages[0].text + '</span> '
+        + '<span class="thinking-elapsed">(0.0s)</span>'
+        + '<div class="shimmer-bar" style="margin-top:8px;"></div></div>';
+      msgsEl.appendChild(thinking);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+
+      const startTime = Date.now();
+      let stageIdx = 0;
+      const statusInterval = setInterval(() => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const elapsedEl = thinking.querySelector('.thinking-elapsed');
+        if (elapsedEl) elapsedEl.textContent = '(' + elapsed + 's)';
+        const elapsedMs = Date.now() - startTime;
+        const nextStage = stages[stageIdx + 1];
+        if (nextStage && elapsedMs >= nextStage.time) {
+          stageIdx++;
+          const iconEl = thinking.querySelector('.thinking-icon');
+          const textEl = thinking.querySelector('.thinking-text');
+          if (iconEl) iconEl.textContent = stages[stageIdx].icon;
+          if (textEl) textEl.textContent = stages[stageIdx].text;
+        }
+      }, 100);
+
+      try {
+        const agentSel = document.getElementById('app-agent-select').value;
+        const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
+        const r = await fetch(API + '/api/v1/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
+        });
+        const d = await r.json();
+        clearInterval(statusInterval);
+        thinking.remove();
+        appAddMsg(d.response, 'bot', d.agent || null, d.tools_used || null);
+        knownMsgCount += 2;
+        // Update credits from response
+        if (d.credits_remaining !== undefined) {
+          updateCredits(d.credits_remaining);
+        }
+        // Refresh conversation list (new conversation may have been created)
+        appLoadConversations();
+      } catch {
+        clearInterval(statusInterval);
+        thinking.remove();
+        appAddMsg(lang === 'ja' ? 'エラーが発生しました。もう一度お試しください。' : 'Something went wrong. Please try again.', 'bot');
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // STT (Speech-to-Text) — Web Speech API
+    // ---------------------------------------------------------------------------
+    let speechRecognition = null;
+    let isRecording = false;
+
+    function initSpeechRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        document.body.classList.add('no-speech-api');
+        return;
+      }
+      speechRecognition = new SpeechRecognition();
+      speechRecognition.lang = 'ja-JP';
+      speechRecognition.continuous = true;
+      speechRecognition.interimResults = true;
+
+      let finalTranscript = '';
+      speechRecognition.onresult = function(e) {
+        let interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) {
+            finalTranscript += e.results[i][0].transcript;
+          } else {
+            interim += e.results[i][0].transcript;
+          }
+        }
+        const textarea = document.getElementById('app-input');
+        textarea.value = finalTranscript + interim;
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
+      };
+
+      speechRecognition.onend = function() {
+        isRecording = false;
+        const btn = document.getElementById('app-mic-btn');
+        if (btn) btn.classList.remove('recording');
+        if (finalTranscript.trim()) {
+          appSend();
+        }
+        finalTranscript = '';
+      };
+
+      speechRecognition.onerror = function(e) {
+        isRecording = false;
+        const btn = document.getElementById('app-mic-btn');
+        if (btn) btn.classList.remove('recording');
+        finalTranscript = '';
+        if (e.error === 'not-allowed') {
+          const lang = document.documentElement.lang || 'ja';
+          alert(lang === 'ja' ? 'マイクへのアクセスが拒否されました。ブラウザの設定でマイクを許可してください。' : 'Microphone access denied. Please allow microphone access in browser settings.');
+        }
+      };
+    }
+
+    function toggleSpeechRecognition() {
+      if (!speechRecognition) {
+        initSpeechRecognition();
+        if (!speechRecognition) return;
+      }
+      const btn = document.getElementById('app-mic-btn');
+      if (isRecording) {
+        speechRecognition.stop();
+        isRecording = false;
+        btn.classList.remove('recording');
+      } else {
+        speechRecognition.start();
+        isRecording = true;
+        btn.classList.add('recording');
+      }
+    }
+
+    // Initialize STT on load
+    initSpeechRecognition();
+
+    // ---------------------------------------------------------------------------
+    // TTS (Text-to-Speech) — OpenAI API via backend
+    // ---------------------------------------------------------------------------
+    let currentAudio = null;
+    let currentTtsBtn = null;
+
+    async function playTTS(btn) {
+      const text = btn.dataset.text;
+      if (!text) return;
+
+      // If already playing this button, stop
+      if (currentTtsBtn === btn && currentAudio && !currentAudio.paused) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        btn.classList.remove('playing');
+        btn.textContent = '\uD83D\uDD0A';
+        currentTtsBtn = null;
+        return;
+      }
+
+      // Stop any other playing audio
+      if (currentAudio && !currentAudio.paused) {
+        currentAudio.pause();
+        if (currentTtsBtn) {
+          currentTtsBtn.classList.remove('playing');
+          currentTtsBtn.textContent = '\uD83D\uDD0A';
+        }
+      }
+
+      btn.classList.add('playing');
+      btn.textContent = '\u23F9';
+
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
+        const r = await fetch(API + '/api/v1/speech/synthesize', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ text: text.substring(0, 4096), session_id: webSessionId }),
+        });
+
+        if (!r.ok) throw new Error('TTS failed');
+
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        currentAudio = new Audio(url);
+        currentTtsBtn = btn;
+
+        currentAudio.onended = function() {
+          btn.classList.remove('playing');
+          btn.textContent = '\uD83D\uDD0A';
+          URL.revokeObjectURL(url);
+          currentTtsBtn = null;
+        };
+
+        currentAudio.play();
+
+        // Update credits after TTS
+        refreshCredits();
+      } catch(e) {
+        btn.classList.remove('playing');
+        btn.textContent = '\uD83D\uDD0A';
+        currentTtsBtn = null;
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Real-time credit display
+    // ---------------------------------------------------------------------------
+    function updateCredits(remaining) {
+      const display = document.getElementById('credit-display');
+      const count = document.getElementById('credit-count');
+      if (!display || !count) return;
+      display.style.display = '';
+      const prev = parseInt(count.textContent) || 0;
+      count.textContent = remaining.toLocaleString();
+      if (prev !== remaining && prev > 0) {
+        display.classList.add('credit-flash');
+        setTimeout(() => display.classList.remove('credit-flash'), 600);
+      }
+    }
+
+    async function refreshCredits() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/auth/me', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        if (d.authenticated && d.credits_remaining !== undefined) {
+          updateCredits(d.credits_remaining);
+        }
+      } catch(e) { /* ignore */ }
+    }
+
+    // Check auth on page load
+    checkAuth();
+
+    // IntersectionObserver for scroll-triggered fade-up
+    (function() {
+      const targets = document.querySelectorAll('.cap-section, .sync-section, .channel-cards, .bottom-cta, .cli-section');
+      targets.forEach(el => el.classList.add('scroll-fade-up'));
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.1 });
+      targets.forEach(el => observer.observe(el));
+    })();
 
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
   </script>

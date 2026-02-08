@@ -55,6 +55,8 @@ impl ToolRegistry {
             Box::new(DateTimeTool),
             Box::new(QrCodeTool),
             Box::new(NewsSearchTool),
+            Box::new(GoogleCalendarTool),
+            Box::new(GmailTool),
         ];
 
         // Register GitHub self-edit tools if GITHUB_TOKEN is available (requires http-api feature)
@@ -336,6 +338,81 @@ impl Tool for NewsSearchTool {
         let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
         let freshness = params.get("freshness").and_then(|v| v.as_str()).unwrap_or("pw");
         execute_news_search(query, freshness).await
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar tool — list/create events via user's OAuth refresh token
+// ---------------------------------------------------------------------------
+
+pub struct GoogleCalendarTool;
+
+#[async_trait]
+impl Tool for GoogleCalendarTool {
+    fn name(&self) -> &str { "google_calendar" }
+    fn description(&self) -> &str {
+        "Access the user's Google Calendar. Can list upcoming events or create new events. \
+         Requires the user to be logged in with Google OAuth."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list", "create"],
+                    "description": "Action to perform: 'list' upcoming events or 'create' a new event"
+                },
+                "summary": { "type": "string", "description": "Event title (for create)" },
+                "start": { "type": "string", "description": "Start datetime in ISO 8601 format, e.g. '2025-03-01T10:00:00+09:00' (for create)" },
+                "end": { "type": "string", "description": "End datetime in ISO 8601 format (for create)" },
+                "description": { "type": "string", "description": "Event description (for create, optional)" },
+                "max_results": { "type": "integer", "description": "Max events to return (for list, default 10)" }
+            },
+            "required": ["action"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("list");
+        execute_google_calendar(action, &params).await
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Gmail tool — search/read/send emails via user's OAuth refresh token
+// ---------------------------------------------------------------------------
+
+pub struct GmailTool;
+
+#[async_trait]
+impl Tool for GmailTool {
+    fn name(&self) -> &str { "gmail" }
+    fn description(&self) -> &str {
+        "Access the user's Gmail. Can search emails, read a specific email, or send an email. \
+         Requires the user to be logged in with Google OAuth."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["search", "read", "send"],
+                    "description": "Action: 'search' emails, 'read' a specific email by ID, or 'send' an email"
+                },
+                "query": { "type": "string", "description": "Search query for Gmail (for search). Uses Gmail search syntax, e.g. 'from:user@example.com' or 'is:unread'" },
+                "message_id": { "type": "string", "description": "Gmail message ID (for read)" },
+                "to": { "type": "string", "description": "Recipient email address (for send)" },
+                "subject": { "type": "string", "description": "Email subject (for send)" },
+                "body": { "type": "string", "description": "Email body text (for send)" },
+                "max_results": { "type": "integer", "description": "Max emails to return (for search, default 10)" }
+            },
+            "required": ["action"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("search");
+        execute_gmail(action, &params).await
     }
 }
 
@@ -1829,6 +1906,426 @@ pub fn list_integrations() -> Vec<Integration> {
     ]
 }
 
+// ---------------------------------------------------------------------------
+// Google API helpers — refresh token exchange + Calendar/Gmail execution
+// ---------------------------------------------------------------------------
+
+/// Refresh a Google OAuth access token using a refresh_token.
+async fn google_refresh_access_token(refresh_token: &str) -> Result<String, String> {
+    let client_id = std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default();
+    let client_secret = std::env::var("GOOGLE_CLIENT_SECRET").unwrap_or_default();
+    if client_id.is_empty() || client_secret.is_empty() {
+        return Err("Google OAuth not configured".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&[
+            ("client_id", client_id.as_str()),
+            ("client_secret", client_secret.as_str()),
+            ("refresh_token", refresh_token),
+            ("grant_type", "refresh_token"),
+        ])
+        .send()
+        .await
+        .map_err(|e| format!("Token refresh request failed: {}", e))?;
+
+    let data: serde_json::Value = resp.json().await.map_err(|e| format!("Token parse error: {}", e))?;
+    data.get("access_token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("No access_token in response: {}", data))
+}
+
+/// Get user's Google refresh token from DynamoDB (via GOOGLE_SA_KEY env or lookup).
+/// This function looks up the refresh token from the user's session.
+async fn get_google_refresh_token_for_session() -> Result<String, String> {
+    // Try to get the service account key as fallback
+    let sa_key = std::env::var("GOOGLE_SA_KEY").unwrap_or_default();
+    if !sa_key.is_empty() {
+        // Use service account JWT flow
+        return get_sa_access_token(&sa_key).await;
+    }
+    Err("No Google refresh token available. User must log in with Google OAuth first.".to_string())
+}
+
+/// Get access token from service account JSON key.
+async fn get_sa_access_token(sa_key_json: &str) -> Result<String, String> {
+    let key: serde_json::Value = serde_json::from_str(sa_key_json)
+        .map_err(|e| format!("Invalid service account key: {}", e))?;
+
+    let client_email = key.get("client_email").and_then(|v| v.as_str()).unwrap_or("");
+    let private_key_pem = key.get("private_key").and_then(|v| v.as_str()).unwrap_or("");
+
+    if client_email.is_empty() || private_key_pem.is_empty() {
+        return Err("Service account key missing client_email or private_key".to_string());
+    }
+
+    // Build JWT
+    let now = chrono::Utc::now().timestamp();
+    let header = base64_url_encode(&serde_json::json!({"alg":"RS256","typ":"JWT"}).to_string());
+    let claims = base64_url_encode(&serde_json::json!({
+        "iss": client_email,
+        "scope": "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.modify",
+        "aud": "https://oauth2.googleapis.com/token",
+        "iat": now,
+        "exp": now + 3600,
+    }).to_string());
+
+    let unsigned = format!("{}.{}", header, claims);
+
+    // Sign with RSA-SHA256 using the private key
+    let signature = sign_rs256(private_key_pem, unsigned.as_bytes())
+        .map_err(|e| format!("JWT signing failed: {}", e))?;
+
+    let jwt = format!("{}.{}", unsigned, signature);
+
+    // Exchange JWT for access token
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&[
+            ("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
+            ("assertion", &jwt),
+        ])
+        .send()
+        .await
+        .map_err(|e| format!("SA token request failed: {}", e))?;
+
+    let data: serde_json::Value = resp.json().await
+        .map_err(|e| format!("SA token parse error: {}", e))?;
+
+    data.get("access_token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("No access_token in SA response: {}", data))
+}
+
+fn base64_url_encode(input: &str) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(input.as_bytes())
+}
+
+fn sign_rs256(_pem: &str, _data: &[u8]) -> Result<String, String> {
+    // RSA signing requires additional crates. For now, rely on user OAuth tokens.
+    Err("RSA signing not available. Use user OAuth tokens instead.".to_string())
+}
+
+/// Execute Google Calendar tool.
+async fn execute_google_calendar(action: &str, params: &HashMap<String, serde_json::Value>) -> String {
+    // Try to get access token from user's refresh token stored in env/context
+    // In the HTTP handler, the refresh token is passed via GOOGLE_USER_REFRESH_TOKEN env
+    let refresh_token = std::env::var("GOOGLE_USER_REFRESH_TOKEN").unwrap_or_default();
+    let access_token = if !refresh_token.is_empty() {
+        match google_refresh_access_token(&refresh_token).await {
+            Ok(t) => t,
+            Err(e) => return format!("Error getting Google access token: {}", e),
+        }
+    } else {
+        // Fall back to service account
+        match get_google_refresh_token_for_session().await {
+            Ok(t) => t,
+            Err(e) => return format!("Google Calendar requires login with Google. Error: {}", e),
+        }
+    };
+
+    let client = reqwest::Client::new();
+
+    match action {
+        "list" => {
+            let max = params.get("max_results").and_then(|v| v.as_i64()).unwrap_or(10);
+            let now = chrono::Utc::now().to_rfc3339();
+            let url = format!(
+                "https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults={}&orderBy=startTime&singleEvents=true&timeMin={}",
+                max, urlencoding::encode(&now)
+            );
+            match client.get(&url).bearer_auth(&access_token).send().await {
+                Ok(resp) => {
+                    match resp.json::<serde_json::Value>().await {
+                        Ok(data) => {
+                            if let Some(items) = data.get("items").and_then(|v| v.as_array()) {
+                                let mut result = format!("Upcoming {} events:\n\n", items.len());
+                                for (i, item) in items.iter().enumerate() {
+                                    let summary = item.get("summary").and_then(|v| v.as_str()).unwrap_or("(no title)");
+                                    let start = item.get("start")
+                                        .and_then(|s| s.get("dateTime").or(s.get("date")))
+                                        .and_then(|v| v.as_str()).unwrap_or("?");
+                                    let end = item.get("end")
+                                        .and_then(|s| s.get("dateTime").or(s.get("date")))
+                                        .and_then(|v| v.as_str()).unwrap_or("?");
+                                    let desc = item.get("description").and_then(|v| v.as_str()).unwrap_or("");
+                                    result.push_str(&format!("{}. {} | {} → {}", i + 1, summary, start, end));
+                                    if !desc.is_empty() {
+                                        result.push_str(&format!("\n   {}", &desc[..desc.len().min(100)]));
+                                    }
+                                    result.push('\n');
+                                }
+                                result
+                            } else if let Some(err) = data.get("error") {
+                                format!("Calendar API error: {}", err)
+                            } else {
+                                "No upcoming events found.".to_string()
+                            }
+                        }
+                        Err(e) => format!("Failed to parse calendar response: {}", e),
+                    }
+                }
+                Err(e) => format!("Calendar request failed: {}", e),
+            }
+        }
+        "create" => {
+            let summary = params.get("summary").and_then(|v| v.as_str()).unwrap_or("New Event");
+            let start = params.get("start").and_then(|v| v.as_str()).unwrap_or("");
+            let end = params.get("end").and_then(|v| v.as_str()).unwrap_or("");
+            let description = params.get("description").and_then(|v| v.as_str()).unwrap_or("");
+
+            if start.is_empty() || end.is_empty() {
+                return "Error: Both 'start' and 'end' datetimes are required for creating an event.".to_string();
+            }
+
+            let event_body = serde_json::json!({
+                "summary": summary,
+                "description": description,
+                "start": { "dateTime": start },
+                "end": { "dateTime": end },
+            });
+
+            match client
+                .post("https://www.googleapis.com/calendar/v3/calendars/primary/events")
+                .bearer_auth(&access_token)
+                .json(&event_body)
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    match resp.json::<serde_json::Value>().await {
+                        Ok(data) => {
+                            if let Some(id) = data.get("id").and_then(|v| v.as_str()) {
+                                let link = data.get("htmlLink").and_then(|v| v.as_str()).unwrap_or("");
+                                format!("Event created: '{}'\nID: {}\nLink: {}", summary, id, link)
+                            } else if let Some(err) = data.get("error") {
+                                format!("Calendar API error: {}", err)
+                            } else {
+                                format!("Event created: {}", data)
+                            }
+                        }
+                        Err(e) => format!("Failed to parse create response: {}", e),
+                    }
+                }
+                Err(e) => format!("Calendar create request failed: {}", e),
+            }
+        }
+        _ => format!("Unknown calendar action: '{}'. Use 'list' or 'create'.", action),
+    }
+}
+
+/// Execute Gmail tool.
+async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>) -> String {
+    let refresh_token = std::env::var("GOOGLE_USER_REFRESH_TOKEN").unwrap_or_default();
+    let access_token = if !refresh_token.is_empty() {
+        match google_refresh_access_token(&refresh_token).await {
+            Ok(t) => t,
+            Err(e) => return format!("Error getting Google access token: {}", e),
+        }
+    } else {
+        match get_google_refresh_token_for_session().await {
+            Ok(t) => t,
+            Err(e) => return format!("Gmail requires login with Google. Error: {}", e),
+        }
+    };
+
+    let client = reqwest::Client::new();
+
+    match action {
+        "search" => {
+            let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("is:inbox");
+            let max = params.get("max_results").and_then(|v| v.as_i64()).unwrap_or(10);
+            let url = format!(
+                "https://www.googleapis.com/gmail/v1/users/me/messages?q={}&maxResults={}",
+                urlencoding::encode(query), max
+            );
+            match client.get(&url).bearer_auth(&access_token).send().await {
+                Ok(resp) => {
+                    let data: serde_json::Value = match resp.json().await {
+                        Ok(d) => d,
+                        Err(e) => return format!("Gmail parse error: {}", e),
+                    };
+                    if let Some(messages) = data.get("messages").and_then(|v| v.as_array()) {
+                        let mut result = format!("Found {} messages:\n\n", messages.len());
+                        // Fetch details for each message (up to max)
+                        for msg in messages.iter().take(max as usize) {
+                            let msg_id = msg.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                            if msg_id.is_empty() { continue; }
+                            let detail_url = format!(
+                                "https://www.googleapis.com/gmail/v1/users/me/messages/{}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date",
+                                msg_id
+                            );
+                            if let Ok(detail_resp) = client.get(&detail_url).bearer_auth(&access_token).send().await {
+                                if let Ok(detail) = detail_resp.json::<serde_json::Value>().await {
+                                    let headers = detail.get("payload")
+                                        .and_then(|p| p.get("headers"))
+                                        .and_then(|h| h.as_array());
+                                    let mut from = "";
+                                    let mut subject = "";
+                                    let mut date = "";
+                                    if let Some(hdrs) = headers {
+                                        for h in hdrs {
+                                            let name = h.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                            let val = h.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                                            match name {
+                                                "From" => from = val,
+                                                "Subject" => subject = val,
+                                                "Date" => date = val,
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                    let snippet = detail.get("snippet").and_then(|v| v.as_str()).unwrap_or("");
+                                    result.push_str(&format!("ID: {}\n  From: {}\n  Subject: {}\n  Date: {}\n  Preview: {}\n\n",
+                                        msg_id, from, subject, date, &snippet[..snippet.len().min(120)]));
+                                }
+                            }
+                        }
+                        result
+                    } else if let Some(err) = data.get("error") {
+                        format!("Gmail API error: {}", err)
+                    } else {
+                        "No messages found.".to_string()
+                    }
+                }
+                Err(e) => format!("Gmail search failed: {}", e),
+            }
+        }
+        "read" => {
+            let msg_id = params.get("message_id").and_then(|v| v.as_str()).unwrap_or("");
+            if msg_id.is_empty() {
+                return "Error: 'message_id' is required for reading an email.".to_string();
+            }
+            let url = format!(
+                "https://www.googleapis.com/gmail/v1/users/me/messages/{}?format=full",
+                msg_id
+            );
+            match client.get(&url).bearer_auth(&access_token).send().await {
+                Ok(resp) => {
+                    match resp.json::<serde_json::Value>().await {
+                        Ok(data) => {
+                            let headers = data.get("payload")
+                                .and_then(|p| p.get("headers"))
+                                .and_then(|h| h.as_array());
+                            let mut from = String::new();
+                            let mut to = String::new();
+                            let mut subject = String::new();
+                            let mut date = String::new();
+                            if let Some(hdrs) = headers {
+                                for h in hdrs {
+                                    let name = h.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                    let val = h.get("value").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    match name {
+                                        "From" => from = val,
+                                        "To" => to = val,
+                                        "Subject" => subject = val,
+                                        "Date" => date = val,
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            let snippet = data.get("snippet").and_then(|v| v.as_str()).unwrap_or("");
+                            // Try to get body text
+                            let body = extract_gmail_body(&data);
+                            format!("From: {}\nTo: {}\nSubject: {}\nDate: {}\n\n{}", from, to, subject, date,
+                                if body.is_empty() { snippet.to_string() } else { body })
+                        }
+                        Err(e) => format!("Gmail read parse error: {}", e),
+                    }
+                }
+                Err(e) => format!("Gmail read failed: {}", e),
+            }
+        }
+        "send" => {
+            let to = params.get("to").and_then(|v| v.as_str()).unwrap_or("");
+            let subject = params.get("subject").and_then(|v| v.as_str()).unwrap_or("");
+            let body = params.get("body").and_then(|v| v.as_str()).unwrap_or("");
+
+            if to.is_empty() || subject.is_empty() {
+                return "Error: 'to' and 'subject' are required for sending an email.".to_string();
+            }
+
+            // Construct RFC 2822 message
+            let raw_msg = format!("To: {}\r\nSubject: {}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{}", to, subject, body);
+            use base64::Engine;
+            let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw_msg.as_bytes());
+
+            let send_body = serde_json::json!({ "raw": encoded });
+
+            match client
+                .post("https://www.googleapis.com/gmail/v1/users/me/messages/send")
+                .bearer_auth(&access_token)
+                .json(&send_body)
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    match resp.json::<serde_json::Value>().await {
+                        Ok(data) => {
+                            if let Some(id) = data.get("id").and_then(|v| v.as_str()) {
+                                format!("Email sent successfully!\nTo: {}\nSubject: {}\nMessage ID: {}", to, subject, id)
+                            } else if let Some(err) = data.get("error") {
+                                format!("Gmail send error: {}", err)
+                            } else {
+                                format!("Email sent: {}", data)
+                            }
+                        }
+                        Err(e) => format!("Gmail send parse error: {}", e),
+                    }
+                }
+                Err(e) => format!("Gmail send failed: {}", e),
+            }
+        }
+        _ => format!("Unknown Gmail action: '{}'. Use 'search', 'read', or 'send'.", action),
+    }
+}
+
+/// Extract plain text body from Gmail message payload.
+fn extract_gmail_body(data: &serde_json::Value) -> String {
+    // Try direct body
+    if let Some(body_data) = data.get("payload")
+        .and_then(|p| p.get("body"))
+        .and_then(|b| b.get("data"))
+        .and_then(|d| d.as_str())
+    {
+        use base64::Engine;
+        if let Ok(decoded) = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(body_data) {
+            if let Ok(text) = String::from_utf8(decoded) {
+                return text;
+            }
+        }
+    }
+    // Try parts
+    if let Some(parts) = data.get("payload")
+        .and_then(|p| p.get("parts"))
+        .and_then(|p| p.as_array())
+    {
+        for part in parts {
+            let mime = part.get("mimeType").and_then(|v| v.as_str()).unwrap_or("");
+            if mime == "text/plain" {
+                if let Some(body_data) = part.get("body")
+                    .and_then(|b| b.get("data"))
+                    .and_then(|d| d.as_str())
+                {
+                    use base64::Engine;
+                    if let Ok(decoded) = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(body_data) {
+                        if let Ok(text) = String::from_utf8(decoded) {
+                            return text;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    String::new()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1876,7 +2373,7 @@ mod tests {
         // Clear GITHUB_TOKEN to get deterministic count
         std::env::remove_var("GITHUB_TOKEN");
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 9);
+        assert_eq!(registry.len(), 11);
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))

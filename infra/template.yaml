@@ -65,6 +65,15 @@ Parameters:
     NoEcho: true
     Description: GitHub personal access token for self-edit (repo scope)
     Default: ''
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth 2.0 Client ID
+    Default: ''
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Description: Google OAuth 2.0 Client Secret
+    Default: ''
   TenantId:
     Type: String
     Description: Tenant ID for multi-tenant isolation
@@ -103,6 +112,8 @@ Resources:
           RESEND_API_KEY: !Ref ResendApiKey
           GITHUB_TOKEN: !Ref GitHubToken
           NANOBOT_TENANT_ID: !Ref TenantId
+          GOOGLE_CLIENT_ID: !Ref GoogleClientId
+          GOOGLE_CLIENT_SECRET: !Ref GoogleClientSecret
           DYNAMODB_SESSIONS_TABLE: !Ref SessionsTable
       Policies:
         - DynamoDBCrudPolicy:

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Comparison - chatweb.ai</title>
-  <meta name="description" content="chatweb.ai vs ChatGPT, Gemini, Perplexity - detailed feature comparison">
+  <meta name="description" content="chatweb.ai vs ChatGPT, Gemini, Perplexity, OpenClaw, nanobot CLI - detailed feature comparison">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
   <style>
     :root{--bg:#0a0a0a;--s:#141414;--b:#1e1e1e;--t:#e5e5e5;--m:#777;--a:#6366f1;--ah:#818cf8;--g:#22c55e;--y:#f59e0b;--r:#ef4444}
@@ -49,7 +49,7 @@
     footer{text-align:center;padding:24px;color:var(--m);font-size:12px;border-top:1px solid var(--b)}
     footer a{color:var(--m);text-decoration:none}.footer a:hover{color:var(--t)}
     @media(max-width:768px){
-      .tbl{font-size:11px}.tbl th,.tbl td{padding:8px 6px}
+      .tbl{font-size:10px}.tbl th,.tbl td{padding:6px 4px}
       .hero h1{font-size:26px}.stats{gap:16px}.stat .num{font-size:24px}
       .sections{grid-template-columns:1fr}
     }
@@ -86,106 +86,118 @@
   </div>
 
   <!-- Comparison table -->
+  <div style="overflow-x:auto;">
   <table class="tbl">
     <thead><tr>
       <th id="t-feature">機能</th>
       <th class="hl">CHATWEB.AI</th>
+      <th>OPENCLAW</th>
+      <th>NANOBOT CLI</th>
       <th>CHATGPT</th>
       <th>GEMINI</th>
       <th>PERPLEXITY</th>
     </tr></thead>
     <tbody>
       <!-- AI Models -->
-      <tr class="cat-row"><td colspan="5" id="cat-models">AI Models</td></tr>
-      <tr><td id="f-multi">マルチモデル対応</td><td class="hl"><span class="ck">&#x2713;</span> GPT-4o, Claude, Gemini, DeepSeek</td><td><span class="cx">&#x2717;</span> GPT only</td><td><span class="cx">&#x2717;</span> Gemini only</td><td><span class="cp">&#x25CB;</span> Limited</td></tr>
-      <tr><td id="f-modelsel">モデル切り替え</td><td class="hl"><span class="ck">&#x2713;</span> 設定画面で自由に変更</td><td><span class="ck">&#x2713;</span> GPT内のみ</td><td><span class="cx">&#x2717;</span></td><td><span class="cp">&#x25CB;</span></td></tr>
-      <tr><td id="f-temp">Temperature調整</td><td class="hl"><span class="ck">&#x2713;</span> 0.0〜2.0スライダー</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-customkey">自分のAPIキーを使用</td><td class="hl"><span class="ck">&#x2713;</span> OpenAI/Anthropic/Google等</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-lb">ロードバランシング</td><td class="hl"><span class="ck">&#x2713;</span> 複数キーでラウンドロビン+フェイルオーバー</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr class="cat-row"><td colspan="7" id="cat-models">AI Models</td></tr>
+      <tr><td id="f-multi">マルチモデル対応</td><td class="hl"><span class="ck">&#x2713;</span> GPT-4o, Claude, Gemini, DeepSeek</td><td><span class="ck">&#x2713;</span> Claude, GPT, Gemini, Ollama等</td><td><span class="ck">&#x2713;</span> chatweb.aiと同じエンジン</td><td><span class="cx">&#x2717;</span> GPT only</td><td><span class="cx">&#x2717;</span> Gemini only</td><td><span class="cp">&#x25CB;</span> Limited</td></tr>
+      <tr><td id="f-modelsel">モデル切り替え</td><td class="hl"><span class="ck">&#x2713;</span> 設定画面で自由に変更</td><td><span class="ck">&#x2713;</span> 設定ファイルで変更</td><td><span class="ck">&#x2713;</span> --model フラグ</td><td><span class="ck">&#x2713;</span> GPT内のみ</td><td><span class="cx">&#x2717;</span></td><td><span class="cp">&#x25CB;</span></td></tr>
+      <tr><td id="f-temp">Temperature調整</td><td class="hl"><span class="ck">&#x2713;</span> 0.0〜2.0スライダー</td><td><span class="cp">&#x25CB;</span> プロバイダー依存</td><td><span class="ck">&#x2713;</span> 設定で変更可</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-customkey">自分のAPIキーを使用</td><td class="hl"><span class="ck">&#x2713;</span> OpenAI/Anthropic/Google等</td><td><span class="ck">&#x2713;</span> 必須（自分のキーのみ）</td><td><span class="ck">&#x2713;</span> 設定ファイルで指定</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-lb">ロードバランシング</td><td class="hl"><span class="ck">&#x2713;</span> 複数キーでラウンドロビン+フェイルオーバー</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span> chatweb.aiと同じ</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
 
       <!-- Agents -->
-      <tr class="cat-row"><td colspan="5" id="cat-agents">AI Agents</td></tr>
-      <tr><td id="f-agent-orch">オーケストレーター</td><td class="hl"><span class="ck">&#x2713;</span> 最適なエージェントに自動ルーティング</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-agent-asst">アシスタント</td><td class="hl"><span class="ck">&#x2713;</span> 汎用、ツール対応</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-agent-res">リサーチャー</td><td class="hl"><span class="ck">&#x2713;</span> Web検索+ファクトチェック</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-agent-code">コーダー</td><td class="hl"><span class="ck">&#x2713;</span> コード生成・デバッグ特化</td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-agent-analyst">アナリスト</td><td class="hl"><span class="ck">&#x2713;</span> データ分析・ビジネスインサイト</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-agent-creative">クリエイター</td><td class="hl"><span class="ck">&#x2713;</span> ライティング・翻訳・ブレスト</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-agent-auto">自動エージェント選択</td><td class="hl"><span class="ck">&#x2713;</span> キーワード+@プレフィックスで切替</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr class="cat-row"><td colspan="7" id="cat-agents">AI Agents</td></tr>
+      <tr><td id="f-agent-orch">オーケストレーター</td><td class="hl"><span class="ck">&#x2713;</span> 最適なエージェントに自動ルーティング</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span> chatweb.aiと同じ</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-agent-asst">アシスタント</td><td class="hl"><span class="ck">&#x2713;</span> 汎用、ツール対応</td><td><span class="ck">&#x2713;</span> 700+スキル</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-agent-res">リサーチャー</td><td class="hl"><span class="ck">&#x2713;</span> Web検索+ファクトチェック</td><td><span class="ck">&#x2713;</span> Brave Search対応</td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-agent-code">コーダー</td><td class="hl"><span class="ck">&#x2713;</span> コード生成・デバッグ特化</td><td><span class="ck">&#x2713;</span> シェル実行・ファイル操作</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-agent-analyst">アナリスト</td><td class="hl"><span class="ck">&#x2713;</span> データ分析・ビジネスインサイト</td><td><span class="cp">&#x25CB;</span> スキルで拡張可</td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-agent-creative">クリエイター</td><td class="hl"><span class="ck">&#x2713;</span> ライティング・翻訳・ブレスト</td><td><span class="cp">&#x25CB;</span> スキルで拡張可</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-agent-auto">自動エージェント選択</td><td class="hl"><span class="ck">&#x2713;</span> キーワード+@プレフィックスで切替</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span> @プレフィックス</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
 
       <!-- Tools -->
-      <tr class="cat-row"><td colspan="5" id="cat-tools">Built-in Tools (9)</td></tr>
-      <tr><td>🔍 Web Search</td><td class="hl"><span class="ck">&#x2713;</span> Brave + Bing + Jinaフォールバック</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td>🌐 Web Fetch</td><td class="hl"><span class="ck">&#x2713;</span> Jina Reader対応</td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td>🧮 Calculator</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>🌤 Weather</td><td class="hl"><span class="ck">&#x2713;</span> Open-Meteo API</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td>🌍 Translate</td><td class="hl"><span class="ck">&#x2713;</span> MyMemory API</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>📚 Wikipedia</td><td class="hl"><span class="ck">&#x2713;</span> REST API + 検索フォールバック</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td>🕐 DateTime</td><td class="hl"><span class="ck">&#x2713;</span> 全タイムゾーン対応</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>📰 News Search</td><td class="hl"><span class="ck">&#x2713;</span> 最新ニュース検索</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td>📱 QR Code</td><td class="hl"><span class="ck">&#x2713;</span> QRコード生成</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-tool-toggle">ツール個別ON/OFF</td><td class="hl"><span class="ck">&#x2713;</span> 設定画面で切替</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr class="cat-row"><td colspan="7" id="cat-tools">Built-in Tools</td></tr>
+      <tr><td>🔍 Web Search</td><td class="hl"><span class="ck">&#x2713;</span> Brave + Bing + Jinaフォールバック</td><td><span class="ck">&#x2713;</span> Brave Search</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td>🌐 Web Fetch</td><td class="hl"><span class="ck">&#x2713;</span> Jina Reader対応</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td>🧮 Calculator</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>🌤 Weather</td><td class="hl"><span class="ck">&#x2713;</span> Open-Meteo API</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td>🌍 Translate</td><td class="hl"><span class="ck">&#x2713;</span> MyMemory API</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>📚 Wikipedia</td><td class="hl"><span class="ck">&#x2713;</span> REST API + 検索フォールバック</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td>🕐 DateTime</td><td class="hl"><span class="ck">&#x2713;</span> 全タイムゾーン対応</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>📰 News Search</td><td class="hl"><span class="ck">&#x2713;</span> 最新ニュース検索</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td>📱 QR Code</td><td class="hl"><span class="ck">&#x2713;</span> QRコード生成</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>💻 Shell / ファイル操作</td><td class="hl"><span class="cx">&#x2717;</span> セキュリティ上制限</td><td><span class="ck">&#x2713;</span> フルアクセス</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>🖥 ブラウザ自動操作</td><td class="hl"><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span> Puppeteer</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>🧠 永続メモリ</td><td class="hl"><span class="cp">&#x25CB;</span> セッション単位</td><td><span class="ck">&#x2713;</span> ローカルMarkdown</td><td><span class="cp">&#x25CB;</span> セッション単位</td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-tool-toggle">ツール個別ON/OFF</td><td class="hl"><span class="ck">&#x2713;</span> 設定画面で切替</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>🔌 拡張性</td><td class="hl"><span class="ck">&#x2713;</span> MCP対応で無限拡張</td><td><span class="ck">&#x2713;</span> 700+ ClawHubスキル</td><td><span class="ck">&#x2713;</span> MCP対応</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
 
       <!-- Channels -->
-      <tr class="cat-row"><td colspan="5" id="cat-channels">Channels & Integration</td></tr>
-      <tr><td id="f-web">Web Chat</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-line">LINE連携</td><td class="hl"><span class="ck">&#x2713;</span> Webhook + 自動リンク</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-tg">Telegram Bot</td><td class="hl"><span class="ck">&#x2713;</span> Deep link + /start対応</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-sync">クロスチャネル同期</td><td class="hl"><span class="ck">&#x2713;</span> Web↔LINE↔Telegram</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-link">/link コマンド</td><td class="hl"><span class="ck">&#x2713;</span> コード発行→他チャネルで入力</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-qrlink">QRコードでリンク</td><td class="hl"><span class="ck">&#x2713;</span> スキャンで即連携</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-cli">CLI対応</td><td class="hl"><span class="ck">&#x2713;</span> nanobot chat --session で同期</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr class="cat-row"><td colspan="7" id="cat-channels">Channels & Integration</td></tr>
+      <tr><td id="f-web">Web Chat</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span> ローカルWebUI</td><td><span class="cx">&#x2717;</span> CLIのみ</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-line">LINE連携</td><td class="hl"><span class="ck">&#x2713;</span> Webhook + 自動リンク</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span> daemon経由</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-tg">Telegram Bot</td><td class="hl"><span class="ck">&#x2713;</span> Deep link + /start対応</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span> daemon経由</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>WhatsApp</td><td class="hl"><span class="cp">&#x25CB;</span> 開発中</td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>Discord / Slack / Teams</td><td class="hl"><span class="cp">&#x25CB;</span> 開発中</td><td><span class="ck">&#x2713;</span> 全対応</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-sync">クロスチャネル同期</td><td class="hl"><span class="ck">&#x2713;</span> Web↔LINE↔Telegram</td><td><span class="ck">&#x2713;</span> 全チャネル間</td><td><span class="ck">&#x2713;</span> CLI↔Web↔LINE↔TG</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-link">/link コマンド</td><td class="hl"><span class="ck">&#x2713;</span> コード発行→他チャネルで入力</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-qrlink">QRコードでリンク</td><td class="hl"><span class="ck">&#x2713;</span> スキャンで即連携</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-cli">CLI対応</td><td class="hl"><span class="ck">&#x2713;</span> nanobot chat --session で同期</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span> ネイティブCLI</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td>チャネル数</td><td class="hl"><span class="ck">&#x2713;</span> 5 (Web, LINE, TG, CLI, API)</td><td><span class="ck">&#x2713;</span> 12+ チャネル</td><td>CLI + daemon</td><td>1 (Web)</td><td>1 (Web)</td><td>1 (Web)</td></tr>
 
       <!-- Settings & Customization -->
-      <tr class="cat-row"><td colspan="5" id="cat-settings">Settings & Customization</td></tr>
-      <tr><td id="f-settings">設定画面</td><td class="hl"><span class="ck">&#x2713;</span> /settings で全設定変更可</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td></tr>
-      <tr><td id="f-lang">多言語対応</td><td class="hl"><span class="ck">&#x2713;</span> JA/EN/ZH/KO/ES/FR/DE</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-dark">ダークモード</td><td class="hl"><span class="ck">&#x2713;</span> デフォルト</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-peruser">ユーザー別設定保存</td><td class="hl"><span class="ck">&#x2713;</span> DynamoDBで永続化</td><td><span class="ck">&#x2713;</span> アカウント必須</td><td><span class="ck">&#x2713;</span> アカウント必須</td><td><span class="ck">&#x2713;</span> アカウント必須</td></tr>
+      <tr class="cat-row"><td colspan="7" id="cat-settings">Settings & Customization</td></tr>
+      <tr><td id="f-settings">設定画面</td><td class="hl"><span class="ck">&#x2713;</span> /settings で全設定変更可</td><td><span class="cp">&#x25CB;</span> 設定ファイル編集</td><td><span class="cp">&#x25CB;</span> 設定ファイル</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td></tr>
+      <tr><td id="f-lang">多言語対応</td><td class="hl"><span class="ck">&#x2713;</span> JA/EN/ZH/KO/ES/FR/DE</td><td><span class="cp">&#x25CB;</span> 英語中心</td><td><span class="cp">&#x25CB;</span> 英語中心</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-dark">ダークモード</td><td class="hl"><span class="ck">&#x2713;</span> デフォルト</td><td><span class="ck">&#x2713;</span></td><td>—</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-peruser">ユーザー別設定保存</td><td class="hl"><span class="ck">&#x2713;</span> DynamoDBで永続化</td><td><span class="ck">&#x2713;</span> ローカルファイル</td><td><span class="ck">&#x2713;</span> ローカル設定</td><td><span class="ck">&#x2713;</span> アカウント必須</td><td><span class="ck">&#x2713;</span> アカウント必須</td><td><span class="ck">&#x2713;</span> アカウント必須</td></tr>
 
       <!-- UX -->
-      <tr class="cat-row"><td colspan="5" id="cat-ux">UI/UX</td></tr>
-      <tr><td id="f-typing">タイプライター表示</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-thinking">段階的Thinking表示</td><td class="hl"><span class="ck">&#x2713;</span> 考え中→検索中→分析中→生成中</td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-toolbadge">ツール使用バッジ</td><td class="hl"><span class="ck">&#x2713;</span> 回答下部に表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-agentbadge">エージェントバッジ</td><td class="hl"><span class="ck">&#x2713;</span> どのエージェントが回答したか表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-elapsed">経過時間表示</td><td class="hl"><span class="ck">&#x2713;</span> リアルタイムで秒数表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr class="cat-row"><td colspan="7" id="cat-ux">UI/UX</td></tr>
+      <tr><td id="f-typing">タイプライター表示</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span> ストリーム出力</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-thinking">段階的Thinking表示</td><td class="hl"><span class="ck">&#x2713;</span> 考え中→検索中→分析中→生成中</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-toolbadge">ツール使用バッジ</td><td class="hl"><span class="ck">&#x2713;</span> 回答下部に表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-agentbadge">エージェントバッジ</td><td class="hl"><span class="ck">&#x2713;</span> どのエージェントが回答したか表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-elapsed">経過時間表示</td><td class="hl"><span class="ck">&#x2713;</span> リアルタイムで秒数表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
 
       <!-- API & Developer -->
-      <tr class="cat-row"><td colspan="5" id="cat-api">API & Developer</td></tr>
-      <tr><td id="f-restapi">REST API</td><td class="hl"><span class="ck">&#x2713;</span> 20+エンドポイント</td><td><span class="ck">&#x2713;</span> 有料</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span> 有料</td></tr>
-      <tr><td id="f-chatapi">Chat API</td><td class="hl"><span class="ck">&#x2713;</span> POST /api/v1/chat</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-sessionapi">Session API</td><td class="hl"><span class="ck">&#x2713;</span> CRUD操作</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-settingsapi">Settings API</td><td class="hl"><span class="ck">&#x2713;</span> GET/POST</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-webhookapi">Webhook API</td><td class="hl"><span class="ck">&#x2713;</span> LINE/Telegram/Stripe</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-billingapi">Billing API</td><td class="hl"><span class="ck">&#x2713;</span> Stripe統合</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr class="cat-row"><td colspan="7" id="cat-api">API & Developer</td></tr>
+      <tr><td id="f-restapi">REST API</td><td class="hl"><span class="ck">&#x2713;</span> 20+エンドポイント</td><td><span class="cp">&#x25CB;</span> ローカルGateway API</td><td><span class="ck">&#x2713;</span> 同一API</td><td><span class="ck">&#x2713;</span> 有料</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span> 有料</td></tr>
+      <tr><td id="f-chatapi">Chat API</td><td class="hl"><span class="ck">&#x2713;</span> POST /api/v1/chat</td><td><span class="cp">&#x25CB;</span> WebSocket</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-sessionapi">Session API</td><td class="hl"><span class="ck">&#x2713;</span> CRUD操作</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-settingsapi">Settings API</td><td class="hl"><span class="ck">&#x2713;</span> GET/POST</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-webhookapi">Webhook API</td><td class="hl"><span class="ck">&#x2713;</span> LINE/Telegram/Stripe</td><td><span class="ck">&#x2713;</span> Webhook triggers</td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-billingapi">Billing API</td><td class="hl"><span class="ck">&#x2713;</span> Stripe統合</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
 
       <!-- Billing -->
-      <tr class="cat-row"><td colspan="5" id="cat-billing">Billing & Pricing</td></tr>
-      <tr><td id="f-free">無料プラン</td><td class="hl"><span class="ck">&#x2713;</span> 1,000クレジット/月</td><td><span class="ck">&#x2713;</span> Limited</td><td><span class="ck">&#x2713;</span> Limited</td><td><span class="ck">&#x2713;</span> Limited</td></tr>
-      <tr><td id="f-starter">Starter</td><td class="hl"><span class="ck">&#x2713;</span> $9/月 (25,000クレジット)</td><td>$20/月</td><td>$20/月</td><td>$20/月</td></tr>
-      <tr><td id="f-pro">Pro</td><td class="hl"><span class="ck">&#x2713;</span> $29/月 (300,000クレジット)</td><td>$200/月</td><td>$250/月</td><td>—</td></tr>
-      <tr><td id="f-credits">クレジット制</td><td class="hl"><span class="ck">&#x2713;</span> モデル別消費量</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-coupon">クーポン対応</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-stripe">Stripe決済</td><td class="hl"><span class="ck">&#x2713;</span> クレカ/Apple Pay等</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr class="cat-row"><td colspan="7" id="cat-billing">Billing & Pricing</td></tr>
+      <tr><td id="f-free">無料プラン</td><td class="hl"><span class="ck">&#x2713;</span> 1,000クレジット/月</td><td><span class="ck">&#x2713;</span> ソフト無料（API代別途）</td><td><span class="ck">&#x2713;</span> 完全無料（API代別途）</td><td><span class="ck">&#x2713;</span> Limited</td><td><span class="ck">&#x2713;</span> Limited</td><td><span class="ck">&#x2713;</span> Limited</td></tr>
+      <tr><td id="f-starter">Starter</td><td class="hl"><span class="ck">&#x2713;</span> $9/月 (25,000クレジット)</td><td>—</td><td>—</td><td>$20/月</td><td>$20/月</td><td>$20/月</td></tr>
+      <tr><td id="f-pro">Pro</td><td class="hl"><span class="ck">&#x2713;</span> $29/月 (300,000クレジット)</td><td>—</td><td>—</td><td>$200/月</td><td>$250/月</td><td>—</td></tr>
+      <tr><td>月額目安</td><td class="hl">$0〜$29</td><td>$10〜$150+ (API代のみ)</td><td>$0 (API代のみ)</td><td>$0〜$200</td><td>$0〜$250</td><td>$0〜$20</td></tr>
+      <tr><td id="f-credits">クレジット制</td><td class="hl"><span class="ck">&#x2713;</span> モデル別消費量</td><td><span class="cx">&#x2717;</span> API従量課金</td><td><span class="cx">&#x2717;</span> API従量課金</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-stripe">Stripe決済</td><td class="hl"><span class="ck">&#x2713;</span> クレカ/Apple Pay等</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
 
       <!-- Infrastructure -->
-      <tr class="cat-row"><td colspan="5" id="cat-infra">Infrastructure</td></tr>
-      <tr><td id="f-oss">オープンソース</td><td class="hl"><span class="ck">&#x2713;</span> MIT License</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-selfhost">セルフホスト可</td><td class="hl"><span class="ck">&#x2713;</span> install.sh / Docker / Lambda</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-rust">Rustバックエンド</td><td class="hl"><span class="ck">&#x2713;</span> 高速・省メモリ</td><td>Python/Go</td><td>Internal</td><td>Internal</td></tr>
-      <tr><td id="f-gzip">gzip圧縮</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-hmac">HMAC署名検証</td><td class="hl"><span class="ck">&#x2713;</span> LINE/Stripe webhook</td><td>—</td><td>—</td><td>—</td></tr>
-      <tr><td id="f-health">ヘルスチェック</td><td class="hl"><span class="ck">&#x2713;</span> /health</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr class="cat-row"><td colspan="7" id="cat-infra">Infrastructure</td></tr>
+      <tr><td id="f-oss">オープンソース</td><td class="hl"><span class="ck">&#x2713;</span> MIT License</td><td><span class="ck">&#x2713;</span> MIT License (145K+ ★)</td><td><span class="ck">&#x2713;</span> MIT License</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-selfhost">セルフホスト可</td><td class="hl"><span class="ck">&#x2713;</span> install.sh / Docker / Lambda</td><td><span class="ck">&#x2713;</span> セルフホスト専用</td><td><span class="ck">&#x2713;</span> install.sh / Docker</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-rust">バックエンド言語</td><td class="hl"><span class="ck">&#x2713;</span> Rust (高速・省メモリ)</td><td>Node.js</td><td><span class="ck">&#x2713;</span> Rust</td><td>Python/Go</td><td>Internal</td><td>Internal</td></tr>
+      <tr><td>セットアップ難易度</td><td class="hl"><span class="ck">&#x2713;</span> 簡単（クラウドサービス）</td><td><span class="cp">&#x25CB;</span> 中〜高（自前サーバー必要）</td><td><span class="cp">&#x25CB;</span> 簡単（ワンコマンド）</td><td><span class="ck">&#x2713;</span> 簡単</td><td><span class="ck">&#x2713;</span> 簡単</td><td><span class="ck">&#x2713;</span> 簡単</td></tr>
+      <tr><td id="f-gzip">gzip圧縮</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-health">ヘルスチェック</td><td class="hl"><span class="ck">&#x2713;</span> /health</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td>—</td><td>—</td><td>—</td></tr>
 
       <!-- Security -->
-      <tr class="cat-row"><td colspan="5" id="cat-security">Security</td></tr>
-      <tr><td id="f-nosignup">サインアップ不要</td><td class="hl"><span class="ck">&#x2713;</span> セッションIDのみ</td><td><span class="cx">&#x2717;</span> アカウント必須</td><td><span class="cx">&#x2717;</span> Google必須</td><td><span class="cx">&#x2717;</span> アカウント必須</td></tr>
-      <tr><td id="f-allowlist">Allow List</td><td class="hl"><span class="ck">&#x2713;</span> チャネル別ユーザー制限</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-maskedid">セッションID マスク表示</td><td class="hl"><span class="ck">&#x2713;</span> webchat:****</td><td>—</td><td>—</td><td>—</td></tr>
-      <tr><td id="f-ratelimit">同時リクエスト制限</td><td class="hl"><span class="ck">&#x2713;</span> Free:10 / Paid:1,000</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr class="cat-row"><td colspan="7" id="cat-security">Security & Privacy</td></tr>
+      <tr><td>データの保存場所</td><td class="hl">クラウド (AWS DynamoDB)</td><td><span class="ck">&#x2713;</span> ローカルのみ</td><td><span class="ck">&#x2713;</span> ローカル + クラウド選択可</td><td>クラウド (OpenAI)</td><td>クラウド (Google)</td><td>クラウド</td></tr>
+      <tr><td id="f-nosignup">メールでログイン</td><td class="hl"><span class="ck">&#x2713;</span> パスワード不要</td><td><span class="cx">&#x2717;</span> 不要</td><td><span class="cx">&#x2717;</span> 不要</td><td><span class="cx">&#x2717;</span> アカウント必須</td><td><span class="cx">&#x2717;</span> Google必須</td><td><span class="cx">&#x2717;</span> アカウント必須</td></tr>
+      <tr><td>Google OAuth</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-allowlist">Allow List</td><td class="hl"><span class="ck">&#x2713;</span> チャネル別ユーザー制限</td><td><span class="cp">&#x25CB;</span> 設定で制限可</td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-ratelimit">同時リクエスト制限</td><td class="hl"><span class="ck">&#x2713;</span> Free:10 / Paid:1,000</td><td>—</td><td>—</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
     </tbody>
   </table>
+  </div>
 
   <!-- Feature detail cards -->
   <div class="sections">
@@ -281,13 +293,13 @@
 const T={
   ja:{
     title:'chatweb.ai 全機能一覧 & 比較',
-    subtitle:'オープンソースのマルチモデルAIプラットフォーム。9つのツール、6つのAIエージェント、5チャネル対応。',
+    subtitle:'オープンソースのマルチモデルAIプラットフォーム vs OpenClaw vs ChatGPT vs Gemini vs Perplexity',
     feature:'機能',cta:'無料で試してみる',pricing:'料金',contact:'お問い合わせ',
     sTools:'ビルトインツール',sAgents:'AIエージェント',sChannels:'チャネル',sProviders:'LLMプロバイダー',sApi:'APIエンドポイント',
   },
   en:{
     title:'chatweb.ai — Full Feature List & Comparison',
-    subtitle:'Open-source multi-model AI platform. 9 tools, 6 AI agents, 5 channels.',
+    subtitle:'Open-source multi-model AI platform vs OpenClaw vs ChatGPT vs Gemini vs Perplexity',
     feature:'Feature',cta:'Try Free',pricing:'Pricing',contact:'Contact',
     sTools:'Built-in Tools',sAgents:'AI Agents',sChannels:'Channels',sProviders:'LLM Providers',sApi:'API Endpoints',
   }

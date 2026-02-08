@@ -11,6 +11,8 @@ pub const SAAS_ALLOWED_TOOLS: &[&str] = &[
     "github_read_file",
     "github_create_or_update_file",
     "github_create_pr",
+    "google_calendar",
+    "gmail",
 ];
 
 /// List of tool names blocked in SaaS mode.
