@@ -20,6 +20,9 @@
   <meta name="twitter:title" content="chatweb.ai - AI Agent Platform">
   <meta name="twitter:description" content="AI assistant with web search, tools, and multi-channel support.">
   <meta name="twitter:image" content="https://chatweb.ai/og.svg">
+  <!-- Preconnect to API Gateway for faster first request -->
+  <link rel="preconnect" href="https://chatweb.ai">
+  <link rel="dns-prefetch" href="https://chatweb.ai">
   <style>
     :root {
       --bg: #09090b;
@@ -326,14 +329,59 @@
       align-self: flex-start;
       border-bottom-left-radius: 4px;
       color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    .msg.typing .dots { display: inline-flex; gap: 4px; }
-    .msg.typing .dots span {
-      width: 6px; height: 6px; background: var(--muted); border-radius: 50%;
-      animation: float 1.4s ease-in-out infinite;
+    .msg.typing .thinking-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      animation: fadeIn 0.3s ease-out;
     }
-    .msg.typing .dots span:nth-child(2) { animation-delay: 0.2s; }
-    .msg.typing .dots span:nth-child(3) { animation-delay: 0.4s; }
+    .msg.typing .thinking-icon {
+      font-size: 14px;
+      animation: pulse-glow 2s ease-in-out infinite;
+      display: inline-block;
+    }
+    .msg.typing .thinking-text {
+      transition: opacity 0.3s ease;
+    }
+    .msg.typing .thinking-elapsed {
+      font-size: 11px;
+      color: var(--muted);
+      opacity: 0.6;
+      font-variant-numeric: tabular-nums;
+    }
+    .msg.typing .shimmer-bar {
+      height: 3px;
+      width: 60px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--surface2) 25%, var(--accent) 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+    /* Tool badge on response */
+    .tool-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: var(--accent-hover);
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 12px;
+      padding: 2px 8px;
+      margin-top: 6px;
+      margin-right: 4px;
+    }
+    .tool-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
 
     /* Channel badge */
     .msg .channel-badge {
@@ -856,6 +904,11 @@
         <span class="cp" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span>
       </div>
       <div style="font-size:11px;color:var(--muted);margin-top:8px;" id="t-cli-sub"></div>
+      <div id="cli-sync-cmd" style="margin-top:10px;background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-family:'SF Mono','Fira Code',monospace;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="copyCliSync(this)">
+        <span style="color:var(--muted);">$</span> <span id="cli-sync-text" style="flex:1;text-align:left;word-break:break-all;"></span>
+        <span class="cp2" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;" id="t-cli-sync-hint"></div>
     </div>
 
     <div class="trust-bar fade-up fade-up-d2">
@@ -1064,7 +1117,7 @@
     <a href="/status">Status</a> &middot;
     <a href="/comparison" id="footer-comparison">Comparison</a> &middot;
     <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
-    <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
+    <a href="/contact">Contact</a> &middot;
     chatweb.ai &copy; 2025-2026
   </footer>
 
@@ -1074,6 +1127,11 @@
     const input = document.getElementById('input');
 
     let webSessionId = localStorage.getItem('webSessionId');
+    // Migrate old api: prefix to webchat:
+    if (webSessionId && webSessionId.startsWith('api:')) {
+      webSessionId = 'webchat:' + webSessionId.slice(4);
+      localStorage.setItem('webSessionId', webSessionId);
+    }
     if (!webSessionId) {
       webSessionId = 'webchat:' + crypto.randomUUID();
       localStorage.setItem('webSessionId', webSessionId);
@@ -1116,7 +1174,7 @@
       return match[1];
     }
 
-    function addMsg(text, who, useTypewriter = false, channel = null, agentName = null) {
+    function addMsg(text, who, useTypewriter = false, channel = null, agentName = null, toolsUsed = null) {
       const d = document.createElement('div');
       d.className = 'msg ' + who;
 
@@ -1174,23 +1232,36 @@
         return;
       }
 
-      // Helper to append agent badge after text
-      function appendAgentBadge() {
+      // Helper to append agent badge and tool badges after text
+      function appendBadges() {
         if (agentName && who === 'bot') {
           const badge = document.createElement('span');
           badge.className = 'agent-badge';
           badge.textContent = agentName;
           d.appendChild(badge);
         }
+        if (toolsUsed && toolsUsed.length > 0 && who === 'bot') {
+          const container = document.createElement('div');
+          container.className = 'tool-badges';
+          const lang = document.documentElement.lang || 'ja';
+          toolsUsed.forEach(tool => {
+            const tb = document.createElement('span');
+            tb.className = 'tool-badge';
+            const info = TOOL_LABELS[tool] || { icon: '\uD83D\uDD27', ja: tool, en: tool };
+            tb.textContent = info.icon + ' ' + (lang === 'ja' ? info.ja : info.en);
+            container.appendChild(tb);
+          });
+          d.appendChild(container);
+        }
       }
 
       if (who === 'bot' && useTypewriter && !channel) {
         msgs.appendChild(d);
-        typewriter(d, text).then(appendAgentBadge);
+        typewriter(d, text).then(appendBadges);
       } else {
         const textNode = document.createTextNode(text);
         d.appendChild(textNode);
-        appendAgentBadge();
+        appendBadges();
         msgs.appendChild(d);
         msgs.scrollTop = msgs.scrollHeight;
       }
@@ -1201,6 +1272,37 @@
       send();
     }
 
+    // Staged thinking status messages
+    const THINKING_STAGES = {
+      ja: [
+        { time: 0,    icon: '\u26A1', text: '\u8003\u3048\u4E2D...' },
+        { time: 1500, icon: '\uD83D\uDD0D', text: '\u60C5\u5831\u3092\u691C\u7D22\u4E2D...' },
+        { time: 4000, icon: '\uD83D\uDCCA', text: '\u30C7\u30FC\u30BF\u3092\u5206\u6790\u4E2D...' },
+        { time: 8000, icon: '\u270D\uFE0F', text: '\u56DE\u7B54\u3092\u751F\u6210\u4E2D...' },
+        { time: 15000, icon: '\u23F3', text: '\u3082\u3046\u5C11\u3057\u304A\u5F85\u3061...' },
+      ],
+      en: [
+        { time: 0,    icon: '\u26A1', text: 'Thinking...' },
+        { time: 1500, icon: '\uD83D\uDD0D', text: 'Searching...' },
+        { time: 4000, icon: '\uD83D\uDCCA', text: 'Analyzing data...' },
+        { time: 8000, icon: '\u270D\uFE0F', text: 'Generating response...' },
+        { time: 15000, icon: '\u23F3', text: 'Almost there...' },
+      ]
+    };
+
+    // Tool name display mapping
+    const TOOL_LABELS = {
+      web_search: { icon: '\uD83D\uDD0D', ja: 'Web\u691C\u7D22', en: 'Web Search' },
+      web_fetch: { icon: '\uD83C\uDF10', ja: '\u30DA\u30FC\u30B8\u53D6\u5F97', en: 'Page Fetch' },
+      calculator: { icon: '\uD83E\uDDEE', ja: '\u8A08\u7B97', en: 'Calculator' },
+      weather: { icon: '\u26C5', ja: '\u5929\u6C17', en: 'Weather' },
+      translate: { icon: '\uD83C\uDF0D', ja: '\u7FFB\u8A33', en: 'Translate' },
+      wikipedia: { icon: '\uD83D\uDCDA', ja: 'Wikipedia', en: 'Wikipedia' },
+      datetime: { icon: '\uD83D\uDD52', ja: '\u65E5\u6642', en: 'DateTime' },
+      qr_code: { icon: '\uD83D\uDCF1', ja: 'QR\u30B3\u30FC\u30C9', en: 'QR Code' },
+      news_search: { icon: '\uD83D\uDCF0', ja: '\u30CB\u30E5\u30FC\u30B9', en: 'News' },
+    };
+
     async function send() {
       const text = input.value.trim();
       if (!text) return;
@@ -1209,9 +1311,41 @@
 
       const typing = document.createElement('div');
       typing.className = 'msg typing';
-      typing.innerHTML = '<div class="dots"><span></span><span></span><span></span></div>';
+      const lang = document.documentElement.lang || 'ja';
+      const stages = THINKING_STAGES[lang] || THINKING_STAGES.ja;
+      typing.innerHTML = '<div class="thinking-status">'
+        + '<span class="thinking-icon">' + stages[0].icon + '</span>'
+        + '<span class="thinking-text">' + stages[0].text + '</span>'
+        + '<span class="thinking-elapsed">(0.0s)</span>'
+        + '</div>'
+        + '<div class="shimmer-bar"></div>';
       msgs.appendChild(typing);
       msgs.scrollTop = msgs.scrollHeight;
+
+      // Staged status transitions
+      const startTime = Date.now();
+      let stageIdx = 0;
+      const statusInterval = setInterval(() => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const elapsedEl = typing.querySelector('.thinking-elapsed');
+        if (elapsedEl) elapsedEl.textContent = '(' + elapsed + 's)';
+
+        const elapsedMs = Date.now() - startTime;
+        const nextStage = stages[stageIdx + 1];
+        if (nextStage && elapsedMs >= nextStage.time) {
+          stageIdx++;
+          const iconEl = typing.querySelector('.thinking-icon');
+          const textEl = typing.querySelector('.thinking-text');
+          if (iconEl) iconEl.textContent = stages[stageIdx].icon;
+          if (textEl) {
+            textEl.style.opacity = '0';
+            setTimeout(() => {
+              textEl.textContent = stages[stageIdx].text;
+              textEl.style.opacity = '1';
+            }, 150);
+          }
+        }
+      }, 100);
 
       try {
         const agentSel = document.getElementById('agent-select').value;
@@ -1222,14 +1356,15 @@
           body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
         });
         const d = await r.json();
+        clearInterval(statusInterval);
         typing.remove();
-        addMsg(d.response, 'bot', true, null, d.agent || null);
+        addMsg(d.response, 'bot', true, null, d.agent || null, d.tools_used || null);
         knownMsgCount += 2; // user + assistant messages
         startPolling();
       } catch {
+        clearInterval(statusInterval);
         typing.remove();
-        const lang = document.documentElement.lang;
-        addMsg(lang === 'ja' ? 'エラーが発生しました。もう一度お試しください。' : 'Something went wrong. Please try again.', 'bot');
+        addMsg(lang === 'ja' ? '\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002' : 'Something went wrong. Please try again.', 'bot');
       }
     }
 
@@ -1389,6 +1524,7 @@
         step3Title: '同期完了', step3Desc: '全チャネルの会話が統合されます',
         sessionLabel: 'あなたのセッションID:', sessionHint: 'クリックでコピー。LINE/Telegramに貼り付けで連携',
         cliTitle: 'コマンドラインでも使える', cliSub: 'nanobot chat "こんにちは!" | macOS, Linux',
+        cliSyncHint: 'Webの会話と同期してCLIを使う',
         bottomTitle: 'もっとパワフルに使いたい？',
         bottomSub: 'GPT-4o、Claude Sonnet、Claude Opusなど最先端モデルを月額$9から。',
         bottomCta: 'プランを比較する',
@@ -1430,6 +1566,7 @@
         step3Title: 'Synced!', step3Desc: 'All conversations are unified',
         sessionLabel: 'Your session ID:', sessionHint: 'Click to copy. Paste in LINE/Telegram to link',
         cliTitle: 'Use from command line', cliSub: 'nanobot chat "Hello!" | macOS, Linux',
+        cliSyncHint: 'Sync with your Web conversation from CLI',
         bottomTitle: 'Need more power?',
         bottomSub: 'Access GPT-4o, Claude Sonnet, Claude Opus and more from $9/month.',
         bottomCta: 'Compare Plans',
@@ -1525,6 +1662,8 @@
       document.getElementById('t-session-hint').textContent = t.sessionHint;
       document.getElementById('t-cli-title').textContent = t.cliTitle;
       document.getElementById('t-cli-sub').innerHTML = t.cliSub;
+      document.getElementById('cli-sync-text').textContent = 'nanobot chat --session ' + webSessionId + ' "Hello"';
+      document.getElementById('t-cli-sync-hint').textContent = t.cliSyncHint;
       document.getElementById('t-bottom-title').textContent = t.bottomTitle;
       document.getElementById('t-bottom-sub').textContent = t.bottomSub;
       document.getElementById('t-bottom-cta').textContent = t.bottomCta;
@@ -1559,8 +1698,31 @@
       renderRecipes(l);
     }
 
-    // Show session ID
-    document.getElementById('session-id-display').textContent = webSessionId;
+    // CLI sync command copy helper
+    function copyCliSync(el) {
+      const cmd = 'nanobot chat --session ' + webSessionId + ' "Hello"';
+      navigator.clipboard.writeText(cmd);
+      const cp = el.querySelector('.cp2');
+      if (cp) { cp.textContent = 'Copied!'; setTimeout(() => cp.textContent = 'Copy', 1500); }
+    }
+
+    // Show session ID (masked for display, full ID on click to copy)
+    function maskSessionId(id) {
+      const parts = id.split(':');
+      if (parts.length === 2) {
+        const uuid = parts[1];
+        return parts[0] + ':' + uuid.substring(0, 8) + '********';
+      }
+      return id;
+    }
+    const sessionDisplay = document.getElementById('session-id-display');
+    sessionDisplay.textContent = maskSessionId(webSessionId);
+    sessionDisplay.title = webSessionId;
+    sessionDisplay.onclick = function() {
+      navigator.clipboard.writeText(webSessionId);
+      this.style.opacity = 0.5;
+      setTimeout(() => this.style.opacity = 1, 300);
+    };
 
     // Channel deep links with auto-link session ID
     function getLineDeepLink() {

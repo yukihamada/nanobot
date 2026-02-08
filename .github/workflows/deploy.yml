@@ -84,6 +84,7 @@ jobs:
             --no-fail-on-empty-changeset \
             --parameter-overrides \
               "OpenaiApiKey=${{ secrets.OPENAI_API_KEY }}" \
+              "BraveApiKey=${{ secrets.BRAVE_API_KEY }}" \
               "NanobotModel=openai/gpt-4o"
 
       # 新バージョン発行 → カナリア (10%)

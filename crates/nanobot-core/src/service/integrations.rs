@@ -49,6 +49,11 @@ impl ToolRegistry {
             Box::new(WebFetchTool),
             Box::new(CalculatorTool),
             Box::new(WeatherTool),
+            Box::new(TranslateTool),
+            Box::new(WikipediaTool),
+            Box::new(DateTimeTool),
+            Box::new(QrCodeTool),
+            Box::new(NewsSearchTool),
         ];
         Self { tools }
     }
@@ -189,6 +194,140 @@ impl Tool for WeatherTool {
     }
 }
 
+/// Translate tool.
+pub struct TranslateTool;
+
+#[async_trait]
+impl Tool for TranslateTool {
+    fn name(&self) -> &str { "translate" }
+    fn description(&self) -> &str {
+        "Translate text between languages using MyMemory API. Free, no API key required."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "text": { "type": "string", "description": "Text to translate" },
+                "from": { "type": "string", "description": "Source language code (e.g., 'ja', 'en', 'zh', 'ko', 'fr', 'de')" },
+                "to": { "type": "string", "description": "Target language code (e.g., 'en', 'ja', 'zh', 'ko', 'fr', 'de')" }
+            },
+            "required": ["text", "from", "to"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let text = params.get("text").and_then(|v| v.as_str()).unwrap_or("");
+        let from = params.get("from").and_then(|v| v.as_str()).unwrap_or("auto");
+        let to = params.get("to").and_then(|v| v.as_str()).unwrap_or("en");
+        execute_translate(text, from, to).await
+    }
+}
+
+/// Wikipedia tool.
+pub struct WikipediaTool;
+
+#[async_trait]
+impl Tool for WikipediaTool {
+    fn name(&self) -> &str { "wikipedia" }
+    fn description(&self) -> &str {
+        "Search Wikipedia and get article summaries. Good for factual information, definitions, and background knowledge."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string", "description": "The topic to search for" },
+                "lang": { "type": "string", "description": "Wikipedia language code (e.g., 'en', 'ja'). Default: 'en'" }
+            },
+            "required": ["query"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
+        let lang = params.get("lang").and_then(|v| v.as_str()).unwrap_or("en");
+        execute_wikipedia(query, lang).await
+    }
+}
+
+/// DateTime tool.
+pub struct DateTimeTool;
+
+#[async_trait]
+impl Tool for DateTimeTool {
+    fn name(&self) -> &str { "datetime" }
+    fn description(&self) -> &str {
+        "Get current date and time in any timezone, or convert between timezones."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "timezone": { "type": "string", "description": "Timezone (e.g., 'Asia/Tokyo', 'America/New_York', 'Europe/London', 'UTC'). Default: UTC" }
+            },
+            "required": []
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let tz = params.get("timezone").and_then(|v| v.as_str()).unwrap_or("UTC");
+        execute_datetime(tz)
+    }
+}
+
+/// URL Shortener / QR Code tool.
+pub struct QrCodeTool;
+
+#[async_trait]
+impl Tool for QrCodeTool {
+    fn name(&self) -> &str { "qr_code" }
+    fn description(&self) -> &str {
+        "Generate a QR code image URL for any text or URL."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "data": { "type": "string", "description": "The text or URL to encode in the QR code" },
+                "size": { "type": "integer", "description": "QR code size in pixels (100-1000). Default: 300" }
+            },
+            "required": ["data"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let data = params.get("data").and_then(|v| v.as_str()).unwrap_or("");
+        let size = params.get("size").and_then(|v| v.as_i64()).unwrap_or(300);
+        let size = size.clamp(100, 1000);
+        format!(
+            "QR Code generated:\nURL: https://api.qrserver.com/v1/create-qr-code/?size={}x{}&data={}\n\nYou can share this URL to display the QR code.",
+            size, size, urlencoding::encode(data)
+        )
+    }
+}
+
+/// Brave News Search tool.
+pub struct NewsSearchTool;
+
+#[async_trait]
+impl Tool for NewsSearchTool {
+    fn name(&self) -> &str { "news_search" }
+    fn description(&self) -> &str {
+        "Search for recent news articles. Use this for breaking news, current events, and trending topics."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string", "description": "News search query" },
+                "freshness": { "type": "string", "description": "How recent: 'pd' (24h), 'pw' (7 days), 'pm' (30 days). Default: 'pw'" }
+            },
+            "required": ["query"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
+        let freshness = params.get("freshness").and_then(|v| v.as_str()).unwrap_or("pw");
+        execute_news_search(query, freshness).await
+    }
+}
+
 /// Available integration types.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -197,6 +336,11 @@ pub enum IntegrationType {
     WebFetch,
     Weather,
     Calculator,
+    Translate,
+    Wikipedia,
+    DateTime,
+    QrCode,
+    NewsSearch,
     Gmail,
     Calendar,
     Notion,
@@ -315,6 +459,34 @@ pub async fn execute_tool(name: &str, arguments: &HashMap<String, serde_json::Va
                 .and_then(|v| v.as_str())
                 .unwrap_or("Tokyo");
             execute_weather(location).await
+        }
+        "translate" => {
+            let text = arguments.get("text").and_then(|v| v.as_str()).unwrap_or("");
+            let from = arguments.get("from").and_then(|v| v.as_str()).unwrap_or("auto");
+            let to = arguments.get("to").and_then(|v| v.as_str()).unwrap_or("en");
+            execute_translate(text, from, to).await
+        }
+        "wikipedia" => {
+            let query = arguments.get("query").and_then(|v| v.as_str()).unwrap_or("");
+            let lang = arguments.get("lang").and_then(|v| v.as_str()).unwrap_or("en");
+            execute_wikipedia(query, lang).await
+        }
+        "datetime" => {
+            let tz = arguments.get("timezone").and_then(|v| v.as_str()).unwrap_or("UTC");
+            execute_datetime(tz)
+        }
+        "qr_code" => {
+            let data = arguments.get("data").and_then(|v| v.as_str()).unwrap_or("");
+            let size = arguments.get("size").and_then(|v| v.as_i64()).unwrap_or(300);
+            format!(
+                "QR Code: https://api.qrserver.com/v1/create-qr-code/?size={}x{}&data={}",
+                size.clamp(100, 1000), size.clamp(100, 1000), urlencoding::encode(data)
+            )
+        }
+        "news_search" => {
+            let query = arguments.get("query").and_then(|v| v.as_str()).unwrap_or("");
+            let freshness = arguments.get("freshness").and_then(|v| v.as_str()).unwrap_or("pw");
+            execute_news_search(query, freshness).await
         }
         _ => format!("Unknown tool: {}", name),
     }
@@ -847,6 +1019,201 @@ async fn execute_weather(location: &str) -> String {
     )
 }
 
+/// Translate text using MyMemory API (free, no key required).
+async fn execute_translate(text: &str, from: &str, to: &str) -> String {
+    if text.is_empty() {
+        return "No text provided to translate.".to_string();
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let url = format!(
+        "https://api.mymemory.translated.net/get?q={}&langpair={}|{}",
+        urlencoding::encode(text),
+        urlencoding::encode(from),
+        urlencoding::encode(to)
+    );
+
+    match client.get(&url).send().await {
+        Ok(resp) => {
+            if let Ok(data) = resp.json::<serde_json::Value>().await {
+                let translated = data
+                    .pointer("/responseData/translatedText")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Translation failed");
+                let match_score = data
+                    .pointer("/responseData/match")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                format!(
+                    "Translation ({} → {}):\n\nOriginal: {}\nTranslated: {}\nConfidence: {:.0}%",
+                    from, to, text, translated, match_score * 100.0
+                )
+            } else {
+                "Failed to parse translation response.".to_string()
+            }
+        }
+        Err(e) => format!("Translation error: {}", e),
+    }
+}
+
+/// Search Wikipedia and get article summaries.
+async fn execute_wikipedia(query: &str, lang: &str) -> String {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let url = format!(
+        "https://{}.wikipedia.org/api/rest_v1/page/summary/{}",
+        lang,
+        urlencoding::encode(query)
+    );
+
+    match client.get(&url)
+        .header("User-Agent", "chatweb.ai/1.0 (https://chatweb.ai)")
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            if !resp.status().is_success() {
+                // Try search API as fallback
+                let search_url = format!(
+                    "https://{}.wikipedia.org/w/api.php?action=query&list=search&srsearch={}&utf8=&format=json&srlimit=3",
+                    lang, urlencoding::encode(query)
+                );
+                if let Ok(sr) = client.get(&search_url).send().await {
+                    if let Ok(data) = sr.json::<serde_json::Value>().await {
+                        if let Some(results) = data.pointer("/query/search").and_then(|v| v.as_array()) {
+                            let mut output = format!("Wikipedia search results for \"{}\":\n\n", query);
+                            for (i, r) in results.iter().take(3).enumerate() {
+                                let title = r.get("title").and_then(|v| v.as_str()).unwrap_or("");
+                                let snippet = r.get("snippet").and_then(|v| v.as_str()).unwrap_or("");
+                                let clean = strip_html_tags(snippet);
+                                output.push_str(&format!(
+                                    "{}. {}\n   https://{}.wikipedia.org/wiki/{}\n   {}\n\n",
+                                    i + 1, title, lang, urlencoding::encode(title), clean
+                                ));
+                            }
+                            return output;
+                        }
+                    }
+                }
+                return format!("No Wikipedia article found for \"{}\".", query);
+            }
+
+            match resp.json::<serde_json::Value>().await {
+                Ok(data) => {
+                    let title = data.get("title").and_then(|v| v.as_str()).unwrap_or(query);
+                    let extract = data.get("extract").and_then(|v| v.as_str()).unwrap_or("No summary available.");
+                    let url = data.pointer("/content_urls/desktop/page").and_then(|v| v.as_str()).unwrap_or("");
+                    format!(
+                        "Wikipedia: {}\n\n{}\n\nURL: {}",
+                        title, extract, url
+                    )
+                }
+                Err(_) => format!("Failed to parse Wikipedia response for \"{}\".", query),
+            }
+        }
+        Err(e) => format!("Wikipedia error: {}", e),
+    }
+}
+
+/// Get current datetime in specified timezone.
+fn execute_datetime(tz: &str) -> String {
+    let now = chrono::Utc::now();
+    // Map common timezone names to UTC offsets
+    let offset_hours: i32 = match tz.to_lowercase().as_str() {
+        "jst" | "asia/tokyo" | "japan" => 9,
+        "kst" | "asia/seoul" | "korea" => 9,
+        "cst" | "asia/shanghai" | "china" | "asia/taipei" => 8,
+        "ist" | "asia/kolkata" | "india" => 5,  // +5:30 approximated
+        "gmt" | "utc" | "europe/london" => 0,
+        "cet" | "europe/paris" | "europe/berlin" => 1,
+        "eet" | "europe/athens" => 2,
+        "est" | "america/new_york" | "us/eastern" => -5,
+        "cst_us" | "america/chicago" | "us/central" => -6,
+        "mst" | "america/denver" | "us/mountain" => -7,
+        "pst" | "america/los_angeles" | "us/pacific" => -8,
+        "hst" | "pacific/honolulu" | "hawaii" => -10,
+        "aest" | "australia/sydney" => 11,
+        "nzst" | "pacific/auckland" => 13,
+        _ => {
+            // Try to parse as +N or -N
+            if let Ok(n) = tz.parse::<i32>() {
+                n
+            } else {
+                0 // default UTC
+            }
+        }
+    };
+
+    let offset = chrono::FixedOffset::east_opt(offset_hours * 3600).unwrap_or_else(|| chrono::FixedOffset::east_opt(0).unwrap());
+    let local = now.with_timezone(&offset);
+
+    format!(
+        "Current time in {} (UTC{}{}):\n\nDate: {}\nTime: {}\nDay: {}\nUnix timestamp: {}",
+        tz,
+        if offset_hours >= 0 { "+" } else { "" },
+        offset_hours,
+        local.format("%Y-%m-%d"),
+        local.format("%H:%M:%S"),
+        local.format("%A"),
+        now.timestamp()
+    )
+}
+
+/// Search for recent news using Brave Search API with freshness filter.
+async fn execute_news_search(query: &str, freshness: &str) -> String {
+    if let Ok(brave_key) = std::env::var("BRAVE_API_KEY") {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
+        let url = format!(
+            "https://api.search.brave.com/res/v1/web/search?q={}&count=8&freshness={}",
+            urlencoding::encode(query),
+            freshness
+        );
+
+        match client.get(&url)
+            .header("Accept", "application/json")
+            .header("X-Subscription-Token", &brave_key)
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                if let Ok(data) = resp.json::<serde_json::Value>().await {
+                    let mut results = Vec::new();
+                    if let Some(web) = data.get("web").and_then(|v| v.get("results")).and_then(|v| v.as_array()) {
+                        for (i, r) in web.iter().take(8).enumerate() {
+                            let title = r.get("title").and_then(|v| v.as_str()).unwrap_or("");
+                            let url = r.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                            let desc = r.get("description").and_then(|v| v.as_str()).unwrap_or("");
+                            let age = r.get("age").and_then(|v| v.as_str()).unwrap_or("");
+                            if !title.is_empty() {
+                                let age_str = if !age.is_empty() { format!(" [{}]", age) } else { String::new() };
+                                results.push(format!("{}. {}{}\n   URL: {}\n   {}", i + 1, title, age_str, url, desc));
+                            }
+                        }
+                    }
+                    if !results.is_empty() {
+                        return format!("News results for \"{}\":\n\n{}", query, results.join("\n\n"));
+                    }
+                }
+            }
+            Err(e) => tracing::warn!("news_search: Brave API error: {}", e),
+        }
+    }
+
+    // Fallback to regular web search with news-focused query
+    execute_web_search(&format!("{} news latest", query)).await
+}
+
 /// Strip HTML tags from text, removing script/style content entirely.
 fn strip_html_tags(html: &str) -> String {
     // First, remove <script>...</script> and <style>...</style> blocks entirely
@@ -968,6 +1335,46 @@ pub fn list_integrations() -> Vec<Integration> {
             auth_url: None,
         },
         Integration {
+            integration_type: IntegrationType::Translate,
+            name: "Translate".to_string(),
+            description: "Translate text between languages".to_string(),
+            enabled: true,
+            requires_auth: false,
+            auth_url: None,
+        },
+        Integration {
+            integration_type: IntegrationType::Wikipedia,
+            name: "Wikipedia".to_string(),
+            description: "Search Wikipedia articles and summaries".to_string(),
+            enabled: true,
+            requires_auth: false,
+            auth_url: None,
+        },
+        Integration {
+            integration_type: IntegrationType::DateTime,
+            name: "Date & Time".to_string(),
+            description: "Get current date/time in any timezone".to_string(),
+            enabled: true,
+            requires_auth: false,
+            auth_url: None,
+        },
+        Integration {
+            integration_type: IntegrationType::QrCode,
+            name: "QR Code".to_string(),
+            description: "Generate QR codes for any text or URL".to_string(),
+            enabled: true,
+            requires_auth: false,
+            auth_url: None,
+        },
+        Integration {
+            integration_type: IntegrationType::NewsSearch,
+            name: "News Search".to_string(),
+            description: "Search recent news articles".to_string(),
+            enabled: true,
+            requires_auth: false,
+            auth_url: None,
+        },
+        Integration {
             integration_type: IntegrationType::Gmail,
             name: "Gmail".to_string(),
             description: "Read and send emails via Gmail".to_string(),
@@ -1055,7 +1462,7 @@ mod tests {
     #[test]
     fn test_tool_registry_builtins() {
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 4);
+        assert_eq!(registry.len(), 9);
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
@@ -1064,21 +1471,25 @@ mod tests {
         assert!(names.contains(&"web_fetch"));
         assert!(names.contains(&"calculator"));
         assert!(names.contains(&"weather"));
+        assert!(names.contains(&"translate"));
+        assert!(names.contains(&"wikipedia"));
+        assert!(names.contains(&"datetime"));
+        assert!(names.contains(&"qr_code"));
+        assert!(names.contains(&"news_search"));
     }
 
     #[test]
-    fn test_tool_registry_definitions_match_legacy() {
+    fn test_tool_registry_includes_legacy() {
         let legacy = get_tool_definitions();
         let registry = ToolRegistry::with_builtins();
         let new = registry.get_definitions();
-        // Same number of tools
-        assert_eq!(legacy.len(), new.len());
-        // Same names in same order
-        for (l, n) in legacy.iter().zip(new.iter()) {
-            assert_eq!(
-                l.pointer("/function/name"),
-                n.pointer("/function/name"),
-            );
+        // Registry has at least as many tools as legacy
+        assert!(new.len() >= legacy.len());
+        // All legacy tools should be in registry
+        for l in &legacy {
+            let name = l.pointer("/function/name").and_then(|v| v.as_str()).unwrap();
+            assert!(new.iter().any(|n| n.pointer("/function/name").and_then(|v| v.as_str()) == Some(name)),
+                "Legacy tool '{}' not found in registry", name);
         }
     }
 

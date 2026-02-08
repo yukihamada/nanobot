@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use axum::{
     extract::{Path, State},
@@ -8,6 +9,7 @@ use axum::{
     Json, Router,
 };
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::compression::CompressionLayer;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::info;
@@ -47,6 +49,8 @@ pub struct AppState {
     pub lb_provider: Option<Arc<dyn LlmProvider>>,
     /// Unified tool registry (built-in + MCP tools)
     pub tool_registry: crate::service::integrations::ToolRegistry,
+    /// Per-user concurrent request tracker: session_key -> active count
+    pub concurrent_requests: dashmap::DashMap<String, AtomicU32>,
     #[cfg(feature = "dynamodb-backend")]
     pub dynamo_client: Option<aws_sdk_dynamodb::Client>,
     #[cfg(feature = "dynamodb-backend")]
@@ -76,6 +80,7 @@ impl AppState {
             provider,
             lb_provider,
             tool_registry,
+            concurrent_requests: dashmap::DashMap::new(),
             #[cfg(feature = "dynamodb-backend")]
             dynamo_client: None,
             #[cfg(feature = "dynamodb-backend")]
@@ -757,6 +762,8 @@ pub struct ChatResponse {
     pub session_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools_used: Option<Vec<String>>,
 }
 
 /// Response body for errors.
@@ -826,6 +833,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Pages
         .route("/pricing", get(handle_pricing))
         .route("/welcome", get(handle_welcome))
+        .route("/comparison", get(handle_comparison))
+        .route("/contact", get(handle_contact))
+        // Contact form submission
+        .route("/api/v1/contact", post(handle_contact_submit))
         // Status
         .route("/status", get(handle_status))
         // Admin
@@ -836,6 +847,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/install.sh", get(handle_install_sh))
         // Health
         .route("/health", get(handle_health))
+        .layer(CompressionLayer::new())
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
@@ -889,6 +901,7 @@ async fn handle_chat(
                 response,
                 session_id: req.session_id,
                 agent: None,
+                tools_used: None,
             });
         }
     }
@@ -900,6 +913,7 @@ async fn handle_chat(
                 response: "AI provider not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.".to_string(),
                 session_id: req.session_id,
                 agent: None,
+                tools_used: None,
             });
         }
     };
@@ -914,10 +928,67 @@ async fn handle_chat(
                     response: "クレジットが不足しています。プランをアップグレードしてください。\nYou've run out of credits. Please upgrade your plan at /pricing".to_string(),
                     session_id: req.session_id,
                     agent: None,
+                    tools_used: None,
                 });
             }
         }
     }
+
+    // Check concurrent request limit (10 for free, 1000 for paid)
+    let max_concurrent = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            let mut limit = 10u32; // free tier default
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                let user = get_or_create_user(dynamo, table, &session_key).await;
+                if user.plan == "starter" || user.plan == "pro" {
+                    limit = 1000;
+                }
+            }
+            limit
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { 10u32 }
+    };
+    // Increment concurrent count
+    {
+        state.concurrent_requests
+            .entry(session_key.clone())
+            .or_insert_with(|| AtomicU32::new(0));
+    }
+    let current = state.concurrent_requests
+        .get(&session_key)
+        .map(|v| v.value().fetch_add(1, Ordering::SeqCst))
+        .unwrap_or(0);
+    if current >= max_concurrent {
+        if let Some(v) = state.concurrent_requests.get(&session_key) {
+            v.value().fetch_sub(1, Ordering::SeqCst);
+        }
+        return Json(ChatResponse {
+            response: format!(
+                "同時リクエスト数が上限（{}）に達しました。しばらくお待ちください。\nConcurrent request limit ({}) reached. Please wait.",
+                max_concurrent, max_concurrent
+            ),
+            session_id: req.session_id,
+            agent: None,
+            tools_used: None,
+        });
+    }
+    // Decrement on exit via drop guard
+    let guard_key = session_key.clone();
+    let guard_state = state.clone();
+    struct ConcurrencyGuard {
+        key: String,
+        state: Arc<AppState>,
+    }
+    impl Drop for ConcurrencyGuard {
+        fn drop(&mut self) {
+            if let Some(v) = self.state.concurrent_requests.get(&self.key) {
+                v.value().fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+    }
+    let _guard = ConcurrencyGuard { key: guard_key, state: guard_state };
 
     // Multi-agent orchestration: route to best agent
     let (agent, clean_message) = detect_agent(&req.message);
@@ -972,7 +1043,7 @@ async fn handle_chat(
 
     info!("Calling LLM: model={}, tools={}, agent={}", model, tools.len(), agent.id);
 
-    let response_text = match provider.chat(&messages, tools_ref, model, max_tokens, temperature).await {
+    let (response_text, tools_used) = match provider.chat(&messages, tools_ref, model, max_tokens, temperature).await {
         Ok(completion) => {
             info!("LLM response: finish_reason={:?}, tool_calls={}, content_len={}",
                 completion.finish_reason, completion.tool_calls.len(),
@@ -992,7 +1063,7 @@ async fn handle_chat(
             // Handle tool calls: up to 3 rounds (search → fetch → answer)
             let mut current = completion;
             let mut conversation = messages.clone();
-            let mut all_tool_results = Vec::new();
+            let mut all_tool_results: Vec<(String, String, String)> = Vec::new();
 
             // Execute tool calls and get final answer
             if current.has_tool_calls() {
@@ -1018,6 +1089,34 @@ async fn handle_chat(
                 }).collect();
                 let tool_results: Vec<_> = futures::future::join_all(futures).await;
                 all_tool_results.extend(tool_results.iter().cloned());
+
+                // Log tool usage to DynamoDB
+                #[cfg(feature = "dynamodb-backend")]
+                {
+                    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                        let now = chrono::Utc::now();
+                        for (_, tool_name, tool_result) in &tool_results {
+                            let usage_pk = format!("USAGE#{}#{}", session_key, now.format("%Y%m%d"));
+                            let usage_sk = format!("{}#{}", now.to_rfc3339(), tool_name);
+                            let result_preview = if tool_result.len() > 200 {
+                                format!("{}...", &tool_result[..200])
+                            } else {
+                                tool_result.clone()
+                            };
+                            let _ = dynamo.put_item()
+                                .table_name(table)
+                                .item("pk", AttributeValue::S(usage_pk))
+                                .item("sk", AttributeValue::S(usage_sk))
+                                .item("tool", AttributeValue::S(tool_name.clone()))
+                                .item("result_len", AttributeValue::N(tool_result.len().to_string()))
+                                .item("result_preview", AttributeValue::S(result_preview))
+                                .item("session_id", AttributeValue::S(session_key.clone()))
+                                .item("timestamp", AttributeValue::S(now.to_rfc3339()))
+                                .send()
+                                .await;
+                        }
+                    }
+                }
 
                 let tc_json: Vec<serde_json::Value> = current.tool_calls.iter().take(2).map(|tc| {
                     serde_json::json!({
@@ -1066,19 +1165,26 @@ async fn handle_chat(
                 }
             }
 
+            // Collect tool names used
+            let tools_used_list: Vec<String> = all_tool_results.iter()
+                .map(|(_, name, _)| name.clone())
+                .collect();
+            let tools_used = if tools_used_list.is_empty() { None } else { Some(tools_used_list) };
+
             // Return final response
             let content = current.content.unwrap_or_default();
-            if content.is_empty() && !all_tool_results.is_empty() {
+            let text = if content.is_empty() && !all_tool_results.is_empty() {
                 all_tool_results.iter()
                     .map(|(_, name, result)| format!("[{}]\n{}", name, result))
                     .collect::<Vec<_>>().join("\n\n")
             } else {
                 content
-            }
+            };
+            (text, tools_used)
         }
         Err(e) => {
             tracing::error!("LLM error: {}", e);
-            format!("Error: {}", e)
+            (format!("Error: {}", e), None)
         }
     };
 
@@ -1095,6 +1201,7 @@ async fn handle_chat(
         response: response_text,
         session_id: req.session_id,
         agent: Some(agent.id.to_string()),
+        tools_used,
     })
 }
 
@@ -2146,6 +2253,83 @@ async fn handle_welcome() -> impl IntoResponse {
 /// GET /status — Status page
 async fn handle_status() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/status.html"))
+}
+
+/// GET /comparison — Service comparison page
+async fn handle_comparison() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/comparison.html"))
+}
+
+/// GET /contact — Contact / bug report page
+async fn handle_contact() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/contact.html"))
+}
+
+/// Contact form submission request.
+#[derive(Debug, Deserialize)]
+pub struct ContactRequest {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub email: String,
+    pub category: String,
+    pub message: String,
+    #[serde(default)]
+    pub session_id: String,
+}
+
+/// POST /api/v1/contact — Save contact/bug report to DynamoDB
+async fn handle_contact_submit(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ContactRequest>,
+) -> impl IntoResponse {
+    info!("Contact form: category={}, email={}", req.category, req.email);
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let id = uuid::Uuid::new_v4().to_string();
+            let now = chrono::Utc::now().to_rfc3339();
+            let result = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("CONTACT#{}", id)))
+                .item("sk", AttributeValue::S("SUBMITTED".to_string()))
+                .item("category", AttributeValue::S(req.category.clone()))
+                .item("message", AttributeValue::S(req.message.clone()))
+                .item("name", AttributeValue::S(req.name.clone()))
+                .item("email", AttributeValue::S(req.email.clone()))
+                .item("session_id", AttributeValue::S(req.session_id.clone()))
+                .item("created_at", AttributeValue::S(now))
+                .item("status", AttributeValue::S("new".to_string()))
+                .send()
+                .await;
+
+            match result {
+                Ok(_) => {
+                    info!("Contact saved: CONTACT#{}", id);
+                    return (StatusCode::OK, Json(serde_json::json!({
+                        "status": "ok",
+                        "id": id,
+                    })));
+                }
+                Err(e) => {
+                    tracing::error!("Failed to save contact: {}", e);
+                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                        "status": "error",
+                        "message": "Failed to save. Please try again.",
+                    })));
+                }
+            }
+        }
+    }
+
+    // Fallback when DynamoDB is not configured
+    let _ = state;
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "ok",
+        "message": "Received (no DB configured)",
+    })))
 }
 
 /// GET /admin — Admin dashboard

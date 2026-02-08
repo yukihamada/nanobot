@@ -40,6 +40,11 @@ Parameters:
     Type: String
     Description: Default LLM model
     Default: 'openai/gpt-4o'
+  BraveApiKey:
+    Type: String
+    NoEcho: true
+    Description: Brave Search API key
+    Default: ''
   TenantId:
     Type: String
     Description: Tenant ID for multi-tenant isolation
@@ -61,6 +66,9 @@ Resources:
       Architectures:
         - arm64
       CodeUri: ../target/lambda/bootstrap/
+      AutoPublishAlias: live
+      ProvisionedConcurrencyConfig:
+        ProvisionedConcurrentExecutions: 10
       Environment:
         Variables:
           RUST_LOG: nanobot=info
@@ -72,6 +80,7 @@ Resources:
           LINE_CHANNEL_ACCESS_TOKEN: !Ref LineChannelAccessToken
           LINE_ALLOW_FROM: !Ref LineAllowFrom
           NANOBOT_MODEL: !Ref NanobotModel
+          BRAVE_API_KEY: !Ref BraveApiKey
           NANOBOT_TENANT_ID: !Ref TenantId
           DYNAMODB_SESSIONS_TABLE: !Ref SessionsTable
       Policies:
