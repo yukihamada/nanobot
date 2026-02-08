@@ -181,6 +181,63 @@
     }
     .hero-cta .cta-secondary:hover { border-color: var(--accent); transform: translateY(-2px); }
 
+    /* Voice demo */
+    .voice-demo {
+      text-align: center;
+      margin-bottom: 28px;
+      padding: 0 16px;
+    }
+    .voice-demo-label {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .voice-demo-grid {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 0;
+    }
+    .voice-demo-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text);
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .voice-demo-btn:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .voice-demo-btn.playing {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+    .voice-demo-output {
+      max-width: 600px;
+      margin: 12px auto 0;
+      min-height: 48px;
+      font-size: 15px;
+      color: var(--muted);
+      line-height: 1.6;
+      transition: color 0.3s ease;
+    }
+    .voice-demo-output.active {
+      color: var(--text);
+    }
+
     /* Stats bar */
     .stats-bar {
       display: flex;
@@ -1671,6 +1728,8 @@
       .channel-cards { grid-template-columns: 1fr; }
       .recipe-grid { grid-template-columns: 1fr; }
       .chat-messages { height: 240px; }
+      .voice-demo-grid { gap: 8px; }
+      .voice-demo-btn { padding: 6px 12px; font-size: 13px; }
       .stats-bar { gap: 20px; }
       .stat-value { font-size: 20px; }
       .bottom-cta { padding: 28px 20px; }
@@ -1757,6 +1816,12 @@
         <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="document.getElementById('input').focus();return false;">無料で試す</a>
         <a href="/pricing" class="cta-secondary" id="t-hero-plans">プランを見る</a>
       </div>
+    </div>
+
+    <div class="voice-demo fade-up fade-up-d1">
+      <div class="voice-demo-label" id="t-voice-label">🎙️ AIの声を聴いてみよう</div>
+      <div class="voice-demo-grid" id="voice-demo-grid"></div>
+      <div class="voice-demo-output" id="voice-demo-output"></div>
     </div>
 
     <div class="stats-bar fade-up fade-up-d1">
@@ -2624,6 +2689,7 @@
         capMemory: '永続メモリ', capMemoryD: '会話横断で記憶を保持',
         capNote: 'MCPツールはModel Context Protocolで無限に拡張可能。',
         capNoteLink: 'ツール一覧を聞いてみる →',
+        voiceLabel: '🎙️ AIの声を聴いてみよう',
         loginBtn: 'ログイン',
         chatLoginPrompt: 'ログインして会話を始める',
         sidebarTitle: '会話履歴',
@@ -2673,6 +2739,7 @@
         capMemory: 'Memory', capMemoryD: 'Persistent cross-session memory',
         capNote: 'MCP tools are infinitely extensible via Model Context Protocol.',
         capNoteLink: 'Ask about available tools →',
+        voiceLabel: '🎙️ Listen to AI speak',
         loginBtn: 'Login',
         chatLoginPrompt: 'Login to start chatting',
         sidebarTitle: 'Conversations',
@@ -2682,6 +2749,127 @@
         appPlaceholder: 'Message chatweb.ai...',
       }
     };
+
+    // -----------------------------------------------------------------------
+    // Voice demo – "listen to AI speak" interactive section
+    // -----------------------------------------------------------------------
+    const DEMO_VOICES = [
+      { icon: '🌤️', ja: '天気', en: 'Weather',
+        text: '東京は晴れ、気温12度です。午後から少し雲が出るでしょう。お出かけには最適な一日です。' },
+      { icon: '📧', ja: 'メール', en: 'Email',
+        text: '件名、ミーティングのお礼。田中様、本日はお忙しい中お時間をいただきありがとうございました。' },
+      { icon: '🌍', ja: '翻訳', en: 'Translate',
+        text: '"Hello, how are you?" は日本語で「こんにちは、お元気ですか？」です。' },
+      { icon: '🍳', ja: 'レシピ', en: 'Recipe',
+        text: 'チャーハンの作り方。ご飯、卵、ネギを用意。フライパンを強火で熱して、卵を先に炒めます。' },
+      { icon: '💡', ja: '豆知識', en: 'Fun Fact',
+        text: 'タコの心臓は3つあります。2つはエラに血液を送り、1つは全身に血液を送ります。' },
+      { icon: '🧮', ja: '計算', en: 'Calculate',
+        text: '消費税10パーセント込みで、2,980円の商品は3,278円になります。' },
+    ];
+
+    let demoAudio = null;
+    let demoPlayingIdx = -1;
+    let demoTypewriterAbort = false;
+
+    function renderVoiceDemo(lang) {
+      const grid = document.getElementById('voice-demo-grid');
+      grid.innerHTML = '';
+      DEMO_VOICES.forEach((v, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'voice-demo-btn';
+        btn.textContent = v.icon + ' ' + (lang === 'ja' ? v.ja : v.en);
+        btn.onclick = () => playDemoVoice(i);
+        if (i === demoPlayingIdx) btn.classList.add('playing');
+        grid.appendChild(btn);
+      });
+    }
+
+    function stopDemoVoice() {
+      demoTypewriterAbort = true;
+      if (demoAudio && !demoAudio.paused) {
+        demoAudio.pause();
+        demoAudio.currentTime = 0;
+      }
+      demoAudio = null;
+      const prev = demoPlayingIdx;
+      demoPlayingIdx = -1;
+      // Remove playing class from all buttons
+      document.querySelectorAll('.voice-demo-btn').forEach(b => b.classList.remove('playing'));
+      const output = document.getElementById('voice-demo-output');
+      if (prev !== -1) {
+        output.classList.remove('active');
+      }
+      return prev;
+    }
+
+    async function playDemoVoice(idx) {
+      const prev = stopDemoVoice();
+      // Toggle off if same button
+      if (prev === idx) return;
+
+      demoPlayingIdx = idx;
+      demoTypewriterAbort = false;
+      const v = DEMO_VOICES[idx];
+      const btns = document.querySelectorAll('.voice-demo-btn');
+      if (btns[idx]) btns[idx].classList.add('playing');
+
+      // Typewriter into output
+      const output = document.getElementById('voice-demo-output');
+      output.textContent = '';
+      output.classList.add('active');
+
+      // Start typewriter (uses only demoTypewriterAbort to stop)
+      (function demoTypewrite() {
+        let i = 0;
+        function tick() {
+          if (demoTypewriterAbort) return;
+          if (i < v.text.length) {
+            output.textContent += v.text[i];
+            i++;
+            setTimeout(tick, 25);
+          } else {
+            // Typewriter finished — remove playing state if audio isn't playing
+            if (!demoAudio || demoAudio.paused || demoAudio.ended) {
+              demoPlayingIdx = -1;
+              if (btns[idx]) btns[idx].classList.remove('playing');
+            }
+          }
+        }
+        tick();
+      })();
+
+      // Fetch TTS audio
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (typeof authToken !== 'undefined' && authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
+        const r = await fetch(API + '/api/v1/speech/synthesize', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ text: v.text, session_id: typeof webSessionId !== 'undefined' ? webSessionId : 'demo' }),
+        });
+
+        if (!r.ok) throw new Error('TTS failed');
+        if (demoPlayingIdx !== idx) return; // User cancelled during fetch
+
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        demoAudio = new Audio(url);
+
+        demoAudio.onended = function() {
+          if (demoPlayingIdx === idx) {
+            demoPlayingIdx = -1;
+            if (btns[idx]) btns[idx].classList.remove('playing');
+          }
+          URL.revokeObjectURL(url);
+        };
+
+        demoAudio.play();
+      } catch(e) {
+        // TTS failed — typewriter continues independently, no-op here
+      }
+    }
 
     function renderRecipes(l) {
       const section = document.getElementById('recipe-section');
@@ -2806,6 +2994,9 @@
       if (appChLabel) appChLabel.textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
       if (document.body.classList.contains('app-mode')) appRenderSuggestions();
       renderRecipes(l);
+      // Voice demo
+      document.getElementById('t-voice-label').textContent = t.voiceLabel;
+      renderVoiceDemo(l);
     }
 
     // CLI sync command copy helper
