@@ -154,6 +154,19 @@ h1{font-size:24px;font-weight:600;margin-bottom:8px}
     <div class="tools-grid" id="toolsGrid"></div>
   </div>
 
+  <!-- Privacy / Log Settings -->
+  <div class="section" id="privacy-section" style="display:none;">
+    <h2><span class="icon">🔒</span> <span data-i18n="privacy_title">Privacy</span></h2>
+    <p style="font-size:13px;color:#888;margin-bottom:16px" data-i18n="privacy_desc">Control how your conversation data is stored. Available for paid plans.</p>
+    <div class="field">
+      <div class="tool-toggle" id="logToggle" onclick="toggleLogSetting()">
+        <div class="check"></div>
+        <span class="tool-name" data-i18n="log_label">Save conversation logs</span>
+      </div>
+      <div class="hint" data-i18n="log_hint">When disabled, messages will not be stored on the server after the session ends.</div>
+    </div>
+  </div>
+
   <!-- Language -->
   <div class="section">
     <h2><span class="icon">🌐</span> <span data-i18n="lang_title">Language</span></h2>
@@ -191,6 +204,7 @@ const TOOLS = [
 
 let currentSettings = {};
 let enabledTools = new Set(TOOLS.map(t => t.id)); // all enabled by default
+let logEnabled = true;
 
 function getSessionId() {
   let sid = localStorage.getItem('webSessionId');
@@ -229,6 +243,12 @@ function renderTools() {
   });
 }
 
+function toggleLogSetting() {
+  logEnabled = !logEnabled;
+  const el = document.getElementById('logToggle');
+  el.classList.toggle('active', logEnabled);
+}
+
 // Load settings from API
 async function loadSettings() {
   const sid = getSessionId();
@@ -250,6 +270,16 @@ async function loadSettings() {
     }
     if (currentSettings.enabled_tools) {
       enabledTools = new Set(currentSettings.enabled_tools);
+    }
+    // Log setting (only visible for paid users)
+    if (currentSettings.log_enabled !== undefined) {
+      logEnabled = currentSettings.log_enabled !== false;
+    }
+    const logToggle = document.getElementById('logToggle');
+    logToggle.classList.toggle('active', logEnabled);
+    // Show privacy section if user has a paid plan
+    if (data.plan && data.plan !== 'free') {
+      document.getElementById('privacy-section').style.display = '';
     }
     // Show API key status
     if (currentSettings.custom_api_keys) {
@@ -281,6 +311,7 @@ async function saveSettings() {
     temperature: parseFloat(document.getElementById('tempRange').value),
     enabled_tools: Array.from(enabledTools),
     language: document.getElementById('langSelect').value || null,
+    log_enabled: logEnabled,
   };
 
   // Collect API keys (only send non-empty ones)
@@ -341,6 +372,8 @@ const I18N = {
     temp_label: '温度 (Temperature)', temp_hint: '低い = 正確で決定的。高い = 創造的で多様。',
     keys_title: 'APIキー', keys_desc: '自分のAPIキーを使うと無制限にアクセスできます。キーは安全に保存され、共有されません。',
     tools_title: 'ツール', tools_desc: 'AIが会話中に使えるツールを有効/無効にします。',
+    privacy_title: 'プライバシー', privacy_desc: '会話データの保存方法を制御します。有料プランで利用可能。',
+    log_label: '会話ログを保存する', log_hint: '無効にすると、セッション終了後にメッセージがサーバーに保存されません。',
     lang_title: '言語', lang_label: '優先言語', save_btn: '設定を保存',
   }
 };

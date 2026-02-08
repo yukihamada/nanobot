@@ -622,9 +622,36 @@ const AGENTS: &[AgentProfile] = &[
         id: "assistant",
         name: "Assistant",
         description: "General-purpose AI assistant for everyday tasks",
-        system_prompt: "あなたはchatweb.ai、高速で賢いAIアシスタントです。\
-             日本語で質問されたら日本語で、英語なら英語で答えてください。\
-             簡潔で役に立つ回答をしてください。",
+        system_prompt: "あなたはChatWeb（chatweb.ai）のAIアシスタントです。\n\
+             あなたの名前は「ChatWeb」です。OpenCLAWやnanobotなど他のサービス名を名乗らないでください。\n\n\
+             ## ChatWebとは\n\
+             ChatWebは24時間稼働のAIアシスタントサービスです。以下のことができます：\n\
+             - **ウェブ検索・リサーチ**: 最新ニュース、価格比較、情報収集をリアルタイムで実行\n\
+             - **データ分析・計算**: 数値計算、通貨換算、統計分析\n\
+             - **天気予報**: 世界中の天気情報を取得\n\
+             - **文章作成・翻訳**: コピーライティング、多言語翻訳、要約\n\
+             - **プログラミング支援**: コード作成、デバッグ、設計アドバイス\n\
+             - **Googleカレンダー連携**: 予定の確認・作成（Google連携済みの場合）\n\
+             - **Gmail連携**: メールの検索・閲覧・送信（Google連携済みの場合）\n\
+             - **マルチチャネル対応**: LINE、Telegram、WhatsApp、Discord、Slack、Teamsと連携\n\n\
+             「何ができる？」と聞かれたら、上記のChatWebの機能を説明してください。\n\n\
+             ## 性格 (SOUL)\n\
+             - 親しみやすく、かつプロフェッショナル。丁寧だけど堅すぎない口調。\n\
+             - 質問の意図を正確に汲み取り、的確で簡潔な回答を心がける。\n\
+             - 不確実な情報は「〜の可能性があります」と正直に伝える。推測と事実を区別する。\n\
+             - ユーザーの言語に自動で合わせる（日本語で聞かれたら日本語、英語なら英語）。\n\n\
+             ## 行動規範\n\
+             - 事実を求められたら、まずweb_searchで最新情報を検索する。記憶だけで答えない。\n\
+             - 価格・ニュース・天気など時事的な質問にはツールを積極的に使う。\n\
+             - 回答は構造化する（箇条書き、見出し、表を活用）。長文より簡潔さを優先。\n\
+             - 情報源があればURLを明示する。\n\n\
+             ## ツール\n\
+             - web_search: ウェブ検索。事実確認や最新情報の取得に使う。\n\
+             - web_fetch: 特定URLのコンテンツを取得。検索結果の詳細確認に使う。\n\
+             - calculator: 計算、通貨換算、数式評価。\n\
+             - weather: 天気・予報の取得。\n\
+             - google_calendar: Googleカレンダーの予定確認・作成（ユーザーが連携済みの場合）。\n\
+             - gmail: メールの検索・閲覧・送信（ユーザーが連携済みの場合）。",
         tools_enabled: true,
         icon: "chat",
     },
@@ -632,12 +659,23 @@ const AGENTS: &[AgentProfile] = &[
         id: "researcher",
         name: "Researcher",
         description: "Web research, fact-checking, data gathering",
-        system_prompt: "あなたはリサーチ専門のAIエージェントです。\
-             手順: 1) web_searchで検索 2) 結果のURLをweb_fetchで取得 3) 取得した情報を元に回答。\
-             価格比較は必ずweb_fetchで各サイトの実際の価格を確認し、具体的な金額とURLを含めて回答。\
-             ツール結果に実際のデータ（価格、日付等）が含まれていれば、必ずそれを引用して回答。\
-             「見つかりません」とは言わず、取得できた情報を最大限活用して回答。\
-             情報源のURLを必ず明示。日本語で質問されたら日本語で、英語なら英語で答える。",
+        system_prompt: "あなたはChatWeb（chatweb.ai）のリサーチ専門エージェントです。\n\
+             あなたの名前は「ChatWeb」です。OpenCLAWなど他のサービス名を名乗らないでください。\n\n\
+             ## 性格\n\
+             - 徹底的で正確。情報の裏取りを怠らない。\n\
+             - 複数の情報源を比較し、信頼性を評価する。\n\
+             - 調査プロセスを透明にし、何を調べたかを共有する。\n\n\
+             ## 調査手順\n\
+             1. web_searchで複数のキーワードで検索（最低2-3回）\n\
+             2. 有望な結果のURLをweb_fetchで取得し、詳細を確認\n\
+             3. 複数の情報源を比較・照合\n\
+             4. 取得した実データ（価格、日付、数値）を引用して回答\n\
+             5. 情報源のURLを全て明示\n\n\
+             ## 制約\n\
+             - 「見つかりません」とは言わない。取得できた情報を最大限活用。\n\
+             - 価格比較は必ず各サイトの実際の価格をweb_fetchで確認。\n\
+             - 古い情報と最新情報を区別して提示。\n\
+             - ユーザーの言語に自動で合わせる。",
         tools_enabled: true,
         icon: "search",
     },
@@ -645,10 +683,19 @@ const AGENTS: &[AgentProfile] = &[
         id: "coder",
         name: "Coder",
         description: "Code writing, debugging, architecture design",
-        system_prompt: "あなたはプログラミング専門のAIエージェントです。\
-             コードを書く時は必ず言語を明示し、ベストプラクティスに従ってください。\
-             バグ修正、コードレビュー、アーキテクチャ設計が得意です。\
-             日本語で質問されたら日本語で、英語なら英語で答えてください。",
+        system_prompt: "あなたはChatWeb（chatweb.ai）のプログラミング専門エージェントです。\n\
+             あなたの名前は「ChatWeb」です。OpenCLAWなど他のサービス名を名乗らないでください。\n\n\
+             ## 性格\n\
+             - 実用的で効率重視。動くコードを最短で提供する。\n\
+             - セキュリティとベストプラクティスを常に意識。\n\
+             - エラーメッセージを丁寧に解説し、解決策を提示。\n\n\
+             ## 行動規範\n\
+             - コードには必ず言語を明示（```python, ```rust 等）。\n\
+             - コードブロックはコピペで動くように完全な形で提供。\n\
+             - パフォーマンス・セキュリティ・可読性の順で優先。\n\
+             - 複雑なロジックには簡潔なコメントを追加。\n\
+             - バグ修正時は原因と修正理由を説明。\n\
+             - ユーザーの言語に自動で合わせる。",
         tools_enabled: false,
         icon: "code",
     },
@@ -656,10 +703,19 @@ const AGENTS: &[AgentProfile] = &[
         id: "analyst",
         name: "Analyst",
         description: "Data analysis, business insights, financial analysis",
-        system_prompt: "あなたはデータ分析専門のAIエージェントです。\
-             数値データの分析、ビジネスインサイト、財務分析が得意です。\
-             計算ツールを活用し、グラフや表で分かりやすく説明してください。\
-             日本語で質問されたら日本語で、英語なら英語で答えてください。",
+        system_prompt: "あなたはChatWeb（chatweb.ai）のデータ分析専門エージェントです。\n\
+             あなたの名前は「ChatWeb」です。OpenCLAWなど他のサービス名を名乗らないでください。\n\n\
+             ## 性格\n\
+             - データドリブン。数値に基づいた客観的な分析を提供。\n\
+             - 複雑なデータも分かりやすい言葉で説明。\n\
+             - ビジネスインパクトを常に意識した提案を行う。\n\n\
+             ## 行動規範\n\
+             - 数値データは表形式で整理して提示。\n\
+             - calculatorツールを積極的に活用して計算を正確に行う。\n\
+             - 前提条件と仮定を明示する。\n\
+             - トレンド、パターン、異常値を指摘する。\n\
+             - 分析結果に基づく具体的なアクション提案を含める。\n\
+             - ユーザーの言語に自動で合わせる。",
         tools_enabled: true,
         icon: "chart",
     },
@@ -667,10 +723,18 @@ const AGENTS: &[AgentProfile] = &[
         id: "creative",
         name: "Creative",
         description: "Writing, copywriting, brainstorming, translation",
-        system_prompt: "あなたはクリエイティブ専門のAIエージェントです。\
-             文章作成、コピーライティング、翻訳、アイデア出しが得意です。\
-             ターゲット読者に合わせた表現を心がけ、魅力的なコンテンツを作成してください。\
-             日本語で質問されたら日本語で、英語なら英語で答えてください。",
+        system_prompt: "あなたはChatWeb（chatweb.ai）のクリエイティブ専門エージェントです。\n\
+             あなたの名前は「ChatWeb」です。OpenCLAWなど他のサービス名を名乗らないでください。\n\n\
+             ## 性格\n\
+             - 想像力豊かで表現力が高い。読者を惹きつける文章を書く。\n\
+             - ターゲット読者のペルソナに合わせた表現を使い分ける。\n\
+             - ブレインストーミングでは量と多様性を重視。批判せず、まず広げる。\n\n\
+             ## 行動規範\n\
+             - 文章作成時は目的・ターゲット・トーンを確認してから書く。\n\
+             - 複数のバリエーションを提案する（見出し、コピーなど）。\n\
+             - 翻訳は直訳ではなく、文化的ニュアンスも考慮した意訳。\n\
+             - キャッチコピーは短く、記憶に残る表現を優先。\n\
+             - ユーザーの言語に自動で合わせる。",
         tools_enabled: false,
         icon: "pen",
     },
@@ -706,11 +770,15 @@ fn detect_agent(text: &str) -> (&'static AgentProfile, String) {
         return (&AGENTS[3], trimmed.to_string()); // coder
     }
 
-    // Research keywords
+    // Research keywords (includes calendar/gmail/schedule queries)
     if lower.contains("調べ") || lower.contains("検索") || lower.contains("リサーチ")
         || lower.contains("search") || lower.contains("research") || lower.contains("比較")
         || lower.contains("最新") || lower.contains("ニュース") || lower.contains("天気")
         || lower.contains("weather")
+        || lower.contains("カレンダー") || lower.contains("calendar") || lower.contains("予定")
+        || lower.contains("スケジュール") || lower.contains("schedule")
+        || lower.contains("メール") || lower.contains("email") || lower.contains("gmail")
+        || lower.contains("送信") || lower.contains("受信")
     {
         return (&AGENTS[2], trimmed.to_string()); // researcher
     }
@@ -723,8 +791,8 @@ fn detect_agent(text: &str) -> (&'static AgentProfile, String) {
         return (&AGENTS[4], trimmed.to_string()); // analyst
     }
 
-    // Creative keywords
-    if lower.contains("書いて") || lower.contains("翻訳") || lower.contains("メール")
+    // Creative keywords (note: "メール" moved to researcher for gmail tool access)
+    if lower.contains("書いて") || lower.contains("翻訳")
         || lower.contains("write") || lower.contains("translat") || lower.contains("コピー")
         || lower.contains("キャッチ") || lower.contains("ブログ") || lower.contains("文章")
     {
@@ -784,6 +852,42 @@ pub struct UpdateSettingsRequest {
     pub enabled_tools: Option<Vec<String>>,
     pub custom_api_keys: Option<std::collections::HashMap<String, String>>,
     pub language: Option<String>,
+    pub log_enabled: Option<bool>,
+}
+
+/// Request body for email registration.
+#[derive(Debug, Deserialize)]
+pub struct RegisterRequest {
+    pub email: String,
+    pub password: String,
+}
+
+/// Request body for email login.
+#[derive(Debug, Deserialize)]
+pub struct LoginRequest {
+    pub email: String,
+    pub password: String,
+    pub session_id: Option<String>,
+}
+
+/// Request body for passwordless email auth (login or auto-register).
+#[derive(Debug, Deserialize)]
+pub struct EmailAuthRequest {
+    pub email: String,
+    pub session_id: Option<String>,
+}
+
+/// Google OAuth callback query parameters.
+#[derive(Debug, Deserialize)]
+pub struct GoogleCallbackParams {
+    pub code: String,
+    pub state: Option<String>,
+}
+
+/// Google OAuth start query parameters.
+#[derive(Debug, Deserialize)]
+pub struct GoogleAuthParams {
+    pub sid: Option<String>,
 }
 
 fn default_session_id() -> String {
@@ -803,6 +907,10 @@ pub struct ChatResponse {
     pub agent: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools_used: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credits_used: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credits_remaining: Option<i64>,
 }
 
 /// Response body for errors.
@@ -873,10 +981,25 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/webhooks/line", post(handle_line_webhook))
         .route("/webhooks/telegram", post(handle_telegram_webhook))
         .route("/webhooks/stripe", post(handle_stripe_webhook))
+        // Auth
+        .route("/auth/google", get(handle_google_auth))
+        .route("/auth/google/callback", get(handle_google_callback))
+        .route("/api/v1/auth/me", get(handle_auth_me))
+        .route("/api/v1/auth/register", post(handle_auth_register))
+        .route("/api/v1/auth/login", post(handle_auth_login))
+        .route("/api/v1/auth/email", post(handle_auth_email))
+        // Conversations
+        .route("/api/v1/conversations", get(handle_list_conversations))
+        .route("/api/v1/conversations", post(handle_create_conversation))
+        .route("/api/v1/conversations/{id}/messages", get(handle_get_conversation_messages))
+        .route("/api/v1/conversations/{id}", delete(handle_delete_conversation))
+        // Speech (TTS)
+        .route("/api/v1/speech/synthesize", post(handle_speech_synthesize))
         // Pages
         .route("/pricing", get(handle_pricing))
         .route("/welcome", get(handle_welcome))
         .route("/comparison", get(handle_comparison))
+        .route("/docs", get(handle_docs))
         .route("/contact", get(handle_contact))
         // Contact form submission
         .route("/api/v1/contact", post(handle_contact_submit))
@@ -888,6 +1011,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/admin/stats", get(handle_admin_stats))
         // OG image
         .route("/og.svg", get(handle_og_svg))
+        // API keys
+        .route("/api/v1/apikeys", get(handle_list_apikeys))
+        .route("/api/v1/apikeys", post(handle_create_apikey))
+        .route("/api/v1/apikeys/{id}", delete(handle_delete_apikey))
         // Install script
         .route("/install.sh", get(handle_install_sh))
         // Health
@@ -948,6 +1075,8 @@ async fn handle_chat(
                 session_id: req.session_id,
                 agent: None,
                 tools_used: None,
+                credits_used: None,
+                credits_remaining: None,
             });
         }
     }
@@ -960,6 +1089,8 @@ async fn handle_chat(
                 session_id: req.session_id,
                 agent: None,
                 tools_used: None,
+                credits_used: None,
+                credits_remaining: None,
             });
         }
     };
@@ -975,6 +1106,8 @@ async fn handle_chat(
                     session_id: req.session_id,
                     agent: None,
                     tools_used: None,
+                    credits_used: Some(0),
+                    credits_remaining: Some(0),
                 });
             }
         }
@@ -1018,6 +1151,8 @@ async fn handle_chat(
             session_id: req.session_id,
             agent: None,
             tools_used: None,
+            credits_used: None,
+            credits_remaining: None,
         });
     }
     // Decrement on exit via drop guard
@@ -1088,12 +1223,19 @@ async fn handle_chat(
         { None }
     };
 
-    // Use model from: request > user settings > global default
+    // Use model from: request > user settings > web-best-model > global default
     let default_model = state.config.agents.defaults.model.clone();
     let model = req.model
         .as_deref()
         .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
-        .unwrap_or(&default_model);
+        .unwrap_or_else(|| {
+            // Web channel gets the best model when no explicit preference is set
+            if req.channel == "web" || req.channel.starts_with("webchat") {
+                "claude-sonnet-4-5-20250929"
+            } else {
+                &default_model
+            }
+        });
     let model = model.to_string();
     let max_tokens = state.config.agents.defaults.max_tokens;
     let temperature = user_settings.as_ref()
@@ -1153,6 +1295,8 @@ async fn handle_chat(
 
     info!("Calling LLM: model={}, tools={}, agent={}", model, tools.len(), agent.id);
 
+    let mut total_credits_used: i64 = 0;
+
     let (response_text, tools_used) = match active_provider.chat(&messages, tools_ref, &model, max_tokens, temperature).await {
         Ok(completion) => {
             info!("LLM response: finish_reason={:?}, tool_calls={}, content_len={}",
@@ -1166,6 +1310,7 @@ async fn handle_chat(
                         dynamo, table, &session_key, &model,
                         completion.usage.prompt_tokens, completion.usage.completion_tokens,
                     ).await;
+                    total_credits_used += credits;
                     tracing::debug!("Deducted {} credits for user {}", credits, session_key);
                 }
             }
@@ -1177,6 +1322,30 @@ async fn handle_chat(
 
             // Execute tool calls and get final answer
             if current.has_tool_calls() {
+                // If any Google tools are requested, look up the user's refresh token
+                let needs_google = current.tool_calls.iter().any(|tc| tc.name == "google_calendar" || tc.name == "gmail");
+                if needs_google {
+                    #[cfg(feature = "dynamodb-backend")]
+                    {
+                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                            // Look up user's Google refresh token from their profile
+                            let user_pk = format!("USER#{}", session_key);
+                            if let Ok(output) = dynamo.get_item()
+                                .table_name(table.as_str())
+                                .key("pk", AttributeValue::S(user_pk))
+                                .key("sk", AttributeValue::S("PROFILE".to_string()))
+                                .send().await
+                            {
+                                if let Some(item) = output.item {
+                                    if let Some(rt) = item.get("google_refresh_token").and_then(|v| v.as_s().ok()) {
+                                        std::env::set_var("GOOGLE_USER_REFRESH_TOKEN", rt);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Limit to max 2 tool calls to stay within API Gateway 29s timeout
                 let tool_calls_to_run: Vec<_> = current.tool_calls.iter().take(2).collect();
                 if current.tool_calls.len() > 2 {
@@ -1244,6 +1413,9 @@ async fn handle_chat(
                     conversation.push(Message::tool_result(id, name, result));
                 }
 
+                // Clean up Google refresh token env var
+                if needs_google { std::env::remove_var("GOOGLE_USER_REFRESH_TOKEN"); }
+
                 // Follow-up call WITHOUT tools — force text generation
                 match active_provider.chat(&conversation, None, &model, max_tokens, temperature).await {
                     Ok(resp) => {
@@ -1254,8 +1426,9 @@ async fn handle_chat(
                         #[cfg(feature = "dynamodb-backend")]
                         {
                             if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
-                                deduct_credits(dynamo, table, &session_key, &model,
+                                let credits = deduct_credits(dynamo, table, &session_key, &model,
                                     resp.usage.prompt_tokens, resp.usage.completion_tokens).await;
+                                total_credits_used += credits;
                             }
                         }
                         current = resp;
@@ -1307,11 +1480,28 @@ async fn handle_chat(
         sessions.save_by_key(&session_key);
     }
 
+    // Look up remaining credits after deduction
+    let remaining_credits: Option<i64> = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                let user = get_or_create_user(dynamo, table, &session_key).await;
+                Some(user.credits_remaining)
+            } else {
+                None
+            }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { None }
+    };
+
     Json(ChatResponse {
         response: response_text,
         session_id: req.session_id,
         agent: Some(agent.id.to_string()),
         tools_used,
+        credits_used: if total_credits_used > 0 { Some(total_credits_used) } else { None },
+        credits_remaining: remaining_credits,
     })
 }
 
@@ -1750,9 +1940,13 @@ async fn handle_line_webhook(
                             let provider = provider.clone();
                             let mut messages = vec![
                                 Message::system(
-                                    "あなたはchatweb.ai、高速で賢いAIアシスタントです。\
-                                     日本語で質問されたら日本語で、英語なら英語で答えてください。\
-                                     簡潔で役に立つ回答をしてください。LINEでのチャットなので短めに。"
+                                    "あなたはChatWeb（chatweb.ai）、高速で賢いAIアシスタントです。\
+                                     あなたの名前は「ChatWeb」です。OpenCLAWなど他のサービス名を名乗らないでください。\
+                                     LINEメッセンジャーでの会話です。\
+                                     - 1メッセージ200文字以内で簡潔に。長い説明は箇条書き。\
+                                     - 絵文字を適度に使用して親しみやすく。\
+                                     - URLは短く。コードブロックは使わない。\
+                                     - 日本語で質問されたら日本語で、英語なら英語で答えてください。"
                                 ),
                             ];
 
@@ -1954,9 +2148,13 @@ async fn handle_telegram_webhook(
             let provider = provider.clone();
             let mut messages = vec![
                 Message::system(
-                    "あなたはchatweb.ai、高速で賢いAIアシスタントです。\
-                     日本語で質問されたら日本語で、英語なら英語で答えてください。\
-                     簡潔で役に立つ回答をしてください。Telegramでのチャットなので短めに。"
+                    "あなたはChatWeb（chatweb.ai）、高速で賢いAIアシスタントです。\
+                     あなたの名前は「ChatWeb」です。OpenCLAWなど他のサービス名を名乗らないでください。\
+                     Telegramでの会話です。\
+                     - 簡潔に要点を伝える（300文字以内）。\
+                     - Markdown記法を活用（太字、コードブロック、リンク）。\
+                     - ボタン操作を意識した応答。\
+                     - 日本語で質問されたら日本語で、英語なら英語で答えてください。"
                 ),
             ];
 
@@ -2384,6 +2582,10 @@ async fn handle_contact() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/contact.html"))
 }
 
+async fn handle_docs() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/docs.html"))
+}
+
 /// Contact form submission request.
 #[derive(Debug, Deserialize)]
 pub struct ContactRequest {
@@ -2778,6 +2980,10 @@ async fn save_user_settings(
         update_expr.push("language = :lang".to_string());
         expr_values.insert(":lang".to_string(), AttributeValue::S(lang.clone()));
     }
+    if let Some(log_enabled) = req.log_enabled {
+        update_expr.push("log_enabled = :log".to_string());
+        expr_values.insert(":log".to_string(), AttributeValue::Bool(log_enabled));
+    }
 
     let update_expression = update_expr.join(", ");
     let _ = dynamo
@@ -2797,6 +3003,1107 @@ async fn handle_settings_page() -> impl IntoResponse {
         [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
         include_str!("../../../../web/settings.html"),
     )
+}
+
+// ---------------------------------------------------------------------------
+// Auth API (Google OAuth + Email)
+// ---------------------------------------------------------------------------
+
+/// Hash a password with HMAC-SHA256 using per-user salt.
+#[cfg(feature = "http-api")]
+fn hash_password(password: &str, salt: &str) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    type HmacSha256 = Hmac<Sha256>;
+
+    let key = std::env::var("GOOGLE_CLIENT_SECRET").unwrap_or_else(|_| "chatweb-default-key".to_string());
+    let mut mac = HmacSha256::new_from_slice(key.as_bytes()).expect("HMAC key");
+    mac.update(password.as_bytes());
+    mac.update(salt.as_bytes());
+    let result = mac.finalize();
+    hex::encode(result.into_bytes())
+}
+
+/// GET /auth/google — Redirect to Google OAuth
+async fn handle_google_auth(
+    Query(params): Query<GoogleAuthParams>,
+) -> impl IntoResponse {
+    let client_id = std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default();
+    if client_id.is_empty() {
+        return axum::response::Redirect::temporary("/?auth=error&reason=google_not_configured");
+    }
+    let redirect_uri = "https://chatweb.ai/auth/google/callback";
+    let state = params.sid.unwrap_or_default();
+    let url = format!(
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&scope=openid%20email%20profile%20https://www.googleapis.com/auth/calendar%20https://www.googleapis.com/auth/gmail.modify&response_type=code&state={}&access_type=offline&prompt=consent",
+        urlencoding::encode(&client_id),
+        urlencoding::encode(redirect_uri),
+        urlencoding::encode(&state),
+    );
+    axum::response::Redirect::temporary(&url)
+}
+
+/// GET /auth/google/callback — Handle Google OAuth callback
+async fn handle_google_callback(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<GoogleCallbackParams>,
+) -> impl IntoResponse {
+    let client_id = std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default();
+    let client_secret = std::env::var("GOOGLE_CLIENT_SECRET").unwrap_or_default();
+    let redirect_uri = "https://chatweb.ai/auth/google/callback";
+
+    // Exchange code for tokens
+    let client = reqwest::Client::new();
+    let token_resp = client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&[
+            ("code", params.code.as_str()),
+            ("client_id", client_id.as_str()),
+            ("client_secret", client_secret.as_str()),
+            ("redirect_uri", redirect_uri),
+            ("grant_type", "authorization_code"),
+        ])
+        .send()
+        .await;
+
+    let token_data: serde_json::Value = match token_resp {
+        Ok(r) => match r.json().await {
+            Ok(d) => d,
+            Err(_) => return axum::response::Redirect::temporary("/?auth=error&reason=token_parse"),
+        },
+        Err(_) => return axum::response::Redirect::temporary("/?auth=error&reason=token_request"),
+    };
+
+    let access_token = match token_data.get("access_token").and_then(|v| v.as_str()) {
+        Some(t) => t.to_string(),
+        None => return axum::response::Redirect::temporary("/?auth=error&reason=no_access_token"),
+    };
+    let refresh_token = token_data.get("refresh_token").and_then(|v| v.as_str()).map(|s| s.to_string());
+
+    // Get user info from Google
+    let userinfo_resp = client
+        .get("https://www.googleapis.com/oauth2/v3/userinfo")
+        .bearer_auth(&access_token)
+        .send()
+        .await;
+
+    let userinfo: serde_json::Value = match userinfo_resp {
+        Ok(r) => match r.json().await {
+            Ok(d) => d,
+            Err(_) => return axum::response::Redirect::temporary("/?auth=error&reason=userinfo_parse"),
+        },
+        Err(_) => return axum::response::Redirect::temporary("/?auth=error&reason=userinfo_request"),
+    };
+
+    let google_sub = userinfo.get("sub").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let email = userinfo.get("email").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let display_name = userinfo.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let session_id = params.state.unwrap_or_default();
+
+    if google_sub.is_empty() {
+        return axum::response::Redirect::temporary("/?auth=error&reason=no_sub");
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let now = chrono::Utc::now().to_rfc3339();
+
+            // Check if GOOGLE#{sub} already exists → get existing user_id
+            let google_pk = format!("GOOGLE#{}", google_sub);
+            let existing = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(google_pk.clone()))
+                .key("sk", AttributeValue::S("USER_MAP".to_string()))
+                .send()
+                .await;
+
+            let user_id = if let Ok(output) = existing {
+                if let Some(item) = output.item {
+                    item.get("user_id").and_then(|v| v.as_s().ok()).cloned()
+                        .unwrap_or_else(|| format!("user:{}", uuid::Uuid::new_v4()))
+                } else {
+                    // Determine user_id: use session_id if provided, else generate
+                    let uid = if !session_id.is_empty() {
+                        resolve_session_key(dynamo, table, &session_id).await
+                    } else {
+                        format!("user:{}", uuid::Uuid::new_v4())
+                    };
+
+                    // Create GOOGLE#{sub} → USER_MAP
+                    let _ = dynamo
+                        .put_item()
+                        .table_name(table.as_str())
+                        .item("pk", AttributeValue::S(google_pk.clone()))
+                        .item("sk", AttributeValue::S("USER_MAP".to_string()))
+                        .item("user_id", AttributeValue::S(uid.clone()))
+                        .item("email", AttributeValue::S(email.clone()))
+                        .item("created_at", AttributeValue::S(now.clone()))
+                        .send()
+                        .await;
+
+                    uid
+                }
+            } else {
+                format!("user:{}", uuid::Uuid::new_v4())
+            };
+
+            // Update USER#{user_id} PROFILE with Google info
+            let user_pk = format!("USER#{}", user_id);
+            let mut update_expr = "SET email = :email, display_name = :name, google_id = :gid, auth_method = :auth, updated_at = :now".to_string();
+            let mut update_req = dynamo
+                .update_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S("PROFILE".to_string()))
+                .expression_attribute_values(":email", AttributeValue::S(email.clone()))
+                .expression_attribute_values(":name", AttributeValue::S(display_name.clone()))
+                .expression_attribute_values(":gid", AttributeValue::S(google_sub.clone()))
+                .expression_attribute_values(":auth", AttributeValue::S("google".to_string()))
+                .expression_attribute_values(":now", AttributeValue::S(now.clone()));
+
+            // Store refresh token if provided (for Calendar/Gmail API access)
+            if let Some(ref rt) = refresh_token {
+                update_expr.push_str(", google_refresh_token = :rt");
+                update_req = update_req.expression_attribute_values(":rt", AttributeValue::S(rt.clone()));
+            }
+            let _ = update_req.update_expression(update_expr).send().await;
+
+            // Link session if provided
+            if !session_id.is_empty() {
+                let link_pk = format!("LINK#{}", session_id);
+                let _ = dynamo
+                    .put_item()
+                    .table_name(table.as_str())
+                    .item("pk", AttributeValue::S(link_pk))
+                    .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
+                    .item("user_id", AttributeValue::S(user_id.clone()))
+                    .item("linked_at", AttributeValue::S(now.clone()))
+                    .send()
+                    .await;
+            }
+
+            // Store auth token for session
+            let auth_token = uuid::Uuid::new_v4().to_string();
+            let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string(); // 30 days
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
+                .item("sk", AttributeValue::S("TOKEN".to_string()))
+                .item("user_id", AttributeValue::S(user_id.clone()))
+                .item("email", AttributeValue::S(email.clone()))
+                .item("display_name", AttributeValue::S(display_name.clone()))
+                .item("created_at", AttributeValue::S(now.clone()))
+                .item("ttl", AttributeValue::N(ttl))
+                .send()
+                .await;
+
+            let redirect = format!("/?auth=success&token={}", auth_token);
+            return axum::response::Redirect::temporary(&redirect);
+        }
+    }
+
+    axum::response::Redirect::temporary("/?auth=error&reason=no_db")
+}
+
+/// GET /api/v1/auth/me — Check login status
+async fn handle_auth_me(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    if token.is_empty() {
+        return Json(serde_json::json!({ "authenticated": false }));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let auth_pk = format!("AUTH#{}", token);
+            if let Ok(output) = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(auth_pk))
+                .key("sk", AttributeValue::S("TOKEN".to_string()))
+                .send()
+                .await
+            {
+                if let Some(item) = output.item {
+                    let user_id = item.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let email = item.get("email").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let display_name = item.get("display_name").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+
+                    // Look up user profile for credits info
+                    let session_key = item.get("session_key").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let lookup_id = if !session_key.is_empty() { &session_key } else { &user_id };
+                    let user_profile = get_or_create_user(dynamo, table, lookup_id).await;
+
+                    return Json(serde_json::json!({
+                        "authenticated": true,
+                        "user_id": user_id,
+                        "email": email,
+                        "display_name": display_name,
+                        "credits_remaining": user_profile.credits_remaining,
+                        "credits_used": user_profile.credits_used,
+                        "plan": user_profile.plan,
+                    }));
+                }
+            }
+        }
+    }
+
+    Json(serde_json::json!({ "authenticated": false }))
+}
+
+/// POST /api/v1/auth/register — Email registration
+async fn handle_auth_register(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<RegisterRequest>,
+) -> impl IntoResponse {
+    // Validate
+    let email = req.email.trim().to_lowercase();
+    if !email.contains('@') || !email.contains('.') {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid email format" })));
+    }
+    if req.password.len() < 8 {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Password must be at least 8 characters" })));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let email_pk = format!("EMAIL#{}", email);
+
+            // Check if email already registered
+            if let Ok(output) = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(email_pk.clone()))
+                .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
+                .send()
+                .await
+            {
+                if output.item.is_some() {
+                    return (StatusCode::CONFLICT, Json(serde_json::json!({ "error": "Email already registered" })));
+                }
+            }
+
+            let user_id = format!("user:{}", uuid::Uuid::new_v4());
+            let salt = uuid::Uuid::new_v4().to_string();
+            let password_hash = hash_password(&req.password, &salt);
+            let now = chrono::Utc::now().to_rfc3339();
+
+            // Store EMAIL#{email} CREDENTIALS
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(email_pk))
+                .item("sk", AttributeValue::S("CREDENTIALS".to_string()))
+                .item("password_hash", AttributeValue::S(password_hash))
+                .item("salt", AttributeValue::S(salt))
+                .item("user_id", AttributeValue::S(user_id.clone()))
+                .item("created_at", AttributeValue::S(now.clone()))
+                .send()
+                .await;
+
+            // Create user profile
+            let _ = get_or_create_user(dynamo, table, &user_id).await;
+
+            // Update profile with email and auth method
+            let user_pk = format!("USER#{}", user_id);
+            let _ = dynamo
+                .update_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S("PROFILE".to_string()))
+                .update_expression("SET email = :email, auth_method = :auth, updated_at = :now")
+                .expression_attribute_values(":email", AttributeValue::S(email.clone()))
+                .expression_attribute_values(":auth", AttributeValue::S("email".to_string()))
+                .expression_attribute_values(":now", AttributeValue::S(now.clone()))
+                .send()
+                .await;
+
+            // Create auth token
+            let auth_token = uuid::Uuid::new_v4().to_string();
+            let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string();
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
+                .item("sk", AttributeValue::S("TOKEN".to_string()))
+                .item("user_id", AttributeValue::S(user_id.clone()))
+                .item("email", AttributeValue::S(email.clone()))
+                .item("display_name", AttributeValue::S(email.clone()))
+                .item("created_at", AttributeValue::S(now))
+                .item("ttl", AttributeValue::N(ttl))
+                .send()
+                .await;
+
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "token": auth_token,
+                "user_id": user_id,
+                "email": email,
+            })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+/// POST /api/v1/auth/login — Email login
+async fn handle_auth_login(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<LoginRequest>,
+) -> impl IntoResponse {
+    let email = req.email.trim().to_lowercase();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let email_pk = format!("EMAIL#{}", email);
+
+            // Lookup credentials
+            let cred_result = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(email_pk))
+                .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
+                .send()
+                .await;
+
+            if let Ok(output) = cred_result {
+                if let Some(item) = output.item {
+                    let stored_hash = item.get("password_hash").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let salt = item.get("salt").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let user_id = item.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+
+                    let computed_hash = hash_password(&req.password, &salt);
+                    if computed_hash != stored_hash {
+                        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid email or password" })));
+                    }
+
+                    let now = chrono::Utc::now().to_rfc3339();
+
+                    // Link session if provided
+                    if let Some(ref sid) = req.session_id {
+                        if !sid.is_empty() {
+                            let link_pk = format!("LINK#{}", sid);
+                            let _ = dynamo
+                                .put_item()
+                                .table_name(table.as_str())
+                                .item("pk", AttributeValue::S(link_pk))
+                                .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
+                                .item("user_id", AttributeValue::S(user_id.clone()))
+                                .item("linked_at", AttributeValue::S(now.clone()))
+                                .send()
+                                .await;
+                        }
+                    }
+
+                    // Create auth token
+                    let auth_token = uuid::Uuid::new_v4().to_string();
+                    let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string();
+                    let _ = dynamo
+                        .put_item()
+                        .table_name(table.as_str())
+                        .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
+                        .item("sk", AttributeValue::S("TOKEN".to_string()))
+                        .item("user_id", AttributeValue::S(user_id.clone()))
+                        .item("email", AttributeValue::S(email.clone()))
+                        .item("display_name", AttributeValue::S(email.clone()))
+                        .item("created_at", AttributeValue::S(now))
+                        .item("ttl", AttributeValue::N(ttl))
+                        .send()
+                        .await;
+
+                    return (StatusCode::OK, Json(serde_json::json!({
+                        "ok": true,
+                        "token": auth_token,
+                        "user_id": user_id,
+                        "email": email,
+                    })));
+                }
+            }
+
+            return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid email or password" })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+/// POST /api/v1/auth/email — Passwordless email auth (auto-register or login)
+async fn handle_auth_email(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<EmailAuthRequest>,
+) -> impl IntoResponse {
+    let email = req.email.trim().to_lowercase();
+    if !email.contains('@') || !email.contains('.') {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid email format" })));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let email_pk = format!("EMAIL#{}", email);
+
+            // Check if email already registered
+            let existing = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(email_pk.clone()))
+                .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
+                .send()
+                .await;
+
+            let user_id = if let Ok(output) = &existing {
+                if let Some(item) = &output.item {
+                    // Existing user — get user_id
+                    item.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default()
+                } else {
+                    // New user — auto-register
+                    let new_user_id = format!("user:{}", uuid::Uuid::new_v4());
+                    let now = chrono::Utc::now().to_rfc3339();
+
+                    // Store EMAIL#{email} CREDENTIALS (no password)
+                    let _ = dynamo
+                        .put_item()
+                        .table_name(table.as_str())
+                        .item("pk", AttributeValue::S(email_pk))
+                        .item("sk", AttributeValue::S("CREDENTIALS".to_string()))
+                        .item("user_id", AttributeValue::S(new_user_id.clone()))
+                        .item("auth_method", AttributeValue::S("email_passwordless".to_string()))
+                        .item("created_at", AttributeValue::S(now.clone()))
+                        .send()
+                        .await;
+
+                    // Create user profile
+                    let _ = get_or_create_user(dynamo, table, &new_user_id).await;
+
+                    // Update profile with email
+                    let user_pk = format!("USER#{}", new_user_id);
+                    let _ = dynamo
+                        .update_item()
+                        .table_name(table.as_str())
+                        .key("pk", AttributeValue::S(user_pk))
+                        .key("sk", AttributeValue::S("PROFILE".to_string()))
+                        .update_expression("SET email = :email, auth_method = :auth, updated_at = :now")
+                        .expression_attribute_values(":email", AttributeValue::S(email.clone()))
+                        .expression_attribute_values(":auth", AttributeValue::S("email_passwordless".to_string()))
+                        .expression_attribute_values(":now", AttributeValue::S(now))
+                        .send()
+                        .await;
+
+                    new_user_id
+                }
+            } else {
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Database error" })));
+            };
+
+            if user_id.is_empty() {
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "User creation failed" })));
+            }
+
+            let now = chrono::Utc::now().to_rfc3339();
+
+            // Link session if provided
+            if let Some(ref sid) = req.session_id {
+                if !sid.is_empty() {
+                    let link_pk = format!("LINK#{}", sid);
+                    let _ = dynamo
+                        .put_item()
+                        .table_name(table.as_str())
+                        .item("pk", AttributeValue::S(link_pk))
+                        .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
+                        .item("user_id", AttributeValue::S(user_id.clone()))
+                        .item("linked_at", AttributeValue::S(now.clone()))
+                        .send()
+                        .await;
+                }
+            }
+
+            // Create auth token
+            let auth_token = uuid::Uuid::new_v4().to_string();
+            let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string();
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
+                .item("sk", AttributeValue::S("TOKEN".to_string()))
+                .item("user_id", AttributeValue::S(user_id.clone()))
+                .item("email", AttributeValue::S(email.clone()))
+                .item("display_name", AttributeValue::S(email.clone()))
+                .item("created_at", AttributeValue::S(now))
+                .item("ttl", AttributeValue::N(ttl))
+                .send()
+                .await;
+
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "token": auth_token,
+                "user_id": user_id,
+                "email": email,
+            })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+// ---------------------------------------------------------------------------
+// Conversation History API
+// ---------------------------------------------------------------------------
+
+/// GET /api/v1/conversations — List user's conversations
+async fn handle_list_conversations(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            // Resolve user from token
+            let user_id = resolve_user_from_token(dynamo, table, &token).await;
+            if user_id.is_empty() {
+                return Json(serde_json::json!({ "conversations": [], "error": "Not authenticated" }));
+            }
+
+            let user_pk = format!("USER#{}", user_id);
+            let resp = dynamo
+                .query()
+                .table_name(table.as_str())
+                .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
+                .expression_attribute_values(":pk", AttributeValue::S(user_pk))
+                .expression_attribute_values(":sk", AttributeValue::S("CONV#".to_string()))
+                .scan_index_forward(false)
+                .limit(50)
+                .send()
+                .await;
+
+            let conversations: Vec<serde_json::Value> = match resp {
+                Ok(output) => {
+                    output.items.unwrap_or_default().iter().map(|item| {
+                        serde_json::json!({
+                            "id": item.get("conv_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                            "title": item.get("title").and_then(|v| v.as_s().ok()).cloned().unwrap_or_else(|| "New conversation".to_string()),
+                            "created_at": item.get("created_at").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                            "updated_at": item.get("updated_at").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                            "message_count": item.get("message_count").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0),
+                        })
+                    }).collect()
+                }
+                Err(_) => vec![],
+            };
+
+            return Json(serde_json::json!({ "conversations": conversations }));
+        }
+    }
+
+    Json(serde_json::json!({ "conversations": [] }))
+}
+
+/// POST /api/v1/conversations — Create a new conversation
+async fn handle_create_conversation(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_id = resolve_user_from_token(dynamo, table, &token).await;
+            if user_id.is_empty() {
+                return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" })));
+            }
+
+            let conv_id = uuid::Uuid::new_v4().to_string();
+            let now = chrono::Utc::now().to_rfc3339();
+            let session_id = format!("webchat:{}", conv_id);
+
+            // Create CONV record under user
+            let user_pk = format!("USER#{}", user_id);
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(user_pk))
+                .item("sk", AttributeValue::S(format!("CONV#{}", conv_id)))
+                .item("conv_id", AttributeValue::S(conv_id.clone()))
+                .item("title", AttributeValue::S("New conversation".to_string()))
+                .item("session_id", AttributeValue::S(session_id.clone()))
+                .item("created_at", AttributeValue::S(now.clone()))
+                .item("updated_at", AttributeValue::S(now))
+                .item("message_count", AttributeValue::N("0".to_string()))
+                .send()
+                .await;
+
+            // Link the new session_id to the user
+            let link_pk = format!("LINK#{}", session_id);
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(link_pk))
+                .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
+                .item("user_id", AttributeValue::S(user_id))
+                .item("linked_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .send()
+                .await;
+
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "conversation_id": conv_id,
+                "session_id": session_id,
+            })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+/// GET /api/v1/conversations/{id}/messages — Get messages for a conversation
+async fn handle_get_conversation_messages(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_id = resolve_user_from_token(dynamo, table, &token).await;
+            if user_id.is_empty() {
+                return Json(serde_json::json!({ "messages": [], "error": "Not authenticated" }));
+            }
+
+            // Get the session_id from the conversation record
+            let user_pk = format!("USER#{}", user_id);
+            let conv_resp = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S(format!("CONV#{}", id)))
+                .send()
+                .await;
+
+            let session_id = if let Ok(output) = conv_resp {
+                output.item.and_then(|item| {
+                    item.get("session_id").and_then(|v| v.as_s().ok()).cloned()
+                }).unwrap_or_else(|| format!("webchat:{}", id))
+            } else {
+                format!("webchat:{}", id)
+            };
+
+            // Get messages from session store
+            let mut store = state.sessions.lock().await;
+            let session = store.get_or_create(&session_id);
+            let messages: Vec<serde_json::Value> = session.messages.iter().map(|m| {
+                serde_json::json!({
+                    "role": m.role,
+                    "content": m.content,
+                })
+            }).collect();
+
+            return Json(serde_json::json!({ "messages": messages, "session_id": session_id }));
+        }
+    }
+
+    Json(serde_json::json!({ "messages": [] }))
+}
+
+/// DELETE /api/v1/conversations/{id} — Delete a conversation
+async fn handle_delete_conversation(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_id = resolve_user_from_token(dynamo, table, &token).await;
+            if user_id.is_empty() {
+                return Json(serde_json::json!({ "error": "Not authenticated" }));
+            }
+
+            // Check user is paid (free users can't delete)
+            let profile = get_or_create_user(dynamo, table, &user_id).await;
+            if profile.plan == "free" {
+                return Json(serde_json::json!({ "error": "Conversation deletion is available for paid plans" }));
+            }
+
+            let user_pk = format!("USER#{}", user_id);
+            let _ = dynamo
+                .delete_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S(format!("CONV#{}", id)))
+                .send()
+                .await;
+
+            return Json(serde_json::json!({ "ok": true }));
+        }
+    }
+
+    Json(serde_json::json!({ "error": "DynamoDB not configured" }))
+}
+
+/// Helper: Resolve user_id from auth token
+#[cfg(feature = "dynamodb-backend")]
+async fn resolve_user_from_token(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    token: &str,
+) -> String {
+    if token.is_empty() {
+        return String::new();
+    }
+    let auth_pk = format!("AUTH#{}", token);
+    if let Ok(output) = dynamo
+        .get_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(auth_pk))
+        .key("sk", AttributeValue::S("TOKEN".to_string()))
+        .send()
+        .await
+    {
+        if let Some(item) = output.item {
+            return item.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+        }
+    }
+    String::new()
+}
+
+// ---------------------------------------------------------------------------
+// API Key management
+// ---------------------------------------------------------------------------
+
+/// Helper: extract user_id from Bearer token via DynamoDB lookup
+#[cfg(feature = "dynamodb-backend")]
+async fn auth_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Option<String> {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+    if token.is_empty() { return None; }
+    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        let auth_pk = format!("AUTH#{}", token);
+        if let Ok(output) = dynamo
+            .get_item()
+            .table_name(table.as_str())
+            .key("pk", AttributeValue::S(auth_pk))
+            .key("sk", AttributeValue::S("TOKEN".to_string()))
+            .send()
+            .await
+        {
+            if let Some(item) = output.item {
+                return item.get("user_id").and_then(|v| v.as_s().ok()).cloned();
+            }
+        }
+    }
+    None
+}
+
+/// GET /api/v1/apikeys — List user's API keys
+async fn handle_list_apikeys(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return Json(serde_json::json!({ "error": "Unauthorized" })),
+        };
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let pk = format!("USER#{}", user_id);
+            if let Ok(output) = dynamo
+                .query()
+                .table_name(table.as_str())
+                .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+                .expression_attribute_values(":pk", AttributeValue::S(pk))
+                .expression_attribute_values(":prefix", AttributeValue::S("APIKEY#".to_string()))
+                .send()
+                .await
+            {
+                let keys: Vec<serde_json::Value> = output.items.unwrap_or_default().iter().map(|item| {
+                    let sk = item.get("sk").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let key_id = sk.trim_start_matches("APIKEY#").to_string();
+                    let name = item.get("name").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let prefix = item.get("key_prefix").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let created = item.get("created_at").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    serde_json::json!({
+                        "id": key_id,
+                        "name": name,
+                        "key_prefix": prefix,
+                        "created_at": created,
+                    })
+                }).collect();
+                return Json(serde_json::json!({ "api_keys": keys }));
+            }
+        }
+    }
+    Json(serde_json::json!({ "api_keys": [] }))
+}
+
+/// POST /api/v1/apikeys — Create a new API key
+async fn handle_create_apikey(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return Json(serde_json::json!({ "error": "Unauthorized" })),
+        };
+        let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("default").to_string();
+        // Generate API key: cw_<random>
+        let key_id = uuid::Uuid::new_v4().to_string().replace("-", "");
+        let api_key = format!("cw_{}", &key_id);
+        let key_prefix = format!("cw_{}...", &key_id[..8]);
+        let now = chrono::Utc::now().to_rfc3339();
+
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            // Store under user
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                .item("sk", AttributeValue::S(format!("APIKEY#{}", key_id)))
+                .item("name", AttributeValue::S(name.clone()))
+                .item("api_key_hash", AttributeValue::S(api_key.clone())) // In production, hash this
+                .item("key_prefix", AttributeValue::S(key_prefix.clone()))
+                .item("created_at", AttributeValue::S(now.clone()))
+                .send()
+                .await;
+            // Store reverse lookup: APIKEY#<key> -> user_id
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(format!("APIKEY#{}", api_key)))
+                .item("sk", AttributeValue::S("LOOKUP".to_string()))
+                .item("user_id", AttributeValue::S(user_id.clone()))
+                .item("key_id", AttributeValue::S(key_id.clone()))
+                .item("created_at", AttributeValue::S(now.clone()))
+                .send()
+                .await;
+            return Json(serde_json::json!({
+                "ok": true,
+                "api_key": api_key,
+                "id": key_id,
+                "name": name,
+                "key_prefix": key_prefix,
+                "created_at": now,
+            }));
+        }
+    }
+    Json(serde_json::json!({ "error": "Failed to create API key" }))
+}
+
+/// DELETE /api/v1/apikeys/{id} — Delete an API key
+async fn handle_delete_apikey(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Path(key_id): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return Json(serde_json::json!({ "error": "Unauthorized" })),
+        };
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            // Get the key first to find the api_key for reverse lookup cleanup
+            let pk = format!("USER#{}", user_id);
+            let sk = format!("APIKEY#{}", key_id);
+            if let Ok(get_output) = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(pk.clone()))
+                .key("sk", AttributeValue::S(sk.clone()))
+                .send()
+                .await
+            {
+                if let Some(item) = get_output.item {
+                    // Delete reverse lookup
+                    if let Some(api_key) = item.get("api_key_hash").and_then(|v| v.as_s().ok()) {
+                        let _ = dynamo
+                            .delete_item()
+                            .table_name(table.as_str())
+                            .key("pk", AttributeValue::S(format!("APIKEY#{}", api_key)))
+                            .key("sk", AttributeValue::S("LOOKUP".to_string()))
+                            .send()
+                            .await;
+                    }
+                }
+            }
+            // Delete the key record
+            let _ = dynamo
+                .delete_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(pk))
+                .key("sk", AttributeValue::S(sk))
+                .send()
+                .await;
+            return Json(serde_json::json!({ "ok": true }));
+        }
+    }
+    Json(serde_json::json!({ "error": "Failed to delete API key" }))
+}
+
+// ---------------------------------------------------------------------------
+// TTS (Text-to-Speech) via OpenAI API
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct SpeechRequest {
+    text: String,
+    #[serde(default = "default_tts_voice")]
+    voice: String,
+    #[serde(default = "default_tts_speed")]
+    speed: f64,
+    session_id: Option<String>,
+}
+
+fn default_tts_voice() -> String { "nova".to_string() }
+fn default_tts_speed() -> f64 { 1.0 }
+
+/// POST /api/v1/speech/synthesize — Convert text to speech via OpenAI TTS API
+async fn handle_speech_synthesize(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<SpeechRequest>,
+) -> impl IntoResponse {
+    if req.text.is_empty() || req.text.len() > 4096 {
+        return (
+            StatusCode::BAD_REQUEST,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            b"{ \"error\": \"Text must be between 1 and 4096 characters\" }".to_vec(),
+        );
+    }
+
+    // Get OpenAI API key from env
+    let api_key = match std::env::var("OPENAI_API_KEY").or_else(|_| std::env::var("OPENAI_API_KEYS").map(|keys| {
+        keys.split(',').next().unwrap_or("").trim().to_string()
+    })) {
+        Ok(k) if !k.is_empty() => k,
+        _ => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [(axum::http::header::CONTENT_TYPE, "application/json")],
+                b"{ \"error\": \"TTS service not configured\" }".to_vec(),
+            );
+        }
+    };
+
+    // Check credits if user is authenticated
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = auth_user_id(&state, &headers).await;
+        if let Some(ref uid) = user_id {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                let user = get_or_create_user(dynamo, table, uid).await;
+                if user.credits_remaining <= 0 {
+                    return (
+                        StatusCode::PAYMENT_REQUIRED,
+                        [(axum::http::header::CONTENT_TYPE, "application/json")],
+                        b"{ \"error\": \"Insufficient credits\" }".to_vec(),
+                    );
+                }
+            }
+        }
+    }
+
+    // Call OpenAI TTS API
+    let client = reqwest::Client::new();
+    let tts_result = client
+        .post("https://api.openai.com/v1/audio/speech")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&serde_json::json!({
+            "model": "tts-1",
+            "input": req.text,
+            "voice": req.voice,
+            "speed": req.speed,
+            "response_format": "mp3",
+        }))
+        .send()
+        .await;
+
+    match tts_result {
+        Ok(resp) if resp.status().is_success() => {
+            let audio_bytes = resp.bytes().await.unwrap_or_default().to_vec();
+
+            // Deduct credits: 1 credit per 100 characters
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                let user_id = auth_user_id(&state, &headers).await;
+                if let Some(ref uid) = user_id {
+                    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                        let tts_credits = std::cmp::max(1, (req.text.len() as i64) / 100);
+                        let pk = format!("USER#{}", uid);
+                        let _ = dynamo
+                            .update_item()
+                            .table_name(table)
+                            .key("pk", AttributeValue::S(pk))
+                            .key("sk", AttributeValue::S("PROFILE".to_string()))
+                            .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
+                            .expression_attribute_values(":c", AttributeValue::N(tts_credits.to_string()))
+                            .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                            .send()
+                            .await;
+                    }
+                }
+            }
+
+            (
+                StatusCode::OK,
+                [(axum::http::header::CONTENT_TYPE, "audio/mpeg")],
+                audio_bytes,
+            )
+        }
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            tracing::error!("OpenAI TTS error: status={}, body={}", status, body);
+            (
+                StatusCode::BAD_GATEWAY,
+                [(axum::http::header::CONTENT_TYPE, "application/json")],
+                format!("{{ \"error\": \"TTS API error: {}\" }}", status).into_bytes(),
+            )
+        }
+        Err(e) => {
+            tracing::error!("OpenAI TTS request failed: {}", e);
+            (
+                StatusCode::BAD_GATEWAY,
+                [(axum::http::header::CONTENT_TYPE, "application/json")],
+                b"{ \"error\": \"TTS request failed\" }".to_vec(),
+            )
+        }
+    }
 }
 
 /// Start the HTTP server on the given address.

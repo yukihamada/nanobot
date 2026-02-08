@@ -71,6 +71,8 @@ PARAM_OVERRIDES=""
 [ -n "${LINE_ALLOW_FROM:-}" ] && PARAM_OVERRIDES+=" LineAllowFrom=$LINE_ALLOW_FROM"
 [ -n "${NANOBOT_MODEL:-}" ] && PARAM_OVERRIDES+=" NanobotModel=$NANOBOT_MODEL"
 [ -n "${NANOBOT_TENANT_ID:-}" ] && PARAM_OVERRIDES+=" TenantId=$NANOBOT_TENANT_ID"
+[ -n "${GOOGLE_CLIENT_ID:-}" ] && PARAM_OVERRIDES+=" GoogleClientId=$GOOGLE_CLIENT_ID"
+[ -n "${GOOGLE_CLIENT_SECRET:-}" ] && PARAM_OVERRIDES+=" GoogleClientSecret=$GOOGLE_CLIENT_SECRET"
 
 if [ -n "$PARAM_OVERRIDES" ]; then
     SAM_ARGS+=(--parameter-overrides "$PARAM_OVERRIDES")
