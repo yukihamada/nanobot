@@ -60,6 +60,11 @@ Parameters:
     NoEcho: true
     Description: Resend API key for email
     Default: ''
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub personal access token for self-edit (repo scope)
+    Default: ''
   TenantId:
     Type: String
     Description: Tenant ID for multi-tenant isolation
@@ -96,6 +101,7 @@ Resources:
           GOOGLE_API_KEY: !Ref GoogleApiKey
           DEEPSEEK_API_KEY: !Ref DeepseekApiKey
           RESEND_API_KEY: !Ref ResendApiKey
+          GITHUB_TOKEN: !Ref GitHubToken
           NANOBOT_TENANT_ID: !Ref TenantId
           DYNAMODB_SESSIONS_TABLE: !Ref SessionsTable
       Policies:

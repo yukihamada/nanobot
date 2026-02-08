@@ -257,7 +257,7 @@
       <a href="/">Home</a>
       <a href="/pricing">Pricing</a>
       <a href="/status">Status</a>
-      <a href="/admin" class="active">Dashboard</a>
+      <a href="#" class="active" id="nav-admin">Dashboard</a>
     </div>
   </nav>
 
@@ -278,19 +278,19 @@
     <div id="tab-overview" class="tab-content active">
       <div class="cards">
         <div class="card">
-          <div class="card-label">Total Requests (today)</div>
-          <div class="card-value blue" id="stat-requests">--</div>
-          <div class="card-sub">API + Webhooks</div>
+          <div class="card-label">Registered Users</div>
+          <div class="card-value blue" id="stat-users">--</div>
+          <div class="card-sub">USER# records in DynamoDB</div>
         </div>
         <div class="card">
-          <div class="card-label">Active Sessions</div>
+          <div class="card-label">Total Sessions</div>
           <div class="card-value green" id="stat-sessions">--</div>
           <div class="card-sub">Web / LINE / Telegram</div>
         </div>
         <div class="card">
-          <div class="card-label">Avg Latency</div>
-          <div class="card-value yellow" id="stat-latency">--</div>
-          <div class="card-sub">Lambda cold start ~120ms</div>
+          <div class="card-label">Today's Requests</div>
+          <div class="card-value yellow" id="stat-requests">--</div>
+          <div class="card-sub" id="stat-date">Tool calls today</div>
         </div>
         <div class="card">
           <div class="card-label">Monthly Cost (est.)</div>
@@ -674,6 +674,7 @@
 
   <script>
     const API = location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+    const SID = new URLSearchParams(location.search).get('sid') || '';
     const ENDPOINTS = [
       { name: 'AWS Lambda (chatweb.ai)', url: 'https://chatweb.ai/health' },
       { name: 'AWS Lambda (teai.io)', url: 'https://teai.io/health' },
@@ -760,6 +761,35 @@
       }
     }
 
+    // Load admin stats from API
+    async function loadAdminStats() {
+      try {
+        const r = await fetch(API + '/api/v1/admin/stats?sid=' + encodeURIComponent(SID));
+        if (!r.ok) return;
+        const data = await r.json();
+        if (data.total_users !== undefined) {
+          document.getElementById('stat-users').textContent = data.total_users;
+        }
+        if (data.sessions) {
+          const s = data.sessions;
+          document.getElementById('stat-sessions').textContent = s.total || 0;
+          document.getElementById('sess-web').textContent = s.webchat || 0;
+          document.getElementById('sess-line').textContent = s.line || 0;
+          document.getElementById('sess-tg').textContent = s.telegram || 0;
+          document.getElementById('sess-total').textContent = s.total || 0;
+          document.getElementById('ch-web').textContent = s.webchat || 0;
+          document.getElementById('ch-line').textContent = s.line || 0;
+          document.getElementById('ch-tg').textContent = s.telegram || 0;
+        }
+        if (data.today_usage !== undefined) {
+          document.getElementById('stat-requests').textContent = data.today_usage;
+          document.getElementById('stat-date').textContent = 'Tool calls on ' + (data.date || 'today');
+        }
+      } catch(e) {
+        console.warn('Failed to load admin stats:', e);
+      }
+    }
+
     // Estimate costs from session count
     function estimateCosts() {
       document.getElementById('stat-cost').textContent = '~$11';
@@ -769,11 +799,13 @@
 
     function refreshAll() {
       checkHealth();
+      loadAdminStats();
       loadSessions();
       estimateCosts();
-      document.getElementById('stat-requests').textContent = '--';
-      document.getElementById('stat-latency').textContent = '--';
     }
+
+    // Keep sid in admin nav link
+    document.getElementById('nav-admin').href = '/admin?sid=' + encodeURIComponent(SID);
 
     // Init
     refreshAll();

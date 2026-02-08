@@ -8,6 +8,9 @@ pub const SAAS_ALLOWED_TOOLS: &[&str] = &[
     "web_search",
     "web_fetch",
     "message",
+    "github_read_file",
+    "github_create_or_update_file",
+    "github_create_pr",
 ];
 
 /// List of tool names blocked in SaaS mode.
@@ -34,6 +37,9 @@ mod tests {
         assert!(is_tool_allowed_in_saas("web_search"));
         assert!(is_tool_allowed_in_saas("web_fetch"));
         assert!(is_tool_allowed_in_saas("message"));
+        assert!(is_tool_allowed_in_saas("github_read_file"));
+        assert!(is_tool_allowed_in_saas("github_create_or_update_file"));
+        assert!(is_tool_allowed_in_saas("github_create_pr"));
 
         assert!(!is_tool_allowed_in_saas("read_file"));
         assert!(!is_tool_allowed_in_saas("write_file"));

@@ -44,7 +44,8 @@ pub struct ToolRegistry {
 impl ToolRegistry {
     /// Create a new registry with only the built-in tools.
     pub fn with_builtins() -> Self {
-        let tools: Vec<Box<dyn Tool>> = vec![
+        #[allow(unused_mut)]
+        let mut tools: Vec<Box<dyn Tool>> = vec![
             Box::new(WebSearchTool),
             Box::new(WebFetchTool),
             Box::new(CalculatorTool),
@@ -55,6 +56,16 @@ impl ToolRegistry {
             Box::new(QrCodeTool),
             Box::new(NewsSearchTool),
         ];
+
+        // Register GitHub self-edit tools if GITHUB_TOKEN is available (requires http-api feature)
+        #[cfg(feature = "http-api")]
+        if std::env::var("GITHUB_TOKEN").map(|t| !t.is_empty()).unwrap_or(false) {
+            tracing::info!("Registering GitHub self-edit tools (GITHUB_TOKEN present)");
+            tools.push(Box::new(GitHubReadFileTool));
+            tools.push(Box::new(GitHubCreateOrUpdateFileTool));
+            tools.push(Box::new(GitHubCreatePrTool));
+        }
+
         Self { tools }
     }
 
@@ -325,6 +336,407 @@ impl Tool for NewsSearchTool {
         let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
         let freshness = params.get("freshness").and_then(|v| v.as_str()).unwrap_or("pw");
         execute_news_search(query, freshness).await
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GitHub self-edit tools — read/write files and create PRs on yukihamada/nanobot
+// Requires http-api feature (for base64 crate). Included in saas feature.
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "http-api")]
+const GITHUB_OWNER: &str = "yukihamada";
+#[cfg(feature = "http-api")]
+const GITHUB_REPO: &str = "nanobot";
+#[cfg(feature = "http-api")]
+const GITHUB_MAX_FILE_SIZE: usize = 500 * 1024; // 500 KB
+
+/// Helper: get a reqwest client configured for the GitHub API.
+#[cfg(feature = "http-api")]
+fn github_client(token: &str) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .default_headers({
+            let mut h = reqwest::header::HeaderMap::new();
+            h.insert("Accept", "application/vnd.github.v3+json".parse().unwrap());
+            h.insert("User-Agent", "chatweb-ai/1.0".parse().unwrap());
+            h.insert(
+                "Authorization",
+                format!("Bearer {}", token).parse().map_err(|e| format!("bad token: {}", e))?,
+            );
+            h
+        })
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))
+}
+
+/// Read a file from the GitHub repository.
+#[cfg(feature = "http-api")]
+pub struct GitHubReadFileTool;
+
+#[cfg(feature = "http-api")]
+#[async_trait]
+impl Tool for GitHubReadFileTool {
+    fn name(&self) -> &str { "github_read_file" }
+    fn description(&self) -> &str {
+        "Read a file from the chatweb.ai source code repository (yukihamada/nanobot). \
+         Returns the file content as text. Use this to inspect the current source code \
+         before making changes."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "File path relative to repo root (e.g. 'README.md', 'crates/nanobot-core/src/service/integrations.rs')"
+                },
+                "ref": {
+                    "type": "string",
+                    "description": "Git ref (branch/tag/SHA). Default: 'main'"
+                }
+            },
+            "required": ["path"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let token = match std::env::var("GITHUB_TOKEN") {
+            Ok(t) if !t.is_empty() => t,
+            _ => return "Error: GITHUB_TOKEN is not configured.".to_string(),
+        };
+        let path = match params.get("path").and_then(|v| v.as_str()) {
+            Some(p) => p,
+            None => return "Error: 'path' parameter is required.".to_string(),
+        };
+        let git_ref = params.get("ref").and_then(|v| v.as_str()).unwrap_or("main");
+
+        let client = match github_client(&token) {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
+            GITHUB_OWNER, GITHUB_REPO, path, git_ref
+        );
+
+        tracing::info!("github_read_file: GET {}", url);
+
+        match client.get(&url).send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                if status == reqwest::StatusCode::NOT_FOUND {
+                    return format!("File not found: {}", path);
+                }
+                if !status.is_success() {
+                    let body = resp.text().await.unwrap_or_default();
+                    return format!("GitHub API error (HTTP {}): {}", status, body);
+                }
+                match resp.json::<serde_json::Value>().await {
+                    Ok(data) => {
+                        if let Some(content_b64) = data.get("content").and_then(|v| v.as_str()) {
+                            // GitHub returns base64 with newlines
+                            let cleaned: String = content_b64.chars().filter(|c| !c.is_whitespace()).collect();
+                            match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &cleaned) {
+                                Ok(bytes) => {
+                                    match String::from_utf8(bytes) {
+                                        Ok(text) => {
+                                            let size = data.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+                                            format!("File: {} ({} bytes, ref: {})\n\n{}", path, size, git_ref, text)
+                                        }
+                                        Err(_) => format!("File {} is binary ({} bytes)", path,
+                                            data.get("size").and_then(|v| v.as_u64()).unwrap_or(0)),
+                                    }
+                                }
+                                Err(e) => format!("Failed to decode file content: {}", e),
+                            }
+                        } else {
+                            "Unexpected API response (no content field).".to_string()
+                        }
+                    }
+                    Err(e) => format!("Failed to parse GitHub response: {}", e),
+                }
+            }
+            Err(e) => format!("GitHub API request failed: {}", e),
+        }
+    }
+}
+
+/// Create or update a file in the repository on a feature branch.
+#[cfg(feature = "http-api")]
+pub struct GitHubCreateOrUpdateFileTool;
+
+#[cfg(feature = "http-api")]
+#[async_trait]
+impl Tool for GitHubCreateOrUpdateFileTool {
+    fn name(&self) -> &str { "github_create_or_update_file" }
+    fn description(&self) -> &str {
+        "Create or update a file in the chatweb.ai source code repository. \
+         The change is committed to a feature branch (never to main). \
+         Use github_read_file first to get the current content, then modify and write back."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "File path relative to repo root"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "New file content (full file, not a diff)"
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Git commit message"
+                },
+                "branch": {
+                    "type": "string",
+                    "description": "Branch name to commit to (e.g. 'fix/weather-desc-en'). Must NOT be 'main' or 'master'."
+                }
+            },
+            "required": ["path", "content", "message", "branch"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let token = match std::env::var("GITHUB_TOKEN") {
+            Ok(t) if !t.is_empty() => t,
+            _ => return "Error: GITHUB_TOKEN is not configured.".to_string(),
+        };
+        let path = match params.get("path").and_then(|v| v.as_str()) {
+            Some(p) => p,
+            None => return "Error: 'path' parameter is required.".to_string(),
+        };
+        let content = match params.get("content").and_then(|v| v.as_str()) {
+            Some(c) => c,
+            None => return "Error: 'content' parameter is required.".to_string(),
+        };
+        let message = match params.get("message").and_then(|v| v.as_str()) {
+            Some(m) => m,
+            None => return "Error: 'message' parameter is required.".to_string(),
+        };
+        let branch = match params.get("branch").and_then(|v| v.as_str()) {
+            Some(b) => b,
+            None => return "Error: 'branch' parameter is required.".to_string(),
+        };
+
+        // Safety: reject writes to main/master
+        if branch == "main" || branch == "master" {
+            return "Error: Writing to 'main' or 'master' is forbidden. Use a feature branch.".to_string();
+        }
+
+        // Size limit
+        if content.len() > GITHUB_MAX_FILE_SIZE {
+            return format!(
+                "Error: Content too large ({} bytes). Maximum is {} bytes.",
+                content.len(), GITHUB_MAX_FILE_SIZE
+            );
+        }
+
+        let client = match github_client(&token) {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+
+        // Step 1: Ensure branch exists (create from main HEAD if not)
+        let branch_url = format!(
+            "https://api.github.com/repos/{}/{}/git/ref/heads/{}",
+            GITHUB_OWNER, GITHUB_REPO, branch
+        );
+        let branch_exists = match client.get(&branch_url).send().await {
+            Ok(resp) => resp.status().is_success(),
+            Err(_) => false,
+        };
+
+        if !branch_exists {
+            tracing::info!("github_create_or_update_file: creating branch '{}'", branch);
+            // Get main HEAD SHA
+            let main_ref_url = format!(
+                "https://api.github.com/repos/{}/{}/git/ref/heads/main",
+                GITHUB_OWNER, GITHUB_REPO
+            );
+            let main_sha = match client.get(&main_ref_url).send().await {
+                Ok(resp) => {
+                    if !resp.status().is_success() {
+                        return "Error: Could not get main branch HEAD.".to_string();
+                    }
+                    match resp.json::<serde_json::Value>().await {
+                        Ok(data) => match data.pointer("/object/sha").and_then(|v| v.as_str()) {
+                            Some(sha) => sha.to_string(),
+                            None => return "Error: Could not parse main branch SHA.".to_string(),
+                        },
+                        Err(e) => return format!("Error parsing main ref: {}", e),
+                    }
+                }
+                Err(e) => return format!("Error fetching main ref: {}", e),
+            };
+
+            // Create the branch
+            let create_ref_url = format!(
+                "https://api.github.com/repos/{}/{}/git/refs",
+                GITHUB_OWNER, GITHUB_REPO
+            );
+            let create_body = serde_json::json!({
+                "ref": format!("refs/heads/{}", branch),
+                "sha": main_sha
+            });
+            match client.post(&create_ref_url).json(&create_body).send().await {
+                Ok(resp) => {
+                    if !resp.status().is_success() {
+                        let body = resp.text().await.unwrap_or_default();
+                        return format!("Error creating branch '{}': {}", branch, body);
+                    }
+                }
+                Err(e) => return format!("Error creating branch: {}", e),
+            }
+        }
+
+        // Step 2: Get existing file SHA (for updates)
+        let file_url = format!(
+            "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
+            GITHUB_OWNER, GITHUB_REPO, path, branch
+        );
+        let existing_sha = match client.get(&file_url).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    resp.json::<serde_json::Value>().await.ok()
+                        .and_then(|d| d.get("sha").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        };
+
+        // Step 3: Create/update file
+        let put_url = format!(
+            "https://api.github.com/repos/{}/{}/contents/{}",
+            GITHUB_OWNER, GITHUB_REPO, path
+        );
+        let content_b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, content.as_bytes());
+        let mut put_body = serde_json::json!({
+            "message": message,
+            "content": content_b64,
+            "branch": branch
+        });
+        if let Some(sha) = &existing_sha {
+            put_body["sha"] = serde_json::json!(sha);
+        }
+
+        match client.put(&put_url).json(&put_body).send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_success() {
+                    let action = if existing_sha.is_some() { "Updated" } else { "Created" };
+                    format!(
+                        "{} file '{}' on branch '{}' with commit message: \"{}\"",
+                        action, path, branch, message
+                    )
+                } else {
+                    let body = resp.text().await.unwrap_or_default();
+                    format!("Error writing file (HTTP {}): {}", status, body)
+                }
+            }
+            Err(e) => format!("Error writing file: {}", e),
+        }
+    }
+}
+
+/// Create a pull request from a feature branch.
+#[cfg(feature = "http-api")]
+pub struct GitHubCreatePrTool;
+
+#[cfg(feature = "http-api")]
+#[async_trait]
+impl Tool for GitHubCreatePrTool {
+    fn name(&self) -> &str { "github_create_pr" }
+    fn description(&self) -> &str {
+        "Create a GitHub Pull Request from a feature branch to main. \
+         The PR will be reviewed and merged by a human. \
+         Use after committing changes with github_create_or_update_file."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "PR title (short, descriptive)"
+                },
+                "body": {
+                    "type": "string",
+                    "description": "PR description (what changed and why)"
+                },
+                "branch": {
+                    "type": "string",
+                    "description": "Source branch name (must already exist with commits)"
+                }
+            },
+            "required": ["title", "body", "branch"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let token = match std::env::var("GITHUB_TOKEN") {
+            Ok(t) if !t.is_empty() => t,
+            _ => return "Error: GITHUB_TOKEN is not configured.".to_string(),
+        };
+        let title = match params.get("title").and_then(|v| v.as_str()) {
+            Some(t) => t,
+            None => return "Error: 'title' parameter is required.".to_string(),
+        };
+        let body = match params.get("body").and_then(|v| v.as_str()) {
+            Some(b) => b,
+            None => return "Error: 'body' parameter is required.".to_string(),
+        };
+        let branch = match params.get("branch").and_then(|v| v.as_str()) {
+            Some(b) => b,
+            None => return "Error: 'branch' parameter is required.".to_string(),
+        };
+
+        let client = match github_client(&token) {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/pulls",
+            GITHUB_OWNER, GITHUB_REPO
+        );
+        let pr_body = serde_json::json!({
+            "title": title,
+            "body": format!("{}\n\n---\n*Created automatically by chatweb.ai*", body),
+            "head": branch,
+            "base": "main"
+        });
+
+        tracing::info!("github_create_pr: POST {} branch={}", url, branch);
+
+        match client.post(&url).json(&pr_body).send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                match resp.json::<serde_json::Value>().await {
+                    Ok(data) => {
+                        if status.is_success() || status == reqwest::StatusCode::CREATED {
+                            let pr_url = data.get("html_url").and_then(|v| v.as_str()).unwrap_or("unknown");
+                            let pr_number = data.get("number").and_then(|v| v.as_u64()).unwrap_or(0);
+                            format!(
+                                "Pull Request #{} created successfully!\nURL: {}\nTitle: {}\n\nA human reviewer will merge this PR.",
+                                pr_number, pr_url, title
+                            )
+                        } else {
+                            let msg = data.get("message").and_then(|v| v.as_str()).unwrap_or("unknown error");
+                            format!("Error creating PR (HTTP {}): {}", status, msg)
+                        }
+                    }
+                    Err(e) => format!("Error parsing PR response: {}", e),
+                }
+            }
+            Err(e) => format!("Error creating PR: {}", e),
+        }
     }
 }
 
@@ -1409,8 +1821,8 @@ pub fn list_integrations() -> Vec<Integration> {
         Integration {
             integration_type: IntegrationType::GitHub,
             name: "GitHub".to_string(),
-            description: "Manage GitHub issues and PRs".to_string(),
-            enabled: false,
+            description: "Read/write source code and create Pull Requests on yukihamada/nanobot".to_string(),
+            enabled: std::env::var("GITHUB_TOKEN").map(|t| !t.is_empty()).unwrap_or(false),
             requires_auth: true,
             auth_url: Some("https://github.com/login/oauth/authorize".to_string()),
         },
@@ -1461,6 +1873,8 @@ mod tests {
 
     #[test]
     fn test_tool_registry_builtins() {
+        // Clear GITHUB_TOKEN to get deterministic count
+        std::env::remove_var("GITHUB_TOKEN");
         let registry = ToolRegistry::with_builtins();
         assert_eq!(registry.len(), 9);
         let defs = registry.get_definitions();
@@ -1476,6 +1890,35 @@ mod tests {
         assert!(names.contains(&"datetime"));
         assert!(names.contains(&"qr_code"));
         assert!(names.contains(&"news_search"));
+    }
+
+    #[test]
+    #[cfg(feature = "http-api")]
+    fn test_tool_registry_with_github_token() {
+        std::env::set_var("GITHUB_TOKEN", "test-token");
+        let registry = ToolRegistry::with_builtins();
+        assert_eq!(registry.len(), 12); // 9 base + 3 GitHub tools
+        let defs = registry.get_definitions();
+        let names: Vec<&str> = defs.iter()
+            .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
+            .collect();
+        assert!(names.contains(&"github_read_file"));
+        assert!(names.contains(&"github_create_or_update_file"));
+        assert!(names.contains(&"github_create_pr"));
+        // Clean up
+        std::env::remove_var("GITHUB_TOKEN");
+    }
+
+    #[test]
+    #[cfg(feature = "http-api")]
+    fn test_github_tools_reject_main_branch() {
+        // Verify the safety constraint is documented in parameters
+        let tool = GitHubCreateOrUpdateFileTool;
+        let params = tool.parameters();
+        let branch_desc = params.pointer("/properties/branch/description")
+            .and_then(|v| v.as_str()).unwrap_or("");
+        assert!(branch_desc.contains("main") || branch_desc.contains("master"),
+            "Branch parameter should warn about main/master restriction");
     }
 
     #[test]

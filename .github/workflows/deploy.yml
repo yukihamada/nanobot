@@ -88,6 +88,9 @@ jobs:
               "GoogleApiKey=${{ secrets.GOOGLE_API_KEY }}" \
               "DeepseekApiKey=${{ secrets.DEEPSEEK_API_KEY }}" \
               "ResendApiKey=${{ secrets.RESEND_API_KEY }}" \
+              "GoogleClientId=${{ secrets.GOOGLE_CLIENT_ID }}" \
+              "GoogleClientSecret=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+              "GitHubToken=${{ secrets.GITHUB_TOKEN }}" \
               "NanobotModel=openai/gpt-4o"
 
       # 新バージョン発行 → カナリア (10%)

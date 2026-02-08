@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{self, StatusCode},
     response::IntoResponse,
     routing::{delete, get, post},
@@ -26,6 +26,23 @@ use crate::service::stripe::{process_webhook_event, verify_webhook_signature};
 
 #[cfg(feature = "dynamodb-backend")]
 use aws_sdk_dynamodb::types::AttributeValue;
+
+/// Admin session keys — only these users can access GitHub tools and /admin.
+const ADMIN_SESSION_KEYS: &[&str] = &[
+    "webchat:e415333e-98fb-4975-8836-946437a7f691",
+];
+
+/// Check if a session key (or resolved user ID) is an admin.
+fn is_admin(session_key: &str) -> bool {
+    ADMIN_SESSION_KEYS.iter().any(|&k| k == session_key)
+}
+
+/// GitHub tool names that are restricted to admin users.
+const GITHUB_TOOL_NAMES: &[&str] = &[
+    "github_read_file",
+    "github_create_or_update_file",
+    "github_create_pr",
+];
 
 /// User profile for unified billing and identity.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -865,8 +882,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/contact", post(handle_contact_submit))
         // Status
         .route("/status", get(handle_status))
-        // Admin
+        // Admin (requires ?sid=<admin session key>)
         .route("/admin", get(handle_admin))
+        .route("/api/v1/admin/check", get(handle_admin_check))
+        .route("/api/v1/admin/stats", get(handle_admin_stats))
         // OG image
         .route("/og.svg", get(handle_og_svg))
         // Install script
@@ -1107,20 +1126,25 @@ async fn handle_chat(
 
     // Get tool definitions for function calling (only if agent supports tools)
     let enabled_tool_names = user_settings.as_ref().and_then(|s| s.enabled_tools.clone());
+    let user_is_admin = is_admin(&session_key);
     let tools = if agent.tools_enabled {
         let all_tools = state.tool_registry.get_definitions();
-        // Filter by user's enabled tools if set
-        if let Some(ref enabled) = enabled_tool_names {
-            all_tools.into_iter()
-                .filter(|t| {
-                    t.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str())
-                        .map(|name| enabled.contains(&name.to_string()))
-                        .unwrap_or(false)
-                })
-                .collect()
-        } else {
-            all_tools
-        }
+        // Filter by user's enabled tools if set, and restrict GitHub tools to admin
+        let filtered: Vec<serde_json::Value> = all_tools.into_iter()
+            .filter(|t| {
+                let name = t.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("");
+                // GitHub tools are admin-only
+                if GITHUB_TOOL_NAMES.contains(&name) && !user_is_admin {
+                    return false;
+                }
+                // Filter by user's enabled tools if set
+                if let Some(ref enabled) = enabled_tool_names {
+                    return enabled.iter().any(|e| e == name);
+                }
+                true
+            })
+            .collect();
+        filtered
     } else {
         vec![]
     };
@@ -2427,9 +2451,159 @@ async fn handle_contact_submit(
     })))
 }
 
-/// GET /admin — Admin dashboard
-async fn handle_admin() -> impl IntoResponse {
-    axum::response::Html(include_str!("../../../../web/admin.html"))
+/// Query params for admin page.
+#[derive(Debug, Deserialize)]
+struct AdminQuery {
+    sid: Option<String>,
+}
+
+/// GET /admin — Admin dashboard (requires ?sid=<admin session key>)
+async fn handle_admin(Query(q): Query<AdminQuery>) -> impl IntoResponse {
+    match q.sid {
+        Some(ref sid) if is_admin(sid) => {
+            axum::response::Html(include_str!("../../../../web/admin.html")).into_response()
+        }
+        _ => {
+            (StatusCode::FORBIDDEN, axum::response::Html(
+                "<html><body><h1>403 Forbidden</h1><p>Admin access required.</p></body></html>"
+            )).into_response()
+        }
+    }
+}
+
+/// GET /api/v1/admin/check?sid=<session_key> — Check if user is admin
+async fn handle_admin_check(Query(q): Query<AdminQuery>) -> impl IntoResponse {
+    let sid = q.sid.unwrap_or_default();
+    Json(serde_json::json!({
+        "is_admin": is_admin(&sid),
+    }))
+}
+
+/// GET /api/v1/admin/stats?sid=<session_key> — Admin stats dashboard data
+async fn handle_admin_stats(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<AdminQuery>,
+) -> impl IntoResponse {
+    let sid = q.sid.unwrap_or_default();
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+            "error": "Forbidden",
+        }))).into_response();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref config_table)) = (&state.dynamo_client, &state.config_table) {
+            let sessions_table = std::env::var("DYNAMODB_SESSIONS_TABLE")
+                .unwrap_or_else(|_| "nanobot-sessions-default".to_string());
+            let today = chrono::Utc::now().format("%Y%m%d").to_string();
+
+            type DynKey = std::collections::HashMap<String, AttributeValue>;
+
+            // 1. Count registered users (USER# + PROFILE)
+            let mut total_users: u64 = 0;
+            let mut start_key: Option<DynKey> = None;
+            loop {
+                let mut scan = dynamo
+                    .scan()
+                    .table_name(config_table)
+                    .filter_expression("begins_with(pk, :prefix) AND sk = :sk")
+                    .expression_attribute_values(":prefix", AttributeValue::S("USER#".to_string()))
+                    .expression_attribute_values(":sk", AttributeValue::S("PROFILE".to_string()))
+                    .select(aws_sdk_dynamodb::types::Select::Count);
+                if let Some(ref key) = start_key {
+                    scan = scan.set_exclusive_start_key(Some(key.clone()));
+                }
+                match scan.send().await {
+                    Ok(output) => {
+                        total_users += output.count() as u64;
+                        match output.last_evaluated_key() {
+                            Some(k) => start_key = Some(k.to_owned()),
+                            None => break,
+                        }
+                    }
+                    Err(e) => { tracing::warn!("admin stats users scan: {}", e); break; }
+                }
+            }
+
+            // 2. Count sessions by channel
+            let mut web: u64 = 0;
+            let mut line: u64 = 0;
+            let mut tg: u64 = 0;
+            let mut other: u64 = 0;
+            let mut start_key: Option<DynKey> = None;
+            loop {
+                let mut scan = dynamo
+                    .scan()
+                    .table_name(&sessions_table)
+                    .projection_expression("session_key");
+                if let Some(ref key) = start_key {
+                    scan = scan.set_exclusive_start_key(Some(key.clone()));
+                }
+                match scan.send().await {
+                    Ok(output) => {
+                        for item in output.items() {
+                            if let Some(sk) = item.get("session_key").and_then(|v| v.as_s().ok()) {
+                                if sk.starts_with("webchat:") { web += 1; }
+                                else if sk.starts_with("line:") { line += 1; }
+                                else if sk.starts_with("tg:") { tg += 1; }
+                                else { other += 1; }
+                            }
+                        }
+                        match output.last_evaluated_key() {
+                            Some(k) => start_key = Some(k.to_owned()),
+                            None => break,
+                        }
+                    }
+                    Err(e) => { tracing::warn!("admin stats sessions scan: {}", e); break; }
+                }
+            }
+
+            // 3. Count today's usage
+            let mut today_usage: u64 = 0;
+            let today_suffix = format!("#{}", today);
+            let mut start_key: Option<DynKey> = None;
+            loop {
+                let mut scan = dynamo
+                    .scan()
+                    .table_name(config_table)
+                    .filter_expression("begins_with(pk, :prefix) AND contains(pk, :date)")
+                    .expression_attribute_values(":prefix", AttributeValue::S("USAGE#".to_string()))
+                    .expression_attribute_values(":date", AttributeValue::S(today_suffix.clone()))
+                    .select(aws_sdk_dynamodb::types::Select::Count);
+                if let Some(ref key) = start_key {
+                    scan = scan.set_exclusive_start_key(Some(key.clone()));
+                }
+                match scan.send().await {
+                    Ok(output) => {
+                        today_usage += output.count() as u64;
+                        match output.last_evaluated_key() {
+                            Some(k) => start_key = Some(k.to_owned()),
+                            None => break,
+                        }
+                    }
+                    Err(e) => { tracing::warn!("admin stats usage scan: {}", e); break; }
+                }
+            }
+
+            return Json(serde_json::json!({
+                "total_users": total_users,
+                "sessions": {
+                    "webchat": web,
+                    "line": line,
+                    "telegram": tg,
+                    "other": other,
+                    "total": web + line + tg + other,
+                },
+                "today_usage": today_usage,
+                "date": today,
+            })).into_response();
+        }
+    }
+
+    Json(serde_json::json!({
+        "error": "DynamoDB not configured",
+    })).into_response()
 }
 
 /// GET /og.svg — OGP image
