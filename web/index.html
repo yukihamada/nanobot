@@ -206,6 +206,61 @@
       outline: none;
     }
     #agent-select:hover { border-color: var(--accent); }
+
+    /* Channel bar in chat header */
+    .ch-bar { display: flex; gap: 6px; margin-left: 8px; }
+    .ch-bar-btn {
+      display: flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      color: #fff; cursor: pointer; border: none; transition: all 0.2s;
+      text-decoration: none;
+    }
+    .ch-bar-btn.line-bar { background: var(--line); }
+    .ch-bar-btn.tg-bar { background: var(--tg); }
+    .ch-bar-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
+    .ch-bar-btn .ch-check { display: none; margin-left: 2px; }
+    .ch-bar-btn.connected .ch-check { display: inline; }
+    .ch-bar-btn.connected { opacity: 0.85; }
+    .ch-bar-btn svg { width: 14px; height: 14px; }
+
+    /* Channel cards (larger CTA) */
+    .channel-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 28px; }
+    .channel-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 20px; cursor: pointer; transition: all 0.25s; text-decoration: none; color: var(--text);
+    }
+    .channel-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+    .channel-card.line-card { border-color: rgba(6,199,85,0.3); }
+    .channel-card.line-card:hover { border-color: var(--line); }
+    .channel-card.tg-card { border-color: rgba(42,171,238,0.3); }
+    .channel-card.tg-card:hover { border-color: var(--tg); }
+    .channel-card .cc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .channel-card .cc-icon {
+      width: 36px; height: 36px; border-radius: 10px; display: flex;
+      align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .channel-card.line-card .cc-icon { background: var(--line); }
+    .channel-card.tg-card .cc-icon { background: var(--tg); }
+    .channel-card .cc-name { font-size: 15px; font-weight: 700; }
+    .channel-card .cc-desc { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+    .channel-card .cc-action {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 13px; font-weight: 600; color: #fff;
+      padding: 8px 16px; border-radius: 8px;
+    }
+    .channel-card.line-card .cc-action { background: var(--line); }
+    .channel-card.tg-card .cc-action { background: var(--tg); }
+    .channel-card .cc-connected {
+      display: none; font-size: 11px; color: var(--green); font-weight: 600;
+      margin-top: 6px;
+    }
+    .channel-card.connected .cc-connected { display: block; }
+    .channel-card.connected .cc-action { opacity: 0.6; }
+
+    /* Tools badge */
+    .tools-count { font-size: 11px; color: var(--muted); text-align: center; margin-top: -20px; margin-bottom: 20px; }
+    .tools-count span { color: var(--accent-hover); font-weight: 700; }
+
     .device-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -670,6 +725,7 @@
     @media (max-width: 600px) {
       .hero h1 { font-size: 30px; }
       .channels { grid-template-columns: 1fr; }
+      .channel-cards { grid-template-columns: 1fr; }
       .recipe-grid { grid-template-columns: 1fr; }
       .chat-messages { height: 240px; }
       .stats-bar { gap: 20px; }
@@ -753,6 +809,16 @@
       <div class="chat-header">
         <div class="dot"></div>
         <span id="t-chat-status">オンライン</span>
+        <div class="ch-bar">
+          <a class="ch-bar-btn line-bar" id="ch-bar-line" onclick="openChannelLink('line');return false;" href="#">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#fff"/></svg>
+            LINE <span class="ch-check">&#x2713;</span>
+          </a>
+          <a class="ch-bar-btn tg-bar" id="ch-bar-tg" onclick="openChannelLink('tg');return false;" href="#">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z" fill="#fff"/></svg>
+            TG <span class="ch-check">&#x2713;</span>
+          </a>
+        </div>
         <select id="agent-select" onchange="selectAgent(this.value)">
           <option value="auto" id="opt-auto">Auto</option>
           <option value="assistant">Assistant</option>
@@ -818,14 +884,24 @@
       </div>
     </div>
 
-    <div class="channels fade-up fade-up-d4">
-      <a id="line-link-btn" onclick="openChannelLink('line');return false;" href="#" class="ch-btn line">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#fff"/></svg>
-        <span id="t-line">LINEで使う</span>
+    <div class="channel-cards fade-up fade-up-d4">
+      <a class="channel-card line-card" id="line-card" onclick="openChannelLink('line');return false;" href="#">
+        <div class="cc-header">
+          <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#fff"/></svg></div>
+          <div class="cc-name">LINE</div>
+        </div>
+        <div class="cc-desc" id="t-line-desc">1タップで友だち追加 → 自動連携</div>
+        <div class="cc-action" id="t-line">LINEで使う</div>
+        <div class="cc-connected" id="t-line-connected">&#x2713; Connected</div>
       </a>
-      <a id="tg-link-btn" onclick="openChannelLink('tg');return false;" href="#" class="ch-btn tg">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z" fill="#fff"/></svg>
-        <span id="t-tg">Telegramで使う</span>
+      <a class="channel-card tg-card" id="tg-card" onclick="openChannelLink('tg');return false;" href="#">
+        <div class="cc-header">
+          <div class="cc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z" fill="#fff"/></svg></div>
+          <div class="cc-name">Telegram</div>
+        </div>
+        <div class="cc-desc" id="t-tg-desc">ボタンを押すだけ → 今すぐ開始</div>
+        <div class="cc-action" id="t-tg">Telegramで使う</div>
+        <div class="cc-connected" id="t-tg-connected">&#x2713; Connected</div>
       </a>
     </div>
 
@@ -905,7 +981,7 @@
       return match[1];
     }
 
-    function addMsg(text, who, useTypewriter = false, channel = null) {
+    function addMsg(text, who, useTypewriter = false, channel = null, agentName = null) {
       const d = document.createElement('div');
       d.className = 'msg ' + who;
 
@@ -963,12 +1039,23 @@
         return;
       }
 
+      // Helper to append agent badge after text
+      function appendAgentBadge() {
+        if (agentName && who === 'bot') {
+          const badge = document.createElement('span');
+          badge.className = 'agent-badge';
+          badge.textContent = agentName;
+          d.appendChild(badge);
+        }
+      }
+
       if (who === 'bot' && useTypewriter && !channel) {
         msgs.appendChild(d);
-        typewriter(d, text);
+        typewriter(d, text).then(appendAgentBadge);
       } else {
         const textNode = document.createTextNode(text);
         d.appendChild(textNode);
+        appendAgentBadge();
         msgs.appendChild(d);
         msgs.scrollTop = msgs.scrollHeight;
       }
@@ -1001,8 +1088,7 @@
         });
         const d = await r.json();
         typing.remove();
-        const agentLabel = d.agent ? ('<span class="agent-badge">' + d.agent + '</span>') : '';
-        addMsg(d.response + agentLabel, 'bot', true);
+        addMsg(d.response, 'bot', true, null, d.agent || null);
         knownMsgCount += 2; // user + assistant messages
         startPolling();
       } catch {
@@ -1034,19 +1120,36 @@
         const data = await r.json();
         const serverMsgs = data.messages || [];
         if (serverMsgs.length > knownMsgCount) {
-          // New messages from other channels
           const newMsgs = serverMsgs.slice(knownMsgCount);
           for (const m of newMsgs) {
             const ch = m.channel || 'web';
-            // Only show messages from other channels (we already show our own)
             if (ch !== 'web') {
               addMsg(m.content, m.role === 'user' ? 'user' : 'bot', false, ch);
             }
           }
           knownMsgCount = serverMsgs.length;
         }
+        // Update connected channel status
+        if (data.linked_channels) {
+          updateChannelStatus(data.linked_channels);
+        }
       } catch(e) { /* ignore poll errors */ }
       isPolling = false;
+    }
+
+    function updateChannelStatus(channels) {
+      const lineBar = document.getElementById('ch-bar-line');
+      const tgBar = document.getElementById('ch-bar-tg');
+      const lineCard = document.getElementById('line-card');
+      const tgCard = document.getElementById('tg-card');
+      if (channels.includes('line')) {
+        lineBar.classList.add('connected');
+        lineCard.classList.add('connected');
+      }
+      if (channels.includes('telegram')) {
+        tgBar.classList.add('connected');
+        tgCard.classList.add('connected');
+      }
     }
 
     // Pause polling when tab is hidden
@@ -1137,6 +1240,8 @@
         sub: '24時間稼働のAIアシスタント。リサーチ・自動化・開発まで。',
         welcome: 'こんにちは！何でもお任せください。下のカードから選ぶか、自由に入力してください。',
         line: 'LINEで使う', tg: 'Telegramで使う',
+        lineDesc: '1タップで友だち追加 → 自動連携', tgDesc: 'ボタンを押すだけ → 今すぐ開始',
+        lineConnected: '&#x2713; 連携済み', tgConnected: '&#x2713; 連携済み',
         ph: '何でも聞いてください...', send: '送信',
         heroTry: '無料で試す', heroPlans: 'プランを見る', pricing: '料金', status: 'ステータス',
         chatStatus: 'オンライン',
@@ -1163,6 +1268,8 @@
         sub: '24/7 AI assistant. Research, automation, and development.',
         welcome: 'Hi! Pick a task below or type anything you need.',
         line: 'Use on LINE', tg: 'Use on Telegram',
+        lineDesc: '1 tap to add friend → auto-link', tgDesc: 'Just tap → start now',
+        lineConnected: '&#x2713; Connected', tgConnected: '&#x2713; Connected',
         ph: 'Ask me anything...', send: 'Send',
         heroTry: 'Try Free', heroPlans: 'View Plans', pricing: 'Pricing', status: 'Status',
         chatStatus: 'Online',
@@ -1225,6 +1332,10 @@
       }
       document.getElementById('t-line').textContent = t.line;
       document.getElementById('t-tg').textContent = t.tg;
+      document.getElementById('t-line-desc').textContent = t.lineDesc;
+      document.getElementById('t-tg-desc').textContent = t.tgDesc;
+      document.getElementById('t-line-connected').innerHTML = t.lineConnected;
+      document.getElementById('t-tg-connected').innerHTML = t.tgConnected;
       input.placeholder = t.ph;
       document.getElementById('send-btn').textContent = t.send;
       document.getElementById('t-hero-try').textContent = t.heroTry;

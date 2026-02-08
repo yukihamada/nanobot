@@ -39,6 +39,14 @@ async fn main() -> Result<(), Error> {
     app_state.dynamo_client = Some(dynamo_client);
     app_state.config_table = Some(config_table);
 
+    // Load MCP tools from environment
+    let mcp_tools = nanobot_core::mcp::client::load_mcp_tools_from_env().await;
+    if !mcp_tools.is_empty() {
+        info!("Loaded {} MCP tools", mcp_tools.len());
+        app_state.tool_registry.register_all(mcp_tools);
+    }
+    info!("Total tools registered: {}", app_state.tool_registry.len());
+
     let state = Arc::new(app_state);
 
     let router = create_router(state);

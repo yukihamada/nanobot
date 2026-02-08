@@ -45,6 +45,8 @@ pub struct AppState {
     pub provider: Option<Arc<dyn LlmProvider>>,
     /// Load-balanced multi-provider for distributing requests
     pub lb_provider: Option<Arc<dyn LlmProvider>>,
+    /// Unified tool registry (built-in + MCP tools)
+    pub tool_registry: crate::service::integrations::ToolRegistry,
     #[cfg(feature = "dynamodb-backend")]
     pub dynamo_client: Option<aws_sdk_dynamodb::Client>,
     #[cfg(feature = "dynamodb-backend")]
@@ -65,11 +67,15 @@ impl AppState {
         let lb_provider = provider::LoadBalancedProvider::from_env()
             .map(|lb| Arc::new(lb) as Arc<dyn LlmProvider>);
 
+        // Create tool registry with built-in tools
+        let tool_registry = crate::service::integrations::ToolRegistry::with_builtins();
+
         Self {
             config,
             sessions: Mutex::new(sessions),
             provider,
             lb_provider,
+            tool_registry,
             #[cfg(feature = "dynamodb-backend")]
             dynamo_client: None,
             #[cfg(feature = "dynamodb-backend")]
@@ -605,11 +611,11 @@ const AGENTS: &[AgentProfile] = &[
         name: "Researcher",
         description: "Web research, fact-checking, data gathering",
         system_prompt: "あなたはリサーチ専門のAIエージェントです。\
-             質問には必ずweb_searchツールを使って実際に検索してから回答してください。\
-             価格比較の場合は各サイトをweb_fetchで確認し、具体的な価格とURLを含めてください。\
-             「見つかりません」と言わず、必ず検索を実行してください。\
-             情報源のURLを必ず明示してください。\
-             日本語で質問されたら日本語で、英語なら英語で答えてください。",
+             手順: 1) web_searchで検索 2) 結果のURLをweb_fetchで取得 3) 取得した情報を元に回答。\
+             価格比較は必ずweb_fetchで各サイトの実際の価格を確認し、具体的な金額とURLを含めて回答。\
+             ツール結果に実際のデータ（価格、日付等）が含まれていれば、必ずそれを引用して回答。\
+             「見つかりません」とは言わず、取得できた情報を最大限活用して回答。\
+             情報源のURLを必ず明示。日本語で質問されたら日本語で、英語なら英語で答える。",
         tools_enabled: true,
         icon: "search",
     },
@@ -915,9 +921,11 @@ async fn handle_chat(
     let (agent, clean_message) = detect_agent(&req.message);
     info!("Agent selected: {} for message", agent.id);
 
-    // Build conversation with session history
+    // Build conversation with session history — include current date in system prompt
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let system_prompt = format!("{}\n\n今日の日付: {}", agent.system_prompt, today);
     let mut messages = vec![
-        Message::system(agent.system_prompt),
+        Message::system(&system_prompt),
     ];
 
     // Get session history (refresh to pick up messages from other channels)
@@ -953,7 +961,7 @@ async fn handle_chat(
 
     // Get tool definitions for function calling (only if agent supports tools)
     let tools = if agent.tools_enabled {
-        crate::service::integrations::get_tool_definitions()
+        state.tool_registry.get_definitions()
     } else {
         vec![]
     };
@@ -979,22 +987,37 @@ async fn handle_chat(
                 }
             }
 
-            // Handle tool calls if any
-            if completion.has_tool_calls() {
-                let mut tool_results = Vec::new();
-                for tool_call in &completion.tool_calls {
-                    info!("Tool call: {} args={:?}", tool_call.name, tool_call.arguments);
-                    let result = crate::service::integrations::execute_tool(
-                        &tool_call.name, &tool_call.arguments
-                    ).await;
-                    info!("Tool result ({}): {} chars", tool_call.name, result.len());
-                    tool_results.push((tool_call.id.clone(), tool_call.name.clone(), result));
-                }
+            // Handle tool calls: up to 3 rounds (search → fetch → answer)
+            let mut current = completion;
+            let mut conversation = messages.clone();
+            let mut all_tool_results = Vec::new();
 
-                // Build follow-up messages with tool results
-                let mut followup = messages.clone();
-                // Add assistant message with tool calls
-                let tc_json: Vec<serde_json::Value> = completion.tool_calls.iter().map(|tc| {
+            // Execute tool calls and get final answer
+            if current.has_tool_calls() {
+                // Limit to max 2 tool calls to stay within API Gateway 29s timeout
+                let tool_calls_to_run: Vec<_> = current.tool_calls.iter().take(2).collect();
+                if current.tool_calls.len() > 2 {
+                    info!("Limiting tool calls from {} to 2", current.tool_calls.len());
+                }
+                // Execute tool calls in parallel
+                let registry = &state.tool_registry;
+                let futures: Vec<_> = tool_calls_to_run.iter().map(|tc| {
+                    let name = tc.name.clone();
+                    let args = tc.arguments.clone();
+                    let id = tc.id.clone();
+                    async move {
+                        info!("Tool call: {} args={:?}", name, args);
+                        let result = registry.execute(&name, &args).await;
+                        let preview_end = result.char_indices().nth(300).map(|(i, _)| i).unwrap_or(result.len());
+                        let preview = &result[..preview_end];
+                        info!("Tool result ({}): {} chars — {}", name, result.len(), preview);
+                        (id, name, result)
+                    }
+                }).collect();
+                let tool_results: Vec<_> = futures::future::join_all(futures).await;
+                all_tool_results.extend(tool_results.iter().cloned());
+
+                let tc_json: Vec<serde_json::Value> = current.tool_calls.iter().take(2).map(|tc| {
                     serde_json::json!({
                         "id": tc.id,
                         "type": "function",
@@ -1004,43 +1027,51 @@ async fn handle_chat(
                         }
                     })
                 }).collect();
-                followup.push(Message::assistant_with_tool_calls(completion.content.clone(), tc_json));
+                conversation.push(Message::assistant_with_tool_calls(current.content.clone(), tc_json));
 
-                // Add tool results
                 for (id, name, result) in &tool_results {
-                    followup.push(Message::tool_result(id, name, result));
+                    conversation.push(Message::tool_result(id, name, result));
                 }
 
-                // Second LLM call with tool results
-                match provider.chat(&followup, tools_ref, model, max_tokens, temperature).await {
-                    Ok(final_resp) => {
-                        info!("Follow-up response: finish={:?}, content_len={}, tool_calls={}",
-                            final_resp.finish_reason,
-                            final_resp.content.as_ref().map(|c| c.len()).unwrap_or(0),
-                            final_resp.tool_calls.len());
+                // Follow-up call WITHOUT tools — force text generation
+                match provider.chat(&conversation, None, model, max_tokens, temperature).await {
+                    Ok(resp) => {
+                        info!("Follow-up: finish={:?}, content_len={}, tool_calls={}",
+                            resp.finish_reason,
+                            resp.content.as_ref().map(|c| c.len()).unwrap_or(0),
+                            resp.tool_calls.len());
                         #[cfg(feature = "dynamodb-backend")]
                         {
                             if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
                                 deduct_credits(dynamo, table, &session_key, model,
-                                    final_resp.usage.prompt_tokens, final_resp.usage.completion_tokens).await;
+                                    resp.usage.prompt_tokens, resp.usage.completion_tokens).await;
                             }
                         }
-                        // If content is empty but we have tool calls again, return tool results directly
-                        let content = final_resp.content.unwrap_or_default();
-                        if content.is_empty() && !tool_results.is_empty() {
-                            tool_results.iter().map(|(_, name, result)| format!("[{}]\n{}", name, result)).collect::<Vec<_>>().join("\n\n")
-                        } else {
-                            content
-                        }
+                        current = resp;
                     }
                     Err(e) => {
-                        tracing::error!("LLM tool followup error: {}", e);
-                        // Fall back to tool results directly
-                        tool_results.iter().map(|(_, name, result)| format!("[{}] {}", name, result)).collect::<Vec<_>>().join("\n")
+                        tracing::error!("LLM follow-up error: {}", e);
+                        let fallback = all_tool_results.iter()
+                            .map(|(_, name, result)| format!("[{}] {}", name, result))
+                            .collect::<Vec<_>>().join("\n");
+                        current = crate::types::CompletionResponse {
+                            content: Some(fallback),
+                            tool_calls: vec![],
+                            finish_reason: crate::types::FinishReason::Stop,
+                            usage: crate::types::TokenUsage::default(),
+                        };
                     }
                 }
+            }
+
+            // Return final response
+            let content = current.content.unwrap_or_default();
+            if content.is_empty() && !all_tool_results.is_empty() {
+                all_tool_results.iter()
+                    .map(|(_, name, result)| format!("[{}]\n{}", name, result))
+                    .collect::<Vec<_>>().join("\n\n")
             } else {
-                completion.content.unwrap_or_default()
+                content
             }
         }
         Err(e) => {
@@ -1253,6 +1284,22 @@ async fn handle_get_session(
         }
     };
 
+    // Query linked channels for this user
+    let linked_channels = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                get_linked_channels(dynamo, table, &session_key).await
+            } else {
+                vec![]
+            }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        {
+            Vec::<String>::new()
+        }
+    };
+
     let mut sessions = state.sessions.lock().await;
     // Force reload from storage to get latest messages from all channels
     let session = sessions.refresh(&session_key);
@@ -1262,7 +1309,71 @@ async fn handle_get_session(
         "resolved_key": session_key,
         "messages": history,
         "message_count": history.len(),
+        "linked_channels": linked_channels,
     }))
+}
+
+/// Query DynamoDB for linked channels associated with a user.
+#[cfg(feature = "dynamodb-backend")]
+async fn get_linked_channels(
+    dynamo: &aws_sdk_dynamodb::Client,
+    table: &str,
+    session_key: &str,
+) -> Vec<String> {
+    // Query LINK# records that point to this user_id
+    let pk = format!("LINK#api:{}", session_key.trim_start_matches("api:"));
+    let resp = dynamo
+        .query()
+        .table_name(table)
+        .key_condition_expression("pk = :pk")
+        .expression_attribute_values(":pk", AttributeValue::S(pk))
+        .limit(10)
+        .send()
+        .await;
+
+    let mut channels = vec!["web".to_string()];
+
+    // Also scan for reverse links: any LINK# records with user_id = session_key
+    let scan_resp = dynamo
+        .query()
+        .table_name(table)
+        .index_name("gsi-user-id")
+        .key_condition_expression("user_id = :uid")
+        .expression_attribute_values(":uid", AttributeValue::S(session_key.to_string()))
+        .limit(20)
+        .send()
+        .await;
+
+    if let Ok(output) = scan_resp {
+        for item in output.items.unwrap_or_default() {
+            if let Some(pk_val) = item.get("pk").and_then(|v| v.as_s().ok()) {
+                let key = pk_val.trim_start_matches("LINK#");
+                if key.starts_with("line:") && !channels.contains(&"line".to_string()) {
+                    channels.push("line".to_string());
+                } else if key.starts_with("telegram:") && !channels.contains(&"telegram".to_string()) {
+                    channels.push("telegram".to_string());
+                }
+            }
+        }
+    }
+
+    // Also check the direct query response
+    if let Ok(output) = resp {
+        for item in output.items.unwrap_or_default() {
+            if let Some(uid) = item.get("user_id").and_then(|v| v.as_s().ok()) {
+                if uid != session_key {
+                    // This link record exists — there's a linked channel
+                    if uid.starts_with("line:") && !channels.contains(&"line".to_string()) {
+                        channels.push("line".to_string());
+                    } else if uid.starts_with("telegram:") && !channels.contains(&"telegram".to_string()) {
+                        channels.push("telegram".to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    channels
 }
 
 /// DELETE /api/v1/sessions/:id — Delete session
@@ -1990,14 +2101,16 @@ async fn handle_providers(
 }
 
 /// GET /api/v1/integrations — List available integrations
-async fn handle_integrations() -> impl IntoResponse {
+async fn handle_integrations(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
     let integrations = crate::service::integrations::list_integrations();
-    let tools = crate::service::integrations::get_tool_definitions();
+    let tools = state.tool_registry.get_definitions();
 
     Json(serde_json::json!({
         "integrations": integrations,
         "tools": tools,
-        "active_count": integrations.iter().filter(|i| i.enabled).count(),
+        "active_count": tools.len(),
         "total_count": integrations.len(),
     }))
 }
