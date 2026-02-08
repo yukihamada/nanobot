@@ -269,6 +269,55 @@
     }
     footer a { color: var(--muted); }
 
+    /* Coupon active state — Starter plan highlight */
+    .plan-card.coupon-active {
+      border-color: #f59e0b;
+      box-shadow: 0 0 32px rgba(245,158,11,0.2);
+      transform: scale(1.03);
+      transition: all 0.4s ease;
+    }
+    .plan-card.coupon-active .plan-badge {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+    }
+    .coupon-free-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 8px;
+      margin-top: 8px;
+      animation: badgePop 0.4s ease;
+    }
+    @keyframes badgePop {
+      0% { opacity: 0; transform: scale(0.8); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    .plan-price .original-price {
+      font-size: 18px;
+      color: var(--muted);
+      text-decoration: line-through;
+      font-weight: 400;
+      margin-right: 8px;
+    }
+    .plan-price .trial-note {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 400;
+      margin-top: 4px;
+      letter-spacing: 0;
+    }
+    .plan-cta.green {
+      background: var(--green);
+      color: #fff;
+    }
+    .plan-cta.green:hover {
+      background: #16a34a;
+      transform: translateY(-1px);
+    }
+
     @media (max-width: 768px) {
       .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin-left: auto; margin-right: auto; }
       .hero h1 { font-size: 28px; }
@@ -356,10 +405,50 @@
   </footer>
 
   <script>
-    const PAYMENT_LINKS = {
-      starter: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o',
-      pro: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p',
+    // Region detection & pricing
+    const isJP = navigator.language.startsWith('ja') ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone.startsWith('Asia/Tokyo');
+
+    const PRICING = {
+      jp: {
+        starter: { amount: 9, currency: '$', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
+        pro: { amount: 29, currency: '$', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
+      },
+      intl: {
+        starter: { amount: 19, currency: '$', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
+        pro: { amount: 49, currency: '$', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
+      },
     };
+
+    const region = isJP ? 'jp' : 'intl';
+    const PAYMENT_LINKS = {
+      starter: PRICING[region].starter.link,
+      pro: PRICING[region].pro.link,
+    };
+
+    // Apply region pricing to DOM after page load
+    function applyRegionPricing() {
+      if (!isJP) {
+        const starterPrice = document.querySelector('.plan-card.featured .plan-price');
+        if (starterPrice && !starterPrice.classList.contains('coupon-modified')) {
+          starterPrice.innerHTML = '<span class="currency">$</span>' + PRICING.intl.starter.amount +
+            '<span class="period" id="p-starter-period">' +
+            (document.documentElement.lang === 'ja' ? '/月' : '/mo') + '</span>';
+        }
+        const proCards = document.querySelectorAll('.plan-card:not(.featured)');
+        proCards.forEach(card => {
+          const name = card.querySelector('.plan-name');
+          if (name && name.textContent === 'Pro') {
+            const priceEl = card.querySelector('.plan-price');
+            if (priceEl && !priceEl.classList.contains('coupon-modified')) {
+              priceEl.innerHTML = '<span class="currency">$</span>' + PRICING.intl.pro.amount +
+                '<span class="period" id="p-pro-period">' +
+                (document.documentElement.lang === 'ja' ? '/月' : '/mo') + '</span>';
+            }
+          }
+        });
+      }
+    }
 
     let activeCoupon = null;
 
@@ -385,12 +474,16 @@
             ? (data.description_ja || data.description || 'クーポンが適用されました！')
             : (data.description || 'Coupon applied!');
           input.style.borderColor = 'var(--green)';
+
+          // UI enhancement: highlight Starter plan with coupon details
+          applyCouponUI(l, data);
         } else {
           activeCoupon = null;
           msg.className = 'coupon-msg error';
           const l = document.documentElement.lang || 'ja';
           msg.textContent = l === 'ja' ? '無効なクーポンコードです' : 'Invalid coupon code';
           input.style.borderColor = '#ef4444';
+          resetCouponUI();
         }
       })
       .catch(() => {
@@ -402,6 +495,83 @@
     document.getElementById('coupon-input').addEventListener('keydown', e => {
       if (e.key === 'Enter') applyCoupon();
     });
+
+    function applyCouponUI(lang, data) {
+      const starterCard = document.querySelector('.plan-card.featured');
+      if (!starterCard) return;
+
+      const grantCredits = data.grant_credits || 30000;
+      const grantDays = data.grant_days || 30;
+      const noCard = data.require_card === false;
+
+      // Add gold border + scale
+      starterCard.classList.add('coupon-active');
+
+      // Update badge text
+      const badge = document.getElementById('p-starter-badge');
+      badge.textContent = lang === 'ja'
+        ? (grantDays >= 180 ? '6ヶ月無料' : grantDays + '日間無料')
+        : (grantDays >= 180 ? '6 months free' : grantDays + ' days free');
+
+      // Update price display
+      const priceEl = starterCard.querySelector('.plan-price');
+      priceEl.innerHTML = '<span class="original-price">$9</span><span class="currency">$</span>0<span class="period">' +
+        (lang === 'ja' ? '/月' : '/mo') + '</span>' +
+        '<span class="trial-note">' +
+        (lang === 'ja'
+          ? (noCard ? 'カード登録不要・' + grantDays + '日間無料' : (grantDays + 1) + '日目から$' + PRICING[region].starter.amount + '/月・いつでもキャンセル可')
+          : (noCard ? 'No card required. ' + grantDays + ' days free' : 'After ' + grantDays + ' days: $' + PRICING[region].starter.amount + '/mo. Cancel anytime.')) +
+        '</span>';
+
+      // Add free badge
+      if (!starterCard.querySelector('.coupon-free-badge')) {
+        const freeBadge = document.createElement('div');
+        freeBadge.className = 'coupon-free-badge';
+        freeBadge.textContent = lang === 'ja'
+          ? (noCard ? 'カード不要！' + grantDays + '日間 完全無料' : grantDays + '日間 完全無料')
+          : (noCard ? 'No card needed! ' + grantDays + ' days free' : grantDays + ' days completely free');
+        priceEl.parentNode.insertBefore(freeBadge, priceEl.nextSibling);
+      }
+
+      // Update CTA button — if no card required, redeem directly
+      const cta = document.getElementById('p-starter-cta');
+      if (noCard) {
+        cta.textContent = lang === 'ja' ? '今すぐ無料で始める' : 'Start free now';
+        cta.classList.remove('primary');
+        cta.classList.add('green');
+        cta.dataset.nocard = 'true';
+      } else {
+        cta.textContent = lang === 'ja' ? '今すぐ無料で始める' : 'Start free now';
+        cta.classList.remove('primary');
+        cta.classList.add('green');
+      }
+    }
+
+    function resetCouponUI() {
+      const starterCard = document.querySelector('.plan-card.featured');
+      if (!starterCard) return;
+
+      starterCard.classList.remove('coupon-active');
+
+      // Restore badge
+      const l = document.documentElement.lang || 'ja';
+      document.getElementById('p-starter-badge').textContent = T[l].badge;
+
+      // Restore price
+      const priceEl = starterCard.querySelector('.plan-price');
+      priceEl.innerHTML = '<span class="currency">$</span>9<span class="period" id="p-starter-period">' +
+        T[l].starter.period + '</span>';
+
+      // Remove free badge
+      const freeBadge = starterCard.querySelector('.coupon-free-badge');
+      if (freeBadge) freeBadge.remove();
+
+      // Restore CTA
+      const cta = document.getElementById('p-starter-cta');
+      cta.textContent = T[l].starter.cta;
+      cta.classList.remove('green');
+      cta.classList.add('primary');
+    }
 
     const T = {
       ja: {
@@ -558,6 +728,53 @@
       btn.addEventListener('click', function(e) {
         e.preventDefault();
         const plan = this.dataset.plan;
+
+        // No-card coupon: redeem directly via API
+        if (this.dataset.nocard === 'true' && activeCoupon) {
+          const sid = localStorage.getItem('session_id') || '';
+          const token = localStorage.getItem('auth_token') || '';
+          const headers = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = 'Bearer ' + token;
+
+          this.disabled = true;
+          const lang = document.documentElement.lang || 'ja';
+          this.textContent = lang === 'ja' ? '適用中...' : 'Applying...';
+
+          fetch('/api/v1/coupon/redeem', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ code: activeCoupon, session_id: sid }),
+          })
+          .then(r => r.json())
+          .then(data => {
+            if (data.success) {
+              const msg = document.getElementById('coupon-msg');
+              msg.className = 'coupon-msg success';
+              msg.textContent = lang === 'ja'
+                ? data.message_ja || 'クーポン適用完了！'
+                : data.message || 'Coupon redeemed!';
+              this.textContent = lang === 'ja' ? '適用済み！チャットへ' : 'Done! Go to chat';
+              this.classList.add('green');
+              setTimeout(() => { window.location.href = '/'; }, 1500);
+            } else {
+              const msg = document.getElementById('coupon-msg');
+              msg.className = 'coupon-msg error';
+              msg.textContent = lang === 'ja'
+                ? (data.error_ja || data.error || 'エラーが発生しました')
+                : (data.error || 'Error redeeming coupon');
+              this.disabled = false;
+              this.textContent = lang === 'ja' ? '今すぐ無料で始める' : 'Start free now';
+            }
+          })
+          .catch(() => {
+            this.disabled = false;
+            this.textContent = lang === 'ja' ? '今すぐ無料で始める' : 'Start free now';
+            alert(lang === 'ja' ? 'エラーが発生しました。もう一度お試しください。' : 'Error. Please try again.');
+          });
+          return;
+        }
+
+        // Normal Stripe flow
         let link = PAYMENT_LINKS[plan];
         if (link) {
           if (activeCoupon) {
@@ -578,6 +795,7 @@
     });
 
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+    applyRegionPricing();
   </script>
 </body>
 </html>

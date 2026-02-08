@@ -86,14 +86,20 @@ impl ToolRegistry {
         self.tools.iter().map(|t| t.to_openai_definition()).collect()
     }
 
-    /// Execute a tool by name.
+    /// Execute a tool by name with a 10-second timeout.
     pub async fn execute(&self, name: &str, arguments: &HashMap<String, serde_json::Value>) -> String {
         for tool in &self.tools {
             if tool.name() == name {
-                return tool.execute(arguments.clone()).await;
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(10),
+                    tool.execute(arguments.clone()),
+                ).await {
+                    Ok(result) => return result,
+                    Err(_) => return format!("[TOOL_ERROR] Tool '{}' timed out after 10s", name),
+                }
             }
         }
-        format!("Unknown tool: {}", name)
+        format!("[TOOL_ERROR] Unknown tool: {}", name)
     }
 
     /// Number of registered tools.
@@ -374,7 +380,8 @@ impl Tool for GoogleCalendarTool {
     }
     async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
         let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("list");
-        execute_google_calendar(action, &params).await
+        let refresh_token = params.get("_refresh_token").and_then(|v| v.as_str()).map(|s| s.to_string());
+        execute_google_calendar(action, &params, refresh_token.as_deref()).await
     }
 }
 
@@ -412,7 +419,8 @@ impl Tool for GmailTool {
     }
     async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
         let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("search");
-        execute_gmail(action, &params).await
+        let refresh_token = params.get("_refresh_token").and_then(|v| v.as_str()).map(|s| s.to_string());
+        execute_gmail(action, &params, refresh_token.as_deref()).await
     }
 }
 
@@ -2013,10 +2021,9 @@ fn sign_rs256(_pem: &str, _data: &[u8]) -> Result<String, String> {
 }
 
 /// Execute Google Calendar tool.
-async fn execute_google_calendar(action: &str, params: &HashMap<String, serde_json::Value>) -> String {
-    // Try to get access token from user's refresh token stored in env/context
-    // In the HTTP handler, the refresh token is passed via GOOGLE_USER_REFRESH_TOKEN env
-    let refresh_token = std::env::var("GOOGLE_USER_REFRESH_TOKEN").unwrap_or_default();
+async fn execute_google_calendar(action: &str, params: &HashMap<String, serde_json::Value>, injected_refresh_token: Option<&str>) -> String {
+    // Try to get access token from user's refresh token passed via parameter
+    let refresh_token = injected_refresh_token.unwrap_or("").to_string();
     let access_token = if !refresh_token.is_empty() {
         match google_refresh_access_token(&refresh_token).await {
             Ok(t) => t,
@@ -2121,8 +2128,8 @@ async fn execute_google_calendar(action: &str, params: &HashMap<String, serde_js
 }
 
 /// Execute Gmail tool.
-async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>) -> String {
-    let refresh_token = std::env::var("GOOGLE_USER_REFRESH_TOKEN").unwrap_or_default();
+async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>, injected_refresh_token: Option<&str>) -> String {
+    let refresh_token = injected_refresh_token.unwrap_or("").to_string();
     let access_token = if !refresh_token.is_empty() {
         match google_refresh_access_token(&refresh_token).await {
             Ok(t) => t,

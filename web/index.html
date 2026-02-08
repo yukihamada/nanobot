@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
   <title>chatweb.ai - AIチャット</title>
   <meta name="description" content="AIとすぐに話せる。LINE・Telegramでも使える。無料。">
   <!-- Favicon -->
@@ -20,6 +20,31 @@
   <meta name="twitter:title" content="chatweb.ai - AI Agent Platform">
   <meta name="twitter:description" content="AI assistant with web search, tools, and multi-channel support.">
   <meta name="twitter:image" content="https://chatweb.ai/og.svg">
+  <!-- Canonical & PWA -->
+  <link rel="canonical" href="https://chatweb.ai/">
+  <meta name="theme-color" content="#6366f1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="chatweb.ai">
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "chatweb.ai",
+    "url": "https://chatweb.ai",
+    "description": "Voice-first AI assistant. Research, automation, development - all by voice. Works on Web, LINE, and Telegram.",
+    "applicationCategory": "ProductivityApplication",
+    "operatingSystem": "Web",
+    "offers": [
+      {"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD"},
+      {"@type": "Offer", "name": "Starter", "price": "9", "priceCurrency": "USD"},
+      {"@type": "Offer", "name": "Pro", "price": "29", "priceCurrency": "USD"}
+    ],
+    "featureList": "Voice Input, Web Search, Multi-Channel (LINE, Telegram, Web), 5+ AI Models, Long-term Memory, TTS",
+    "inLanguage": ["ja", "en"]
+  }
+  </script>
   <!-- Preconnect to API Gateway for faster first request -->
   <link rel="preconnect" href="https://chatweb.ai">
   <link rel="dns-prefetch" href="https://chatweb.ai">
@@ -1345,37 +1370,96 @@
       align-items: center;
       justify-content: center;
       color: var(--muted);
-      gap: 16px;
+      gap: 24px;
+      padding-bottom: 60px;
     }
     .app-chat-empty-logo {
-      font-size: 36px;
-      font-weight: 900;
+      font-size: 28px;
+      font-weight: 800;
       background: linear-gradient(135deg, var(--accent), #a78bfa);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
     }
-    .app-chat-empty-text { font-size: 16px; }
+    .app-chat-empty-text { font-size: 15px; color: var(--muted); }
+
+    /* Voice hero button - the primary CTA */
+    .voice-hero-btn {
+      width: 100px; height: 100px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 0 0 0 rgba(99,102,241,0.3);
+    }
+    .voice-hero-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 30px rgba(99,102,241,0.4);
+    }
+    .voice-hero-btn:active { transform: scale(0.95); }
+    .voice-hero-btn svg { width: 40px; height: 40px; }
+    .voice-hero-btn::before {
+      content: '';
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      border: 2px solid rgba(99,102,241,0.15);
+      animation: voice-ring 3s ease-in-out infinite;
+    }
+    .voice-hero-btn::after {
+      content: '';
+      position: absolute;
+      inset: -14px;
+      border-radius: 50%;
+      border: 1px solid rgba(99,102,241,0.08);
+      animation: voice-ring 3s ease-in-out infinite 0.5s;
+    }
+    @keyframes voice-ring {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.08); opacity: 0.5; }
+    }
+    .voice-hero-btn.recording {
+      background: linear-gradient(135deg, #ef4444, #f97316);
+      animation: voice-pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes voice-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+      50% { box-shadow: 0 0 0 20px rgba(239,68,68,0); }
+    }
+    .voice-hero-label {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+
     .app-chat-suggestions {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       justify-content: center;
-      max-width: 600px;
+      max-width: 500px;
+      margin-top: 8px;
     }
     .app-chat-suggestion {
       padding: 8px 16px;
-      background: var(--surface);
+      background: transparent;
       border: 1px solid var(--border);
       border-radius: 20px;
       font-size: 13px;
-      color: var(--text);
+      color: var(--muted);
       cursor: pointer;
       transition: all 0.2s;
     }
-    .app-chat-suggestion:hover { border-color: var(--accent); background: var(--surface2); }
+    .app-chat-suggestion:hover { border-color: var(--accent); color: var(--text); }
     .app-chat-input-area {
-      padding: 16px 20px 20px;
-      max-width: 800px;
+      padding: 12px 16px 16px;
+      max-width: 760px;
       width: 100%;
       margin: 0 auto;
     }
@@ -1384,18 +1468,22 @@
       align-items: flex-end;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 8px;
-      transition: border-color 0.2s;
+      border-radius: 22px;
+      padding: 6px 6px 6px 8px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      gap: 4px;
     }
-    .app-chat-input-box:focus-within { border-color: var(--accent); }
+    .app-chat-input-box:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+    }
     .app-chat-input-box textarea {
       flex: 1;
       background: none;
       border: none;
       color: var(--text);
       font-size: 15px;
-      padding: 8px 12px;
+      padding: 8px 8px;
       resize: none;
       outline: none;
       max-height: 150px;
@@ -1404,8 +1492,8 @@
     }
     .app-chat-input-box textarea::placeholder { color: var(--muted); }
     .app-chat-send-btn {
-      width: 36px; height: 36px;
-      border-radius: 10px;
+      width: 38px; height: 38px;
+      border-radius: 50%;
       background: var(--accent);
       border: none;
       color: #fff;
@@ -1414,15 +1502,15 @@
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      transition: background 0.2s;
+      transition: all 0.2s;
     }
-    .app-chat-send-btn:hover { background: var(--accent-hover); }
-    .app-chat-send-btn:disabled { opacity: 0.4; cursor: default; }
+    .app-chat-send-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+    .app-chat-send-btn:disabled { opacity: 0.3; cursor: default; transform: none; }
     .app-chat-model-bar {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 4px 0 0;
+      padding: 6px 4px 0;
       font-size: 12px;
       color: var(--muted);
     }
@@ -1431,18 +1519,24 @@
       border: 1px solid var(--border);
       color: var(--muted);
       font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 6px;
+      padding: 4px 10px;
+      border-radius: 8px;
       cursor: pointer;
       outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6' fill='%23888'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 6px center;
+      padding-right: 20px;
     }
 
-    /* Mic button (STT) */
+    /* Mic button (STT) in input box */
     .app-chat-mic-btn {
-      width: 36px; height: 36px;
-      border-radius: 10px;
+      width: 38px; height: 38px;
+      border-radius: 50%;
       background: transparent;
-      border: 1px solid var(--border);
+      border: 1.5px solid var(--border);
       color: var(--muted);
       cursor: pointer;
       display: flex;
@@ -1450,20 +1544,21 @@
       justify-content: center;
       flex-shrink: 0;
       transition: all 0.2s;
-      margin-right: 4px;
     }
-    .app-chat-mic-btn:hover { background: var(--surface); color: var(--text); border-color: var(--accent); }
+    .app-chat-mic-btn:hover { background: rgba(99,102,241,0.1); color: var(--accent); border-color: var(--accent); }
     .app-chat-mic-btn.recording {
-      background: #ff4444;
-      border-color: #ff4444;
+      background: #ef4444;
+      border-color: #ef4444;
       color: #fff;
-      animation: mic-pulse 1.2s infinite;
+      animation: mic-rec-pulse 1.2s infinite;
     }
-    @keyframes mic-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(255,68,68,0.4); }
-      50% { box-shadow: 0 0 0 8px rgba(255,68,68,0); }
+    @keyframes mic-rec-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+      50% { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
     }
     body.no-speech-api .app-chat-mic-btn { display: none; }
+    body.no-speech-api .voice-hero-btn { display: none; }
+    body.no-speech-api .voice-hero-label { display: none; }
 
     /* TTS button */
     .app-tts-btn {
@@ -1474,13 +1569,13 @@
       border: 1px solid var(--border);
       color: var(--muted);
       cursor: pointer;
-      font-size: 12px;
-      padding: 3px 8px;
-      border-radius: 6px;
-      margin-top: 6px;
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 16px;
+      margin-top: 8px;
       transition: all 0.2s;
     }
-    .app-tts-btn:hover { background: var(--surface); color: var(--text); border-color: var(--accent); }
+    .app-tts-btn:hover { background: rgba(99,102,241,0.1); color: var(--accent); border-color: var(--accent); }
     .app-tts-btn.playing {
       background: var(--accent);
       color: #fff;
@@ -1511,22 +1606,27 @@
 
     /* App mode message styling */
     .app-chat-messages .app-msg {
-      max-width: 720px;
+      max-width: 700px;
       width: 100%;
       margin: 0 auto;
-      padding: 0 20px;
+      padding: 0 16px;
+      animation: msg-in 0.3s ease-out;
+    }
+    @keyframes msg-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     .app-chat-messages .app-msg-user {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
     .app-chat-messages .app-msg-user .app-msg-bubble {
       background: var(--accent);
       color: #fff;
       padding: 10px 16px;
-      border-radius: 18px 18px 4px 18px;
-      max-width: 70%;
+      border-radius: 20px 20px 6px 20px;
+      max-width: 75%;
       font-size: 14px;
       line-height: 1.6;
       word-break: break-word;
@@ -1535,24 +1635,25 @@
     .app-chat-messages .app-msg-bot {
       display: flex;
       gap: 10px;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
     .app-chat-messages .app-msg-bot .app-msg-avatar {
-      width: 28px; height: 28px;
+      width: 30px; height: 30px;
       border-radius: 50%;
-      background: var(--surface);
-      border: 1px solid var(--border);
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
       flex-shrink: 0;
       margin-top: 2px;
     }
     .app-chat-messages .app-msg-bot .app-msg-content {
       flex: 1;
       font-size: 14px;
-      line-height: 1.7;
+      line-height: 1.75;
       color: var(--text);
       word-break: break-word;
       white-space: pre-wrap;
@@ -1650,33 +1751,63 @@
     @media (max-width: 768px) {
       .app-sidebar {
         position: fixed;
-        top: 48px; left: -280px; bottom: 0;
+        top: 44px; left: -280px; bottom: 0;
         width: 280px;
         z-index: 200;
         transition: left 0.3s ease;
       }
       .app-sidebar.open { left: 0; }
       .app-sidebar-toggle { display: block; }
-      .app-chat-input-area { padding: 10px 12px 14px; }
-      .app-chat-input-box { border-radius: 12px; }
-      .app-chat-input-box textarea { font-size: 14px; padding: 6px 10px; }
-      .app-chat-messages .app-msg { padding: 0 8px; }
-      .app-chat-messages .app-msg-user .app-msg-bubble { max-width: 85%; font-size: 13px; }
-      .app-chat-messages .app-msg-bot .app-msg-content { font-size: 13px; }
-      .app-chat-empty-logo { font-size: 28px; }
-      .app-chat-empty-text { font-size: 14px; }
-      .app-chat-suggestion { font-size: 12px; padding: 6px 12px; }
+      .app-sidebar, .app-container { top: 44px; }
       body.app-mode nav { padding: 6px 10px; height: 44px; }
       body.app-mode .logo { font-size: 16px; }
       body.app-mode .user-name { font-size: 11px; max-width: 100px; }
       body.app-mode .auth-nav-btn.logout-btn { font-size: 11px; padding: 3px 8px; }
+
+      /* Chat messages area - fill screen properly */
+      .app-chat-messages { padding: 12px 0; gap: 10px; }
+      .app-chat-messages .app-msg { padding: 0 10px; }
+      .app-chat-messages .app-msg-user .app-msg-bubble { max-width: 88%; font-size: 14px; padding: 8px 14px; }
+      .app-chat-messages .app-msg-bot .app-msg-content { font-size: 14px; max-width: calc(100vw - 70px); }
+      .app-chat-messages .app-msg-bot .app-msg-avatar { width: 28px; height: 28px; font-size: 10px; flex-shrink: 0; }
+      .app-chat-messages .app-msg-bot { gap: 8px; }
+
+      /* Input area - compact and touch-friendly */
+      .app-chat-input-area { padding: 8px 10px calc(env(safe-area-inset-bottom, 8px) + 8px); }
+      .app-chat-input-box { border-radius: 14px; padding: 6px; }
+      .app-chat-input-box textarea { font-size: 16px; padding: 6px 10px; }
+      .app-chat-send-btn { width: 38px; height: 38px; border-radius: 12px; }
+      .app-chat-mic-btn { width: 38px; height: 38px; border-radius: 12px; }
+
+      /* Model bar - inline with smaller spacing */
+      .app-chat-model-bar { padding: 4px 2px 0; }
+      .app-chat-model-bar select { font-size: 12px; padding: 5px 22px 5px 10px; border-radius: 10px; }
+
+      /* Empty state - voice hero */
+      .voice-hero-btn { width: 88px; height: 88px; }
+      .voice-hero-btn svg { width: 36px; height: 36px; }
+      .app-chat-empty-logo { font-size: 24px; }
+      .app-chat-empty-text { font-size: 14px; }
+      .app-chat-suggestions { gap: 6px; padding: 0 12px; }
+      .app-chat-suggestion { font-size: 12px; padding: 8px 14px; }
+
+      /* TTS button - larger touch target on mobile */
+      .app-tts-btn { padding: 5px 10px; font-size: 14px; min-height: 32px; }
+
+      /* Sidebar */
       .app-sidebar-channels-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
       .app-ch-btn { padding: 6px 2px; }
       .app-ch-btn svg { width: 18px; height: 18px; }
       .app-ch-btn .app-ch-name { font-size: 8px; }
     }
-    @media (max-width: 768px) {
-      .app-sidebar, .app-container { top: 44px; }
+
+    /* Small phones (iPhone SE, etc.) */
+    @media (max-width: 400px) {
+      .app-chat-input-area { padding: 6px 8px calc(env(safe-area-inset-bottom, 6px) + 6px); }
+      .app-chat-input-box textarea { font-size: 16px; }
+      .app-chat-empty-logo { font-size: 22px; }
+      .app-chat-messages .app-msg { padding: 0 6px; }
+      .app-chat-messages .app-msg-user .app-msg-bubble { max-width: 92%; }
     }
 
     /* Mobile hamburger menu */
@@ -1808,12 +1939,12 @@
   </div>
   <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" style="display:none;">&#x2630;</button>
 
-  <div class="main">
+  <main class="main" role="main">
     <div class="hero fade-up">
-      <h1 id="t-title">AIに何でも頼んでみよう</h1>
-      <p id="t-sub">24時間稼働のAIアシスタント。リサーチ・自動化・開発まで。</p>
-      <div class="hero-cta">
-        <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="document.getElementById('input').focus();return false;">無料で試す</a>
+      <h1 id="t-title">AIに何でも聞ける。声でも、テキストでも。</h1>
+      <p id="t-subtitle">話しかけるだけで、検索・分析・自動化。LINE・Telegramでも使える無料AIアシスタント。</p>
+      <div class="hero-cta" id="t-hero-cta">
+        <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="document.getElementById('input').focus();return false;">今すぐ無料で試す</a>
         <a href="/pricing" class="cta-secondary" id="t-hero-plans">プランを見る</a>
       </div>
     </div>
@@ -2162,37 +2293,8 @@
       <div class="app-sidebar-list" id="app-conv-list"></div>
       <div class="app-sidebar-channels">
         <div class="app-sidebar-channels-label" id="app-channels-label">Channels</div>
-        <div class="app-sidebar-channels-grid">
-          <button class="app-ch-btn" id="app-ch-line" onclick="openChannelLink('line')">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#06C755"/></svg>
-            <span class="app-ch-name">LINE</span>
-            <span class="app-ch-check">&#x2713;</span>
-          </button>
-          <button class="app-ch-btn" id="app-ch-tg" onclick="openChannelLink('tg')">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z" fill="#2AABEE"/></svg>
-            <span class="app-ch-name">Telegram</span>
-            <span class="app-ch-check">&#x2713;</span>
-          </button>
-          <button class="app-ch-btn" id="app-ch-whatsapp" onclick="openChannelLink('whatsapp')">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M12 0C5.37 0 0 5.37 0 12c0 2.12.55 4.13 1.6 5.93L0 24l6.26-1.64C8.01 23.44 9.97 24 12 24c6.63 0 12-5.37 12-12S18.63 0 12 0zm5.8 16.9c-.24.68-1.41 1.3-1.95 1.38-.5.08-1.14.11-1.84-.12-.42-.14-.97-.33-1.67-.65-2.95-1.33-4.87-4.3-5.02-4.5-.15-.2-1.24-1.65-1.24-3.15s.78-2.23 1.06-2.54c.28-.3.62-.38.82-.38h.6c.19 0 .45-.07.7.54.26.62.87 2.13.95 2.28.08.15.13.33.03.53-.1.2-.15.33-.3.5-.15.18-.31.4-.45.53-.15.15-.3.31-.13.6.17.3.78 1.28 1.67 2.08 1.14.97 2.1 1.27 2.4 1.42.3.15.47.13.65-.08.17-.2.75-.87.95-1.17.2-.3.4-.25.67-.15.28.1 1.75.82 2.05.97.3.15.5.23.57.35.08.13.08.73-.16 1.4z" fill="#25D366"/></svg>
-            <span class="app-ch-name">WhatsApp</span>
-            <span class="app-ch-check">&#x2713;</span>
-          </button>
-          <button class="app-ch-btn" id="app-ch-discord" onclick="openChannelLink('discord')">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52.07.07 0 0 0-.08.04c-.21.38-.45.87-.61 1.26a18.27 18.27 0 0 0-5.49 0 12.64 12.64 0 0 0-.62-1.26.07.07 0 0 0-.08-.04 19.74 19.74 0 0 0-4.89 1.52.07.07 0 0 0-.03.03C1.11 8.39.33 12.27.74 16.1a.08.08 0 0 0 .03.06 19.9 19.9 0 0 0 5.99 3.03.08.08 0 0 0 .08-.03c.46-.63.87-1.3 1.22-2a.08.08 0 0 0-.04-.11 13.1 13.1 0 0 1-1.87-.9.08.08 0 0 1-.01-.13c.13-.09.25-.19.37-.29a.07.07 0 0 1 .08-.01c3.93 1.8 8.18 1.8 12.07 0a.07.07 0 0 1 .08.01c.12.1.25.2.37.29a.08.08 0 0 1 0 .13c-.6.35-1.22.65-1.88.9a.08.08 0 0 0-.04.11c.36.7.77 1.37 1.22 2a.08.08 0 0 0 .08.03 19.83 19.83 0 0 0 6-3.03.08.08 0 0 0 .03-.05c.5-5.18-.84-9.68-3.55-13.67a.06.06 0 0 0-.03-.03zM8.02 13.63c-1.18 0-2.16-1.09-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.33-.96 2.42-2.16 2.42zm7.97 0c-1.18 0-2.16-1.09-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.33-.95 2.42-2.16 2.42z" fill="#5865F2"/></svg>
-            <span class="app-ch-name">Discord</span>
-            <span class="app-ch-check">&#x2713;</span>
-          </button>
-          <button class="app-ch-btn" id="app-ch-slack" onclick="openChannelLink('slack')">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M5.04 15.24a2.52 2.52 0 1 1-2.52-2.52h2.52v2.52zm1.27 0a2.52 2.52 0 1 1 5.04 0v6.3a2.52 2.52 0 1 1-5.04 0v-6.3zM8.83 5.04a2.52 2.52 0 1 1 2.52-2.52v2.52H8.83zm0 1.27a2.52 2.52 0 1 1 0 5.04h-6.3a2.52 2.52 0 1 1 0-5.04h6.3zm10.2 2.52a2.52 2.52 0 1 1 2.52 2.52h-2.52V8.83zm-1.27 0a2.52 2.52 0 1 1-5.04 0v-6.3a2.52 2.52 0 1 1 5.04 0v6.3zm-2.52 10.2a2.52 2.52 0 1 1-2.52 2.52v-2.52h2.52zm0-1.27a2.52 2.52 0 1 1 0-5.04h6.3a2.52 2.52 0 1 1 0 5.04h-6.3z" fill="#E01E5A"/></svg>
-            <span class="app-ch-name">Slack</span>
-            <span class="app-ch-check">&#x2713;</span>
-          </button>
-          <button class="app-ch-btn" id="app-ch-teams" onclick="openChannelLink('teams')">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M20.5 7h-3V5.5a2.5 2.5 0 0 0-5 0V7h-1a1.5 1.5 0 0 0-1.5 1.5v8a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 20.5 7zM15 5.5a1 1 0 0 1 2 0V7h-2V5.5z" fill="#6264A7"/><circle cx="16" cy="3" r="2" fill="#6264A7"/><path d="M8 10H2.5A1.5 1.5 0 0 0 1 11.5v5A1.5 1.5 0 0 0 2.5 18H8v-8z" fill="#6264A7" opacity="0.7"/><circle cx="5" cy="7" r="2" fill="#6264A7" opacity="0.7"/></svg>
-            <span class="app-ch-name">Teams</span>
-            <span class="app-ch-check">&#x2713;</span>
-          </button>
+        <div class="app-sidebar-channels-grid" id="app-channels-grid">
+          <!-- Populated by JS based on region -->
         </div>
       </div>
       <div class="app-sidebar-links">
@@ -2215,33 +2317,28 @@
       <div class="app-chat-messages" id="app-messages">
         <div class="app-chat-empty" id="app-empty">
           <div class="app-chat-empty-logo">chatweb.ai</div>
-          <div class="app-chat-empty-text" id="app-empty-text">How can I help you today?</div>
+          <button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <div class="voice-hero-label" id="voice-hero-label">タップして話す</div>
+          <div class="app-chat-empty-text" id="app-empty-text">何でも聞いてください</div>
           <div class="app-chat-suggestions" id="app-suggestions"></div>
         </div>
       </div>
       <div class="app-chat-input-area">
         <div class="app-chat-input-box">
-          <textarea id="app-input" rows="1" placeholder="Message chatweb.ai..." onkeydown="appInputKeydown(event)"></textarea>
+          <textarea id="app-input" rows="1" placeholder="メッセージを入力..." onkeydown="appInputKeydown(event)"></textarea>
           <button class="app-chat-mic-btn" id="app-mic-btn" onclick="toggleSpeechRecognition()" title="Voice input">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1a2.5 2.5 0 00-2.5 2.5v4a2.5 2.5 0 005 0v-4A2.5 2.5 0 008 1z" fill="currentColor"/><path d="M4 6.5v1a4 4 0 008 0v-1M8 12.5v2M6 14.5h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
           <button class="app-chat-send-btn" id="app-send-btn" onclick="appSend()">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14l12-6L2 2v5l8 1-8 1v5z" fill="currentColor"/></svg>
           </button>
         </div>
-        <div class="app-chat-model-bar">
-          <select id="app-agent-select">
-            <option value="auto" id="app-opt-auto">Auto</option>
-            <option value="assistant">Assistant</option>
-            <option value="researcher">Researcher</option>
-            <option value="coder">Coder</option>
-            <option value="analyst">Analyst</option>
-            <option value="creative">Creative</option>
-          </select>
-        </div>
+        <input type="hidden" id="app-agent-select" value="auto">
       </div>
     </div>
-  </div>
+  </main>
 
   <footer>
     <a href="/pricing" id="footer-pricing">Pricing</a> &middot;
@@ -2649,14 +2746,14 @@
 
     const T = {
       ja: {
-        title: 'AIに何でも頼んでみよう',
-        sub: '24時間稼働のAIアシスタント。リサーチ・自動化・開発まで。',
+        title: 'AIに何でも聞ける。声でも、テキストでも。',
+        sub: '話しかけるだけで、検索・分析・自動化。LINE・Telegramでも使える無料AIアシスタント。',
         welcome: 'こんにちは！何でもお任せください。下のカードから選ぶか、自由に入力してください。',
         line: 'LINEで使う', tg: 'Telegramで使う',
         lineDesc: '1タップで友だち追加 → 自動連携', tgDesc: 'ボタンを押すだけ → 今すぐ開始',
         lineConnected: '&#x2713; 連携済み', tgConnected: '&#x2713; 連携済み',
         ph: '何でも聞いてください...', send: '送信',
-        heroTry: '無料で試す', heroPlans: 'プランを見る', pricing: '料金', status: 'ステータス',
+        heroTry: '今すぐ無料で試す', heroPlans: 'プランを見る', pricing: '料金', status: 'ステータス',
         chatStatus: 'オンライン',
         statsUptime: '稼働率', statsSpeed: '平均応答', statsModels: 'AIモデル', statsChannels: 'チャネル', statsTools: 'ツール',
         trustSsl: 'SSL暗号化', trustStripe: 'Stripe決済', trustNocard: 'カード不要で開始',
@@ -2695,18 +2792,18 @@
         sidebarTitle: '会話履歴',
         newConv: '+ 新しい会話',
         appNewChat: '新しいチャット',
-        appEmptyText: '何をお手伝いしましょうか？',
+        appEmptyText: '何でも聞いてください',
         appPlaceholder: 'メッセージを入力...',
       },
       en: {
-        title: 'Ask AI to do anything',
-        sub: '24/7 AI assistant. Research, automation, and development.',
+        title: 'Ask AI anything. By voice or text.',
+        sub: 'Just talk and get search, analysis, and automation. Free AI assistant on Web, LINE, and Telegram.',
         welcome: 'Hi! Pick a task below or type anything you need.',
         line: 'Use on LINE', tg: 'Use on Telegram',
         lineDesc: '1 tap to add friend → auto-link', tgDesc: 'Just tap → start now',
         lineConnected: '&#x2713; Connected', tgConnected: '&#x2713; Connected',
         ph: 'Ask me anything...', send: 'Send',
-        heroTry: 'Try Free', heroPlans: 'View Plans', pricing: 'Pricing', status: 'Status',
+        heroTry: 'Try Free Now', heroPlans: 'View Plans', pricing: 'Pricing', status: 'Status',
         chatStatus: 'Online',
         statsUptime: 'Uptime', statsSpeed: 'Avg Response', statsModels: 'AI Models', statsChannels: 'Channels', statsTools: 'Tools',
         trustSsl: 'SSL Encrypted', trustStripe: 'Stripe Payments', trustNocard: 'No card required',
@@ -2745,7 +2842,7 @@
         sidebarTitle: 'Conversations',
         newConv: '+ New Conversation',
         appNewChat: 'New chat',
-        appEmptyText: 'How can I help you today?',
+        appEmptyText: 'Ask me anything',
         appPlaceholder: 'Message chatweb.ai...',
       }
     };
@@ -2899,7 +2996,7 @@
       document.getElementById('l-en').className = l === 'en' ? 'on' : '';
       const t = T[l];
       document.getElementById('t-title').textContent = t.title;
-      document.getElementById('t-sub').textContent = t.sub;
+      document.getElementById('t-subtitle').textContent = t.sub;
       // Typewriter welcome
       const welcomeEl = document.getElementById('t-welcome');
       if (!welcomeEl.dataset.typed) {
@@ -3049,10 +3146,20 @@
       return 'https://teams.microsoft.com/l/app/chatweb-ai';
     }
     function openChannelLink(ch) {
-      showModal(ch);
+      const l = document.documentElement.lang || 'ja';
+      const c = CHANNELS[ch];
+      if (!c) return;
+      const t = c[l] || c.ja;
+      // Confirm before opening
+      const msg = l === 'ja'
+        ? t.title + 'しますか？\n\n' + t.desc
+        : t.title + '?\n\n' + t.desc;
+      if (confirm(msg)) {
+        showModal(ch);
+      }
     }
 
-    // Agent selector
+    // Agent selector (always auto)
     let selectedAgent = 'auto';
     function selectAgent(val) { selectedAgent = val; }
 
@@ -3082,6 +3189,40 @@
     }
     setInterval(pollDevices, 30000);
     setTimeout(pollDevices, 2000);
+
+    // Populate sidebar channels based on locale (Japan: LINE, Telegram first)
+    (function populateSidebarChannels() {
+      const grid = document.getElementById('app-channels-grid');
+      if (!grid) return;
+      const lang = navigator.language || 'ja';
+      const isJapan = lang.startsWith('ja');
+
+      const allChannels = [
+        { id: 'line', name: 'LINE', color: '#06C755', path: 'M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z' },
+        { id: 'tg', name: 'Telegram', color: '#2AABEE', path: 'M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.53 8.15l-1.88 8.85c-.14.63-.51.78-.84.49l-2.31-1.7-1.79 1.72c-.2.2-.36.36-.74.36l.27-3.78 6.88-6.22c.3-.27-.07-.42-.47-.16L8.09 13.29l-2.61-.82c-.57-.18-.58-.57.12-.84l11.03-4.27c.47-.17.88.11.73.79h.17z' },
+        { id: 'whatsapp', name: 'WhatsApp', color: '#25D366', path: 'M12 0C5.37 0 0 5.37 0 12c0 2.12.55 4.13 1.6 5.93L0 24l6.26-1.64C8.01 23.44 9.97 24 12 24c6.63 0 12-5.37 12-12S18.63 0 12 0z' },
+        { id: 'discord', name: 'Discord', color: '#5865F2', path: 'M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52c-.21.38-.45.87-.61 1.26a18.27 18.27 0 0 0-5.49 0c-.17-.39-.41-.88-.62-1.26a19.74 19.74 0 0 0-4.89 1.52C1.11 8.39.33 12.27.74 16.1a19.9 19.9 0 0 0 5.99 3.03c.46-.63.87-1.3 1.22-2a13.1 13.1 0 0 1-1.87-.9c.13-.09.25-.19.37-.29 3.93 1.8 8.18 1.8 12.07 0c.12.1.25.2.37.29c-.6.35-1.22.65-1.88.9c.36.7.77 1.37 1.22 2a19.83 19.83 0 0 0 6-3.03c.5-5.18-.84-9.68-3.55-13.67z' },
+        { id: 'slack', name: 'Slack', color: '#E01E5A', path: 'M5.04 15.24a2.52 2.52 0 1 1-2.52-2.52h2.52v2.52zm1.27 0a2.52 2.52 0 1 1 5.04 0v6.3a2.52 2.52 0 1 1-5.04 0v-6.3z' },
+        { id: 'teams', name: 'Teams', color: '#6264A7', path: 'M20.5 7h-3V5.5a2.5 2.5 0 0 0-5 0V7h-1a1.5 1.5 0 0 0-1.5 1.5v8a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 20.5 7z' },
+      ];
+
+      // Japan: LINE, Telegram first. Others: WhatsApp, Telegram first
+      const order = isJapan
+        ? ['line', 'tg', 'whatsapp', 'discord', 'slack', 'teams']
+        : ['whatsapp', 'tg', 'discord', 'slack', 'line', 'teams'];
+
+      order.forEach(id => {
+        const ch = allChannels.find(c => c.id === id);
+        if (!ch) return;
+        const btn = document.createElement('button');
+        btn.className = 'app-ch-btn';
+        btn.id = 'app-ch-' + ch.id;
+        btn.onclick = function() { openChannelLink(ch.id); };
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="' + ch.path + '" fill="' + ch.color + '"/></svg>'
+          + '<span class="app-ch-name">' + ch.name + '</span>';
+        grid.appendChild(btn);
+      });
+    })();
 
     const CHANNELS = {
       line: {
@@ -3429,7 +3570,7 @@
       // Set i18n
       const l = document.documentElement.lang || 'ja';
       document.getElementById('app-new-conv-text').textContent = l === 'ja' ? '新しいチャット' : 'New chat';
-      document.getElementById('app-empty-text').textContent = l === 'ja' ? '何をお手伝いしましょうか？' : 'How can I help you today?';
+      document.getElementById('app-empty-text').textContent = l === 'ja' ? '何でも聞いてください' : 'Ask me anything';
       document.getElementById('app-input').placeholder = l === 'ja' ? 'メッセージを入力...' : 'Message chatweb.ai...';
       document.getElementById('app-channels-label').textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
     }
@@ -3443,14 +3584,15 @@
       const l = document.documentElement.lang || 'ja';
       const suggestions = l === 'ja' ? [
         '今日の天気を教えて',
-        '英語メールを書いて',
-        'Pythonでスクレイピング',
+        '今日の天気を教えて',
+        '元気が出る言葉をください',
         '旅行プランを立てて',
+        '仕事を手伝って',
       ] : [
         "What's the weather today?",
-        'Write a professional email',
-        'Python web scraping',
+        'Give me an inspiring quote',
         'Plan a trip for me',
+        'Help me with work',
       ];
       const container = document.getElementById('app-suggestions');
       container.innerHTML = '';
@@ -3533,7 +3675,9 @@
           empty.id = 'app-empty';
           const l = document.documentElement.lang || 'ja';
           empty.innerHTML = '<div class="app-chat-empty-logo">chatweb.ai</div>'
-            + '<div class="app-chat-empty-text">' + (l === 'ja' ? '何をお手伝いしましょうか？' : 'How can I help you today?') + '</div>'
+            + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
+            + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
+            + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '何でも聞いてください' : 'Ask me anything') + '</div>'
             + '<div class="app-chat-suggestions" id="app-suggestions"></div>';
           msgsEl.appendChild(empty);
           appRenderSuggestions();
@@ -3654,22 +3798,75 @@
       try {
         const agentSel = document.getElementById('app-agent-select').value;
         const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
-        const r = await fetch(API + '/api/v1/chat', {
+
+        // SSE streaming for real-time response
+        const r = await fetch(API + '/api/v1/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
+          body: JSON.stringify({ message: msgToSend, session_id: webSessionId, channel: 'web' }),
         });
-        const d = await r.json();
-        clearInterval(statusInterval);
-        thinking.remove();
-        appAddMsg(d.response, 'bot', d.agent || null, d.tools_used || null);
-        knownMsgCount += 2;
-        // Update credits from response
-        if (d.credits_remaining !== undefined) {
-          updateCredits(d.credits_remaining);
+
+        if (!r.ok || !r.body) {
+          // Fallback to non-streaming
+          const fallback = await fetch(API + '/api/v1/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
+          });
+          const d = await fallback.json();
+          clearInterval(statusInterval);
+          thinking.remove();
+          appAddMsg(d.response, 'bot', d.agent || null, d.tools_used || null);
+          knownMsgCount += 2;
+          if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
+          autoPlayTTS(d.response);
+          appLoadConversations();
+        } else {
+          // Read SSE stream
+          const reader = r.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+          let gotContent = false;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+
+            // Parse SSE events from buffer
+            const lines = buf.split('\n');
+            buf = lines.pop() || '';
+
+            for (const line of lines) {
+              if (!line.startsWith('data:')) continue;
+              const data = line.slice(5).trim();
+              if (!data || data === '') continue;
+              try {
+                const evt = JSON.parse(data);
+                if (evt.type === 'content' && !gotContent) {
+                  gotContent = true;
+                  clearInterval(statusInterval);
+                  thinking.remove();
+                  appAddMsg(evt.content, 'bot', null, null);
+                  knownMsgCount += 2;
+                  if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
+                  autoPlayTTS(evt.content);
+                } else if (evt.type === 'error') {
+                  clearInterval(statusInterval);
+                  thinking.remove();
+                  appAddMsg(evt.content || 'Error', 'bot');
+                }
+              } catch {}
+            }
+          }
+
+          if (!gotContent) {
+            clearInterval(statusInterval);
+            thinking.remove();
+            appAddMsg(lang === 'ja' ? 'レスポンスを受信できませんでした。' : 'No response received.', 'bot');
+          }
+          appLoadConversations();
         }
-        // Refresh conversation list (new conversation may have been created)
-        appLoadConversations();
       } catch {
         clearInterval(statusInterval);
         thinking.remove();
@@ -3682,6 +3879,7 @@
     // ---------------------------------------------------------------------------
     let speechRecognition = null;
     let isRecording = false;
+    let voiceInitiated = false; // Track if message was voice-initiated for auto-TTS
 
     function initSpeechRecognition() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -3714,7 +3912,11 @@
         isRecording = false;
         const btn = document.getElementById('app-mic-btn');
         if (btn) btn.classList.remove('recording');
+        const heroBtn = document.getElementById('voice-hero-btn');
+        if (heroBtn) heroBtn.classList.remove('recording');
+        updateVoiceHeroLabel();
         if (finalTranscript.trim()) {
+          voiceInitiated = true;
           appSend();
         }
         finalTranscript = '';
@@ -3724,10 +3926,12 @@
         isRecording = false;
         const btn = document.getElementById('app-mic-btn');
         if (btn) btn.classList.remove('recording');
+        const heroBtn = document.getElementById('voice-hero-btn');
+        if (heroBtn) heroBtn.classList.remove('recording');
+        updateVoiceHeroLabel();
         finalTranscript = '';
         if (e.error === 'not-allowed') {
-          const lang = document.documentElement.lang || 'ja';
-          alert(lang === 'ja' ? 'マイクへのアクセスが拒否されました。ブラウザの設定でマイクを許可してください。' : 'Microphone access denied. Please allow microphone access in browser settings.');
+          alert('マイクへのアクセスが拒否されました。ブラウザの設定でマイクを許可してください。');
         }
       };
     }
@@ -3741,11 +3945,51 @@
       if (isRecording) {
         speechRecognition.stop();
         isRecording = false;
-        btn.classList.remove('recording');
+        if (btn) btn.classList.remove('recording');
       } else {
         speechRecognition.start();
         isRecording = true;
-        btn.classList.add('recording');
+        if (btn) btn.classList.add('recording');
+      }
+    }
+
+    // Voice hero button (large mic in empty state)
+    function toggleVoiceHero() {
+      if (!speechRecognition) {
+        initSpeechRecognition();
+        if (!speechRecognition) return;
+      }
+      const heroBtn = document.getElementById('voice-hero-btn');
+      const micBtn = document.getElementById('app-mic-btn');
+      if (isRecording) {
+        speechRecognition.stop();
+        isRecording = false;
+        if (heroBtn) heroBtn.classList.remove('recording');
+        if (micBtn) micBtn.classList.remove('recording');
+      } else {
+        speechRecognition.start();
+        isRecording = true;
+        if (heroBtn) heroBtn.classList.add('recording');
+        if (micBtn) micBtn.classList.add('recording');
+      }
+      updateVoiceHeroLabel();
+    }
+
+    function updateVoiceHeroLabel() {
+      const label = document.getElementById('voice-hero-label');
+      if (!label) return;
+      label.textContent = isRecording ? '聞いています...' : 'タップして話す';
+    }
+
+    // Auto-play TTS on voice-initiated response
+    function autoPlayTTS(text) {
+      if (!voiceInitiated) return;
+      voiceInitiated = false;
+      // Find the last TTS button and play it
+      const btns = document.querySelectorAll('.app-tts-btn');
+      if (btns.length > 0) {
+        const lastBtn = btns[btns.length - 1];
+        playTTS(lastBtn);
       }
     }
 
@@ -3757,6 +4001,7 @@
     // ---------------------------------------------------------------------------
     let currentAudio = null;
     let currentTtsBtn = null;
+    const ttsCache = new Map(); // text -> blobURL cache
 
     async function playTTS(btn) {
       const text = btn.dataset.text;
@@ -3782,37 +4027,64 @@
       }
 
       btn.classList.add('playing');
-      btn.textContent = '\u23F9';
+      btn.textContent = '\u23F3'; // hourglass while loading
 
       try {
-        const headers = { 'Content-Type': 'application/json' };
-        if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+        const cacheKey = text.substring(0, 4096);
+        let blobUrl = ttsCache.get(cacheKey);
 
-        const r = await fetch(API + '/api/v1/speech/synthesize', {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify({ text: text.substring(0, 4096), session_id: webSessionId }),
-        });
+        if (!blobUrl) {
+          const hdrs = { 'Content-Type': 'application/json' };
+          if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
 
-        if (!r.ok) throw new Error('TTS failed');
+          const r = await fetch(API + '/api/v1/speech/synthesize', {
+            method: 'POST',
+            headers: hdrs,
+            body: JSON.stringify({ text: cacheKey, session_id: webSessionId }),
+          });
 
-        const blob = await r.blob();
-        const url = URL.createObjectURL(blob);
-        currentAudio = new Audio(url);
+          if (!r.ok) {
+            const errBody = await r.text().catch(() => '');
+            console.error('TTS API error:', r.status, errBody);
+            throw new Error('TTS failed: ' + r.status);
+          }
+
+          const blob = await r.blob();
+          if (!blob || blob.size === 0) throw new Error('Empty audio response');
+          blobUrl = URL.createObjectURL(blob);
+          ttsCache.set(cacheKey, blobUrl);
+        }
+
+        currentAudio = new Audio(blobUrl);
         currentTtsBtn = btn;
 
         currentAudio.onended = function() {
           btn.classList.remove('playing');
           btn.textContent = '\uD83D\uDD0A';
-          URL.revokeObjectURL(url);
           currentTtsBtn = null;
         };
 
-        currentAudio.play();
+        currentAudio.onerror = function(e) {
+          console.error('Audio playback error:', e);
+          btn.classList.remove('playing');
+          btn.textContent = '\uD83D\uDD0A';
+          currentTtsBtn = null;
+          ttsCache.delete(cacheKey);
+        };
+
+        btn.textContent = '\u23F9'; // stop icon once loaded
+        await currentAudio.play().catch(function(e) {
+          console.error('Audio play() rejected:', e);
+          // Retry on user gesture (autoplay policy)
+          btn.classList.remove('playing');
+          btn.textContent = '\uD83D\uDD0A';
+          currentTtsBtn = null;
+        });
 
         // Update credits after TTS
         refreshCredits();
       } catch(e) {
+        console.error('TTS error:', e);
         btn.classList.remove('playing');
         btn.textContent = '\uD83D\uDD0A';
         currentTtsBtn = null;

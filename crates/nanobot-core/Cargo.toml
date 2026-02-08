@@ -59,7 +59,7 @@ tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 # HTTP API (optional)
 axum = { version = "0.8", optional = true }
 tower = { version = "0.5", optional = true }
-tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"], optional = true }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "limit", "set-header"], optional = true }
 hmac = { version = "0.12", optional = true }
 sha2 = { version = "0.10", optional = true }
 base64 = "0.22"

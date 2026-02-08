@@ -10,6 +10,7 @@ pub mod teams;
 pub mod google_chat;
 pub mod matrix;
 pub mod zalo;
+pub mod facebook;
 
 use async_trait::async_trait;
 use tokio::sync::mpsc;

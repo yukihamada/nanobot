@@ -78,6 +78,31 @@ Parameters:
     Type: String
     Description: Tenant ID for multi-tenant isolation
     Default: 'default'
+  AdminSessionKeys:
+    Type: String
+    NoEcho: true
+    Description: Comma-separated admin session keys or emails
+    Default: ''
+  PasswordHmacKey:
+    Type: String
+    NoEcho: true
+    Description: HMAC key for password hashing (if empty, falls back to GOOGLE_CLIENT_SECRET)
+    Default: ''
+  TelegramWebhookSecret:
+    Type: String
+    NoEcho: true
+    Description: Secret token for Telegram webhook verification
+    Default: ''
+  FacebookPageAccessToken:
+    Type: String
+    NoEcho: true
+    Description: Facebook Page Access Token for Messenger
+    Default: ''
+  FacebookVerifyToken:
+    Type: String
+    NoEcho: true
+    Description: Facebook webhook verify token
+    Default: ''
 
 Globals:
   Function:
@@ -114,6 +139,11 @@ Resources:
           NANOBOT_TENANT_ID: !Ref TenantId
           GOOGLE_CLIENT_ID: !Ref GoogleClientId
           GOOGLE_CLIENT_SECRET: !Ref GoogleClientSecret
+          ADMIN_SESSION_KEYS: !Ref AdminSessionKeys
+          PASSWORD_HMAC_KEY: !Ref PasswordHmacKey
+          TELEGRAM_WEBHOOK_SECRET: !Ref TelegramWebhookSecret
+          FACEBOOK_PAGE_ACCESS_TOKEN: !Ref FacebookPageAccessToken
+          FACEBOOK_VERIFY_TOKEN: !Ref FacebookVerifyToken
           DYNAMODB_SESSIONS_TABLE: !Ref SessionsTable
       Policies:
         - DynamoDBCrudPolicy:
@@ -186,6 +216,9 @@ Resources:
           KeyType: HASH
         - AttributeName: sk
           KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
 
 Outputs:
   ApiUrl:
