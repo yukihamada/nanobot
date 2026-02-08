@@ -2373,7 +2373,7 @@ mod tests {
         // Clear GITHUB_TOKEN to get deterministic count
         std::env::remove_var("GITHUB_TOKEN");
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 9);
+        assert_eq!(registry.len(), 11);
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
