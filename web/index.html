@@ -2166,6 +2166,12 @@
   -->
 </head>
 <body>
+  <script>
+    // Instantly apply app-mode if user is logged in (prevent landing page flash)
+    if (localStorage.getItem('authToken') || new URLSearchParams(window.location.search).get('token')) {
+      document.body.classList.add('app-mode');
+    }
+  </script>
   <nav>
     <button class="app-sidebar-toggle" id="app-sidebar-toggle" onclick="var s=document.getElementById('app-sidebar'),b=document.getElementById('app-sidebar-backdrop');s.classList.toggle('open');b.classList.toggle('show');" style="display:none;">&#x2630;</button>
     <a href="/" class="logo" style="text-decoration:none"><span>chat</span>web.ai</a>
