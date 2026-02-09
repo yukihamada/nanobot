@@ -1138,6 +1138,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/sync/conversations", get(handle_sync_list_conversations))
         .route("/api/v1/sync/conversations/{id}", get(handle_sync_get_conversation))
         .route("/api/v1/sync/push", post(handle_sync_push))
+        // Cron (Scheduled Tasks)
+        .route("/api/v1/cron", get(handle_cron_list))
+        .route("/api/v1/cron", post(handle_cron_create))
+        .route("/api/v1/cron/{id}", axum::routing::put(handle_cron_update))
+        .route("/api/v1/cron/{id}", delete(handle_cron_delete))
         // Speech (TTS)
         .route("/api/v1/speech/synthesize", post(handle_speech_synthesize))
         // Pages
@@ -7792,6 +7797,268 @@ async fn handle_sync_push(
     }
 
     (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+// ---------------------------------------------------------------------------
+// Cron / Scheduled Tasks API
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct CronCreateRequest {
+    name: String,
+    message: String,
+    schedule: CronScheduleInput,
+    channel: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CronScheduleInput {
+    every_minutes: Option<u64>,
+    cron: Option<String>,
+    at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CronUpdateRequest {
+    enabled: Option<bool>,
+    name: Option<String>,
+    message: Option<String>,
+}
+
+async fn handle_cron_list(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_id = resolve_user_from_token(dynamo, table, &token).await;
+            if user_id.is_empty() {
+                return Json(serde_json::json!({ "jobs": [], "error": "Not authenticated" }));
+            }
+            let user_pk = format!("CRON#{}", user_id);
+            let resp = dynamo
+                .query()
+                .table_name(table.as_str())
+                .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
+                .expression_attribute_values(":pk", AttributeValue::S(user_pk))
+                .expression_attribute_values(":sk", AttributeValue::S("JOB#".to_string()))
+                .scan_index_forward(false)
+                .limit(50)
+                .send()
+                .await;
+            let jobs: Vec<serde_json::Value> = match resp {
+                Ok(output) => {
+                    output.items.unwrap_or_default().iter().map(|item| {
+                        let schedule_type = item.get("schedule_type").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                        let schedule_val = item.get("schedule_value").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                        let display = match schedule_type.as_str() {
+                            "every" => format!("{}min", schedule_val),
+                            "cron" => schedule_val.clone(),
+                            "at" => schedule_val.clone(),
+                            _ => schedule_val.clone(),
+                        };
+                        serde_json::json!({
+                            "id": item.get("job_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                            "name": item.get("name").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                            "message": item.get("message").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                            "schedule": format!("{}:{}", schedule_type, schedule_val),
+                            "schedule_display": display,
+                            "channel": item.get("channel").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                            "enabled": item.get("enabled").and_then(|v| v.as_s().ok()).map(|s| s == "true").unwrap_or(true),
+                            "created_at": item.get("created_at").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                        })
+                    }).collect()
+                }
+                Err(_) => vec![],
+            };
+            return Json(serde_json::json!({ "jobs": jobs }));
+        }
+    }
+
+    let _ = (&state, &token);
+    Json(serde_json::json!({ "jobs": [] }))
+}
+
+async fn handle_cron_create(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<CronCreateRequest>,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_id = resolve_user_from_token(dynamo, table, &token).await;
+            if user_id.is_empty() {
+                return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" }))).into_response();
+            }
+
+            // Check plan limits: Free = 1 cron, Starter = 5, Pro = 20
+            let user = get_or_create_user(dynamo, table, &user_id).await;
+            let plan = user.plan.as_str();
+            let max_jobs: usize = match plan {
+                "starter" => 5,
+                "pro" | "enterprise" => 20,
+                _ => 1,
+            };
+
+            // Count existing jobs
+            let user_pk = format!("CRON#{}", user_id);
+            let count_resp = dynamo.query()
+                .table_name(table.as_str())
+                .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
+                .expression_attribute_values(":pk", AttributeValue::S(user_pk.clone()))
+                .expression_attribute_values(":sk", AttributeValue::S("JOB#".to_string()))
+                .select(aws_sdk_dynamodb::types::Select::Count)
+                .send().await;
+            let current_count = count_resp.map(|r| r.count() as usize).unwrap_or(0);
+            if current_count >= max_jobs {
+                return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+                    "error": format!("Plan limit reached ({}/{}). Upgrade for more scheduled tasks.", current_count, max_jobs)
+                }))).into_response();
+            }
+
+            let job_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+            let (schedule_type, schedule_value) = if let Some(mins) = req.schedule.every_minutes {
+                ("every".to_string(), mins.to_string())
+            } else if let Some(ref expr) = req.schedule.cron {
+                ("cron".to_string(), expr.clone())
+            } else if let Some(ref at_str) = req.schedule.at {
+                ("at".to_string(), at_str.clone())
+            } else {
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid schedule" }))).into_response();
+            };
+
+            let now = chrono::Utc::now().to_rfc3339();
+            let mut item = std::collections::HashMap::new();
+            item.insert("pk".to_string(), AttributeValue::S(user_pk));
+            item.insert("sk".to_string(), AttributeValue::S(format!("JOB#{}", job_id)));
+            item.insert("job_id".to_string(), AttributeValue::S(job_id.clone()));
+            item.insert("name".to_string(), AttributeValue::S(req.name));
+            item.insert("message".to_string(), AttributeValue::S(req.message));
+            item.insert("schedule_type".to_string(), AttributeValue::S(schedule_type));
+            item.insert("schedule_value".to_string(), AttributeValue::S(schedule_value));
+            item.insert("channel".to_string(), AttributeValue::S(req.channel.unwrap_or_default()));
+            item.insert("enabled".to_string(), AttributeValue::S("true".to_string()));
+            item.insert("created_at".to_string(), AttributeValue::S(now));
+            item.insert("user_id".to_string(), AttributeValue::S(user_id));
+
+            match dynamo.put_item().table_name(table.as_str()).set_item(Some(item)).send().await {
+                Ok(_) => return Json(serde_json::json!({ "ok": true, "id": job_id })).into_response(),
+                Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": format!("{}", e) }))).into_response(),
+            }
+        }
+    }
+
+    let _ = (&state, &token, &req);
+    (StatusCode::NOT_IMPLEMENTED, Json(serde_json::json!({ "error": "DynamoDB backend required" }))).into_response()
+}
+
+async fn handle_cron_update(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<CronUpdateRequest>,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_id = resolve_user_from_token(dynamo, table, &token).await;
+            if user_id.is_empty() {
+                return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" }))).into_response();
+            }
+            let user_pk = format!("CRON#{}", user_id);
+            let sk = format!("JOB#{}", id);
+
+            let mut update_expr_parts = vec![];
+            let mut attr_values = std::collections::HashMap::new();
+            if let Some(enabled) = req.enabled {
+                update_expr_parts.push("enabled = :enabled");
+                attr_values.insert(":enabled".to_string(), AttributeValue::S(enabled.to_string()));
+            }
+            if let Some(ref name) = req.name {
+                update_expr_parts.push("#n = :name");
+                attr_values.insert(":name".to_string(), AttributeValue::S(name.clone()));
+            }
+            if let Some(ref message) = req.message {
+                update_expr_parts.push("message = :msg");
+                attr_values.insert(":msg".to_string(), AttributeValue::S(message.clone()));
+            }
+            if update_expr_parts.is_empty() {
+                return Json(serde_json::json!({ "ok": true })).into_response();
+            }
+
+            let update_expr = format!("SET {}", update_expr_parts.join(", "));
+            let mut builder = dynamo.update_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S(sk))
+                .update_expression(&update_expr);
+            for (k, v) in &attr_values {
+                builder = builder.expression_attribute_values(k, v.clone());
+            }
+            if req.name.is_some() {
+                builder = builder.expression_attribute_names("#n", "name");
+            }
+            match builder.send().await {
+                Ok(_) => return Json(serde_json::json!({ "ok": true })).into_response(),
+                Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": format!("{}", e) }))).into_response(),
+            }
+        }
+    }
+
+    let _ = (&state, &id, &token, &req);
+    (StatusCode::NOT_IMPLEMENTED, Json(serde_json::json!({ "error": "DynamoDB backend required" }))).into_response()
+}
+
+async fn handle_cron_delete(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_id = resolve_user_from_token(dynamo, table, &token).await;
+            if user_id.is_empty() {
+                return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" }))).into_response();
+            }
+            let user_pk = format!("CRON#{}", user_id);
+            let sk = format!("JOB#{}", id);
+            match dynamo.delete_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S(sk))
+                .send().await
+            {
+                Ok(_) => return Json(serde_json::json!({ "ok": true })).into_response(),
+                Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": format!("{}", e) }))).into_response(),
+            }
+        }
+    }
+
+    let _ = (&state, &id, &token);
+    (StatusCode::NOT_IMPLEMENTED, Json(serde_json::json!({ "error": "DynamoDB backend required" }))).into_response()
 }
 
 /// Start the HTTP server on the given address.

@@ -1314,6 +1314,62 @@
       color: #fff;
     }
     .app-ch-btn.connected .app-ch-check { display: flex; }
+    .app-sidebar-sync {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: var(--muted);
+    }
+    .sync-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 11px;
+      display: flex; align-items: center; gap: 4px; transition: all 0.2s;
+    }
+    .sync-btn:hover { border-color: var(--accent); color: var(--text); }
+    .sync-btn.syncing svg { animation: spin 0.8s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .sync-info { flex: 1; text-align: right; font-size: 10px; line-height: 1.3; }
+    .sync-info .sync-interval { color: var(--accent); }
+    .app-sidebar-cron {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+    }
+    .app-sidebar-cron-label {
+      font-size: 11px; color: var(--muted); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 6px; padding: 0 4px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .cron-add-btn {
+      background: none; border: none; color: var(--accent); cursor: pointer;
+      font-size: 14px; padding: 0 4px; line-height: 1;
+    }
+    .cron-add-btn:hover { opacity: 0.8; }
+    .cron-list { display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; }
+    .cron-item {
+      display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+      background: var(--surface); border-radius: 6px; font-size: 11px;
+    }
+    .cron-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+    .cron-item-schedule { color: var(--muted); font-size: 10px; font-family: monospace; }
+    .cron-item-toggle { width: 28px; height: 16px; border-radius: 8px; border: none; cursor: pointer;
+      background: var(--border); position: relative; transition: background 0.2s; flex-shrink: 0; }
+    .cron-item-toggle.on { background: var(--green); }
+    .cron-item-toggle::after {
+      content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
+      background: #fff; border-radius: 50%; transition: transform 0.2s;
+    }
+    .cron-item-toggle.on::after { transform: translateX(12px); }
+    .cron-item-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0 2px; }
+    .cron-item-del:hover { color: #e74c3c; }
+    .cron-form { background: var(--surface); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .cron-form input, .cron-form select { background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 4px; padding: 6px 8px; font-size: 11px; }
+    .cron-form-row { display: flex; gap: 6px; }
+    .cron-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
+    .cron-form-actions button { padding: 4px 12px; border-radius: 4px; font-size: 11px; cursor: pointer; border: none; }
+    .cron-save-btn { background: var(--accent); color: #fff; }
+    .cron-cancel-btn { background: var(--border); color: var(--text); }
     .app-sidebar-footer {
       padding: 12px;
       border-top: 1px solid var(--border);
@@ -2480,6 +2536,24 @@
         <div class="app-sidebar-channels-grid" id="app-channels-grid">
           <!-- Populated by JS based on region -->
         </div>
+      </div>
+      <div class="app-sidebar-sync" id="app-sync-bar">
+        <button class="sync-btn" id="sync-btn" onclick="syncNow()">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M14 2v4h-4M2 14v-4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.5 6A6 6 0 003.3 3.3L2 6M2.5 10a6 6 0 0010.2 2.7L14 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="sync-btn-text">Sync</span>
+        </button>
+        <div class="sync-info">
+          <div id="sync-last">--</div>
+          <div><span class="sync-interval" id="sync-interval-label">5min</span></div>
+        </div>
+      </div>
+      <div class="app-sidebar-cron" id="app-cron-section">
+        <div class="app-sidebar-cron-label">
+          <span id="cron-label-text">Scheduled Tasks</span>
+          <button class="cron-add-btn" id="cron-add-btn" onclick="toggleCronForm()">+</button>
+        </div>
+        <div class="cron-list" id="cron-list"></div>
+        <div id="cron-form-container" style="display:none;"></div>
       </div>
       <div class="app-sidebar-links">
         <button class="app-sidebar-link" onclick="openApiKeysModal()" id="app-link-apikeys">API Keys</button>
@@ -3903,9 +3977,14 @@
       document.getElementById('app-empty-text').textContent = l === 'ja' ? '何でも聞いてください' : 'Ask me anything';
       document.getElementById('app-input').placeholder = l === 'ja' ? 'メッセージを入力...' : 'Message chatweb.ai...';
       document.getElementById('app-channels-label').textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
+      // Init sync + cron
+      startAutoSync();
+      loadCronJobs();
+      updateSyncUI();
     }
 
     function exitAppMode() {
+      stopAutoSync();
       document.body.classList.remove('app-mode');
       document.getElementById('app-sidebar-toggle').style.display = 'none';
     }
@@ -4824,6 +4903,200 @@
       toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:10000;transition:opacity 0.3s;';
       document.body.appendChild(toast);
       setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2500);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Auto-sync: 5min (free) / 1min (paid)
+    // ---------------------------------------------------------------------------
+    let syncTimer = null;
+    let lastSyncTime = null;
+
+    function getSyncIntervalMs() {
+      if (!currentUser) return 5 * 60 * 1000;
+      const plan = (currentUser.plan || 'free').toLowerCase();
+      return (plan === 'free') ? 5 * 60 * 1000 : 1 * 60 * 1000;
+    }
+
+    function getSyncIntervalLabel() {
+      const l = document.documentElement.lang || 'ja';
+      if (!currentUser) return l === 'ja' ? '5分ごと' : 'every 5min';
+      const plan = (currentUser.plan || 'free').toLowerCase();
+      if (plan === 'free') return l === 'ja' ? '5分ごと (Free)' : 'every 5min (Free)';
+      return l === 'ja' ? '1分ごと (Pro)' : 'every 1min (Pro)';
+    }
+
+    function updateSyncUI() {
+      const l = document.documentElement.lang || 'ja';
+      const el = document.getElementById('sync-interval-label');
+      if (el) el.textContent = getSyncIntervalLabel();
+      const btn = document.getElementById('sync-btn-text');
+      if (btn) btn.textContent = l === 'ja' ? '同期' : 'Sync';
+      const lbl = document.getElementById('cron-label-text');
+      if (lbl) lbl.textContent = l === 'ja' ? '定期タスク' : 'Scheduled Tasks';
+      const last = document.getElementById('sync-last');
+      if (last) {
+        if (lastSyncTime) {
+          const ago = Math.round((Date.now() - lastSyncTime) / 1000);
+          last.textContent = ago < 60 ? (l === 'ja' ? `${ago}秒前` : `${ago}s ago`) : (l === 'ja' ? `${Math.round(ago/60)}分前` : `${Math.round(ago/60)}m ago`);
+        } else {
+          last.textContent = '--';
+        }
+      }
+    }
+
+    async function syncNow() {
+      const btn = document.getElementById('sync-btn');
+      if (btn) btn.classList.add('syncing');
+      try {
+        await appLoadConversations();
+        lastSyncTime = Date.now();
+        updateSyncUI();
+      } catch(e) { /* ignore */ }
+      if (btn) setTimeout(() => btn.classList.remove('syncing'), 500);
+    }
+
+    function startAutoSync() {
+      stopAutoSync();
+      const ms = getSyncIntervalMs();
+      syncTimer = setInterval(syncNow, ms);
+      // Update "ago" display every 30s
+      if (!window._syncUiTimer) {
+        window._syncUiTimer = setInterval(updateSyncUI, 30000);
+      }
+    }
+
+    function stopAutoSync() {
+      if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Cron CRUD (Scheduled Tasks)
+    // ---------------------------------------------------------------------------
+    let cronJobs = [];
+
+    async function loadCronJobs() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/cron', { headers: { 'Authorization': 'Bearer ' + authToken } });
+        const d = await r.json();
+        cronJobs = d.jobs || [];
+        renderCronList();
+      } catch(e) { cronJobs = []; renderCronList(); }
+    }
+
+    function renderCronList() {
+      const list = document.getElementById('cron-list');
+      if (!list) return;
+      const l = document.documentElement.lang || 'ja';
+      if (cronJobs.length === 0) {
+        list.innerHTML = '<div style="font-size:10px;color:var(--muted);padding:4px 8px;">' + (l === 'ja' ? '定期タスクなし' : 'No scheduled tasks') + '</div>';
+        return;
+      }
+      list.innerHTML = '';
+      cronJobs.forEach(job => {
+        const item = document.createElement('div');
+        item.className = 'cron-item';
+        item.innerHTML = `
+          <button class="cron-item-toggle ${job.enabled ? 'on' : ''}" onclick="toggleCronJob('${job.id}',${!job.enabled})"></button>
+          <span class="cron-item-name" title="${job.message || ''}">${job.name}</span>
+          <span class="cron-item-schedule">${job.schedule_display || job.schedule || ''}</span>
+          <button class="cron-item-del" onclick="deleteCronJob('${job.id}')">&#x2715;</button>
+        `;
+        list.appendChild(item);
+      });
+    }
+
+    function toggleCronForm() {
+      const c = document.getElementById('cron-form-container');
+      if (c.style.display === 'none') {
+        const l = document.documentElement.lang || 'ja';
+        c.style.display = '';
+        c.innerHTML = `<div class="cron-form">
+          <input id="cron-name" placeholder="${l === 'ja' ? 'タスク名' : 'Task name'}" maxlength="50">
+          <input id="cron-message" placeholder="${l === 'ja' ? 'AIへのメッセージ' : 'Message to AI'}" maxlength="200">
+          <div class="cron-form-row">
+            <select id="cron-schedule-type" onchange="updateCronScheduleUI()" style="flex:1;">
+              <option value="every">${l === 'ja' ? '定期実行' : 'Interval'}</option>
+              <option value="cron">Cron式</option>
+              <option value="at">${l === 'ja' ? '1回のみ' : 'One-time'}</option>
+            </select>
+            <input id="cron-schedule-val" placeholder="${l === 'ja' ? '例: 30 (分)' : 'e.g. 30 (min)'}" style="flex:1;">
+          </div>
+          <div class="cron-form-row" id="cron-channel-row">
+            <select id="cron-channel" style="flex:1;">
+              <option value="">Web</option>
+              <option value="line">LINE</option>
+              <option value="telegram">Telegram</option>
+            </select>
+          </div>
+          <div class="cron-form-actions">
+            <button class="cron-cancel-btn" onclick="toggleCronForm()">${l === 'ja' ? 'キャンセル' : 'Cancel'}</button>
+            <button class="cron-save-btn" onclick="saveCronJob()">${l === 'ja' ? '保存' : 'Save'}</button>
+          </div>
+        </div>`;
+      } else {
+        c.style.display = 'none';
+        c.innerHTML = '';
+      }
+    }
+
+    function updateCronScheduleUI() {
+      const type = document.getElementById('cron-schedule-type').value;
+      const input = document.getElementById('cron-schedule-val');
+      const l = document.documentElement.lang || 'ja';
+      if (type === 'every') input.placeholder = l === 'ja' ? '例: 30 (分)' : 'e.g. 30 (min)';
+      else if (type === 'cron') input.placeholder = l === 'ja' ? '例: 0 9 * * *' : 'e.g. 0 9 * * *';
+      else input.placeholder = l === 'ja' ? '例: 2026-02-10 09:00' : 'e.g. 2026-02-10 09:00';
+    }
+
+    async function saveCronJob() {
+      const name = document.getElementById('cron-name').value.trim();
+      const message = document.getElementById('cron-message').value.trim();
+      const scheduleType = document.getElementById('cron-schedule-type').value;
+      const scheduleVal = document.getElementById('cron-schedule-val').value.trim();
+      const channel = document.getElementById('cron-channel').value;
+      if (!name || !message || !scheduleVal) return;
+      let schedule = {};
+      if (scheduleType === 'every') schedule = { every_minutes: parseInt(scheduleVal) || 30 };
+      else if (scheduleType === 'cron') schedule = { cron: scheduleVal };
+      else schedule = { at: scheduleVal };
+      try {
+        const r = await fetch(API + '/api/v1/cron', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, message, schedule, channel: channel || undefined }),
+        });
+        if (r.ok) {
+          toggleCronForm();
+          loadCronJobs();
+          const l = document.documentElement.lang || 'ja';
+          showToast(l === 'ja' ? '定期タスクを作成しました' : 'Scheduled task created');
+        }
+      } catch(e) { /* ignore */ }
+    }
+
+    async function toggleCronJob(id, enabled) {
+      try {
+        await fetch(API + '/api/v1/cron/' + id, {
+          method: 'PUT',
+          headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled }),
+        });
+        loadCronJobs();
+      } catch(e) { /* ignore */ }
+    }
+
+    async function deleteCronJob(id) {
+      const l = document.documentElement.lang || 'ja';
+      if (!confirm(l === 'ja' ? 'この定期タスクを削除しますか？' : 'Delete this scheduled task?')) return;
+      try {
+        await fetch(API + '/api/v1/cron/' + id, {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        loadCronJobs();
+        showToast(l === 'ja' ? '削除しました' : 'Deleted');
+      } catch(e) { /* ignore */ }
     }
 
     // Detect shared view URL before normal init

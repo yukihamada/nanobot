@@ -29,6 +29,7 @@
     .method.get{background:rgba(34,197,94,.15);color:var(--g)}
     .method.post{background:rgba(99,102,241,.15);color:var(--a)}
     .method.delete{background:rgba(239,68,68,.15);color:var(--r)}
+    .method.put{background:rgba(234,179,8,.15);color:#eab308}
 
     .content{flex:1;padding:32px 40px 80px;min-width:0}
     .content h1{font-size:32px;font-weight:800;margin-bottom:8px;letter-spacing:-0.5px}
@@ -142,6 +143,17 @@
     <a href="#apikeys-create"><span class="method post">POST</span>/apikeys</a>
     <a href="#apikeys-delete"><span class="method delete">DEL</span>/apikeys/{id}</a>
 
+    <h4 id="sn-cat-sync">Sync</h4>
+    <a href="#sync-overview">Overview & Intervals</a>
+    <a href="#sync-list"><span class="method get">GET</span>/sync/conversations</a>
+    <a href="#sync-push"><span class="method post">POST</span>/sync/push</a>
+
+    <h4 id="sn-cat-cron">Scheduled Tasks</h4>
+    <a href="#cron-list"><span class="method get">GET</span>/cron</a>
+    <a href="#cron-create"><span class="method post">POST</span>/cron</a>
+    <a href="#cron-update"><span class="method put">PUT</span>/cron/{id}</a>
+    <a href="#cron-delete"><span class="method delete">DEL</span>/cron/{id}</a>
+
     <h4 id="sn-cat-misc">Misc</h4>
     <a href="#providers"><span class="method get">GET</span>/providers</a>
     <a href="#agents"><span class="method get">GET</span>/agents</a>
@@ -153,7 +165,7 @@
     <a href="#mcp"><span class="method post">POST</span>/mcp</a>
 
     <h4 id="sn-cat-webhooks">Webhooks</h4>
-    <a href="#webhooks">LINE / Telegram / Stripe</a>
+    <a href="#webhooks">LINE / Telegram / Teams / etc.</a>
   </div>
 
   <div class="content">
@@ -793,6 +805,160 @@ POST /mcp
       </div>
     </div>
 
+    <!-- ============ SYNC ============ -->
+    <div class="section" id="sync-overview">
+      <h2>Sync</h2>
+      <div class="desc" data-ja="chatweb.aiはマルチデバイス・マルチチャネルで会話を同期します。" data-en="chatweb.ai syncs conversations across devices and channels.">chatweb.aiはマルチデバイス・マルチチャネルで会話を同期します。</div>
+
+      <div class="endpoint" style="background:var(--surface);border-left:3px solid var(--accent);padding:16px;border-radius:8px;margin:16px 0;">
+        <h3 style="margin-top:0;">Auto-Sync Intervals</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left;padding:8px;" data-ja="プラン" data-en="Plan">Plan</th>
+            <th style="text-align:left;padding:8px;" data-ja="自動同期間隔" data-en="Auto-sync Interval">Auto-sync Interval</th>
+            <th style="text-align:left;padding:8px;" data-ja="手動同期" data-en="Manual Sync">Manual Sync</th>
+            <th style="text-align:left;padding:8px;" data-ja="定期タスク上限" data-en="Cron Limit">Cron Limit</th>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px;">Free</td>
+            <td style="padding:8px;" data-ja="5分ごと" data-en="Every 5 minutes">5 min</td>
+            <td style="padding:8px;" data-ja="あり (Syncボタン)" data-en="Yes (Sync button)">Yes</td>
+            <td style="padding:8px;">1</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px;">Starter</td>
+            <td style="padding:8px;" data-ja="1分ごと" data-en="Every 1 minute">1 min</td>
+            <td style="padding:8px;" data-ja="あり" data-en="Yes">Yes</td>
+            <td style="padding:8px;">5</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px;">Pro</td>
+            <td style="padding:8px;" data-ja="1分ごと" data-en="Every 1 minute">1 min</td>
+            <td style="padding:8px;" data-ja="あり" data-en="Yes">Yes</td>
+            <td style="padding:8px;">20</td>
+          </tr>
+          <tr>
+            <td style="padding:8px;">Enterprise</td>
+            <td style="padding:8px;" data-ja="1分ごと" data-en="Every 1 minute">1 min</td>
+            <td style="padding:8px;" data-ja="あり" data-en="Yes">Yes</td>
+            <td style="padding:8px;">20</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="section" id="sync-list">
+      <div class="endpoint">
+        <h3><span class="method get">GET</span><span class="path">/api/v1/sync/conversations</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="会話リストを同期トークン付きで取得。?since=パラメータで差分取得。" data-en="List conversations with sync token. Use ?since= for incremental sync.">会話リストを同期トークン付きで取得。</div>
+        <pre><code>GET /api/v1/sync/conversations?since=2026-01-01T00:00:00Z
+Authorization: Bearer {token}
+
+// Response
+{ "conversations": [...], "sync_token": "..." }</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="sync-push">
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/sync/push</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="クライアントの会話をサーバーにプッシュ同期。" data-en="Push client conversations to server.">クライアントの会話をサーバーにプッシュ同期。</div>
+        <pre><code>POST /api/v1/sync/push
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "conversations": [{
+    "client_id": "local-123",
+    "title": "My chat",
+    "messages": [{"role":"user","content":"Hello"}]
+  }]
+}
+
+// Response
+{ "synced": [{"client_id":"local-123","server_id":"abc"}] }</code></pre>
+      </div>
+    </div>
+
+    <!-- ============ CRON (SCHEDULED TASKS) ============ -->
+    <div class="section" id="cron-list">
+      <h2>Scheduled Tasks (Cron)</h2>
+      <div class="desc" data-ja="定期的にAIにメッセージを送信するスケジュールタスクを管理します。" data-en="Manage scheduled tasks that periodically send messages to AI.">定期的にAIにメッセージを送信するスケジュールタスクを管理します。</div>
+
+      <div class="endpoint">
+        <h3><span class="method get">GET</span><span class="path">/api/v1/cron</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="ユーザーの定期タスク一覧を取得。" data-en="List user's scheduled tasks.">ユーザーの定期タスク一覧を取得。</div>
+        <pre><code>GET /api/v1/cron
+Authorization: Bearer {token}
+
+// Response
+{
+  "jobs": [{
+    "id": "abc12345",
+    "name": "Morning briefing",
+    "message": "今日の天気と予定を教えて",
+    "schedule": "every:30",
+    "schedule_display": "30min",
+    "channel": "",
+    "enabled": true,
+    "created_at": "2026-02-10T00:00:00Z"
+  }]
+}</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="cron-create">
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/cron</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="定期タスクを作成。スケジュールはinterval(分)、cron式、または1回実行(at)を指定。" data-en="Create a scheduled task. Schedule can be interval (minutes), cron expression, or one-time (at).">定期タスクを作成。</div>
+        <pre><code>POST /api/v1/cron
+Authorization: Bearer {token}
+Content-Type: application/json
+
+// Interval (every N minutes)
+{ "name": "Weather check", "message": "天気を教えて",
+  "schedule": { "every_minutes": 30 }, "channel": "line" }
+
+// Cron expression
+{ "name": "Morning report", "message": "今日のニュースまとめ",
+  "schedule": { "cron": "0 9 * * *" } }
+
+// One-time
+{ "name": "Reminder", "message": "会議の準備",
+  "schedule": { "at": "2026-02-10 09:00" } }
+
+// Response
+{ "ok": true, "id": "abc12345" }</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="cron-update">
+      <div class="endpoint">
+        <h3><span class="method put">PUT</span><span class="path">/api/v1/cron/{id}</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="定期タスクを更新（有効/無効の切り替え、名前・メッセージ変更）。" data-en="Update a scheduled task (enable/disable, change name/message).">定期タスクを更新。</div>
+        <pre><code>PUT /api/v1/cron/abc12345
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{ "enabled": false }
+
+// Response
+{ "ok": true }</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="cron-delete">
+      <div class="endpoint">
+        <h3><span class="method delete">DELETE</span><span class="path">/api/v1/cron/{id}</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="定期タスクを削除。" data-en="Delete a scheduled task.">定期タスクを削除。</div>
+        <pre><code>DELETE /api/v1/cron/abc12345
+Authorization: Bearer {token}
+
+// Response
+{ "ok": true }</code></pre>
+      </div>
+    </div>
+
     <!-- ============ WEBHOOKS ============ -->
     <div class="section" id="webhooks">
       <h2>Webhooks</h2>
@@ -810,6 +976,31 @@ POST /mcp
       <div class="endpoint">
         <h3><span class="method get">GET</span><span class="method post">POST</span><span class="path">/webhooks/facebook</span><span class="badge badge-free">No prefix</span></h3>
         <div class="desc" data-ja="Facebook Messenger Webhookエンドポイント。GETはverify、POSTはメッセージ受信。" data-en="Facebook Messenger webhook. GET for verification, POST for messages.">Facebook Messenger Webhookエンドポイント。GETはverify、POSTはメッセージ受信。</div>
+      </div>
+
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/webhooks/teams</span><span class="badge badge-free">No prefix</span></h3>
+        <div class="desc" data-ja="Microsoft Teams Bot Framework Webhookエンドポイント。" data-en="Microsoft Teams Bot Framework webhook endpoint.">Microsoft Teams Bot Framework Webhookエンドポイント。</div>
+      </div>
+
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/webhooks/google_chat</span><span class="badge badge-free">No prefix</span></h3>
+        <div class="desc" data-ja="Google Chat Webhookエンドポイント。同期JSON応答。" data-en="Google Chat webhook endpoint. Synchronous JSON response.">Google Chat Webhookエンドポイント。同期JSON応答。</div>
+      </div>
+
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/webhooks/zalo</span><span class="badge badge-free">No prefix</span></h3>
+        <div class="desc" data-ja="Zalo OA Webhookエンドポイント。" data-en="Zalo Official Account webhook endpoint.">Zalo OA Webhookエンドポイント。</div>
+      </div>
+
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/webhooks/feishu</span><span class="badge badge-free">No prefix</span></h3>
+        <div class="desc" data-ja="Feishu/Lark Webhookエンドポイント。URL検証チャレンジ対応。" data-en="Feishu/Lark webhook endpoint. Supports URL verification challenge.">Feishu/Lark Webhookエンドポイント。URL検証チャレンジ対応。</div>
+      </div>
+
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/webhooks/whatsapp</span><span class="badge badge-free">No prefix</span></h3>
+        <div class="desc" data-ja="WhatsApp Cloud API Webhookエンドポイント。" data-en="WhatsApp Cloud API webhook endpoint.">WhatsApp Cloud API Webhookエンドポイント。</div>
       </div>
 
       <div class="endpoint">
