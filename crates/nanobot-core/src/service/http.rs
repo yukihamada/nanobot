@@ -3929,10 +3929,57 @@ async fn handle_chat_explore(
         }
     };
 
+    // Pre-process: detect URLs and search queries, fetch content before sending to models
+    let mut context_prefix = String::new();
+    {
+        use crate::service::integrations::{execute_web_fetch, execute_web_search};
+
+        // Extract URLs from the message
+        let url_re = regex::Regex::new(r#"https?://[^\s<>"']+"#).unwrap();
+        let urls: Vec<&str> = url_re.find_iter(&req.message).map(|m| m.as_str()).collect();
+
+        // Fetch URLs in parallel
+        if !urls.is_empty() {
+            tracing::info!("explore: fetching {} URLs", urls.len());
+            let fetch_futures: Vec<_> = urls.iter().map(|url| execute_web_fetch(url)).collect();
+            let results = futures::future::join_all(fetch_futures).await;
+            for result in results {
+                if result.len() > 20 {
+                    context_prefix.push_str(&result);
+                    context_prefix.push_str("\n\n---\n\n");
+                }
+            }
+        }
+
+        // If no URLs, check if the message looks like it needs a web search
+        if urls.is_empty() {
+            let needs_search = req.message.contains("最新")
+                || req.message.contains("ニュース")
+                || req.message.contains("調べて")
+                || req.message.contains("検索")
+                || req.message.contains("today")
+                || req.message.contains("latest")
+                || req.message.contains("current")
+                || req.message.contains("2025")
+                || req.message.contains("2026");
+
+            if needs_search {
+                tracing::info!("explore: running web search for context");
+                let search_result = execute_web_search(&req.message).await;
+                if search_result.len() > 20 {
+                    context_prefix.push_str("## Web search results:\n");
+                    context_prefix.push_str(&search_result);
+                    context_prefix.push_str("\n\n---\n\n");
+                }
+            }
+        }
+    }
+
     // Build messages
     let mut messages = vec![Message::system(
         "あなたは nanobot — OpenClaw派生のRust製AIエージェントシステムです。\
-         ユーザーの質問に正確かつ詳しく回答してください。"
+         ユーザーの質問に正確かつ詳しく回答してください。\
+         提供された参考情報がある場合は、それを元に回答してください。"
     )];
 
     // Add session history
@@ -3956,18 +4003,23 @@ async fn handle_chat_explore(
     // Level 1 (re-query): adds "think step by step" instruction
     // Level 2 (deep): adds expert persona + structured output request
     let level = req.level.unwrap_or(0);
+    let base_msg = if context_prefix.is_empty() {
+        req.message.clone()
+    } else {
+        format!("## 参考情報（事前取得済み）:\n{}\n## ユーザーの質問:\n{}", context_prefix, req.message)
+    };
     let user_msg = match level {
         1 => format!(
             "{}\n\n上記の質問について、ステップバイステップで考えてから回答してください。",
-            req.message
+            base_msg
         ),
         2 => format!(
             "あなたはこの分野の専門家です。以下の質問について、\
              まず前提条件を整理し、複数の観点から分析し、\
              最終的な結論を根拠とともに示してください。\n\n質問: {}",
-            req.message
+            base_msg
         ),
-        _ => req.message.clone(),
+        _ => base_msg,
     };
     messages.push(Message::user(&user_msg));
 
@@ -7441,7 +7493,7 @@ async fn handle_delete_apikey(
 }
 
 // ---------------------------------------------------------------------------
-// TTS (Text-to-Speech) via OpenAI API
+// TTS (Text-to-Speech) via AWS Polly (primary) + OpenAI (fallback)
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
@@ -7451,13 +7503,104 @@ struct SpeechRequest {
     voice: String,
     #[serde(default = "default_tts_speed")]
     speed: f64,
+    #[serde(default)]
+    engine: Option<String>, // "polly" or "openai" — auto if absent
     session_id: Option<String>,
 }
 
 fn default_tts_voice() -> String { "nova".to_string() }
 fn default_tts_speed() -> f64 { 1.0 }
 
-/// POST /api/v1/speech/synthesize — Convert text to speech via OpenAI TTS API
+/// Try AWS Polly Neural TTS (Kazuha for Japanese, Ruth for English)
+#[cfg(feature = "dynamodb-backend")]
+async fn try_polly_tts(text: &str) -> Option<Vec<u8>> {
+    use aws_sdk_polly::types::{Engine, OutputFormat, VoiceId};
+
+    let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+    let polly = aws_sdk_polly::Client::new(&config);
+
+    // Detect language: if contains CJK/hiragana/katakana → Japanese
+    let is_ja = text.chars().any(|c| {
+        ('\u{3040}'..='\u{309F}').contains(&c) || // hiragana
+        ('\u{30A0}'..='\u{30FF}').contains(&c) || // katakana
+        ('\u{4E00}'..='\u{9FFF}').contains(&c)    // CJK
+    });
+
+    let (voice, voice_name) = if is_ja { (VoiceId::Kazuha, "Kazuha") } else { (VoiceId::Ruth, "Ruth") };
+
+    let result = polly
+        .synthesize_speech()
+        .engine(Engine::Neural)
+        .output_format(OutputFormat::Mp3)
+        .text(text)
+        .voice_id(voice)
+        .send()
+        .await;
+
+    match result {
+        Ok(output) => {
+            match output.audio_stream.collect().await {
+                Ok(bytes) => {
+                    let audio = bytes.into_bytes().to_vec();
+                    if audio.is_empty() {
+                        tracing::warn!("Polly returned empty audio");
+                        None
+                    } else {
+                        tracing::info!("Polly TTS success: {} bytes, voice={}", audio.len(), voice_name);
+                        Some(audio)
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Polly audio stream read failed: {}", e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Polly synthesize_speech failed: {}", e);
+            None
+        }
+    }
+}
+
+/// Fallback: OpenAI TTS API
+async fn try_openai_tts(text: &str, voice: &str, speed: f64) -> Result<Vec<u8>, String> {
+    let api_key = std::env::var("OPENAI_API_KEY")
+        .or_else(|_| std::env::var("OPENAI_API_KEYS").map(|keys| {
+            keys.split(',').next().unwrap_or("").trim().to_string()
+        }))
+        .map_err(|_| "No OpenAI API key".to_string())?;
+
+    if api_key.is_empty() {
+        return Err("Empty OpenAI API key".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://api.openai.com/v1/audio/speech")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&serde_json::json!({
+            "model": "tts-1-hd",
+            "input": text,
+            "voice": voice,
+            "speed": speed,
+            "response_format": "mp3",
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if resp.status().is_success() {
+        let audio = resp.bytes().await.unwrap_or_default().to_vec();
+        Ok(audio)
+    } else {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("OpenAI TTS error: {} {}", status, body))
+    }
+}
+
+/// POST /api/v1/speech/synthesize — Convert text to speech (Polly → OpenAI fallback)
 async fn handle_speech_synthesize(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
@@ -7470,20 +7613,6 @@ async fn handle_speech_synthesize(
             b"{ \"error\": \"Text must be between 1 and 4096 characters\" }".to_vec(),
         );
     }
-
-    // Get OpenAI API key from env
-    let api_key = match std::env::var("OPENAI_API_KEY").or_else(|_| std::env::var("OPENAI_API_KEYS").map(|keys| {
-        keys.split(',').next().unwrap_or("").trim().to_string()
-    })) {
-        Ok(k) if !k.is_empty() => k,
-        _ => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                [(axum::http::header::CONTENT_TYPE, "application/json")],
-                b"{ \"error\": \"TTS service not configured\" }".to_vec(),
-            );
-        }
-    };
 
     // Check credits if user is authenticated
     #[cfg(feature = "dynamodb-backend")]
@@ -7503,25 +7632,25 @@ async fn handle_speech_synthesize(
         }
     }
 
-    // Call OpenAI TTS API
-    let client = reqwest::Client::new();
-    let tts_result = client
-        .post("https://api.openai.com/v1/audio/speech")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .json(&serde_json::json!({
-            "model": "tts-1",
-            "input": req.text,
-            "voice": req.voice,
-            "speed": req.speed,
-            "response_format": "mp3",
-        }))
-        .send()
-        .await;
+    // Try AWS Polly first (faster, natural Japanese via Kazuha Neural)
+    let force_engine = req.engine.as_deref();
+    let mut audio_bytes: Option<Vec<u8>> = None;
 
-    match tts_result {
-        Ok(resp) if resp.status().is_success() => {
-            let audio_bytes = resp.bytes().await.unwrap_or_default().to_vec();
+    #[cfg(feature = "dynamodb-backend")]
+    if force_engine != Some("openai") {
+        audio_bytes = try_polly_tts(&req.text).await;
+    }
 
+    // Fallback to OpenAI TTS
+    if audio_bytes.is_none() && force_engine != Some("polly") {
+        match try_openai_tts(&req.text, &req.voice, req.speed).await {
+            Ok(bytes) => audio_bytes = Some(bytes),
+            Err(e) => tracing::error!("OpenAI TTS fallback failed: {}", e),
+        }
+    }
+
+    match audio_bytes {
+        Some(bytes) if !bytes.is_empty() => {
             // Deduct credits: 1 credit per 100 characters
             #[cfg(feature = "dynamodb-backend")]
             {
@@ -7547,25 +7676,15 @@ async fn handle_speech_synthesize(
             (
                 StatusCode::OK,
                 [(axum::http::header::CONTENT_TYPE, "audio/mpeg")],
-                audio_bytes,
+                bytes,
             )
         }
-        Ok(resp) => {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            tracing::error!("OpenAI TTS error: status={}, body={}", status, body);
+        _ => {
+            tracing::error!("All TTS engines failed");
             (
                 StatusCode::BAD_GATEWAY,
                 [(axum::http::header::CONTENT_TYPE, "application/json")],
-                format!("{{ \"error\": \"TTS API error: {}\" }}", status).into_bytes(),
-            )
-        }
-        Err(e) => {
-            tracing::error!("OpenAI TTS request failed: {}", e);
-            (
-                StatusCode::BAD_GATEWAY,
-                [(axum::http::header::CONTENT_TYPE, "application/json")],
-                b"{ \"error\": \"TTS request failed\" }".to_vec(),
+                b"{ \"error\": \"TTS service unavailable\" }".to_vec(),
             )
         }
     }

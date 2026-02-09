@@ -168,6 +168,11 @@ Resources:
             TableName: !Ref MemoryTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ConfigTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - polly:SynthesizeSpeech
+              Resource: '*'
       Events:
         Api:
           Type: HttpApi

@@ -297,6 +297,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-polly"
+version = "1.98.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "081901fb6adc956177e9a9e02b00f051c207d6791cda0ed4eba0b03875917129"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-sigv4",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-observability",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand 2.3.0",
+ "http 0.2.12",
+ "http 1.4.0",
+ "http-body 1.0.1",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-sso"
 version = "1.93.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2625,6 +2651,7 @@ dependencies = [
  "async-trait",
  "aws-config",
  "aws-sdk-dynamodb",
+ "aws-sdk-polly",
  "axum",
  "base64 0.22.1",
  "candle-core",

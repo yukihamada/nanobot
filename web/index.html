@@ -1645,6 +1645,30 @@
       border-color: var(--accent);
     }
 
+    /* Auto-TTS toggle */
+    .auto-tts-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 14px;
+      transition: all 0.2s;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .auto-tts-toggle:hover { border-color: var(--accent); color: var(--text); }
+    .auto-tts-toggle.active {
+      background: rgba(99,102,241,0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .auto-tts-toggle .tts-icon { font-size: 14px; }
+
     /* Credit display */
     .credit-display {
       font-size: 12px;
@@ -2604,7 +2628,10 @@
           </button>
         </div>
         <input type="hidden" id="app-agent-select" value="auto">
-        <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:4px;">
+        <div style="display:flex;gap:12px;justify-content:flex-end;align-items:center;margin-top:4px;">
+          <button class="auto-tts-toggle active" id="auto-tts-btn" onclick="toggleAutoTTS()" title="自動読み上げ ON/OFF">
+            <span class="tts-icon">&#128266;</span><span id="auto-tts-label">自動読み上げ</span>
+          </button>
           <label id="multi-model-toggle" style="display:none;font-size:11px;color:var(--muted);cursor:pointer;user-select:none;">
             <input type="checkbox" id="multi-model-check" style="vertical-align:middle;margin-right:4px;">Multi-Model Race
           </label>
@@ -4342,10 +4369,16 @@
           return;
         }
 
+        // Use forced model for summary, then clear
+        const chatBody = { message: msgToSend, session_id: webSessionId, channel: 'web' };
+        if (window._forceSummaryModel) {
+          chatBody.model = window._forceSummaryModel;
+          delete window._forceSummaryModel;
+        }
         const r = await fetch(API + '/api/v1/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msgToSend, session_id: webSessionId, channel: 'web' }),
+          body: JSON.stringify(chatBody),
         });
 
         if (!r.ok || !r.body) {
@@ -4588,18 +4621,21 @@
 
           const summaryBtn = document.createElement('button');
           summaryBtn.className = 'explore-action-btn';
-          summaryBtn.textContent = lang === 'ja' ? 'まとめる' : 'Summarize';
+          summaryBtn.textContent = lang === 'ja' ? 'まとめる (Claude Sonnet 4.5)' : 'Summarize (Claude Sonnet 4.5)';
           summaryBtn.onclick = function() {
             const allResponses = container.querySelectorAll('.explore-card-body');
             let combined = '';
             allResponses.forEach((el, i) => {
-              combined += (lang === 'ja' ? '回答' : 'Answer') + (i + 1) + ':\n' + el.textContent + '\n\n';
+              const modelName = container.querySelectorAll('.explore-model-name')[i]?.textContent || ('Model ' + (i+1));
+              combined += (lang === 'ja' ? '回答' : 'Answer') + (i + 1) + ' (' + modelName + '):\n' + el.textContent + '\n\n';
             });
             const summaryPrompt = lang === 'ja'
-              ? '以下の複数の回答をまとめて、最も正確で包括的な回答を作成してください:\n\n' + combined
-              : 'Summarize the following answers into one accurate, comprehensive response:\n\n' + combined;
+              ? '以下の複数のAIモデルからの回答を統合し、最も正確で包括的な日本語の回答を作成してください。各回答の良い点を取り入れ、矛盾があれば最も信頼性の高い情報を優先してください:\n\n' + combined
+              : 'Synthesize the following AI model responses into one accurate, comprehensive answer. Incorporate the best points from each and prioritize the most reliable information where answers conflict:\n\n' + combined;
             document.getElementById('app-input').value = summaryPrompt;
             document.getElementById('explore-check').checked = false;
+            // Force best model for summary
+            window._forceSummaryModel = 'claude-sonnet-4-5-20250929';
             appSend();
           };
           actions.appendChild(summaryBtn);
@@ -4785,16 +4821,46 @@
       label.textContent = isRecording ? '聞いています...' : 'タップして話す';
     }
 
-    // Auto-play TTS on voice-initiated response
-    function autoPlayTTS(text) {
-      if (!voiceInitiated) return;
-      voiceInitiated = false;
-      // Find the last TTS button and play it
-      const btns = document.querySelectorAll('.app-tts-btn');
-      if (btns.length > 0) {
-        const lastBtn = btns[btns.length - 1];
-        playTTS(lastBtn);
+    // Auto-TTS: always read aloud when enabled (default ON)
+    let autoTtsEnabled = localStorage.getItem('autoTtsEnabled') !== 'false'; // default true
+
+    function toggleAutoTTS() {
+      autoTtsEnabled = !autoTtsEnabled;
+      localStorage.setItem('autoTtsEnabled', autoTtsEnabled);
+      const btn = document.getElementById('auto-tts-btn');
+      if (btn) {
+        btn.classList.toggle('active', autoTtsEnabled);
       }
+      // If turning off, stop current audio
+      if (!autoTtsEnabled && currentAudio && !currentAudio.paused) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        if (currentTtsBtn) {
+          currentTtsBtn.classList.remove('playing');
+          currentTtsBtn.textContent = '\uD83D\uDD0A';
+          currentTtsBtn = null;
+        }
+      }
+    }
+
+    // Initialize toggle state on load
+    (function initAutoTtsToggle() {
+      const btn = document.getElementById('auto-tts-btn');
+      if (btn) btn.classList.toggle('active', autoTtsEnabled);
+    })();
+
+    // Auto-play TTS on every bot response (when enabled)
+    function autoPlayTTS(text) {
+      if (!autoTtsEnabled) return;
+      if (!text || text.length < 2) return;
+      // Small delay to ensure DOM has TTS button rendered
+      setTimeout(function() {
+        const btns = document.querySelectorAll('.app-tts-btn');
+        if (btns.length > 0) {
+          const lastBtn = btns[btns.length - 1];
+          playTTS(lastBtn);
+        }
+      }, 100);
     }
 
     // Initialize STT on load

@@ -1013,7 +1013,7 @@ pub async fn execute_tool(name: &str, arguments: &HashMap<String, serde_json::Va
 }
 
 /// Web search: try Brave API → Bing HTML → Jina search fallback.
-async fn execute_web_search(query: &str) -> String {
+pub(crate) async fn execute_web_search(query: &str) -> String {
     tracing::info!("execute_web_search: query={}", query);
 
     // Try Brave Search API first (if key is available)
@@ -1370,7 +1370,7 @@ async fn direct_site_search(query: &str) -> String {
 }
 
 /// Fetch a web page via Jina Reader for JS rendering, with fallback to direct fetch.
-async fn execute_web_fetch(url: &str) -> String {
+pub(crate) async fn execute_web_fetch(url: &str) -> String {
     if url.is_empty() {
         return "No URL provided".to_string();
     }
