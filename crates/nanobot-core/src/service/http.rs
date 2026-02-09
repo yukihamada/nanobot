@@ -7653,21 +7653,26 @@ async fn handle_speech_synthesize(
         }
     }
 
-    // Try AWS Polly first (faster, natural Japanese via Kazuha Neural)
+    // TTS priority: OpenAI tts-1-hd (most expressive) → AWS Polly Kazuha Neural → fail
+    // Frontend adds browser SpeechSynthesis as final fallback
     let force_engine = req.engine.as_deref();
     let mut audio_bytes: Option<Vec<u8>> = None;
 
-    #[cfg(feature = "dynamodb-backend")]
-    if force_engine != Some("openai") {
-        audio_bytes = try_polly_tts(&req.text).await;
+    // 1st: OpenAI tts-1-hd (most natural, expressive voices)
+    if force_engine != Some("polly") {
+        match try_openai_tts(&req.text, &req.voice, req.speed).await {
+            Ok(bytes) => {
+                tracing::info!("TTS: OpenAI tts-1-hd success, {} bytes", bytes.len());
+                audio_bytes = Some(bytes);
+            }
+            Err(e) => tracing::warn!("TTS: OpenAI failed ({}), trying Polly...", e),
+        }
     }
 
-    // Fallback to OpenAI TTS
-    if audio_bytes.is_none() && force_engine != Some("polly") {
-        match try_openai_tts(&req.text, &req.voice, req.speed).await {
-            Ok(bytes) => audio_bytes = Some(bytes),
-            Err(e) => tracing::error!("OpenAI TTS fallback failed: {}", e),
-        }
+    // 2nd: AWS Polly Neural (Kazuha for JP — reliable, low latency)
+    #[cfg(feature = "dynamodb-backend")]
+    if audio_bytes.is_none() && force_engine != Some("openai") {
+        audio_bytes = try_polly_tts(&req.text).await;
     }
 
     match audio_bytes {
