@@ -2597,6 +2597,7 @@
       <div class="app-sidebar-footer">
         <div class="credit-display" id="credit-display" style="display:none;">
           <span>&#9889;</span> <span class="credit-count" id="credit-count">--</span> <span style="font-size:11px;">credits</span>
+          <button onclick="showCryptoTopup()" style="margin-left:8px;background:linear-gradient(135deg,#627eea,#8b5cf6);color:#fff;border:none;border-radius:12px;padding:2px 10px;font-size:11px;cursor:pointer;white-space:nowrap;" title="仮想通貨でチャージ">&#9830; Crypto</button>
         </div>
         <div class="app-sidebar-user" onclick="logout()">
           <div class="app-sidebar-user-avatar" id="app-user-avatar"></div>
@@ -5063,6 +5064,167 @@
           updateCredits(d.credits_remaining);
         }
       } catch(e) { /* ignore */ }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Crypto top-up (ETH/MATIC/Base via OpenRouter)
+    // ---------------------------------------------------------------------------
+    function showCryptoTopup() {
+      const modal = document.getElementById('modal');
+      const content = document.getElementById('modal-content');
+      const lang = document.documentElement.lang || 'ja';
+
+      content.innerHTML = '<h3 style="margin:0 0 12px;">' + (lang === 'ja' ? '&#9830; 仮想通貨でチャージ' : '&#9830; Top Up with Crypto') + '</h3>'
+        + '<p style="color:var(--muted);font-size:13px;margin-bottom:16px;">'
+        + (lang === 'ja' ? 'ETH / MATIC / Base でクレジットを購入。$1 = 100 credits' : 'Buy credits with ETH/MATIC/Base. $1 = 100 credits')
+        + '</p>'
+        + '<div style="display:flex;gap:8px;margin-bottom:12px;">'
+        + '<button class="crypto-amount-btn" onclick="selectCryptoAmount(5)" data-amt="5" style="flex:1;padding:10px;border:2px solid var(--border);border-radius:10px;background:transparent;color:var(--text);cursor:pointer;font-size:15px;font-weight:600;">$5<br><span style="font-size:11px;color:var(--muted);">500 cr</span></button>'
+        + '<button class="crypto-amount-btn" onclick="selectCryptoAmount(20)" data-amt="20" style="flex:1;padding:10px;border:2px solid var(--border);border-radius:10px;background:transparent;color:var(--text);cursor:pointer;font-size:15px;font-weight:600;">$20<br><span style="font-size:11px;color:var(--muted);">2,000 cr</span></button>'
+        + '<button class="crypto-amount-btn" onclick="selectCryptoAmount(50)" data-amt="50" style="flex:1;padding:10px;border:2px solid var(--border);border-radius:10px;background:transparent;color:var(--text);cursor:pointer;font-size:15px;font-weight:600;">$50<br><span style="font-size:11px;color:var(--muted);">5,000 cr</span></button>'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;margin-bottom:16px;">'
+        + '<button onclick="selectChain(8453)" id="chain-8453" class="chain-btn selected" style="flex:1;padding:8px;border:2px solid var(--accent);border-radius:8px;background:rgba(99,102,241,0.1);color:var(--accent);cursor:pointer;font-size:12px;">Base<br><span style="font-size:10px;">推奨・ガス安</span></button>'
+        + '<button onclick="selectChain(137)" id="chain-137" class="chain-btn" style="flex:1;padding:8px;border:2px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:12px;">Polygon<br><span style="font-size:10px;">MATIC</span></button>'
+        + '<button onclick="selectChain(1)" id="chain-1" class="chain-btn" style="flex:1;padding:8px;border:2px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:12px;">Ethereum<br><span style="font-size:10px;">ETH</span></button>'
+        + '</div>'
+        + '<button id="crypto-pay-btn" onclick="initCryptoPayment()" style="width:100%;padding:14px;background:linear-gradient(135deg,#627eea,#8b5cf6);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;">'
+        + (lang === 'ja' ? '&#128190; ウォレットで支払う ($20)' : '&#128190; Pay with Wallet ($20)')
+        + '</button>'
+        + '<p id="crypto-status" style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px;min-height:18px;"></p>'
+        + '<p style="text-align:center;font-size:11px;color:var(--muted);margin-top:4px;">'
+        + (lang === 'ja' ? 'MetaMask等のウォレットが必要です' : 'Requires MetaMask or compatible wallet')
+        + '</p>';
+
+      modal.classList.add('show');
+      window._cryptoAmount = 20;
+      window._cryptoChain = 8453;
+      selectCryptoAmount(20);
+    }
+
+    function selectCryptoAmount(amt) {
+      window._cryptoAmount = amt;
+      document.querySelectorAll('.crypto-amount-btn').forEach(function(b) {
+        const isSelected = parseInt(b.dataset.amt) === amt;
+        b.style.borderColor = isSelected ? 'var(--accent)' : 'var(--border)';
+        b.style.background = isSelected ? 'rgba(99,102,241,0.1)' : 'transparent';
+      });
+      const lang = document.documentElement.lang || 'ja';
+      const btn = document.getElementById('crypto-pay-btn');
+      if (btn) btn.innerHTML = (lang === 'ja' ? '&#128190; ウォレットで支払う ($' : '&#128190; Pay with Wallet ($') + amt + ')';
+    }
+
+    function selectChain(chainId) {
+      window._cryptoChain = chainId;
+      [1, 137, 8453].forEach(function(id) {
+        const el = document.getElementById('chain-' + id);
+        if (el) {
+          const isSel = id === chainId;
+          el.style.borderColor = isSel ? 'var(--accent)' : 'var(--border)';
+          el.style.background = isSel ? 'rgba(99,102,241,0.1)' : 'transparent';
+          el.style.color = isSel ? 'var(--accent)' : 'var(--text)';
+          el.className = 'chain-btn' + (isSel ? ' selected' : '');
+        }
+      });
+    }
+
+    async function initCryptoPayment() {
+      const statusEl = document.getElementById('crypto-status');
+      const lang = document.documentElement.lang || 'ja';
+
+      if (!window.ethereum) {
+        statusEl.textContent = lang === 'ja' ? 'MetaMaskが見つかりません。ブラウザ拡張をインストールしてください。' : 'MetaMask not found. Please install the browser extension.';
+        statusEl.style.color = '#ef4444';
+        return;
+      }
+
+      statusEl.textContent = lang === 'ja' ? 'ウォレット接続中...' : 'Connecting wallet...';
+      statusEl.style.color = 'var(--accent)';
+
+      try {
+        // Request wallet connection
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const wallet = accounts[0];
+        statusEl.textContent = lang === 'ja' ? '決済データ取得中...' : 'Getting payment data...';
+
+        // Get calldata from our API
+        const hdrs = { 'Content-Type': 'application/json' };
+        if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
+
+        const resp = await fetch(API + '/api/v1/crypto/initiate', {
+          method: 'POST',
+          headers: hdrs,
+          body: JSON.stringify({
+            amount: window._cryptoAmount,
+            chain_id: window._cryptoChain,
+            wallet_address: wallet,
+            session_id: webSessionId,
+          }),
+        });
+        const data = await resp.json();
+
+        if (data.error) {
+          statusEl.textContent = data.error;
+          statusEl.style.color = '#ef4444';
+          return;
+        }
+
+        // Switch chain if needed
+        const currentChain = parseInt(await window.ethereum.request({ method: 'eth_chainId' }), 16);
+        if (currentChain !== window._cryptoChain) {
+          statusEl.textContent = lang === 'ja' ? 'チェーン切替中...' : 'Switching chain...';
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x' + window._cryptoChain.toString(16) }],
+            });
+          } catch(e) {
+            statusEl.textContent = lang === 'ja' ? 'チェーンを切り替えてください: ' + data.chain_name : 'Please switch to ' + data.chain_name;
+            statusEl.style.color = '#ef4444';
+            return;
+          }
+        }
+
+        // Send transaction
+        statusEl.textContent = lang === 'ja' ? 'トランザクション承認を待っています...' : 'Waiting for transaction approval...';
+
+        const calldata = data.calldata;
+        const txParams = {
+          from: wallet,
+          to: calldata.to,
+          value: calldata.value,
+          data: calldata.data || '0x',
+        };
+
+        const txHash = await window.ethereum.request({
+          method: 'eth_sendTransaction',
+          params: [txParams],
+        });
+
+        statusEl.innerHTML = (lang === 'ja' ? '&#9989; トランザクション送信済み！確認中...' : '&#9989; Transaction sent! Confirming...')
+          + '<br><span style="font-size:10px;word-break:break-all;">' + txHash + '</span>';
+        statusEl.style.color = '#22c55e';
+
+        // Confirm with our backend
+        const confirmResp = await fetch(API + '/api/v1/crypto/confirm', {
+          method: 'POST',
+          headers: hdrs,
+          body: JSON.stringify({ tx_hash: txHash, session_id: webSessionId }),
+        });
+        const confirmData = await confirmResp.json();
+
+        if (confirmData.success) {
+          statusEl.innerHTML = (lang === 'ja' ? '&#127881; チャージ完了！' : '&#127881; Payment confirmed!')
+            + '<br>' + (confirmData.message_ja || confirmData.message);
+          refreshCredits();
+          setTimeout(function() { document.getElementById('modal').classList.remove('show'); }, 3000);
+        }
+
+      } catch(e) {
+        console.error('Crypto payment error:', e);
+        statusEl.textContent = e.message || (lang === 'ja' ? 'エラーが発生しました' : 'An error occurred');
+        statusEl.style.color = '#ef4444';
+      }
     }
 
     // ---------------------------------------------------------------------------
