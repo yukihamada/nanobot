@@ -13,14 +13,15 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: aarch64-apple-darwin
             os: macos-14
             method: native
           - target: x86_64-apple-darwin
-            os: macos-13
-            method: native
+            os: macos-14
+            method: cross
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             method: zigbuild
@@ -48,11 +49,15 @@ jobs:
 
       - name: Build (native)
         if: matrix.method == 'native'
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} -p nanobot
+
+      - name: Build (cross — macOS x86_64 from ARM)
+        if: matrix.method == 'cross'
+        run: cargo build --release --target ${{ matrix.target }} -p nanobot
 
       - name: Build (zigbuild)
         if: matrix.method == 'zigbuild'
-        run: cargo zigbuild --release --target ${{ matrix.target }}
+        run: cargo zigbuild --release --target ${{ matrix.target }} -p nanobot
 
       - name: Package
         run: |
