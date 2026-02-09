@@ -653,6 +653,58 @@ async fn link_stripe_to_user(
     info!("Linked Stripe customer {} to user {} with plan {}", stripe_customer_id, user_id, plan);
 }
 
+/// Fire-and-forget: update conversation title (from first user message) and message_count.
+#[cfg(feature = "dynamodb-backend")]
+fn spawn_update_conv_meta(
+    dynamo: aws_sdk_dynamodb::Client,
+    config_table: String,
+    user_id: String,
+    conv_id: String,
+    user_message: String,
+    message_count: usize,
+) {
+    tokio::spawn(async move {
+        let user_pk = format!("USER#{}", user_id);
+        let sk = format!("CONV#{}", conv_id);
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Always update message_count and updated_at
+        let _ = dynamo
+            .update_item()
+            .table_name(&config_table)
+            .key("pk", AttributeValue::S(user_pk.clone()))
+            .key("sk", AttributeValue::S(sk.clone()))
+            .update_expression("SET message_count = :mc, updated_at = :now")
+            .expression_attribute_values(":mc", AttributeValue::N(message_count.to_string()))
+            .expression_attribute_values(":now", AttributeValue::S(now.clone()))
+            .send()
+            .await;
+
+        // Set title only if still "New conversation" (first message)
+        let trimmed = user_message.trim();
+        if trimmed.is_empty() { return; }
+        let title = if trimmed.len() > 50 {
+            let mut i = 50;
+            while i > 0 && !trimmed.is_char_boundary(i) { i -= 1; }
+            format!("{}...", &trimmed[..i])
+        } else {
+            trimmed.to_string()
+        };
+
+        let _ = dynamo
+            .update_item()
+            .table_name(&config_table)
+            .key("pk", AttributeValue::S(user_pk))
+            .key("sk", AttributeValue::S(sk))
+            .update_expression("SET title = :title")
+            .condition_expression("title = :default OR attribute_not_exists(title)")
+            .expression_attribute_values(":title", AttributeValue::S(title))
+            .expression_attribute_values(":default", AttributeValue::S("New conversation".to_string()))
+            .send()
+            .await;
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Multi-agent orchestration
 // ---------------------------------------------------------------------------
@@ -1921,6 +1973,23 @@ async fn handle_chat(
         session.add_message_from_channel("user", &req.message, "web");
         session.add_message_from_channel("assistant", &response_text, "web");
         sessions.save_by_key(&session_key);
+    }
+
+    // Auto-update conversation title & message count (fire-and-forget)
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let Some(conv_id) = req.session_id.strip_prefix("webchat:") {
+                let msg_count = {
+                    let mut sessions = state.sessions.lock().await;
+                    sessions.get_or_create(&session_key).messages.len()
+                };
+                spawn_update_conv_meta(
+                    dynamo.clone(), table.clone(), session_key.clone(),
+                    conv_id.to_string(), req.message.clone(), msg_count,
+                );
+            }
+        }
     }
 
     // Auto-save to daily memory log (fire-and-forget)
@@ -3833,6 +3902,23 @@ async fn handle_chat_stream(
                     session.add_message("user", &req_message);
                     session.add_message("assistant", &response_text);
                     sessions.save_by_key(&session_key_clone);
+                }
+
+                // Auto-update conversation title & message count
+                #[cfg(feature = "dynamodb-backend")]
+                {
+                    if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                        if let Some(conv_id) = req_session_id.strip_prefix("webchat:") {
+                            let msg_count = {
+                                let mut sessions = state_clone.sessions.lock().await;
+                                sessions.get_or_create(&session_key_clone).messages.len()
+                            };
+                            spawn_update_conv_meta(
+                                dynamo.clone(), table.clone(), session_key_clone.clone(),
+                                conv_id.to_string(), req_message.clone(), msg_count,
+                            );
+                        }
+                    }
                 }
 
                 // Content event (final answer)

@@ -1203,7 +1203,8 @@
     }
     body.app-mode .nav-right > a,
     body.app-mode .nav-right > .lang-sw,
-    body.app-mode .nav-hamburger { display: none !important; }
+    body.app-mode .nav-hamburger,
+    body.app-mode #auth-nav { display: none !important; }
     body.app-mode .main { display: none; }
     body.app-mode footer { display: none; }
 
@@ -1265,6 +1266,19 @@
     }
     .app-conv-item:hover { background: var(--surface); color: var(--text); }
     .app-conv-item.active { background: var(--surface); color: var(--text); }
+    .conv-date-group { margin-bottom: 4px; }
+    .conv-date-header {
+      display: flex; align-items: center; gap: 4px;
+      padding: 6px 12px 4px; font-size: 11px; font-weight: 600;
+      color: var(--muted); cursor: pointer; user-select: none;
+    }
+    .conv-date-header:hover { color: var(--text); }
+    .conv-date-header .chevron {
+      transition: transform 0.2s; font-size: 10px;
+    }
+    .conv-date-header.collapsed .chevron { transform: rotate(-90deg); }
+    .conv-date-items { overflow: hidden; }
+    .conv-date-items.collapsed { display: none; }
     .app-sidebar-channels {
       padding: 8px 12px;
       border-top: 1px solid var(--border);
@@ -4213,24 +4227,70 @@
         appConversations = d.conversations || [];
         const list = document.getElementById('app-conv-list');
         list.innerHTML = '';
+        const l = document.documentElement.lang || 'ja';
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+        const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
+
+        // Group conversations by date
+        const groups = {};
         appConversations.forEach(conv => {
-          const item = document.createElement('div');
-          item.className = 'app-conv-item' + (conv.id === appCurrentConvId ? ' active' : '');
-          item.style.cssText = 'display:flex;align-items:center;gap:4px;';
-          const title = document.createElement('span');
-          title.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-          title.textContent = conv.title || (document.documentElement.lang === 'ja' ? '新しい会話' : 'New conversation');
-          title.onclick = () => appLoadConversation(conv.id, conv.session_id);
-          item.appendChild(title);
-          const shareBtn = document.createElement('button');
-          shareBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-          shareBtn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;flex-shrink:0;opacity:0;transition:opacity 0.15s;';
-          shareBtn.title = 'Share';
-          shareBtn.onclick = (e) => { e.stopPropagation(); shareConversation(conv.id); };
-          item.appendChild(shareBtn);
-          item.onmouseenter = () => shareBtn.style.opacity = '1';
-          item.onmouseleave = () => shareBtn.style.opacity = '0';
-          list.appendChild(item);
+          const d2 = new Date(conv.updated_at || conv.created_at);
+          let label;
+          if (d2 >= today) label = l === 'ja' ? '今日' : 'Today';
+          else if (d2 >= yesterday) label = l === 'ja' ? '昨日' : 'Yesterday';
+          else if (d2 >= weekAgo) label = l === 'ja' ? '今週' : 'This Week';
+          else label = l === 'ja' ? 'それ以前' : 'Older';
+          if (!groups[label]) groups[label] = [];
+          groups[label].push(conv);
+        });
+
+        const collapsedGroups = JSON.parse(localStorage.getItem('convCollapsed') || '{}');
+
+        Object.entries(groups).forEach(([label, convs]) => {
+          const group = document.createElement('div');
+          group.className = 'conv-date-group';
+
+          const header = document.createElement('div');
+          header.className = 'conv-date-header' + (collapsedGroups[label] ? ' collapsed' : '');
+          header.innerHTML = '<span class="chevron">&#9660;</span> ' + label;
+          header.onclick = () => {
+            const items = group.querySelector('.conv-date-items');
+            const isCollapsed = header.classList.toggle('collapsed');
+            items.classList.toggle('collapsed', isCollapsed);
+            const stored = JSON.parse(localStorage.getItem('convCollapsed') || '{}');
+            stored[label] = isCollapsed;
+            localStorage.setItem('convCollapsed', JSON.stringify(stored));
+          };
+          group.appendChild(header);
+
+          const items = document.createElement('div');
+          items.className = 'conv-date-items' + (collapsedGroups[label] ? ' collapsed' : '');
+
+          convs.forEach(conv => {
+            const item = document.createElement('div');
+            item.className = 'app-conv-item' + (conv.id === appCurrentConvId ? ' active' : '');
+            item.style.cssText = 'display:flex;align-items:center;gap:4px;';
+            const title = document.createElement('span');
+            title.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            const convTitle = conv.title || (l === 'ja' ? '新しい会話' : 'New conversation');
+            title.textContent = convTitle === 'New conversation' && l === 'ja' ? '新しい会話' : convTitle;
+            title.onclick = () => appLoadConversation(conv.id, conv.session_id);
+            item.appendChild(title);
+            const shareBtn = document.createElement('button');
+            shareBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+            shareBtn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;flex-shrink:0;opacity:0;transition:opacity 0.15s;';
+            shareBtn.title = 'Share';
+            shareBtn.onclick = (e) => { e.stopPropagation(); shareConversation(conv.id); };
+            item.appendChild(shareBtn);
+            item.onmouseenter = () => shareBtn.style.opacity = '1';
+            item.onmouseleave = () => shareBtn.style.opacity = '0';
+            items.appendChild(item);
+          });
+
+          group.appendChild(items);
+          list.appendChild(group);
         });
       } catch(e) { /* ignore */ }
     }
