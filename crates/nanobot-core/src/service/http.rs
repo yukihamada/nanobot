@@ -7511,13 +7511,27 @@ struct SpeechRequest {
 fn default_tts_voice() -> String { "nova".to_string() }
 fn default_tts_speed() -> f64 { 1.0 }
 
+/// Cached Polly client (reuse across requests for speed)
+#[cfg(feature = "dynamodb-backend")]
+static POLLY_CLIENT: once_cell::sync::OnceCell<aws_sdk_polly::Client> = once_cell::sync::OnceCell::new();
+
+#[cfg(feature = "dynamodb-backend")]
+async fn get_polly_client() -> &'static aws_sdk_polly::Client {
+    if let Some(client) = POLLY_CLIENT.get() {
+        return client;
+    }
+    let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+    let client = aws_sdk_polly::Client::new(&config);
+    let _ = POLLY_CLIENT.set(client);
+    POLLY_CLIENT.get().unwrap()
+}
+
 /// Try AWS Polly Neural TTS (Kazuha for Japanese, Ruth for English)
 #[cfg(feature = "dynamodb-backend")]
 async fn try_polly_tts(text: &str) -> Option<Vec<u8>> {
     use aws_sdk_polly::types::{Engine, OutputFormat, VoiceId};
 
-    let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
-    let polly = aws_sdk_polly::Client::new(&config);
+    let polly = get_polly_client().await;
 
     // Detect language: if contains CJK/hiragana/katakana → Japanese
     let is_ja = text.chars().any(|c| {
@@ -7528,11 +7542,18 @@ async fn try_polly_tts(text: &str) -> Option<Vec<u8>> {
 
     let (voice, voice_name) = if is_ja { (VoiceId::Kazuha, "Kazuha") } else { (VoiceId::Ruth, "Ruth") };
 
+    // Wrap in SSML for more natural prosody
+    let ssml_text = format!(
+        r#"<speak><prosody rate="105%">{}</prosody></speak>"#,
+        text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    );
+
     let result = polly
         .synthesize_speech()
         .engine(Engine::Neural)
         .output_format(OutputFormat::Mp3)
-        .text(text)
+        .text_type(aws_sdk_polly::types::TextType::Ssml)
+        .text(&ssml_text)
         .voice_id(voice)
         .send()
         .await;

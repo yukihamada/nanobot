@@ -4831,16 +4831,8 @@
       if (btn) {
         btn.classList.toggle('active', autoTtsEnabled);
       }
-      // If turning off, stop current audio
-      if (!autoTtsEnabled && currentAudio && !currentAudio.paused) {
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        if (currentTtsBtn) {
-          currentTtsBtn.classList.remove('playing');
-          currentTtsBtn.textContent = '\uD83D\uDD0A';
-          currentTtsBtn = null;
-        }
-      }
+      // If turning off, stop all TTS
+      if (!autoTtsEnabled) stopTTS();
     }
 
     // Initialize toggle state on load
@@ -4850,115 +4842,198 @@
     })();
 
     // Auto-play TTS on every bot response (when enabled)
+    // Uses sentence-level parallel TTS for fastest playback
     function autoPlayTTS(text) {
       if (!autoTtsEnabled) return;
       if (!text || text.length < 2) return;
-      // Small delay to ensure DOM has TTS button rendered
-      setTimeout(function() {
-        const btns = document.querySelectorAll('.app-tts-btn');
-        if (btns.length > 0) {
-          const lastBtn = btns[btns.length - 1];
-          playTTS(lastBtn);
-        }
-      }, 100);
+      // Strip markdown formatting for cleaner speech
+      const clean = text.replace(/#{1,6}\s/g, '').replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
+        .replace(/`[^`]+`/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/^[-*]\s/gm, '').replace(/^\d+\.\s/gm, '').trim();
+      if (clean.length < 2) return;
+      streamTTS(clean);
     }
 
     // Initialize STT on load
     initSpeechRecognition();
 
     // ---------------------------------------------------------------------------
-    // TTS (Text-to-Speech) — OpenAI API via backend
+    // TTS — Sentence-level parallel fetch + sequential playback + browser fallback
     // ---------------------------------------------------------------------------
     let currentAudio = null;
     let currentTtsBtn = null;
-    const ttsCache = new Map(); // text -> blobURL cache
+    const ttsCache = new Map();
+    let ttsQueue = [];       // [{blobUrl, sentence}] — audio ready to play
+    let ttsPlaying = false;
+    let ttsAborted = false;
+    let ttsPendingCount = 0; // how many fetches are in-flight
 
+    // Split text into sentences (Japanese + English boundaries)
+    function splitSentences(text) {
+      // Split on 。！？ and .!? (but not decimals like 3.14)
+      const parts = text.split(/(?<=[。！？\!\?])\s*|(?<=\.)\s+/);
+      // Merge very short fragments (< 8 chars) with previous
+      const merged = [];
+      for (const p of parts) {
+        const t = p.trim();
+        if (!t) continue;
+        if (merged.length > 0 && t.length < 8) {
+          merged[merged.length - 1] += t;
+        } else {
+          merged.push(t);
+        }
+      }
+      return merged.filter(s => s.length > 0);
+    }
+
+    // Fetch TTS audio for a single sentence
+    async function fetchTtsAudio(sentence) {
+      const cacheKey = sentence.substring(0, 4096);
+      let blobUrl = ttsCache.get(cacheKey);
+      if (blobUrl) return blobUrl;
+
+      const hdrs = { 'Content-Type': 'application/json' };
+      if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
+
+      const r = await fetch(API + '/api/v1/speech/synthesize', {
+        method: 'POST',
+        headers: hdrs,
+        body: JSON.stringify({ text: cacheKey, session_id: webSessionId }),
+      });
+
+      if (!r.ok) throw new Error('TTS HTTP ' + r.status);
+      const blob = await r.blob();
+      if (!blob || blob.size === 0) throw new Error('Empty audio');
+      blobUrl = URL.createObjectURL(blob);
+      ttsCache.set(cacheKey, blobUrl);
+      return blobUrl;
+    }
+
+    // Play next audio in the queue
+    function playNextQueued() {
+      if (ttsAborted || ttsQueue.length === 0) {
+        ttsPlaying = false;
+        // Update button state if all done
+        if (ttsPendingCount <= 0 && currentTtsBtn) {
+          currentTtsBtn.classList.remove('playing');
+          currentTtsBtn.textContent = '\uD83D\uDD0A';
+          currentTtsBtn = null;
+          refreshCredits();
+        }
+        return;
+      }
+      ttsPlaying = true;
+      const item = ttsQueue.shift();
+      const audio = new Audio(item.blobUrl);
+      currentAudio = audio;
+      audio.onended = function() { playNextQueued(); };
+      audio.onerror = function() { playNextQueued(); };
+      audio.play().catch(function() { playNextQueued(); });
+    }
+
+    // Stream TTS: split into sentences, fetch in parallel, play in order
+    function streamTTS(text) {
+      // Abort any previous stream
+      stopTTS();
+      ttsAborted = false;
+
+      const sentences = splitSentences(text);
+      if (sentences.length === 0) return;
+
+      // Pre-allocate slots to maintain order
+      const slots = new Array(sentences.length).fill(null);
+      ttsPendingCount = sentences.length;
+      let nextToPlay = 0;
+
+      function tryEnqueue() {
+        // Enqueue all consecutive ready slots
+        while (nextToPlay < slots.length && slots[nextToPlay] !== null) {
+          if (ttsAborted) return;
+          ttsQueue.push({ blobUrl: slots[nextToPlay], sentence: sentences[nextToPlay] });
+          nextToPlay++;
+          if (!ttsPlaying) playNextQueued();
+        }
+      }
+
+      // Fire all TTS requests in parallel
+      sentences.forEach(function(sentence, idx) {
+        fetchTtsAudio(sentence).then(function(blobUrl) {
+          if (ttsAborted) return;
+          ttsPendingCount--;
+          slots[idx] = blobUrl;
+          tryEnqueue();
+        }).catch(function(err) {
+          console.warn('TTS API failed for sentence, trying browser fallback:', err.message);
+          ttsPendingCount--;
+          // Use browser built-in SpeechSynthesis as fallback
+          if (ttsAborted) return;
+          speakWithBrowser(sentence);
+          slots[idx] = 'SPOKEN'; // mark as handled
+          tryEnqueue();
+        });
+      });
+    }
+
+    // Stop all TTS playback
+    function stopTTS() {
+      ttsAborted = true;
+      ttsQueue = [];
+      ttsPendingCount = 0;
+      if (currentAudio && !currentAudio.paused) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+      }
+      currentAudio = null;
+      ttsPlaying = false;
+      // Cancel browser speech too
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      if (currentTtsBtn) {
+        currentTtsBtn.classList.remove('playing');
+        currentTtsBtn.textContent = '\uD83D\uDD0A';
+        currentTtsBtn = null;
+      }
+    }
+
+    // Browser built-in SpeechSynthesis fallback (works offline, zero latency)
+    function speakWithBrowser(text) {
+      if (!window.speechSynthesis) return;
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'ja-JP';
+      utter.rate = 1.1;
+      // Try to find a good Japanese voice
+      const voices = speechSynthesis.getVoices();
+      const jaVoice = voices.find(v => v.lang === 'ja-JP' && v.name.includes('Kyoko'))
+        || voices.find(v => v.lang === 'ja-JP' && v.name.includes('O-Ren'))
+        || voices.find(v => v.lang === 'ja-JP' && !v.localService === false)
+        || voices.find(v => v.lang.startsWith('ja'));
+      if (jaVoice) utter.voice = jaVoice;
+      speechSynthesis.speak(utter);
+    }
+
+    // Manual TTS button click — play full text
     async function playTTS(btn) {
       const text = btn.dataset.text;
       if (!text) return;
 
       // If already playing this button, stop
-      if (currentTtsBtn === btn && currentAudio && !currentAudio.paused) {
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        btn.classList.remove('playing');
-        btn.textContent = '\uD83D\uDD0A';
-        currentTtsBtn = null;
+      if (currentTtsBtn === btn && (ttsPlaying || (currentAudio && !currentAudio.paused))) {
+        stopTTS();
         return;
       }
 
-      // Stop any other playing audio
-      if (currentAudio && !currentAudio.paused) {
-        currentAudio.pause();
-        if (currentTtsBtn) {
-          currentTtsBtn.classList.remove('playing');
-          currentTtsBtn.textContent = '\uD83D\uDD0A';
-        }
-      }
+      // Stop any previous
+      stopTTS();
 
       btn.classList.add('playing');
-      btn.textContent = '\u23F3'; // hourglass while loading
+      btn.textContent = '\u23F9';
+      currentTtsBtn = btn;
 
-      try {
-        const cacheKey = text.substring(0, 4096);
-        let blobUrl = ttsCache.get(cacheKey);
+      // Strip markdown
+      const clean = text.replace(/#{1,6}\s/g, '').replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
+        .replace(/`[^`]+`/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/^[-*]\s/gm, '').replace(/^\d+\.\s/gm, '').trim();
 
-        if (!blobUrl) {
-          const hdrs = { 'Content-Type': 'application/json' };
-          if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
-
-          const r = await fetch(API + '/api/v1/speech/synthesize', {
-            method: 'POST',
-            headers: hdrs,
-            body: JSON.stringify({ text: cacheKey, session_id: webSessionId }),
-          });
-
-          if (!r.ok) {
-            const errBody = await r.text().catch(() => '');
-            console.error('TTS API error:', r.status, errBody);
-            throw new Error('TTS failed: ' + r.status);
-          }
-
-          const blob = await r.blob();
-          if (!blob || blob.size === 0) throw new Error('Empty audio response');
-          blobUrl = URL.createObjectURL(blob);
-          ttsCache.set(cacheKey, blobUrl);
-        }
-
-        currentAudio = new Audio(blobUrl);
-        currentTtsBtn = btn;
-
-        currentAudio.onended = function() {
-          btn.classList.remove('playing');
-          btn.textContent = '\uD83D\uDD0A';
-          currentTtsBtn = null;
-        };
-
-        currentAudio.onerror = function(e) {
-          console.error('Audio playback error:', e);
-          btn.classList.remove('playing');
-          btn.textContent = '\uD83D\uDD0A';
-          currentTtsBtn = null;
-          ttsCache.delete(cacheKey);
-        };
-
-        btn.textContent = '\u23F9'; // stop icon once loaded
-        await currentAudio.play().catch(function(e) {
-          console.error('Audio play() rejected:', e);
-          // Retry on user gesture (autoplay policy)
-          btn.classList.remove('playing');
-          btn.textContent = '\uD83D\uDD0A';
-          currentTtsBtn = null;
-        });
-
-        // Update credits after TTS
-        refreshCredits();
-      } catch(e) {
-        console.error('TTS error:', e);
-        btn.classList.remove('playing');
-        btn.textContent = '\uD83D\uDD0A';
-        currentTtsBtn = null;
-      }
+      streamTTS(clean);
     }
 
     // ---------------------------------------------------------------------------
