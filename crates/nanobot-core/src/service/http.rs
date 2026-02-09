@@ -1806,7 +1806,7 @@ async fn handle_chat(
                             let usage_pk = format!("USAGE#{}#{}", session_key, now.format("%Y%m%d"));
                             let usage_sk = format!("{}#{}", now.to_rfc3339(), tool_name);
                             let result_preview = if tool_result.len() > 200 {
-                                format!("{}...", &tool_result[..200])
+                                { let mut i = 200.min(tool_result.len()); while i > 0 && !tool_result.is_char_boundary(i) { i -= 1; } format!("{}...", &tool_result[..i]) }
                             } else {
                                 tool_result.clone()
                             };
@@ -1930,8 +1930,8 @@ async fn handle_chat(
             let bot_msg = response_text.clone();
             tokio::spawn(async move {
                 let summary = format!("- Q: {} → A: {}",
-                    if user_msg.len() > 80 { format!("{}...", &user_msg[..80]) } else { user_msg },
-                    if bot_msg.len() > 120 { format!("{}...", &bot_msg[..120]) } else { bot_msg },
+                    if user_msg.len() > 80 { let mut i = 80; while i > 0 && !user_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &user_msg[..i]) } else { user_msg },
+                    if bot_msg.len() > 120 { let mut i = 120; while i > 0 && !bot_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &bot_msg[..i]) } else { bot_msg },
                 );
                 append_daily_memory(&dynamo, &table, &sk, &summary).await;
             });
