@@ -1115,6 +1115,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/webhooks/google_chat", post(handle_google_chat_webhook))
         .route("/webhooks/zalo", post(handle_zalo_webhook))
         .route("/webhooks/feishu", post(handle_feishu_webhook))
+        .route("/webhooks/whatsapp", get(handle_whatsapp_verify))
         .route("/webhooks/whatsapp", post(handle_whatsapp_webhook))
         .route("/webhooks/stripe", post(handle_stripe_webhook))
         // Auth
@@ -3365,6 +3366,23 @@ async fn handle_feishu_webhook(
 // ---------------------------------------------------------------------------
 // WhatsApp Webhook (Cloud API)
 // ---------------------------------------------------------------------------
+
+/// GET /webhooks/whatsapp — WhatsApp webhook verification (same as Facebook)
+async fn handle_whatsapp_verify(
+    Query(params): Query<FacebookVerifyParams>,
+) -> impl IntoResponse {
+    let expected_token = std::env::var("FACEBOOK_VERIFY_TOKEN").unwrap_or_default();
+    if params.mode.as_deref() == Some("subscribe")
+        && params.verify_token.as_deref() == Some(&expected_token)
+        && !expected_token.is_empty()
+    {
+        info!("WhatsApp webhook verified");
+        (StatusCode::OK, params.challenge.unwrap_or_default())
+    } else {
+        tracing::warn!("WhatsApp webhook verification failed");
+        (StatusCode::FORBIDDEN, "Verification failed".to_string())
+    }
+}
 
 /// POST /webhooks/whatsapp — WhatsApp Cloud API incoming messages
 async fn handle_whatsapp_webhook(
