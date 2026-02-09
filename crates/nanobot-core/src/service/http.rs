@@ -3153,7 +3153,7 @@ async fn handle_chat_stream(
                         Err(e) => {
                             tracing::error!("LLM follow-up error in stream: {}", e);
                             current = crate::types::CompletionResponse {
-                                content: Some(format!("Error during follow-up: {e}")),
+                                content: Some("申し訳ありません。一時的にAIサービスに接続できませんでした。もう一度お試しください。".to_string()),
                                 tool_calls: vec![],
                                 finish_reason: crate::types::FinishReason::Stop,
                                 usage: crate::types::TokenUsage::default(),

@@ -64,13 +64,16 @@ impl ToolRegistry {
             Box::new(SandboxFileListTool),
         ];
 
-        // Register GitHub self-edit tools if GITHUB_TOKEN is available (requires http-api feature)
+        // Register GitHub tools (read works on public repos without token)
         #[cfg(feature = "http-api")]
-        if std::env::var("GITHUB_TOKEN").map(|t| !t.is_empty()).unwrap_or(false) {
-            tracing::info!("Registering GitHub self-edit tools (GITHUB_TOKEN present)");
+        {
             tools.push(Box::new(GitHubReadFileTool));
-            tools.push(Box::new(GitHubCreateOrUpdateFileTool));
-            tools.push(Box::new(GitHubCreatePrTool));
+            // Write tools require GITHUB_TOKEN
+            if std::env::var("GITHUB_TOKEN").map(|t| !t.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering GitHub write tools (GITHUB_TOKEN present)");
+                tools.push(Box::new(GitHubCreateOrUpdateFileTool));
+                tools.push(Box::new(GitHubCreatePrTool));
+            }
         }
 
         Self { tools }
@@ -443,6 +446,19 @@ const GITHUB_MAX_FILE_SIZE: usize = 500 * 1024; // 500 KB
 
 /// Helper: get a reqwest client configured for the GitHub API.
 #[cfg(feature = "http-api")]
+fn github_client_no_auth() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .default_headers({
+            let mut h = reqwest::header::HeaderMap::new();
+            h.insert("Accept", "application/vnd.github.v3+json".parse().unwrap());
+            h.insert("User-Agent", "chatweb-ai/1.0".parse().unwrap());
+            h
+        })
+        .build()
+        .unwrap_or_default()
+}
+
 fn github_client(token: &str) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
@@ -491,19 +507,21 @@ impl Tool for GitHubReadFileTool {
     }
 
     async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
-        let token = match std::env::var("GITHUB_TOKEN") {
-            Ok(t) if !t.is_empty() => t,
-            _ => return "Error: GITHUB_TOKEN is not configured.".to_string(),
-        };
+        let token = std::env::var("GITHUB_TOKEN").ok().filter(|t| !t.is_empty());
         let path = match params.get("path").and_then(|v| v.as_str()) {
             Some(p) => p,
             None => return "Error: 'path' parameter is required.".to_string(),
         };
         let git_ref = params.get("ref").and_then(|v| v.as_str()).unwrap_or("main");
 
-        let client = match github_client(&token) {
-            Ok(c) => c,
-            Err(e) => return e,
+        // Build client — with token if available, without for public repo fallback
+        let client = if let Some(ref tok) = token {
+            match github_client(tok) {
+                Ok(c) => c,
+                Err(_) => github_client_no_auth(),
+            }
+        } else {
+            github_client_no_auth()
         };
 
         let url = format!(
@@ -2701,7 +2719,7 @@ mod tests {
         // Clear GITHUB_TOKEN to get deterministic count
         std::env::remove_var("GITHUB_TOKEN");
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 15); // 11 original + 4 sandbox tools
+        assert_eq!(registry.len(), 16); // 11 original + 4 sandbox + 1 github_read_file (public)
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
