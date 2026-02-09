@@ -137,9 +137,7 @@ impl IMessageChannel {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow::anyhow!(
-                "iMessage send error: {} {}",
-                status,
-                text
+                "iMessage send error: {status} {text}"
             ));
         }
 

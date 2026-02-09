@@ -84,7 +84,7 @@ impl GoogleChatChannel {
         text: &str,
         access_token: &str,
     ) -> anyhow::Result<()> {
-        let url = format!("{}/{}/messages", GOOGLE_CHAT_API_BASE, space);
+        let url = format!("{GOOGLE_CHAT_API_BASE}/{space}/messages");
 
         let body = json!({
             "text": text,
@@ -93,7 +93,7 @@ impl GoogleChatChannel {
         let resp = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", access_token))
+            .header("Authorization", format!("Bearer {access_token}"))
             .json(&body)
             .send()
             .await?;
@@ -102,9 +102,7 @@ impl GoogleChatChannel {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow::anyhow!(
-                "Google Chat send error: {} {}",
-                status,
-                text
+                "Google Chat send error: {status} {text}"
             ));
         }
 

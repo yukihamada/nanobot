@@ -11,6 +11,7 @@ use crate::error::ConfigError;
 /// Root configuration for nanobot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct Config {
     pub agents: AgentsConfig,
     pub channels: ChannelsConfig,
@@ -19,17 +20,6 @@ pub struct Config {
     pub tools: ToolsConfig,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            agents: AgentsConfig::default(),
-            channels: ChannelsConfig::default(),
-            providers: ProvidersConfig::default(),
-            gateway: GatewayConfig::default(),
-            tools: ToolsConfig::default(),
-        }
-    }
-}
 
 impl Config {
     /// Get expanded workspace path.
@@ -124,17 +114,11 @@ impl Config {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct AgentsConfig {
     pub defaults: AgentDefaults,
 }
 
-impl Default for AgentsConfig {
-    fn default() -> Self {
-        Self {
-            defaults: AgentDefaults::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -160,6 +144,7 @@ impl Default for AgentDefaults {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct ChannelsConfig {
     pub whatsapp: WhatsAppConfig,
     pub telegram: TelegramConfig,
@@ -175,27 +160,10 @@ pub struct ChannelsConfig {
     pub zalo: ZaloConfig,
 }
 
-impl Default for ChannelsConfig {
-    fn default() -> Self {
-        Self {
-            whatsapp: WhatsAppConfig::default(),
-            telegram: TelegramConfig::default(),
-            discord: DiscordConfig::default(),
-            feishu: FeishuConfig::default(),
-            line: LineConfig::default(),
-            slack: SlackConfig::default(),
-            signal: SignalConfig::default(),
-            imessage: IMessageConfig::default(),
-            teams: TeamsConfig::default(),
-            google_chat: GoogleChatConfig::default(),
-            matrix: MatrixConfig::default(),
-            zalo: ZaloConfig::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct LineConfig {
     pub enabled: bool,
     pub channel_secret: String,
@@ -203,16 +171,6 @@ pub struct LineConfig {
     pub allow_from: Vec<String>,
 }
 
-impl Default for LineConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            channel_secret: String::new(),
-            channel_access_token: String::new(),
-            allow_from: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -234,6 +192,7 @@ impl Default for WhatsAppConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct TelegramConfig {
     pub enabled: bool,
     pub token: String,
@@ -241,16 +200,6 @@ pub struct TelegramConfig {
     pub proxy: Option<String>,
 }
 
-impl Default for TelegramConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            token: String::new(),
-            allow_from: Vec::new(),
-            proxy: None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -276,6 +225,7 @@ impl Default for DiscordConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct FeishuConfig {
     pub enabled: bool,
     pub app_id: String,
@@ -285,21 +235,10 @@ pub struct FeishuConfig {
     pub allow_from: Vec<String>,
 }
 
-impl Default for FeishuConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            app_id: String::new(),
-            app_secret: String::new(),
-            encrypt_key: String::new(),
-            verification_token: String::new(),
-            allow_from: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct SlackConfig {
     pub enabled: bool,
     pub app_token: String,
@@ -307,16 +246,6 @@ pub struct SlackConfig {
     pub allow_from: Vec<String>,
 }
 
-impl Default for SlackConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            app_token: String::new(),
-            bot_token: String::new(),
-            allow_from: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -358,6 +287,7 @@ impl Default for IMessageConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct TeamsConfig {
     pub enabled: bool,
     pub app_id: String,
@@ -365,19 +295,10 @@ pub struct TeamsConfig {
     pub allow_from: Vec<String>,
 }
 
-impl Default for TeamsConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            app_id: String::new(),
-            app_password: String::new(),
-            allow_from: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct GoogleChatConfig {
     pub enabled: bool,
     pub service_account_key: String,
@@ -385,19 +306,10 @@ pub struct GoogleChatConfig {
     pub allow_from: Vec<String>,
 }
 
-impl Default for GoogleChatConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            service_account_key: String::new(),
-            webhook_token: String::new(),
-            allow_from: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct MatrixConfig {
     pub enabled: bool,
     pub homeserver: String,
@@ -406,20 +318,10 @@ pub struct MatrixConfig {
     pub allow_from: Vec<String>,
 }
 
-impl Default for MatrixConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            homeserver: String::new(),
-            user_id: String::new(),
-            access_token: String::new(),
-            allow_from: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct ZaloConfig {
     pub enabled: bool,
     pub bot_token: String,
@@ -427,19 +329,10 @@ pub struct ZaloConfig {
     pub allow_from: Vec<String>,
 }
 
-impl Default for ZaloConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            bot_token: String::new(),
-            secret_token: String::new(),
-            allow_from: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct ProvidersConfig {
     pub anthropic: ProviderConfig,
     pub openai: ProviderConfig,
@@ -452,37 +345,15 @@ pub struct ProvidersConfig {
     pub moonshot: ProviderConfig,
 }
 
-impl Default for ProvidersConfig {
-    fn default() -> Self {
-        Self {
-            anthropic: ProviderConfig::default(),
-            openai: ProviderConfig::default(),
-            openrouter: ProviderConfig::default(),
-            deepseek: ProviderConfig::default(),
-            groq: ProviderConfig::default(),
-            zhipu: ProviderConfig::default(),
-            vllm: ProviderConfig::default(),
-            gemini: ProviderConfig::default(),
-            moonshot: ProviderConfig::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct ProviderConfig {
     pub api_key: String,
     pub api_base: Option<String>,
 }
 
-impl Default for ProviderConfig {
-    fn default() -> Self {
-        Self {
-            api_key: String::new(),
-            api_base: None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -502,6 +373,7 @@ impl Default for GatewayConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct ToolsConfig {
     pub web: WebToolsConfig,
     #[serde(rename = "exec")]
@@ -509,29 +381,14 @@ pub struct ToolsConfig {
     pub restrict_to_workspace: bool,
 }
 
-impl Default for ToolsConfig {
-    fn default() -> Self {
-        Self {
-            web: WebToolsConfig::default(),
-            exec_config: ExecToolConfig::default(),
-            restrict_to_workspace: false,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct WebToolsConfig {
     pub search: WebSearchConfig,
 }
 
-impl Default for WebToolsConfig {
-    fn default() -> Self {
-        Self {
-            search: WebSearchConfig::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]

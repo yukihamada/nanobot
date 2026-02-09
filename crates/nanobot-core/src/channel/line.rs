@@ -74,7 +74,7 @@ impl LineChannel {
 
         let resp = client
             .post(LINE_REPLY_API)
-            .header("Authorization", format!("Bearer {}", access_token))
+            .header("Authorization", format!("Bearer {access_token}"))
             .json(&body)
             .send()
             .await?;
@@ -83,7 +83,7 @@ impl LineChannel {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             error!("LINE reply API error: {} {}", status, text);
-            return Err(anyhow::anyhow!("LINE reply API error: {}", status));
+            return Err(anyhow::anyhow!("LINE reply API error: {status}"));
         }
 
         debug!("LINE reply sent successfully");
@@ -103,7 +103,7 @@ impl LineChannel {
 
         let resp = client
             .post(LINE_PUSH_API)
-            .header("Authorization", format!("Bearer {}", access_token))
+            .header("Authorization", format!("Bearer {access_token}"))
             .json(&body)
             .send()
             .await?;
@@ -112,7 +112,7 @@ impl LineChannel {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             error!("LINE push API error: {} {}", status, text);
-            return Err(anyhow::anyhow!("LINE push API error: {}", status));
+            return Err(anyhow::anyhow!("LINE push API error: {status}"));
         }
 
         debug!("LINE push message sent to {}", to);

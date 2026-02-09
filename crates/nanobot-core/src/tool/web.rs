@@ -60,8 +60,7 @@ impl Tool for WebSearchTool {
             .get("count")
             .and_then(|v| v.as_u64())
             .unwrap_or(self.max_results as u64)
-            .min(10)
-            .max(1);
+            .clamp(1, 10);
 
         match http::client()
             .get("https://api.search.brave.com/res/v1/web/search")
@@ -90,18 +89,18 @@ impl Tool for WebSearchTool {
                                     let url = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
                                     lines.push(format!("{}. {}\n   {}", i + 1, title, url));
                                     if let Some(desc) = item.get("description").and_then(|v| v.as_str()) {
-                                        lines.push(format!("   {}", desc));
+                                        lines.push(format!("   {desc}"));
                                     }
                                 }
                                 lines.join("\n")
                             }
-                            _ => format!("No results for: {}", query),
+                            _ => format!("No results for: {query}"),
                         }
                     }
-                    Err(e) => format!("Error parsing response: {}", e),
+                    Err(e) => format!("Error parsing response: {e}"),
                 }
             }
-            Err(e) => format!("Error: {}", e),
+            Err(e) => format!("Error: {e}"),
         }
     }
 }

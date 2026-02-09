@@ -95,11 +95,11 @@ impl ToolRegistry {
                     tool.execute(arguments.clone()),
                 ).await {
                     Ok(result) => return result,
-                    Err(_) => return format!("[TOOL_ERROR] Tool '{}' timed out after 10s", name),
+                    Err(_) => return format!("[TOOL_ERROR] Tool '{name}' timed out after 10s"),
                 }
             }
         }
-        format!("[TOOL_ERROR] Unknown tool: {}", name)
+        format!("[TOOL_ERROR] Unknown tool: {name}")
     }
 
     /// Number of registered tools.
@@ -985,7 +985,7 @@ pub async fn execute_tool(name: &str, arguments: &HashMap<String, serde_json::Va
             let freshness = arguments.get("freshness").and_then(|v| v.as_str()).unwrap_or("pw");
             execute_news_search(query, freshness).await
         }
-        _ => format!("Unknown tool: {}", name),
+        _ => format!("Unknown tool: {name}"),
     }
 }
 
@@ -1096,7 +1096,7 @@ async fn bing_search(query: &str) -> Option<String> {
                     link = strip_html_tags(&after[..end]).replace(" › ", "/");
                     // Ensure URL has protocol
                     if !link.starts_with("http") {
-                        link = format!("https://{}", link);
+                        link = format!("https://{link}");
                     }
                 }
             }
@@ -1193,7 +1193,7 @@ async fn jina_search(query: &str) -> String {
 
     // Use Jina Reader to fetch DuckDuckGo lite (server-rendered, no JS)
     let ddg_url = format!("https://lite.duckduckgo.com/lite/?q={}", urlencoding::encode(query));
-    let jina_url = format!("https://r.jina.ai/{}", ddg_url);
+    let jina_url = format!("https://r.jina.ai/{ddg_url}");
 
     tracing::info!("jina_search: fetching {}", jina_url);
 
@@ -1207,7 +1207,7 @@ async fn jina_search(query: &str) -> String {
             let status = resp.status();
             if !status.is_success() {
                 tracing::warn!("jina_search: HTTP {} from Jina", status);
-                return format!("Search temporarily unavailable (HTTP {}). Try asking in a different way.", status);
+                return format!("Search temporarily unavailable (HTTP {status}). Try asking in a different way.");
             }
             match resp.text().await {
                 Ok(body) => {
@@ -1225,20 +1225,20 @@ async fn jina_search(query: &str) -> String {
                         .join("\n");
                     if useful.len() > 50 {
                         let snippet = if useful.len() > 4000 { &useful[..4000] } else { &useful };
-                        return format!("Search results for \"{}\":\n\n{}", query, snippet);
+                        return format!("Search results for \"{query}\":\n\n{snippet}");
                     }
                     tracing::warn!("jina_search: response too small ({} useful chars)", useful.len());
-                    format!("No results found for \"{}\". Try a more specific query.", query)
+                    format!("No results found for \"{query}\". Try a more specific query.")
                 }
                 Err(e) => {
                     tracing::warn!("jina_search: body read error: {}", e);
-                    format!("Search error: {}", e)
+                    format!("Search error: {e}")
                 }
             }
         }
         Err(e) => {
             tracing::warn!("jina_search: request failed: {}", e);
-            format!("Search unavailable: {}", e)
+            format!("Search unavailable: {e}")
         }
     }
 }
@@ -1250,7 +1250,7 @@ async fn direct_site_search(query: &str) -> String {
         .filter(|w| {
             let w_lower = w.to_lowercase();
             !w.starts_with("site:") && !w.starts_with("-")
-            && !w.parse::<u32>().map(|n| n >= 2020 && n <= 2030).unwrap_or(false)
+            && !w.parse::<u32>().map(|n| (2020..=2030).contains(&n)).unwrap_or(false)
             && !w_lower.contains("2024") && !w_lower.contains("2025") && !w_lower.contains("2026")
             && !w_lower.contains("年") && !w_lower.contains("月")
             && !["price", "最安値", "比較", "値段", "cheapest", "lowest", "best", "current"].contains(&w_lower.as_str())
@@ -1266,7 +1266,7 @@ async fn direct_site_search(query: &str) -> String {
     // Step 1: Fetch kakaku.com search to find product page URLs
     let ascii_query = clean_query.split_whitespace().collect::<Vec<_>>().join("+");
     let search_url = format!("https://search.kakaku.com/{}/", urlencoding::encode(&ascii_query));
-    let jina_url = format!("https://r.jina.ai/{}", search_url);
+    let jina_url = format!("https://r.jina.ai/{search_url}");
 
     tracing::info!("direct_site_search step1: {}", jina_url);
 
@@ -1300,7 +1300,7 @@ async fn direct_site_search(query: &str) -> String {
     // Step 2: If we found a product page URL, fetch it for actual prices
     if let Some(ref purl) = product_url {
         tracing::info!("direct_site_search step2: fetching product page {}", purl);
-        let product_jina = format!("https://r.jina.ai/{}", purl);
+        let product_jina = format!("https://r.jina.ai/{purl}");
         if let Ok(resp) = client.get(&product_jina).header("Accept", "text/plain").send().await {
             if resp.status().is_success() {
                 if let Ok(body) = resp.text().await {
@@ -1317,7 +1317,7 @@ async fn direct_site_search(query: &str) -> String {
                     if useful.len() > 100 {
                         tracing::info!("direct_site_search: product page {} chars", useful.len());
                         let snippet = if useful.len() > 5000 { &useful[..5000] } else { &useful };
-                        return format!("Product details from kakaku.com for \"{}\":\nURL: {}\n\n{}", query, purl, snippet);
+                        return format!("Product details from kakaku.com for \"{query}\":\nURL: {purl}\n\n{snippet}");
                     }
                 }
             }
@@ -1334,7 +1334,7 @@ async fn direct_site_search(query: &str) -> String {
             .join("\n");
         if useful.len() > 100 {
             let snippet = if useful.len() > 3000 { &useful[..3000] } else { &useful };
-            return format!("Search results from kakaku.com for \"{}\":\n\n{}", query, snippet);
+            return format!("Search results from kakaku.com for \"{query}\":\n\n{snippet}");
         }
     }
 
@@ -1361,7 +1361,7 @@ async fn execute_web_fetch(url: &str) -> String {
         .unwrap_or_else(|_| reqwest::Client::new());
 
     // Try Jina Reader first for JS rendering
-    let jina_url = format!("https://r.jina.ai/{}", url);
+    let jina_url = format!("https://r.jina.ai/{url}");
     tracing::info!("web_fetch: trying Jina Reader");
     match client.get(&jina_url)
         .header("Accept", "text/plain")
@@ -1382,7 +1382,7 @@ async fn execute_web_fetch(url: &str) -> String {
                             .join("\n");
                         if cleaned.len() > 100 {
                             let snippet = if cleaned.len() > 8000 { &cleaned[..8000] } else { &cleaned };
-                            return format!("Content from {}:\n\n{}", url, snippet);
+                            return format!("Content from {url}:\n\n{snippet}");
                         }
                         tracing::warn!("web_fetch: Jina response too small ({} chars), trying direct", cleaned.len());
                     }
@@ -1420,13 +1420,13 @@ async fn execute_web_fetch(url: &str) -> String {
                     if cleaned.len() > 8000 {
                         format!("Content from {}:\n\n{}...\n\n[Truncated]", url, &cleaned[..8000])
                     } else {
-                        format!("Content from {}:\n\n{}", url, cleaned)
+                        format!("Content from {url}:\n\n{cleaned}")
                     }
                 }
-                Err(e) => format!("Failed to read page: {}", e),
+                Err(e) => format!("Failed to read page: {e}"),
             }
         }
-        Err(e) => format!("Failed to fetch URL: {}", e),
+        Err(e) => format!("Failed to fetch URL: {e}"),
     }
 }
 
@@ -1437,8 +1437,8 @@ fn execute_calculator(expression: &str) -> String {
 
     // Try to evaluate as a simple expression
     match eval_simple_expr(&expr) {
-        Some(result) => format!("{} = {}", expression, result),
-        None => format!("Could not evaluate: {}", expression),
+        Some(result) => format!("{expression} = {result}"),
+        None => format!("Could not evaluate: {expression}"),
     }
 }
 
@@ -1454,17 +1454,17 @@ async fn execute_weather(location: &str) -> String {
 
     let geo_resp = match client.get(&geo_url).send().await {
         Ok(r) => r,
-        Err(e) => return format!("Geocoding failed: {}", e),
+        Err(e) => return format!("Geocoding failed: {e}"),
     };
 
     let geo_data: serde_json::Value = match geo_resp.json().await {
         Ok(d) => d,
-        Err(e) => return format!("Failed to parse geocoding: {}", e),
+        Err(e) => return format!("Failed to parse geocoding: {e}"),
     };
 
     let results = match geo_data.get("results").and_then(|v| v.as_array()) {
         Some(r) if !r.is_empty() => r,
-        _ => return format!("Location not found: {}", location),
+        _ => return format!("Location not found: {location}"),
     };
 
     let lat = results[0].get("latitude").and_then(|v| v.as_f64()).unwrap_or(0.0);
@@ -1473,18 +1473,17 @@ async fn execute_weather(location: &str) -> String {
 
     // Get weather
     let weather_url = format!(
-        "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=auto",
-        lat, lon
+        "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=auto"
     );
 
     let weather_resp = match client.get(&weather_url).send().await {
         Ok(r) => r,
-        Err(e) => return format!("Weather fetch failed: {}", e),
+        Err(e) => return format!("Weather fetch failed: {e}"),
     };
 
     let weather: serde_json::Value = match weather_resp.json().await {
         Ok(d) => d,
-        Err(e) => return format!("Failed to parse weather: {}", e),
+        Err(e) => return format!("Failed to parse weather: {e}"),
     };
 
     let current = match weather.get("current") {
@@ -1511,8 +1510,7 @@ async fn execute_weather(location: &str) -> String {
     };
 
     format!(
-        "Weather in {}:\n- Temperature: {:.1}°C\n- Condition: {}\n- Humidity: {:.0}%\n- Wind: {:.1} km/h",
-        name, temp, condition, humidity, wind
+        "Weather in {name}:\n- Temperature: {temp:.1}°C\n- Condition: {condition}\n- Humidity: {humidity:.0}%\n- Wind: {wind:.1} km/h"
     )
 }
 
@@ -1553,7 +1551,7 @@ async fn execute_translate(text: &str, from: &str, to: &str) -> String {
                 "Failed to parse translation response.".to_string()
             }
         }
-        Err(e) => format!("Translation error: {}", e),
+        Err(e) => format!("Translation error: {e}"),
     }
 }
 
@@ -1585,7 +1583,7 @@ async fn execute_wikipedia(query: &str, lang: &str) -> String {
                 if let Ok(sr) = client.get(&search_url).send().await {
                     if let Ok(data) = sr.json::<serde_json::Value>().await {
                         if let Some(results) = data.pointer("/query/search").and_then(|v| v.as_array()) {
-                            let mut output = format!("Wikipedia search results for \"{}\":\n\n", query);
+                            let mut output = format!("Wikipedia search results for \"{query}\":\n\n");
                             for (i, r) in results.iter().take(3).enumerate() {
                                 let title = r.get("title").and_then(|v| v.as_str()).unwrap_or("");
                                 let snippet = r.get("snippet").and_then(|v| v.as_str()).unwrap_or("");
@@ -1599,7 +1597,7 @@ async fn execute_wikipedia(query: &str, lang: &str) -> String {
                         }
                     }
                 }
-                return format!("No Wikipedia article found for \"{}\".", query);
+                return format!("No Wikipedia article found for \"{query}\".");
             }
 
             match resp.json::<serde_json::Value>().await {
@@ -1608,14 +1606,13 @@ async fn execute_wikipedia(query: &str, lang: &str) -> String {
                     let extract = data.get("extract").and_then(|v| v.as_str()).unwrap_or("No summary available.");
                     let url = data.pointer("/content_urls/desktop/page").and_then(|v| v.as_str()).unwrap_or("");
                     format!(
-                        "Wikipedia: {}\n\n{}\n\nURL: {}",
-                        title, extract, url
+                        "Wikipedia: {title}\n\n{extract}\n\nURL: {url}"
                     )
                 }
-                Err(_) => format!("Failed to parse Wikipedia response for \"{}\".", query),
+                Err(_) => format!("Failed to parse Wikipedia response for \"{query}\"."),
             }
         }
-        Err(e) => format!("Wikipedia error: {}", e),
+        Err(e) => format!("Wikipedia error: {e}"),
     }
 }
 
@@ -1640,11 +1637,7 @@ fn execute_datetime(tz: &str) -> String {
         "nzst" | "pacific/auckland" => 13,
         _ => {
             // Try to parse as +N or -N
-            if let Ok(n) = tz.parse::<i32>() {
-                n
-            } else {
-                0 // default UTC
-            }
+            tz.parse::<i32>().unwrap_or_default()
         }
     };
 
@@ -1693,7 +1686,7 @@ async fn execute_news_search(query: &str, freshness: &str) -> String {
                             let desc = r.get("description").and_then(|v| v.as_str()).unwrap_or("");
                             let age = r.get("age").and_then(|v| v.as_str()).unwrap_or("");
                             if !title.is_empty() {
-                                let age_str = if !age.is_empty() { format!(" [{}]", age) } else { String::new() };
+                                let age_str = if !age.is_empty() { format!(" [{age}]") } else { String::new() };
                                 results.push(format!("{}. {}{}\n   URL: {}\n   {}", i + 1, title, age_str, url, desc));
                             }
                         }
@@ -1708,7 +1701,7 @@ async fn execute_news_search(query: &str, freshness: &str) -> String {
     }
 
     // Fallback to regular web search with news-focused query
-    execute_web_search(&format!("{} news latest", query)).await
+    execute_web_search(&format!("{query} news latest")).await
 }
 
 /// Strip HTML tags from text, removing script/style content entirely.
@@ -1717,8 +1710,8 @@ fn strip_html_tags(html: &str) -> String {
     let mut clean = html.to_string();
     for tag in &["script", "style", "noscript", "svg", "head"] {
         loop {
-            let open = format!("<{}", tag);
-            let close = format!("</{}>", tag);
+            let open = format!("<{tag}");
+            let close = format!("</{tag}>");
             if let Some(start) = clean.to_lowercase().find(&open) {
                 if let Some(end_pos) = clean.to_lowercase()[start..].find(&close) {
                     clean.replace_range(start..start + end_pos + close.len(), " ");
@@ -1937,13 +1930,13 @@ async fn google_refresh_access_token(refresh_token: &str) -> Result<String, Stri
         ])
         .send()
         .await
-        .map_err(|e| format!("Token refresh request failed: {}", e))?;
+        .map_err(|e| format!("Token refresh request failed: {e}"))?;
 
-    let data: serde_json::Value = resp.json().await.map_err(|e| format!("Token parse error: {}", e))?;
+    let data: serde_json::Value = resp.json().await.map_err(|e| format!("Token parse error: {e}"))?;
     data.get("access_token")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| format!("No access_token in response: {}", data))
+        .ok_or_else(|| format!("No access_token in response: {data}"))
 }
 
 /// Get user's Google refresh token from DynamoDB (via GOOGLE_SA_KEY env or lookup).
@@ -1961,7 +1954,7 @@ async fn get_google_refresh_token_for_session() -> Result<String, String> {
 /// Get access token from service account JSON key.
 async fn get_sa_access_token(sa_key_json: &str) -> Result<String, String> {
     let key: serde_json::Value = serde_json::from_str(sa_key_json)
-        .map_err(|e| format!("Invalid service account key: {}", e))?;
+        .map_err(|e| format!("Invalid service account key: {e}"))?;
 
     let client_email = key.get("client_email").and_then(|v| v.as_str()).unwrap_or("");
     let private_key_pem = key.get("private_key").and_then(|v| v.as_str()).unwrap_or("");
@@ -1981,13 +1974,13 @@ async fn get_sa_access_token(sa_key_json: &str) -> Result<String, String> {
         "exp": now + 3600,
     }).to_string());
 
-    let unsigned = format!("{}.{}", header, claims);
+    let unsigned = format!("{header}.{claims}");
 
     // Sign with RSA-SHA256 using the private key
     let signature = sign_rs256(private_key_pem, unsigned.as_bytes())
-        .map_err(|e| format!("JWT signing failed: {}", e))?;
+        .map_err(|e| format!("JWT signing failed: {e}"))?;
 
-    let jwt = format!("{}.{}", unsigned, signature);
+    let jwt = format!("{unsigned}.{signature}");
 
     // Exchange JWT for access token
     let client = reqwest::Client::new();
@@ -1999,15 +1992,15 @@ async fn get_sa_access_token(sa_key_json: &str) -> Result<String, String> {
         ])
         .send()
         .await
-        .map_err(|e| format!("SA token request failed: {}", e))?;
+        .map_err(|e| format!("SA token request failed: {e}"))?;
 
     let data: serde_json::Value = resp.json().await
-        .map_err(|e| format!("SA token parse error: {}", e))?;
+        .map_err(|e| format!("SA token parse error: {e}"))?;
 
     data.get("access_token")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| format!("No access_token in SA response: {}", data))
+        .ok_or_else(|| format!("No access_token in SA response: {data}"))
 }
 
 fn base64_url_encode(input: &str) -> String {
@@ -2027,13 +2020,13 @@ async fn execute_google_calendar(action: &str, params: &HashMap<String, serde_js
     let access_token = if !refresh_token.is_empty() {
         match google_refresh_access_token(&refresh_token).await {
             Ok(t) => t,
-            Err(e) => return format!("Error getting Google access token: {}", e),
+            Err(e) => return format!("Error getting Google access token: {e}"),
         }
     } else {
         // Fall back to service account
         match get_google_refresh_token_for_session().await {
             Ok(t) => t,
-            Err(e) => return format!("Google Calendar requires login with Google. Error: {}", e),
+            Err(e) => return format!("Google Calendar requires login with Google. Error: {e}"),
         }
     };
 
@@ -2070,15 +2063,15 @@ async fn execute_google_calendar(action: &str, params: &HashMap<String, serde_js
                                 }
                                 result
                             } else if let Some(err) = data.get("error") {
-                                format!("Calendar API error: {}", err)
+                                format!("Calendar API error: {err}")
                             } else {
                                 "No upcoming events found.".to_string()
                             }
                         }
-                        Err(e) => format!("Failed to parse calendar response: {}", e),
+                        Err(e) => format!("Failed to parse calendar response: {e}"),
                     }
                 }
-                Err(e) => format!("Calendar request failed: {}", e),
+                Err(e) => format!("Calendar request failed: {e}"),
             }
         }
         "create" => {
@@ -2110,20 +2103,20 @@ async fn execute_google_calendar(action: &str, params: &HashMap<String, serde_js
                         Ok(data) => {
                             if let Some(id) = data.get("id").and_then(|v| v.as_str()) {
                                 let link = data.get("htmlLink").and_then(|v| v.as_str()).unwrap_or("");
-                                format!("Event created: '{}'\nID: {}\nLink: {}", summary, id, link)
+                                format!("Event created: '{summary}'\nID: {id}\nLink: {link}")
                             } else if let Some(err) = data.get("error") {
-                                format!("Calendar API error: {}", err)
+                                format!("Calendar API error: {err}")
                             } else {
-                                format!("Event created: {}", data)
+                                format!("Event created: {data}")
                             }
                         }
-                        Err(e) => format!("Failed to parse create response: {}", e),
+                        Err(e) => format!("Failed to parse create response: {e}"),
                     }
                 }
-                Err(e) => format!("Calendar create request failed: {}", e),
+                Err(e) => format!("Calendar create request failed: {e}"),
             }
         }
-        _ => format!("Unknown calendar action: '{}'. Use 'list' or 'create'.", action),
+        _ => format!("Unknown calendar action: '{action}'. Use 'list' or 'create'."),
     }
 }
 
@@ -2133,12 +2126,12 @@ async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>
     let access_token = if !refresh_token.is_empty() {
         match google_refresh_access_token(&refresh_token).await {
             Ok(t) => t,
-            Err(e) => return format!("Error getting Google access token: {}", e),
+            Err(e) => return format!("Error getting Google access token: {e}"),
         }
     } else {
         match get_google_refresh_token_for_session().await {
             Ok(t) => t,
-            Err(e) => return format!("Gmail requires login with Google. Error: {}", e),
+            Err(e) => return format!("Gmail requires login with Google. Error: {e}"),
         }
     };
 
@@ -2156,7 +2149,7 @@ async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>
                 Ok(resp) => {
                     let data: serde_json::Value = match resp.json().await {
                         Ok(d) => d,
-                        Err(e) => return format!("Gmail parse error: {}", e),
+                        Err(e) => return format!("Gmail parse error: {e}"),
                     };
                     if let Some(messages) = data.get("messages").and_then(|v| v.as_array()) {
                         let mut result = format!("Found {} messages:\n\n", messages.len());
@@ -2165,8 +2158,7 @@ async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>
                             let msg_id = msg.get("id").and_then(|v| v.as_str()).unwrap_or("");
                             if msg_id.is_empty() { continue; }
                             let detail_url = format!(
-                                "https://www.googleapis.com/gmail/v1/users/me/messages/{}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date",
-                                msg_id
+                                "https://www.googleapis.com/gmail/v1/users/me/messages/{msg_id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date"
                             );
                             if let Ok(detail_resp) = client.get(&detail_url).bearer_auth(&access_token).send().await {
                                 if let Ok(detail) = detail_resp.json::<serde_json::Value>().await {
@@ -2196,12 +2188,12 @@ async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>
                         }
                         result
                     } else if let Some(err) = data.get("error") {
-                        format!("Gmail API error: {}", err)
+                        format!("Gmail API error: {err}")
                     } else {
                         "No messages found.".to_string()
                     }
                 }
-                Err(e) => format!("Gmail search failed: {}", e),
+                Err(e) => format!("Gmail search failed: {e}"),
             }
         }
         "read" => {
@@ -2210,8 +2202,7 @@ async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>
                 return "Error: 'message_id' is required for reading an email.".to_string();
             }
             let url = format!(
-                "https://www.googleapis.com/gmail/v1/users/me/messages/{}?format=full",
-                msg_id
+                "https://www.googleapis.com/gmail/v1/users/me/messages/{msg_id}?format=full"
             );
             match client.get(&url).bearer_auth(&access_token).send().await {
                 Ok(resp) => {
@@ -2243,10 +2234,10 @@ async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>
                             format!("From: {}\nTo: {}\nSubject: {}\nDate: {}\n\n{}", from, to, subject, date,
                                 if body.is_empty() { snippet.to_string() } else { body })
                         }
-                        Err(e) => format!("Gmail read parse error: {}", e),
+                        Err(e) => format!("Gmail read parse error: {e}"),
                     }
                 }
-                Err(e) => format!("Gmail read failed: {}", e),
+                Err(e) => format!("Gmail read failed: {e}"),
             }
         }
         "send" => {
@@ -2259,7 +2250,7 @@ async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>
             }
 
             // Construct RFC 2822 message
-            let raw_msg = format!("To: {}\r\nSubject: {}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{}", to, subject, body);
+            let raw_msg = format!("To: {to}\r\nSubject: {subject}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{body}");
             use base64::Engine;
             let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw_msg.as_bytes());
 
@@ -2276,20 +2267,20 @@ async fn execute_gmail(action: &str, params: &HashMap<String, serde_json::Value>
                     match resp.json::<serde_json::Value>().await {
                         Ok(data) => {
                             if let Some(id) = data.get("id").and_then(|v| v.as_str()) {
-                                format!("Email sent successfully!\nTo: {}\nSubject: {}\nMessage ID: {}", to, subject, id)
+                                format!("Email sent successfully!\nTo: {to}\nSubject: {subject}\nMessage ID: {id}")
                             } else if let Some(err) = data.get("error") {
-                                format!("Gmail send error: {}", err)
+                                format!("Gmail send error: {err}")
                             } else {
-                                format!("Email sent: {}", data)
+                                format!("Email sent: {data}")
                             }
                         }
-                        Err(e) => format!("Gmail send parse error: {}", e),
+                        Err(e) => format!("Gmail send parse error: {e}"),
                     }
                 }
-                Err(e) => format!("Gmail send failed: {}", e),
+                Err(e) => format!("Gmail send failed: {e}"),
             }
         }
-        _ => format!("Unknown Gmail action: '{}'. Use 'search', 'read', or 'send'.", action),
+        _ => format!("Unknown Gmail action: '{action}'. Use 'search', 'read', or 'send'."),
     }
 }
 
@@ -2436,7 +2427,7 @@ mod tests {
         for l in &legacy {
             let name = l.pointer("/function/name").and_then(|v| v.as_str()).unwrap();
             assert!(new.iter().any(|n| n.pointer("/function/name").and_then(|v| v.as_str()) == Some(name)),
-                "Legacy tool '{}' not found in registry", name);
+                "Legacy tool '{name}' not found in registry");
         }
     }
 

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Launch Status Dashboard</title>
+  <style>
+    :root { --bg: #09090b; --surface: #18181b; --border: #27272a; --text: #fafafa; --muted: #71717a; --green: #22c55e; --yellow: #eab308; --red: #ef4444; --indigo: #6366f1; --emerald: #10b981; --purple: #8b5cf6; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 32px; }
+    h1 { font-size: 28px; font-weight: 800; text-align: center; margin-bottom: 8px; }
+    .subtitle { text-align: center; color: var(--muted); margin-bottom: 32px; font-size: 14px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1200px; margin: 0 auto; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+    .card h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .card h2 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .card.full { grid-column: 1 / -1; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    a { color: var(--emerald); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .tag.done { background: rgba(34,197,94,0.15); color: var(--green); }
+    .tag.pending { background: rgba(234,179,8,0.15); color: var(--yellow); }
+    .tag.next { background: rgba(99,102,241,0.15); color: var(--indigo); }
+    .tag.brand-cw { background: rgba(99,102,241,0.15); color: var(--indigo); }
+    .tag.brand-te { background: rgba(16,185,129,0.15); color: var(--emerald); }
+    .tag.brand-el { background: rgba(139,92,246,0.15); color: var(--purple); }
+    .file-path { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: var(--muted); }
+    .progress-bar { background: var(--border); border-radius: 4px; height: 6px; margin-top: 8px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .stat { text-align: center; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 8px; }
+    .stat .num { font-size: 32px; font-weight: 800; }
+    .stat .label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .url-list { list-style: none; }
+    .url-list li { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .url-list li:last-child { border-bottom: none; }
+    .url-label { font-size: 13px; font-weight: 600; }
+    .url-link { font-size: 12px; font-family: monospace; }
+    .action-card { border-left: 3px solid var(--emerald); }
+    .action-list { list-style: none; counter-reset: action; }
+    .action-list li { padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: flex-start; }
+    .action-list li:last-child { border-bottom: none; }
+    .action-num { background: var(--emerald); color: #000; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0; }
+    .action-content { flex: 1; }
+    .action-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+    .action-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .action-desc code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+    .copy-btn { background: var(--border); color: var(--text); border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-top: 6px; }
+    .copy-btn:hover { background: var(--muted); }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+
+<h1>Launch Status Dashboard</h1>
+<p class="subtitle">chatweb.ai / teai.io / ElioChat — 2026-02-09 Updated</p>
+
+<div class="grid">
+
+  <!-- Overall Progress -->
+  <div class="card full">
+    <div class="stats">
+      <div class="stat">
+        <div class="num" style="color:var(--green)">v98</div>
+        <div class="label">Lambda LIVE</div>
+      </div>
+      <div class="stat">
+        <div class="num" style="color:var(--green)">5</div>
+        <div class="label">原稿完了</div>
+      </div>
+      <div class="stat">
+        <div class="num" style="color:var(--yellow)">0</div>
+        <div class="label">有料ユーザー / 100</div>
+      </div>
+      <div class="stat">
+        <div class="num" style="color:var(--emerald)">~30s</div>
+        <div class="label">高速デプロイ</div>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--muted);text-align:center;">目標: chatweb.ai 60人 + teai.io 30人 + ElioChat 10人 = 100人</div>
+    <div class="progress-bar"><div class="progress-fill" style="width:0%;background:var(--emerald);"></div></div>
+  </div>
+
+  <!-- TODAY's Actions -->
+  <div class="card full action-card">
+    <h2>NOW: マーケティング実行チェックリスト</h2>
+    <ol class="action-list">
+      <li>
+        <span class="action-num">1</span>
+        <div class="action-content">
+          <div class="action-title">teai.io DNS設定</div>
+          <div class="action-desc">
+            ドメインレジストラで teai.io の CNAME を API Gateway に向ける。<br>
+            API Gateway: <code>3nitmtxgsi.execute-api.ap-northeast-1.amazonaws.com</code><br>
+            設定先: teai.io → CNAME → API Gateway<br>
+            api.teai.io → CNAME → API Gateway<br>
+            AWS Console → API Gateway → Custom domains で teai.io を追加し ACM 証明書を発行
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">2</span>
+        <div class="action-content">
+          <div class="action-title">X アカウント開設 (3つ)</div>
+          <div class="action-desc">
+            <strong>@chatweb_ai</strong> — 「AIに何でも聞ける。声でもテキストでも。LINE/Telegram対応。無料で始めよう → chatweb.ai」<br>
+            <strong>@teai_io</strong> — 「AI Agent for Developers. MCP tools, multi-model, REST API. Ship faster → teai.io」<br>
+            <strong>@elio_chat</strong> — 「Your private AI. 100% on-device. No data leaves your iPhone → elio.love」<br>
+            アイコン: 各ブランドカラー (indigo / emerald / purple) のロゴ
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">3</span>
+        <div class="action-content">
+          <div class="action-title">Show HN 投稿 (teai.io)</div>
+          <div class="action-desc">
+            ファイル: <code>launch/hackernews-show-hn.md</code> — コピペで投稿可能<br>
+            タイトル: "Show HN: teai.io -- Multi-model AI agent built in Rust with MCP tools"<br>
+            投稿先: <a href="https://news.ycombinator.com/submit" target="_blank">news.ycombinator.com/submit</a><br>
+            ベストタイム: 平日 8-10 AM ET (日本時間 22-24時)
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">4</span>
+        <div class="action-content">
+          <div class="action-title">Dev.to 記事投稿 (英語)</div>
+          <div class="action-desc">
+            ファイル: <code>launch/articles-draft.md</code> (前半)<br>
+            タイトル: "I Built a Multi-Model AI Agent Platform in Rust -- Here's What I Learned"<br>
+            投稿先: <a href="https://dev.to/new" target="_blank">dev.to/new</a><br>
+            タグ: #rust #ai #webdev #opensource
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">5</span>
+        <div class="action-content">
+          <div class="action-title">Qiita 記事投稿 (日本語)</div>
+          <div class="action-desc">
+            ファイル: <code>launch/articles-draft.md</code> (後半)<br>
+            タイトル: 「Rustで作ったマルチモデルAIエージェント基盤 — Lambda1つで14チャネル対応」<br>
+            投稿先: <a href="https://qiita.com/drafts/new" target="_blank">qiita.com/drafts/new</a><br>
+            タグ: Rust, AI, AWS, Lambda, LINE
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">6</span>
+        <div class="action-content">
+          <div class="action-title">Product Hunt ローンチ (chatweb.ai)</div>
+          <div class="action-desc">
+            ファイル: <code>launch/producthunt-drafts.md</code> (前半)<br>
+            投稿先: <a href="https://www.producthunt.com/posts/new" target="_blank">producthunt.com/posts/new</a><br>
+            ベスト曜日: 火曜日 12:01 AM PT<br>
+            事前準備: スクリーンショット5枚 (Web UI, LINE, Voice, Multi-channel, Tools)
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">7</span>
+        <div class="action-content">
+          <div class="action-title">Product Hunt ローンチ (teai.io)</div>
+          <div class="action-desc">
+            ファイル: <code>launch/producthunt-drafts.md</code> (後半)<br>
+            chatweb.ai から 2週間以上空けてローンチ<br>
+            事前準備: スクリーンショット5枚 (LP, Terminal curl, Features, Code gen, Architecture)
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">8</span>
+        <div class="action-content">
+          <div class="action-title">Google OAuth に teai.io 追加</div>
+          <div class="action-desc">
+            Google Cloud Console → OAuth 2.0 → Authorized redirect URIs に追加:<br>
+            <code>https://teai.io/auth/google/callback</code><br>
+            <code>https://api.teai.io/auth/google/callback</code>
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">9</span>
+        <div class="action-content">
+          <div class="action-title">PostHog セットアップ</div>
+          <div class="action-desc">
+            <a href="https://posthog.com" target="_blank">posthog.com</a> で無料アカウント作成 → Project Key 取得<br>
+            <code>web/index.html</code> と <code>web/pricing.html</code> の PostHog コメントアウトを解除し、<code>YOUR_PROJECT_KEY</code> を置換<br>
+            月100万イベントまで無料
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">10</span>
+        <div class="action-content">
+          <div class="action-title">OpenRouter API キーのローテーション</div>
+          <div class="action-desc">
+            前回のチャットでキーが露出。<a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a> で新しいキーを生成し、旧キーを無効化。<br>
+            Lambda 環境変数を更新: <code>./infra/deploy-fast.sh --skip-build</code>
+          </div>
+        </div>
+      </li>
+    </ol>
+  </div>
+
+  <!-- 3 Brands -->
+  <div class="card full">
+    <h2>3 Brands</h2>
+    <table>
+      <tr>
+        <th>Brand</th>
+        <th>Character</th>
+        <th>Target</th>
+        <th>URL</th>
+        <th>X</th>
+        <th>PH</th>
+      </tr>
+      <tr>
+        <td><span class="tag brand-cw">chatweb.ai</span></td>
+        <td>Chato</td>
+        <td>JP general / biz</td>
+        <td><a href="https://chatweb.ai" target="_blank">chatweb.ai</a></td>
+        <td>@chatweb_ai</td>
+        <td><span class="tag pending">Draft ready</span></td>
+      </tr>
+      <tr>
+        <td><span class="tag brand-te">teai.io</span></td>
+        <td>Tei</td>
+        <td>Global devs</td>
+        <td><a href="https://teai.io" target="_blank">teai.io</a> (Host routing OK)</td>
+        <td>@teai_io</td>
+        <td><span class="tag pending">Draft ready</span></td>
+      </tr>
+      <tr>
+        <td><span class="tag brand-el">ElioChat</span></td>
+        <td>Elio</td>
+        <td>Privacy iOS</td>
+        <td><a href="https://elio.love" target="_blank">elio.love</a></td>
+        <td>@elio_chat</td>
+        <td><a href="https://www.producthunt.com/posts/elio-offline-ai-mcp" target="_blank"><span class="tag done">Launched</span></a></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- URLs -->
+  <div class="card">
+    <h2><span class="dot" style="background:var(--green)"></span>Production URLs</h2>
+    <ul class="url-list">
+      <li><span class="url-label">chatweb.ai</span><a href="https://chatweb.ai" target="_blank" class="url-link">https://chatweb.ai</a></li>
+      <li><span class="url-label">chatweb.ai /pricing</span><a href="https://chatweb.ai/pricing" target="_blank" class="url-link">https://chatweb.ai/pricing</a></li>
+      <li><span class="url-label">API docs</span><a href="https://api.chatweb.ai" target="_blank" class="url-link">https://api.chatweb.ai</a></li>
+      <li><span class="url-label">Health</span><a href="https://chatweb.ai/health" target="_blank" class="url-link">https://chatweb.ai/health</a></li>
+      <li><span class="url-label">teai.io (via Host)</span><span class="url-link" style="color:var(--yellow)">DNS pending</span></li>
+      <li><span class="url-label">GitHub</span><a href="https://github.com/yukihamada/nanobot" target="_blank" class="url-link">github.com/yukihamada/nanobot</a></li>
+    </ul>
+  </div>
+
+  <!-- Deploy -->
+  <div class="card">
+    <h2><span class="dot" style="background:var(--green)"></span>Deploy</h2>
+    <ul class="url-list">
+      <li><span class="url-label">Lambda</span><span class="url-link">v98 LIVE</span></li>
+      <li><span class="url-label">Full deploy</span><span class="url-link">infra/deploy.sh (~3min)</span></li>
+      <li><span class="url-label">Fast deploy</span><span class="url-link" style="color:var(--emerald)">infra/deploy-fast.sh (~30s)</span></li>
+      <li><span class="url-label">Skip build</span><span class="url-link">deploy-fast.sh --skip-build</span></li>
+      <li><span class="url-label">OpenRouter</span><span class="url-link" style="color:var(--green)">Backup LLM OK</span></li>
+    </ul>
+  </div>
+
+  <!-- Launch Content -->
+  <div class="card full">
+    <h2>Launch Content (All Ready)</h2>
+    <table>
+      <tr><th>Content</th><th>File</th><th>Platform</th><th>Status</th></tr>
+      <tr>
+        <td>PH: chatweb.ai</td>
+        <td class="file-path">launch/producthunt-drafts.md</td>
+        <td><a href="https://www.producthunt.com/posts/new" target="_blank">Submit</a></td>
+        <td><span class="tag done">Draft OK</span></td>
+      </tr>
+      <tr>
+        <td>PH: teai.io</td>
+        <td class="file-path">launch/producthunt-drafts.md</td>
+        <td><a href="https://www.producthunt.com/posts/new" target="_blank">Submit</a></td>
+        <td><span class="tag done">Draft OK</span></td>
+      </tr>
+      <tr>
+        <td>Show HN: teai.io</td>
+        <td class="file-path">launch/hackernews-show-hn.md</td>
+        <td><a href="https://news.ycombinator.com/submit" target="_blank">Submit</a></td>
+        <td><span class="tag done">Draft OK</span></td>
+      </tr>
+      <tr>
+        <td>Dev.to (EN)</td>
+        <td class="file-path">launch/articles-draft.md</td>
+        <td><a href="https://dev.to/new" target="_blank">New post</a></td>
+        <td><span class="tag done">Draft OK</span></td>
+      </tr>
+      <tr>
+        <td>Qiita (JA)</td>
+        <td class="file-path">launch/articles-draft.md</td>
+        <td><a href="https://qiita.com/drafts/new" target="_blank">New post</a></td>
+        <td><span class="tag done">Draft OK</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Stripe -->
+  <div class="card full">
+    <h2>Stripe</h2>
+    <table>
+      <tr><th></th><th>chatweb.ai</th><th>teai.io</th></tr>
+      <tr><td>Plans</td><td>Free / Starter $9 / Pro $29</td><td>Free / Dev $19 / Team $49</td></tr>
+      <tr><td>Starter/Dev Link</td><td><a href="https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o" target="_blank">plink_...LKo</a></td><td>Shared (for now)</td></tr>
+      <tr><td>Pro/Team Link</td><td><a href="https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p" target="_blank">plink_...ME</a></td><td>Shared (for now)</td></tr>
+      <tr><td>Webhook</td><td colspan="2">https://chatweb.ai/webhooks/stripe</td></tr>
+      <tr><td>Coupon</td><td colspan="2">LAUNCH2026 (30% OFF)</td></tr>
+    </table>
+  </div>
+
+  <!-- Infra -->
+  <div class="card full">
+    <h2>Infrastructure</h2>
+    <table>
+      <tr><th>Component</th><th>Details</th><th>Status</th></tr>
+      <tr><td>Lambda</td><td>nanobot, ARM64, ap-northeast-1</td><td><span class="tag done">v98 LIVE</span></td></tr>
+      <tr><td>API Gateway</td><td>3nitmtxgsi — chatweb.ai, api.chatweb.ai</td><td><span class="tag done">OK</span></td></tr>
+      <tr><td>teai.io domain</td><td>CNAME → API Gateway + ACM cert</td><td><span class="tag next">DNS setup needed</span></td></tr>
+      <tr><td>DynamoDB</td><td>sessions, memory, config</td><td><span class="tag done">OK</span></td></tr>
+      <tr><td>CORS</td><td>+teai.io, api.teai.io</td><td><span class="tag done">Deployed</span></td></tr>
+      <tr><td>LLM Providers</td><td>Anthropic + OpenAI + Gemini + Groq + Kimi + OpenRouter</td><td><span class="tag done">6 providers</span></td></tr>
+      <tr><td>Host Routing</td><td>teai.io → teai-index.html, Tei persona</td><td><span class="tag done">Deployed</span></td></tr>
+      <tr><td>Fast Deploy</td><td>infra/deploy-fast.sh (direct Lambda update)</td><td><span class="tag done">NEW</span></td></tr>
+    </table>
+  </div>
+
+</div>
+
+<div style="text-align:center;padding:32px;color:var(--muted);font-size:12px;">
+  Updated 2026-02-09 | Lambda v98 LIVE | 5 launch drafts ready | 0/100 paying users
+</div>
+
+</body>
+</html>

@@ -2,7 +2,6 @@
 ///
 /// In SaaS mode, dangerous tools (shell, filesystem) are disabled.
 /// Only safe tools are available: WebSearch, WebFetch, Memory.
-
 /// List of tool names allowed in SaaS mode.
 pub const SAAS_ALLOWED_TOOLS: &[&str] = &[
     "web_search",

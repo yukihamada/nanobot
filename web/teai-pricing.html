@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pricing - chatweb.ai</title>
-  <meta name="description" content="chatweb.ai pricing plans. Free, Starter $9/mo, Pro $29/mo.">
+  <title>Pricing - teai.io</title>
+  <meta name="description" content="teai.io pricing plans. Free, Developer $19/mo, Team $49/mo. Developer-focused AI platform.">
   <style>
     :root {
       --bg: #0a0a0a;
@@ -12,13 +12,13 @@
       --border: #1e1e1e;
       --text: #e5e5e5;
       --muted: #777;
-      --accent: #6366f1;
-      --accent-hover: #818cf8;
+      --accent: #10b981;
+      --accent-hover: #34d399;
       --green: #22c55e;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
@@ -86,7 +86,7 @@
     }
     .plan-card.featured {
       border-color: var(--accent);
-      box-shadow: 0 0 24px rgba(99,102,241,0.15);
+      box-shadow: 0 0 24px rgba(16,185,129,0.15);
     }
     .plan-badge {
       position: absolute;
@@ -267,9 +267,10 @@
       font-size: 12px;
       color: var(--muted);
     }
-    footer a { color: var(--muted); }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
 
-    /* Coupon active state — Starter plan highlight */
+    /* Coupon active state — Developer plan highlight */
     .plan-card.coupon-active {
       border-color: #f59e0b;
       box-shadow: 0 0 32px rgba(245,158,11,0.2);
@@ -323,70 +324,63 @@
       .hero h1 { font-size: 28px; }
     }
   </style>
-  <!-- PostHog Analytics (enable by replacing YOUR_PROJECT_KEY) -->
-  <!--
-  <script>
-    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
-    posthog.init('YOUR_PROJECT_KEY',{api_host:'https://us.i.posthog.com',person_profiles:'identified_only'});
-  </script>
-  -->
 </head>
 <body>
   <nav>
-    <a href="/" class="logo"><span>chat</span>web.ai</a>
+    <a href="/" class="logo"><span>te</span>ai.io</a>
     <div class="nav-links">
       <a href="/" id="nav-home">Home</a>
       <a href="/status">Status</a>
       <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
       <div class="lang-sw">
-        <button onclick="setLang('ja')" id="l-ja">JA</button>
         <button onclick="setLang('en')" id="l-en">EN</button>
+        <button onclick="setLang('ja')" id="l-ja">JA</button>
       </div>
     </div>
   </nav>
 
   <div class="main">
     <div class="hero">
-      <h1 id="t-title">料金プラン</h1>
-      <p id="t-sub">無料で始めて、ビジネスの成長に合わせてスケール。</p>
+      <h1 id="t-title">Pricing</h1>
+      <p id="t-sub">Start free, scale as you build. Simple, transparent pricing for developers.</p>
     </div>
 
     <div class="pricing-grid">
       <!-- Free -->
       <div class="plan-card">
         <div class="plan-name" id="p-free-name">Free</div>
-        <div class="plan-desc" id="p-free-desc">個人利用・お試しに</div>
-        <div class="plan-price"><span class="currency">$</span>0<span class="period" id="p-free-period">/月</span></div>
+        <div class="plan-desc" id="p-free-desc">For personal projects & exploration</div>
+        <div class="plan-price"><span class="currency">$</span>0<span class="period" id="p-free-period">/mo</span></div>
         <ul class="plan-features" id="p-free-features"></ul>
-        <a href="/" class="plan-cta secondary" id="p-free-cta">今すぐ使う</a>
+        <a href="/" class="plan-cta secondary" id="p-free-cta">Get Started</a>
       </div>
 
-      <!-- Starter -->
+      <!-- Developer -->
       <div class="plan-card featured">
-        <div class="plan-badge" id="p-starter-badge">人気</div>
-        <div class="plan-name" id="p-starter-name">Starter</div>
-        <div class="plan-desc" id="p-starter-desc">小規模チーム・本格利用に</div>
-        <div class="plan-price"><span class="currency">$</span>9<span class="period" id="p-starter-period">/月</span></div>
-        <ul class="plan-features" id="p-starter-features"></ul>
-        <a href="#" class="plan-cta primary" id="p-starter-cta" data-plan="starter">Starterを始める</a>
+        <div class="plan-badge" id="p-developer-badge">Most Popular</div>
+        <div class="plan-name" id="p-developer-name">Developer</div>
+        <div class="plan-desc" id="p-developer-desc">For serious development & production apps</div>
+        <div class="plan-price"><span class="currency">$</span>19<span class="period" id="p-developer-period">/mo</span></div>
+        <ul class="plan-features" id="p-developer-features"></ul>
+        <a href="#" class="plan-cta primary" id="p-developer-cta" data-plan="developer">Start Developer</a>
       </div>
 
-      <!-- Pro -->
+      <!-- Team -->
       <div class="plan-card">
-        <div class="plan-name" id="p-pro-name">Pro</div>
-        <div class="plan-desc" id="p-pro-desc">大規模利用・高性能モデルに</div>
-        <div class="plan-price"><span class="currency">$</span>29<span class="period" id="p-pro-period">/月</span></div>
-        <ul class="plan-features" id="p-pro-features"></ul>
-        <a href="#" class="plan-cta primary" id="p-pro-cta" data-plan="pro">Proを始める</a>
+        <div class="plan-name" id="p-team-name">Team</div>
+        <div class="plan-desc" id="p-team-desc">For teams & high-volume workloads</div>
+        <div class="plan-price"><span class="currency">$</span>49<span class="period" id="p-team-period">/mo</span></div>
+        <ul class="plan-features" id="p-team-features"></ul>
+        <a href="#" class="plan-cta primary" id="p-team-cta" data-plan="team">Start Team</a>
       </div>
     </div>
 
     <!-- Coupon -->
     <div class="coupon-section">
-      <h3 id="t-coupon-title">クーポンコードをお持ちですか？</h3>
+      <h3 id="t-coupon-title">Have a coupon code?</h3>
       <div class="coupon-row">
-        <input type="text" id="coupon-input" placeholder="コードを入力" maxlength="20" autocomplete="off">
-        <button onclick="applyCoupon()" id="coupon-btn">適用</button>
+        <input type="text" id="coupon-input" placeholder="Enter code" maxlength="20" autocomplete="off">
+        <button onclick="applyCoupon()" id="coupon-btn">Apply</button>
       </div>
       <div class="coupon-msg" id="coupon-msg"></div>
     </div>
@@ -395,8 +389,8 @@
     <div class="guarantee">
       <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
       <div class="guarantee-text">
-        <strong id="t-guarantee-title">安心の返金保証</strong>
-        <span id="t-guarantee-desc">いつでもキャンセル可能。日割り計算で返金されます。</span>
+        <strong id="t-guarantee-title">Money-back guarantee</strong>
+        <span id="t-guarantee-desc">Cancel anytime. Prorated refunds, no questions asked.</span>
       </div>
     </div>
 
@@ -405,11 +399,19 @@
 
   <footer>
     <a href="/" id="nav-home2">Home</a> &middot;
+    <a href="/pricing">Pricing</a> &middot;
     <a href="/status">Status</a> &middot;
     <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
-    <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
-    chatweb.ai &copy; 2025-2026
+    <a href="mailto:hello@teai.io">Contact</a> &middot;
+    teai.io &copy; 2025-2026
   </footer>
+
+  <!-- PostHog analytics
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('YOUR_PROJECT_KEY', {api_host: 'https://app.posthog.com'});
+  </script>
+  -->
 
   <script>
     // Region detection & pricing
@@ -418,43 +420,42 @@
 
     const PRICING = {
       jp: {
-        starter: { amount: 9, currency: '$', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
-        pro: { amount: 29, currency: '$', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
+        developer: { amount: 19, currency: '$', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
+        team: { amount: 49, currency: '$', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
       },
       intl: {
-        starter: { amount: 19, currency: '$', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
-        pro: { amount: 49, currency: '$', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
+        developer: { amount: 19, currency: '$', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
+        team: { amount: 49, currency: '$', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
       },
     };
 
     const region = isJP ? 'jp' : 'intl';
     const PAYMENT_LINKS = {
-      starter: PRICING[region].starter.link,
-      pro: PRICING[region].pro.link,
+      developer: PRICING[region].developer.link,
+      team: PRICING[region].team.link,
     };
 
     // Apply region pricing to DOM after page load
     function applyRegionPricing() {
-      if (!isJP) {
-        const starterPrice = document.querySelector('.plan-card.featured .plan-price');
-        if (starterPrice && !starterPrice.classList.contains('coupon-modified')) {
-          starterPrice.innerHTML = '<span class="currency">$</span>' + PRICING.intl.starter.amount +
-            '<span class="period" id="p-starter-period">' +
-            (document.documentElement.lang === 'ja' ? '/月' : '/mo') + '</span>';
-        }
-        const proCards = document.querySelectorAll('.plan-card:not(.featured)');
-        proCards.forEach(card => {
-          const name = card.querySelector('.plan-name');
-          if (name && name.textContent === 'Pro') {
-            const priceEl = card.querySelector('.plan-price');
-            if (priceEl && !priceEl.classList.contains('coupon-modified')) {
-              priceEl.innerHTML = '<span class="currency">$</span>' + PRICING.intl.pro.amount +
-                '<span class="period" id="p-pro-period">' +
-                (document.documentElement.lang === 'ja' ? '/月' : '/mo') + '</span>';
-            }
-          }
-        });
+      // Both regions have the same pricing for teai.io, but keep the structure for future regional pricing
+      const devPrice = document.querySelector('.plan-card.featured .plan-price');
+      if (devPrice && !devPrice.classList.contains('coupon-modified')) {
+        devPrice.innerHTML = '<span class="currency">$</span>' + PRICING[region].developer.amount +
+          '<span class="period" id="p-developer-period">' +
+          (document.documentElement.lang === 'ja' ? '/月' : '/mo') + '</span>';
       }
+      const teamCards = document.querySelectorAll('.plan-card:not(.featured)');
+      teamCards.forEach(card => {
+        const name = card.querySelector('.plan-name');
+        if (name && name.textContent === 'Team') {
+          const priceEl = card.querySelector('.plan-price');
+          if (priceEl && !priceEl.classList.contains('coupon-modified')) {
+            priceEl.innerHTML = '<span class="currency">$</span>' + PRICING[region].team.amount +
+              '<span class="period" id="p-team-period">' +
+              (document.documentElement.lang === 'ja' ? '/月' : '/mo') + '</span>';
+          }
+        }
+      });
     }
 
     let activeCoupon = null;
@@ -476,19 +477,19 @@
         if (data.valid) {
           activeCoupon = data.stripe_promo_code || code;
           msg.className = 'coupon-msg success';
-          const l = document.documentElement.lang || 'ja';
+          const l = document.documentElement.lang || 'en';
           msg.textContent = l === 'ja'
-            ? (data.description_ja || data.description || 'クーポンが適用されました！')
+            ? (data.description_ja || data.description || 'Coupon applied!')
             : (data.description || 'Coupon applied!');
           input.style.borderColor = 'var(--green)';
 
-          // UI enhancement: highlight Starter plan with coupon details
+          // UI enhancement: highlight Developer plan with coupon details
           applyCouponUI(l, data);
         } else {
           activeCoupon = null;
           msg.className = 'coupon-msg error';
-          const l = document.documentElement.lang || 'ja';
-          msg.textContent = l === 'ja' ? '無効なクーポンコードです' : 'Invalid coupon code';
+          const l = document.documentElement.lang || 'en';
+          msg.textContent = l === 'ja' ? 'Invalid coupon code' : 'Invalid coupon code';
           input.style.borderColor = '#ef4444';
           resetCouponUI();
         }
@@ -504,166 +505,121 @@
     });
 
     function applyCouponUI(lang, data) {
-      const starterCard = document.querySelector('.plan-card.featured');
-      if (!starterCard) return;
+      const devCard = document.querySelector('.plan-card.featured');
+      if (!devCard) return;
 
-      const grantCredits = data.grant_credits || 30000;
+      const grantCredits = data.grant_credits || 50000;
       const grantDays = data.grant_days || 30;
       const noCard = data.require_card === false;
 
       // Add gold border + scale
-      starterCard.classList.add('coupon-active');
+      devCard.classList.add('coupon-active');
 
       // Update badge text
-      const badge = document.getElementById('p-starter-badge');
+      const badge = document.getElementById('p-developer-badge');
       badge.textContent = lang === 'ja'
-        ? (grantDays >= 180 ? '6ヶ月無料' : grantDays + '日間無料')
+        ? (grantDays >= 180 ? '6 months free' : grantDays + ' days free')
         : (grantDays >= 180 ? '6 months free' : grantDays + ' days free');
 
       // Update price display
-      const priceEl = starterCard.querySelector('.plan-price');
-      priceEl.innerHTML = '<span class="original-price">$9</span><span class="currency">$</span>0<span class="period">' +
+      const priceEl = devCard.querySelector('.plan-price');
+      priceEl.classList.add('coupon-modified');
+      priceEl.innerHTML = '<span class="original-price">$19</span><span class="currency">$</span>0<span class="period">' +
         (lang === 'ja' ? '/月' : '/mo') + '</span>' +
         '<span class="trial-note">' +
         (lang === 'ja'
-          ? (noCard ? 'カード登録不要・' + grantDays + '日間無料' : (grantDays + 1) + '日目から$' + PRICING[region].starter.amount + '/月・いつでもキャンセル可')
-          : (noCard ? 'No card required. ' + grantDays + ' days free' : 'After ' + grantDays + ' days: $' + PRICING[region].starter.amount + '/mo. Cancel anytime.')) +
+          ? (noCard ? 'No card required. ' + grantDays + ' days free' : 'After ' + grantDays + ' days: $' + PRICING[region].developer.amount + '/mo. Cancel anytime.')
+          : (noCard ? 'No card required. ' + grantDays + ' days free' : 'After ' + grantDays + ' days: $' + PRICING[region].developer.amount + '/mo. Cancel anytime.')) +
         '</span>';
 
       // Add free badge
-      if (!starterCard.querySelector('.coupon-free-badge')) {
+      if (!devCard.querySelector('.coupon-free-badge')) {
         const freeBadge = document.createElement('div');
         freeBadge.className = 'coupon-free-badge';
         freeBadge.textContent = lang === 'ja'
-          ? (noCard ? 'カード不要！' + grantDays + '日間 完全無料' : grantDays + '日間 完全無料')
+          ? (noCard ? 'No card needed! ' + grantDays + ' days free' : grantDays + ' days completely free')
           : (noCard ? 'No card needed! ' + grantDays + ' days free' : grantDays + ' days completely free');
         priceEl.parentNode.insertBefore(freeBadge, priceEl.nextSibling);
       }
 
-      // Update CTA button — if no card required, redeem directly
-      const cta = document.getElementById('p-starter-cta');
+      // Update CTA button
+      const cta = document.getElementById('p-developer-cta');
       if (noCard) {
-        cta.textContent = lang === 'ja' ? '今すぐ無料で始める' : 'Start free now';
+        cta.textContent = lang === 'ja' ? 'Start free now' : 'Start free now';
         cta.classList.remove('primary');
         cta.classList.add('green');
         cta.dataset.nocard = 'true';
       } else {
-        cta.textContent = lang === 'ja' ? '今すぐ無料で始める' : 'Start free now';
+        cta.textContent = lang === 'ja' ? 'Start free now' : 'Start free now';
         cta.classList.remove('primary');
         cta.classList.add('green');
       }
     }
 
     function resetCouponUI() {
-      const starterCard = document.querySelector('.plan-card.featured');
-      if (!starterCard) return;
+      const devCard = document.querySelector('.plan-card.featured');
+      if (!devCard) return;
 
-      starterCard.classList.remove('coupon-active');
+      devCard.classList.remove('coupon-active');
 
       // Restore badge
-      const l = document.documentElement.lang || 'ja';
-      document.getElementById('p-starter-badge').textContent = T[l].badge;
+      const l = document.documentElement.lang || 'en';
+      document.getElementById('p-developer-badge').textContent = T[l].badge;
 
       // Restore price
-      const priceEl = starterCard.querySelector('.plan-price');
-      priceEl.innerHTML = '<span class="currency">$</span>9<span class="period" id="p-starter-period">' +
-        T[l].starter.period + '</span>';
+      const priceEl = devCard.querySelector('.plan-price');
+      priceEl.classList.remove('coupon-modified');
+      priceEl.innerHTML = '<span class="currency">$</span>19<span class="period" id="p-developer-period">' +
+        T[l].developer.period + '</span>';
 
       // Remove free badge
-      const freeBadge = starterCard.querySelector('.coupon-free-badge');
+      const freeBadge = devCard.querySelector('.coupon-free-badge');
       if (freeBadge) freeBadge.remove();
 
       // Restore CTA
-      const cta = document.getElementById('p-starter-cta');
-      cta.textContent = T[l].starter.cta;
+      const cta = document.getElementById('p-developer-cta');
+      cta.textContent = T[l].developer.cta;
       cta.classList.remove('green');
       cta.classList.add('primary');
     }
 
     const T = {
-      ja: {
-        title: '料金プラン',
-        sub: '無料で始めて、ビジネスの成長に合わせてスケール。',
-        navHome: 'ホーム',
-        badge: '人気',
-        free: { name: 'Free', desc: '個人利用・お試しに', cta: '今すぐ使う', period: '/月' },
-        starter: { name: 'Starter', desc: '小規模チーム・本格利用に', cta: 'Starterを始める', period: '/月' },
-        pro: { name: 'Pro', desc: '大規模利用・高性能モデルに', cta: 'Proを始める', period: '/月' },
-        features: {
-          free: [
-            '1,000 クレジット/月',
-            '5 リクエスト/分',
-            'GPT-4o-mini, Gemini Flash',
-            '100 エージェント実行/月',
-            'Web・LINE・Telegram対応',
-          ],
-          starter: [
-            '25,000 クレジット/月',
-            '30 リクエスト/分',
-            'GPT-4o-mini, Gemini Flash',
-            '+ GPT-4o, Claude Sonnet',
-            '2,000 エージェント実行/月',
-            'Web・LINE・Telegram対応',
-            '優先サポート',
-          ],
-          pro: [
-            '300,000 クレジット/月',
-            '120 リクエスト/分',
-            '全モデル利用可能',
-            '+ Claude Opus',
-            '20,000 エージェント実行/月',
-            'Web・LINE・Telegram対応',
-            '優先サポート',
-            'カスタムエージェント',
-          ],
-        },
-        couponTitle: 'クーポンコードをお持ちですか？',
-        couponBtn: '適用',
-        couponPh: 'コードを入力',
-        guaranteeTitle: '安心の返金保証',
-        guaranteeDesc: 'いつでもキャンセル可能。日割り計算で返金されます。',
-        faqTitle: 'よくある質問',
-        faqs: [
-          { q: 'クレジットとは何ですか？', a: 'クレジットはAPIの利用量を表す単位です。モデルによって消費量が異なります。GPT-4o-miniは1K入力トークンで1クレジット、Claude Opusは30クレジットです。' },
-          { q: 'プランはいつでも変更できますか？', a: 'はい、いつでもアップグレード・ダウングレードが可能です。アップグレードは即座に反映され、差額が日割り計算されます。' },
-          { q: '無料プランに制限はありますか？', a: '無料プランでは月1,000クレジット、分5リクエストまで利用可能です。GPT-4o-miniとGemini Flashモデルが使えます。' },
-          { q: '支払い方法は何が使えますか？', a: 'Stripeを通じてVisa、Mastercard、American Express、JCBなど主要なクレジットカードとデビットカードに対応しています。' },
-        ],
-      },
       en: {
         title: 'Pricing',
-        sub: 'Start free, scale as your business grows.',
+        sub: 'Start free, scale as you build. Simple, transparent pricing for developers.',
         navHome: 'Home',
-        badge: 'Popular',
-        free: { name: 'Free', desc: 'For personal use & trial', cta: 'Get Started', period: '/mo' },
-        starter: { name: 'Starter', desc: 'For small teams & serious use', cta: 'Start Starter', period: '/mo' },
-        pro: { name: 'Pro', desc: 'For high-volume & advanced models', cta: 'Start Pro', period: '/mo' },
+        badge: 'Most Popular',
+        free: { name: 'Free', desc: 'For personal projects & exploration', cta: 'Get Started', period: '/mo' },
+        developer: { name: 'Developer', desc: 'For serious development & production apps', cta: 'Start Developer', period: '/mo' },
+        team: { name: 'Team', desc: 'For teams & high-volume workloads', cta: 'Start Team', period: '/mo' },
         features: {
           free: [
-            '1,000 credits/mo',
+            '1,000 credits/month',
             '5 requests/min',
             'GPT-4o-mini, Gemini Flash',
-            '100 agent runs/mo',
-            'Web, LINE & Telegram',
+            '100 agent runs/month',
+            'Web, REST API',
+            'Community support',
           ],
-          starter: [
-            '25,000 credits/mo',
-            '30 requests/min',
+          developer: [
+            '50,000 credits/month',
+            '60 requests/min',
             'GPT-4o-mini, Gemini Flash',
             '+ GPT-4o, Claude Sonnet',
-            '2,000 agent runs/mo',
-            'Web, LINE & Telegram',
+            '5,000 agent runs/month',
+            'All channels + MCP tools',
             'Priority support',
+            'Code generation models',
           ],
-          pro: [
-            '300,000 credits/mo',
-            '120 requests/min',
-            'All models available',
-            '+ Claude Opus',
-            '20,000 agent runs/mo',
-            'Web, LINE & Telegram',
+          team: [
+            '500,000 credits/month',
+            '200 requests/min',
+            'All models (+ Claude Opus)',
+            '50,000 agent runs/month',
+            'All channels + MCP tools',
             'Priority support',
             'Custom agents',
+            'Team collaboration (coming soon)',
           ],
         },
         couponTitle: 'Have a coupon code?',
@@ -673,10 +629,61 @@
         guaranteeDesc: 'Cancel anytime. Prorated refunds, no questions asked.',
         faqTitle: 'FAQ',
         faqs: [
-          { q: 'What are credits?', a: 'Credits measure API usage. Different models consume different amounts. GPT-4o-mini costs 1 credit per 1K input tokens, while Claude Opus costs 30 credits.' },
-          { q: 'Can I change plans anytime?', a: 'Yes, you can upgrade or downgrade anytime. Upgrades take effect immediately with prorated billing.' },
-          { q: 'Are there limits on the free plan?', a: 'The free plan includes 1,000 credits/month and 5 requests/minute. You can use GPT-4o-mini and Gemini Flash models.' },
-          { q: 'What payment methods are accepted?', a: 'We accept Visa, Mastercard, American Express, JCB and other major credit/debit cards via Stripe.' },
+          { q: 'What are credits?', a: 'Credits measure API usage. Different models cost different amounts. GPT-4o-mini: 1 credit/1K tokens. Claude Opus: 30 credits/1K tokens.' },
+          { q: 'Can I use the REST API on the Free plan?', a: 'Yes! The REST API is available on all plans. Free plan is limited to 5 req/min.' },
+          { q: 'What MCP tools are available?', a: 'Web search, web fetch, calculator, weather, file operations, shell execution, browser automation, and more.' },
+          { q: 'Do you offer annual billing?', a: 'Annual billing with 20% discount is coming soon. Contact us for early access.' },
+        ],
+      },
+      ja: {
+        title: 'Pricing',
+        sub: '無料で始めて、開発の成長に合わせてスケール。開発者向けのシンプルで透明な料金体系。',
+        navHome: 'Home',
+        badge: 'Most Popular',
+        free: { name: 'Free', desc: '個人プロジェクト・お試しに', cta: '今すぐ始める', period: '/月' },
+        developer: { name: 'Developer', desc: '本格開発・本番アプリに', cta: 'Developerを始める', period: '/月' },
+        team: { name: 'Team', desc: 'チーム・大規模ワークロードに', cta: 'Teamを始める', period: '/月' },
+        features: {
+          free: [
+            '1,000 クレジット/月',
+            '5 リクエスト/分',
+            'GPT-4o-mini, Gemini Flash',
+            '100 エージェント実行/月',
+            'Web, REST API',
+            'コミュニティサポート',
+          ],
+          developer: [
+            '50,000 クレジット/月',
+            '60 リクエスト/分',
+            'GPT-4o-mini, Gemini Flash',
+            '+ GPT-4o, Claude Sonnet',
+            '5,000 エージェント実行/月',
+            '全チャネル + MCPツール',
+            '優先サポート',
+            'コード生成モデル',
+          ],
+          team: [
+            '500,000 クレジット/月',
+            '200 リクエスト/分',
+            '全モデル (+ Claude Opus)',
+            '50,000 エージェント実行/月',
+            '全チャネル + MCPツール',
+            '優先サポート',
+            'カスタムエージェント',
+            'チームコラボレーション (coming soon)',
+          ],
+        },
+        couponTitle: 'クーポンコードをお持ちですか？',
+        couponBtn: '適用',
+        couponPh: 'コードを入力',
+        guaranteeTitle: '安心の返金保証',
+        guaranteeDesc: 'いつでもキャンセル可能。日割り計算で返金されます。',
+        faqTitle: 'よくある質問',
+        faqs: [
+          { q: 'クレジットとは何ですか？', a: 'クレジットはAPI利用量の単位です。モデルによってコストが異なります。GPT-4o-mini: 1クレジット/1Kトークン。Claude Opus: 30クレジット/1Kトークン。' },
+          { q: '無料プランでREST APIは使えますか？', a: 'はい！REST APIは全プランで利用可能です。無料プランは5リクエスト/分の制限があります。' },
+          { q: '利用可能なMCPツールは？', a: 'Web検索、Webフェッチ、計算機、天気、ファイル操作、シェル実行、ブラウザ自動化など多数のツールが利用可能です。' },
+          { q: '年払いはありますか？', a: '20%割引の年払いプランは近日提供予定です。先行アクセスについてはお問い合わせください。' },
         ],
       },
     };
@@ -712,9 +719,9 @@
       document.getElementById('t-sub').textContent = t.sub;
       document.getElementById('nav-home').textContent = t.navHome;
       document.getElementById('nav-home2').textContent = t.navHome;
-      document.getElementById('p-starter-badge').textContent = t.badge;
+      document.getElementById('p-developer-badge').textContent = t.badge;
 
-      ['free', 'starter', 'pro'].forEach(p => {
+      ['free', 'developer', 'team'].forEach(p => {
         document.getElementById('p-' + p + '-name').textContent = t[p].name;
         document.getElementById('p-' + p + '-desc').textContent = t[p].desc;
         document.getElementById('p-' + p + '-cta').textContent = t[p].cta;
@@ -744,8 +751,8 @@
           if (token) headers['Authorization'] = 'Bearer ' + token;
 
           this.disabled = true;
-          const lang = document.documentElement.lang || 'ja';
-          this.textContent = lang === 'ja' ? '適用中...' : 'Applying...';
+          const lang = document.documentElement.lang || 'en';
+          this.textContent = lang === 'ja' ? 'Applying...' : 'Applying...';
 
           fetch('/api/v1/coupon/redeem', {
             method: 'POST',
@@ -758,25 +765,25 @@
               const msg = document.getElementById('coupon-msg');
               msg.className = 'coupon-msg success';
               msg.textContent = lang === 'ja'
-                ? data.message_ja || 'クーポン適用完了！'
+                ? data.message_ja || 'Coupon redeemed!'
                 : data.message || 'Coupon redeemed!';
-              this.textContent = lang === 'ja' ? '適用済み！チャットへ' : 'Done! Go to chat';
+              this.textContent = lang === 'ja' ? 'Done! Go to chat' : 'Done! Go to chat';
               this.classList.add('green');
               setTimeout(() => { window.location.href = '/'; }, 1500);
             } else {
               const msg = document.getElementById('coupon-msg');
               msg.className = 'coupon-msg error';
               msg.textContent = lang === 'ja'
-                ? (data.error_ja || data.error || 'エラーが発生しました')
+                ? (data.error_ja || data.error || 'Error occurred')
                 : (data.error || 'Error redeeming coupon');
               this.disabled = false;
-              this.textContent = lang === 'ja' ? '今すぐ無料で始める' : 'Start free now';
+              this.textContent = lang === 'ja' ? 'Start free now' : 'Start free now';
             }
           })
           .catch(() => {
             this.disabled = false;
-            this.textContent = lang === 'ja' ? '今すぐ無料で始める' : 'Start free now';
-            alert(lang === 'ja' ? 'エラーが発生しました。もう一度お試しください。' : 'Error. Please try again.');
+            this.textContent = lang === 'ja' ? 'Start free now' : 'Start free now';
+            alert('Error. Please try again.');
           });
           return;
         }
@@ -801,6 +808,7 @@
       });
     });
 
+    // Initialize language — default to English, respect saved preference
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
     applyRegionPricing();
   </script>

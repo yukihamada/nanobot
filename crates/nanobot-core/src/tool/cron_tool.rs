@@ -133,12 +133,12 @@ impl Tool for CronTool {
                 };
                 let mut cron = self.cron_service.lock().await;
                 if cron.remove_job(job_id) {
-                    format!("Removed job {}", job_id)
+                    format!("Removed job {job_id}")
                 } else {
-                    format!("Job {} not found", job_id)
+                    format!("Job {job_id} not found")
                 }
             }
-            _ => format!("Unknown action: {}", action),
+            _ => format!("Unknown action: {action}"),
         }
     }
 }

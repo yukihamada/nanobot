@@ -78,17 +78,17 @@ impl Tool for ReadFileTool {
         match resolve_path(path, self.allowed_dir.as_deref()) {
             Ok(file_path) => {
                 if !file_path.exists() {
-                    return format!("Error: File not found: {}", path);
+                    return format!("Error: File not found: {path}");
                 }
                 if !file_path.is_file() {
-                    return format!("Error: Not a file: {}", path);
+                    return format!("Error: Not a file: {path}");
                 }
                 match std::fs::read_to_string(&file_path) {
                     Ok(content) => content,
-                    Err(e) => format!("Error reading file: {}", e),
+                    Err(e) => format!("Error reading file: {e}"),
                 }
             }
-            Err(e) => format!("Error: {}", e),
+            Err(e) => format!("Error: {e}"),
         }
     }
 }
@@ -159,20 +159,20 @@ impl Tool for WriteFileTool {
             if parent.exists() {
                 let parent_resolved = parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf());
                 if !parent_resolved.starts_with(&allowed_resolved) {
-                    return format!("Error: Path {} is outside allowed directory", path);
+                    return format!("Error: Path {path} is outside allowed directory");
                 }
             }
         }
 
         if let Some(parent) = file_path.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
-                return format!("Error creating directories: {}", e);
+                return format!("Error creating directories: {e}");
             }
         }
 
         match std::fs::write(&file_path, content) {
             Ok(_) => format!("Successfully wrote {} bytes to {}", content.len(), path),
-            Err(e) => format!("Error writing file: {}", e),
+            Err(e) => format!("Error writing file: {e}"),
         }
     }
 }
@@ -237,7 +237,7 @@ impl Tool for EditFileTool {
         match resolve_path(path, self.allowed_dir.as_deref()) {
             Ok(file_path) => {
                 if !file_path.exists() {
-                    return format!("Error: File not found: {}", path);
+                    return format!("Error: File not found: {path}");
                 }
                 match std::fs::read_to_string(&file_path) {
                     Ok(content) => {
@@ -247,20 +247,19 @@ impl Tool for EditFileTool {
                         let count = content.matches(old_text).count();
                         if count > 1 {
                             return format!(
-                                "Warning: old_text appears {} times. Please provide more context to make it unique.",
-                                count
+                                "Warning: old_text appears {count} times. Please provide more context to make it unique."
                             );
                         }
                         let new_content = content.replacen(old_text, new_text, 1);
                         match std::fs::write(&file_path, new_content) {
-                            Ok(_) => format!("Successfully edited {}", path),
-                            Err(e) => format!("Error writing file: {}", e),
+                            Ok(_) => format!("Successfully edited {path}"),
+                            Err(e) => format!("Error writing file: {e}"),
                         }
                     }
-                    Err(e) => format!("Error reading file: {}", e),
+                    Err(e) => format!("Error reading file: {e}"),
                 }
             }
-            Err(e) => format!("Error: {}", e),
+            Err(e) => format!("Error: {e}"),
         }
     }
 }
@@ -309,10 +308,10 @@ impl Tool for ListDirTool {
         match resolve_path(path, self.allowed_dir.as_deref()) {
             Ok(dir_path) => {
                 if !dir_path.exists() {
-                    return format!("Error: Directory not found: {}", path);
+                    return format!("Error: Directory not found: {path}");
                 }
                 if !dir_path.is_dir() {
-                    return format!("Error: Not a directory: {}", path);
+                    return format!("Error: Not a directory: {path}");
                 }
 
                 match std::fs::read_dir(&dir_path) {
@@ -322,9 +321,9 @@ impl Tool for ListDirTool {
                             .map(|entry| {
                                 let name = entry.file_name().to_string_lossy().to_string();
                                 if entry.path().is_dir() {
-                                    format!("[DIR]  {}", name)
+                                    format!("[DIR]  {name}")
                                 } else {
-                                    format!("[FILE] {}", name)
+                                    format!("[FILE] {name}")
                                 }
                             })
                             .collect();
@@ -332,15 +331,15 @@ impl Tool for ListDirTool {
                         items.sort();
 
                         if items.is_empty() {
-                            format!("Directory {} is empty", path)
+                            format!("Directory {path} is empty")
                         } else {
                             items.join("\n")
                         }
                     }
-                    Err(e) => format!("Error listing directory: {}", e),
+                    Err(e) => format!("Error listing directory: {e}"),
                 }
             }
-            Err(e) => format!("Error: {}", e),
+            Err(e) => format!("Error: {e}"),
         }
     }
 }

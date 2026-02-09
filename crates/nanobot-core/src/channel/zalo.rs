@@ -62,7 +62,7 @@ impl ZaloChannel {
 
     /// Send a customer-service message via Zalo OA API.
     async fn send_cs_message(&self, recipient_id: &str, text: &str) -> anyhow::Result<()> {
-        let url = format!("{}/message/cs", ZALO_OA_API_BASE);
+        let url = format!("{ZALO_OA_API_BASE}/message/cs");
 
         let body = json!({
             "recipient": {
@@ -84,7 +84,7 @@ impl ZaloChannel {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!("Zalo send error: {} {}", status, text));
+            return Err(anyhow::anyhow!("Zalo send error: {status} {text}"));
         }
 
         let result: serde_json::Value = resp.json().await.unwrap_or_default();
@@ -93,7 +93,7 @@ impl ZaloChannel {
                 .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
-            return Err(anyhow::anyhow!("Zalo API error: {}", err_msg));
+            return Err(anyhow::anyhow!("Zalo API error: {err_msg}"));
         }
 
         Ok(())

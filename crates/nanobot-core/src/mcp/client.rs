@@ -85,7 +85,7 @@ impl McpClient {
             .json(&req)
             .send()
             .await
-            .map_err(|e| format!("MCP request failed: {}", e))?;
+            .map_err(|e| format!("MCP request failed: {e}"))?;
 
         if !resp.status().is_success() {
             return Err(format!("MCP server returned HTTP {}", resp.status()));
@@ -93,7 +93,7 @@ impl McpClient {
 
         let rpc_resp: JsonRpcResponse = resp.json()
             .await
-            .map_err(|e| format!("MCP response parse error: {}", e))?;
+            .map_err(|e| format!("MCP response parse error: {e}"))?;
 
         if let Some(err) = rpc_resp.error {
             return Err(format!("MCP error: {}", err.message));
@@ -160,7 +160,7 @@ impl McpClient {
                     result.to_string()
                 }
             }
-            Err(e) => format!("MCP tool error: {}", e),
+            Err(e) => format!("MCP tool error: {e}"),
         }
     }
 

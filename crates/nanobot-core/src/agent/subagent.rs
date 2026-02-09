@@ -93,7 +93,7 @@ impl SubagentManager {
 
             let (status, result_text) = match result {
                 Ok(text) => ("ok", text),
-                Err(e) => ("error", format!("Error: {}", e)),
+                Err(e) => ("error", format!("Error: {e}")),
             };
 
             // Announce result
@@ -114,7 +114,7 @@ impl SubagentManager {
             let msg = InboundMessage::new(
                 "system",
                 "subagent",
-                &format!("{}:{}", origin_ch, origin_id),
+                format!("{origin_ch}:{origin_id}"),
                 &announce_content,
             );
 
@@ -211,7 +211,7 @@ When you have completed the task, provide a clear summary of your findings or ac
                 0.7,
             )
             .await
-            .map_err(|e| anyhow::anyhow!("{}", e))?;
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         if response.has_tool_calls() {
             let tool_call_dicts: Vec<serde_json::Value> = response

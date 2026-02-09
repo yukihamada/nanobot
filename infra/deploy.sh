@@ -73,6 +73,7 @@ PARAM_OVERRIDES=""
 [ -n "${NANOBOT_TENANT_ID:-}" ] && PARAM_OVERRIDES+=" TenantId=$NANOBOT_TENANT_ID"
 [ -n "${GOOGLE_CLIENT_ID:-}" ] && PARAM_OVERRIDES+=" GoogleClientId=$GOOGLE_CLIENT_ID"
 [ -n "${GOOGLE_CLIENT_SECRET:-}" ] && PARAM_OVERRIDES+=" GoogleClientSecret=$GOOGLE_CLIENT_SECRET"
+[ -n "${OPENROUTER_API_KEY:-}" ] && PARAM_OVERRIDES+=" OpenrouterApiKey=$OPENROUTER_API_KEY"
 
 if [ -n "$PARAM_OVERRIDES" ]; then
     SAM_ARGS+=(--parameter-overrides "$PARAM_OVERRIDES")

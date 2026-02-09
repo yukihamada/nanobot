@@ -26,7 +26,7 @@ impl FileSessionStore {
 
     fn session_path(&self, key: &str) -> PathBuf {
         let safe_key = safe_filename(&key.replace(':', "_"));
-        self.sessions_dir.join(format!("{}.jsonl", safe_key))
+        self.sessions_dir.join(format!("{safe_key}.jsonl"))
     }
 
     /// Load a session from disk.

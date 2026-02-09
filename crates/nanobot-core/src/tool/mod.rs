@@ -92,7 +92,7 @@ impl ToolRegistry {
     ) -> String {
         let tool = match self.tools.get(name) {
             Some(t) => t.value().clone(),
-            None => return format!("Error: Tool '{}' not found", name),
+            None => return format!("Error: Tool '{name}' not found"),
         };
 
         debug!("Executing tool: {}", name);

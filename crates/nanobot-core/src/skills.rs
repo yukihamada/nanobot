@@ -121,7 +121,7 @@ impl SkillsLoader {
         for name in skill_names {
             if let Some(content) = self.load_skill(name) {
                 let body = markdown::strip_frontmatter(&content);
-                parts.push(format!("### Skill: {}\n\n{}", name, body));
+                parts.push(format!("### Skill: {name}\n\n{body}"));
             }
         }
         parts.join("\n\n---\n\n")
@@ -145,8 +145,8 @@ impl SkillsLoader {
                 "  <skill available=\"{}\">",
                 if available { "true" } else { "false" }
             ));
-            lines.push(format!("    <name>{}</name>", name));
-            lines.push(format!("    <description>{}</description>", desc));
+            lines.push(format!("    <name>{name}</name>"));
+            lines.push(format!("    <description>{desc}</description>"));
             lines.push(format!("    <location>{}</location>", s.path.display()));
 
             if !available {
@@ -168,7 +168,7 @@ impl SkillsLoader {
         for s in self.list_skills(true) {
             let frontmatter = self.get_skill_metadata(&s.name);
             let nanobot_meta = self.get_skill_nanobot_meta(&s.name);
-            if nanobot_meta.get("always").is_some()
+            if nanobot_meta.contains_key("always")
                 || frontmatter
                     .as_ref()
                     .and_then(|m| m.get("always"))
@@ -245,7 +245,7 @@ fn get_missing_requirements(meta: &HashMap<String, serde_json::Value>) -> String
             for bin in bins {
                 if let Some(name) = bin.as_str() {
                     if which::which(name).is_err() {
-                        missing.push(format!("CLI: {}", name));
+                        missing.push(format!("CLI: {name}"));
                     }
                 }
             }
@@ -254,7 +254,7 @@ fn get_missing_requirements(meta: &HashMap<String, serde_json::Value>) -> String
             for env in envs {
                 if let Some(name) = env.as_str() {
                     if std::env::var(name).is_err() {
-                        missing.push(format!("ENV: {}", name));
+                        missing.push(format!("ENV: {name}"));
                     }
                 }
             }

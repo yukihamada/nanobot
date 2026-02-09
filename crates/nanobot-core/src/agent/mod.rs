@@ -132,7 +132,7 @@ impl AgentLoop {
                     let error_msg = OutboundMessage::new(
                         &msg.channel,
                         &msg.chat_id,
-                        &format!("Sorry, I encountered an error: {}", e),
+                        format!("Sorry, I encountered an error: {e}"),
                     );
                     self.outbound_tx.send(error_msg).await.ok();
                 }
@@ -213,7 +213,7 @@ impl AgentLoop {
             ("cli".to_string(), msg.chat_id.clone())
         };
 
-        let session_key = format!("{}:{}", origin_channel, origin_chat_id);
+        let session_key = format!("{origin_channel}:{origin_chat_id}");
         self.message_tool
             .set_context(&origin_channel, &origin_chat_id)
             .await;
@@ -269,7 +269,7 @@ impl AgentLoop {
                     0.7,
                 )
                 .await
-                .map_err(|e| anyhow::anyhow!("{}", e))?;
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
 
             if response.has_tool_calls() {
                 // Build tool_calls JSON for message history

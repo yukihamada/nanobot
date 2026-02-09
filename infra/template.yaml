@@ -55,6 +55,11 @@ Parameters:
     NoEcho: true
     Description: DeepSeek API key
     Default: ''
+  OpenrouterApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenRouter API key (backup LLM provider)
+    Default: ''
   ResendApiKey:
     Type: String
     NoEcho: true
@@ -134,6 +139,7 @@ Resources:
           BRAVE_API_KEY: !Ref BraveApiKey
           GOOGLE_API_KEY: !Ref GoogleApiKey
           DEEPSEEK_API_KEY: !Ref DeepseekApiKey
+          OPENROUTER_API_KEY: !Ref OpenrouterApiKey
           RESEND_API_KEY: !Ref ResendApiKey
           GITHUB_TOKEN: !Ref GitHubToken
           NANOBOT_TENANT_ID: !Ref TenantId

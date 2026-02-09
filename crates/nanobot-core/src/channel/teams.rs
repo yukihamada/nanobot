@@ -114,8 +114,7 @@ impl TeamsChannel {
             .ok_or_else(|| anyhow::anyhow!("Teams: no access token"))?;
 
         let url = format!(
-            "{}v3/conversations/{}/activities",
-            service_url, conversation_id
+            "{service_url}v3/conversations/{conversation_id}/activities"
         );
 
         let body = json!({
@@ -126,7 +125,7 @@ impl TeamsChannel {
         let resp = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .json(&body)
             .send()
             .await?;
@@ -134,7 +133,7 @@ impl TeamsChannel {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!("Teams send error: {} {}", status, text));
+            return Err(anyhow::anyhow!("Teams send error: {status} {text}"));
         }
 
         Ok(())

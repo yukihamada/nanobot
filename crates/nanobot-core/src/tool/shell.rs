@@ -140,7 +140,7 @@ impl Tool for ExecTool {
 
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 if !stderr.trim().is_empty() {
-                    parts.push(format!("STDERR:\n{}", stderr));
+                    parts.push(format!("STDERR:\n{stderr}"));
                 }
 
                 if !output.status.success() {
@@ -168,7 +168,7 @@ impl Tool for ExecTool {
                     result
                 }
             }
-            Ok(Err(e)) => format!("Error executing command: {}", e),
+            Ok(Err(e)) => format!("Error executing command: {e}"),
             Err(_) => format!("Error: Command timed out after {} seconds", self.timeout),
         }
     }

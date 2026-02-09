@@ -1,105 +1,125 @@
+<div align="center">
+
 # nanobot
 
-AIエージェントプラットフォーム — Web・LINE・Telegramで使えるAIアシスタントを数分でデプロイ。
+[![Build](https://github.com/yukihamada/nanobot/actions/workflows/ci.yml/badge.svg)](https://github.com/yukihamada/nanobot/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/yukihamada/nanobot?style=social)](https://github.com/yukihamada/nanobot/stargazers)
+[![Rust](https://img.shields.io/badge/Built_with-Rust-dea584?logo=rust)](https://www.rust-lang.org/)
 
-**サイト:** [https://chatweb.ai](https://chatweb.ai)
-**API:** [https://api.chatweb.ai](https://api.chatweb.ai)
+**AI Agent Platform** — Deploy intelligent AI agents to LINE, Telegram, Web in minutes.
 
-## 特徴
+[Try it now](https://chatweb.ai) | [API Docs](https://teai.io) | [iOS App](https://apps.apple.com/app/eliochat/id6742071881)
 
-- **マルチモデル** — GPT-4o, Claude Sonnet/Opus, Gemini を切り替え可能
-- **マルチチャネル** — Web, LINE, Telegram をリアルタイム同期
-- **チャネル同期** — `/link` コマンドまたはセッションID送信で全チャネルの会話を統合
-- **ツール呼び出し** — Web検索、天気、計算機、ページ取得などAIが自動でツールを使用
-- **サーバーレス** — Rust製、AWS Lambda (ARM64) で高速・低コスト
-- **会話メモリ** — DynamoDBでセッションを永続化、チャネル横断で文脈を記憶
-- **負荷分散** — 複数APIキーのラウンドロビン + 自動フェイルオーバー
-- **フリーミアム** — 無料プランは登録不要、クーポンコード対応
-- **OGP対応** — SNSシェア時にリッチプレビュー表示
+</div>
 
-## すぐに試す
+---
 
-### Web
-[https://chatweb.ai](https://chatweb.ai) にアクセスしてチャット開始
+## Why nanobot?
 
-### LINE
-友だち追加: [@619jcqqh](https://line.me/R/ti/p/@619jcqqh)
+Most AI chatbot frameworks are slow Python wrappers around a single model. nanobot is different: a **production-grade Rust runtime** that connects any LLM to any channel, with voice, tools, and memory built in.
 
-### Telegram
-ボット: [@chatweb_ai_bot](https://t.me/chatweb_ai_bot)
+| | nanobot | Typical framework |
+|---|---|---|
+| Language | Rust (cold start < 50ms) | Python (cold start 3-10s) |
+| Channels | Web + LINE + Telegram + Facebook | Usually one |
+| Models | GPT-4o, Claude, Gemini (hot-swap) | Single provider |
+| Voice | STT + TTS, push-to-talk | None |
+| Memory | Cross-channel long-term memory | Session only |
+| Deploy | Lambda / Fly.io / Docker / one-click | "figure it out" |
 
-### API
+---
+
+## Features
+
+- **Voice-First** — Push-to-talk microphone UI with speech-to-text and auto-TTS response. Talk to your AI, don't type.
+- **Multi-Model** — GPT-4o, Claude Sonnet/Opus, Gemini Flash/Pro. Automatic model selection per channel, or pick your own.
+- **Multi-Channel** — Web, LINE, Telegram, Facebook Messenger. One conversation synced across all channels with `/link`.
+- **MCP Tools** — Web search, weather, calculator, page fetch, and custom tool calling. The agent decides when to use tools.
+- **Long-Term Memory** — OpenClaw-inspired daily logs and long-term memory stored in DynamoDB, injected into every conversation.
+- **Serverless Rust** — Compiled to ARM64, runs on AWS Lambda with sub-50ms cold starts. Handles 1,000+ concurrent sessions.
+
+---
+
+## Quick Start
+
+### Chat via API (no auth required)
+
 ```bash
 curl -X POST https://chatweb.ai/api/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello!", "session_id": "my-session"}'
+  -d '{"message": "Hello! What can you do?", "session_id": "my-session"}'
 ```
 
-## チャネル同期
+### Stream responses (SSE)
 
-どのチャネルでも同じ会話を継続できます:
+```bash
+curl -N https://chatweb.ai/api/v1/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Write me a haiku about Rust", "session_id": "my-session"}'
+```
 
-### 方法1: セッションID送信（簡単）
-1. Webチャット画面のセッションID（`webchat:xxxx-xxxx-...`）をコピー
-2. LINEまたはTelegramにそのIDを送信 → 自動連携
+### Try it on every channel
 
-### 方法2: リンクコード
-1. 任意のチャネルで `/link` と送信 → 6桁コード生成
-2. 別チャネルで `/link CODE` と送信 → 会話が統合
+| Channel | Link |
+|---------|------|
+| Web | [chatweb.ai](https://chatweb.ai) |
+| LINE | [@619jcqqh](https://line.me/R/ti/p/@619jcqqh) |
+| Telegram | [@chatweb_ai_bot](https://t.me/chatweb_ai_bot) |
 
-### 方法3: ディープリンク
-Web画面のLINE/Telegramボタンをタップ → 自動連携
+---
 
-## アーキテクチャ
+## Architecture
 
 ```
-Web / LINE / Telegram
-        |
+ Web  LINE  Telegram  Facebook
+  |     |      |         |
+  +-----+------+---------+
+         |
    API Gateway (chatweb.ai)
-        |
-   AWS Lambda (Rust ARM64)
-        |
-   +----+----+
-   |         |
-DynamoDB   DynamoDB
-(sessions) (config/links)
+         |
+   AWS Lambda (Rust, ARM64)
+         |
+   +-----+-----+-----+
+   |           |           |
+DynamoDB    LLM APIs    Tools
+sessions    Anthropic   web_search
+users       OpenAI      calculator
+memory      Google      web_fetch
 ```
 
-## 料金
+**CI/CD Pipeline:** Push to `main` &rarr; Test &rarr; Build &rarr; Canary 10% &rarr; Production 100%
 
-| プラン | 価格 | 内容 |
-|--------|------|------|
-| Free | $0/月 | 1,000クレジット, GPT-4o-mini, Gemini Flash |
-| Starter | $9/月 | 25,000クレジット, + GPT-4o, Claude Sonnet |
-| Pro | $29/月 | 300,000クレジット, + Claude Opus, 全モデル |
+---
 
-クーポンコード `LAUNCH2026` で Starter プラン初月無料
+## Self-Hosting
 
-## デプロイ
+### One-Click Deploy
 
-### ワンクリックデプロイ
-
-| プラットフォーム | コマンド / リンク |
-|---------|-----------|
+| Platform | |
+|----------|---|
 | **Railway** | [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/nanobot) |
 | **Render** | [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/yukihamada/nanobot) |
 | **Koyeb** | [![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=git&repository=yukihamada/nanobot) |
-| **Docker** | `docker run -p 3000:3000 ghcr.io/yukihamada/nanobot` |
-| **RunPod** | `runpodctl deploy --gpu 0 --image ghcr.io/yukihamada/nanobot` |
 
-### AWS Lambda
+### Docker
 
 ```bash
-brew install zig
-cargo install cargo-zigbuild
+docker run -p 3000:3000 \
+  -e ANTHROPIC_API_KEY=sk-... \
+  ghcr.io/yukihamada/nanobot
+```
+
+### AWS Lambda (ARM64)
+
+```bash
+brew install zig && cargo install cargo-zigbuild
 rustup target add aarch64-unknown-linux-gnu
 
-# ビルド
-RUSTUP_TOOLCHAIN=stable cargo zigbuild \
+cargo zigbuild \
   --manifest-path crates/nanobot-lambda/Cargo.toml \
   --release --target aarch64-unknown-linux-gnu
 
-# デプロイ
 cp target/aarch64-unknown-linux-gnu/release/bootstrap ./bootstrap
 zip -j lambda.zip bootstrap
 aws lambda update-function-code --function-name nanobot --zip-file fileb://lambda.zip
@@ -108,71 +128,113 @@ aws lambda update-function-code --function-name nanobot --zip-file fileb://lambd
 ### Fly.io
 
 ```bash
-fly launch --no-deploy
-fly deploy
+fly launch --no-deploy && fly deploy
 ```
 
-### ローカル開発
+### Local Development
 
 ```bash
 cargo run -- gateway --http --http-port 3000
-# http://localhost:3000 でアクセス
+# Open http://localhost:3000
 ```
 
-## インフラ構成
+---
 
-| コンポーネント | サービス | リージョン | 冗長化 |
-|------------|---------|---------|--------|
-| Compute | AWS Lambda (ARM64 Graviton2) | ap-northeast-1 (東京) | 自動スケーリング (1,000+ 同時実行) |
-| Database | Amazon DynamoDB | ap-northeast-1 (東京) | 3-AZ レプリケーション |
-| API Gateway | Amazon API Gateway | ap-northeast-1 (東京) | Multi-AZ, 自動フェイルオーバー |
-| Backup Compute | Fly.io | nrt (成田) | Warm standby |
-| DNS / CDN | Cloudflare | Global Edge | グローバル分散 |
-| CI/CD | GitHub Actions | - | Test → Build → Canary 10% → Production 100% |
-| 決済 | Stripe | - | PCI DSS準拠 |
+## Channel Sync
 
-## 開発
+Conversations stay in sync across all channels:
 
-```bash
-cargo test --all        # テスト実行
-cargo build             # デフォルトビルド
-cargo build --features saas  # SaaS機能付きビルド
-```
+1. **Session ID** — Copy your `webchat:xxxx-...` ID from the web UI and send it in LINE/Telegram to auto-link.
+2. **Link Code** — Send `/link` in any channel to get a 6-digit code. Send `/link CODE` in another channel to merge.
+3. **Deep Link** — Tap the LINE/Telegram button in the web UI for instant linking.
 
-## ディレクトリ構成
+---
+
+## API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/chat` | Send a message, get an AI response |
+| `POST` | `/api/v1/chat/stream` | SSE streaming response |
+| `POST` | `/api/v1/speech/synthesize` | Text-to-speech (MP3) |
+| `GET` | `/api/v1/sessions/{id}` | Get session with history |
+| `GET` | `/api/v1/sessions` | List sessions |
+| `DELETE` | `/api/v1/sessions/{id}` | Delete a session |
+| `GET` | `/api/v1/account/{id}` | User profile, plan, credits |
+| `GET` | `/api/v1/providers` | Available AI providers |
+| `GET` | `/api/v1/integrations` | Available tools and integrations |
+| `GET` | `/health` | Health check |
+
+Full API docs at [teai.io](https://teai.io).
+
+---
+
+## Project Structure
 
 ```
 crates/
-  nanobot-core/    # コアライブラリ（チャネル, AI, セッション, HTTP API）
-  nanobot-lambda/  # AWS Lambda ハンドラー
-infra/             # SAMテンプレート, デプロイスクリプト
-web/               # フロントエンド (index.html, pricing.html, etc.)
-src/               # ローカルサーバー (CLI)
-docs/              # プレスリリース等
+  nanobot-core/      Core library (channels, AI providers, sessions, HTTP API)
+  nanobot-lambda/    AWS Lambda handler
+infra/               SAM templates, deploy scripts
+web/                 Frontend (index.html, pricing.html, etc.)
+src/                 Local server CLI
+tests/               Integration tests
 ```
 
-## API エンドポイント
+---
 
-| Method | Path | 説明 |
-|--------|------|------|
-| POST | `/api/v1/chat` | AIチャット（クレジット消費あり） |
-| GET | `/api/v1/sessions/{id}` | セッション取得（リンク解決対応） |
-| GET | `/api/v1/sessions` | セッション一覧 |
-| DELETE | `/api/v1/sessions/{id}` | セッション削除 |
-| GET | `/api/v1/account/{id}` | ユーザープロファイル（プラン・クレジット残高） |
-| GET | `/api/v1/usage` | 利用状況（クレジット消費量） |
-| GET | `/api/v1/providers` | 利用可能なAIプロバイダー一覧 |
-| GET | `/api/v1/integrations` | 外部API連携一覧（ツール定義含む） |
-| POST | `/api/v1/billing/checkout` | Stripeチェックアウト |
-| GET | `/api/v1/billing/portal` | Stripe課金ポータル |
-| POST | `/api/v1/coupon/validate` | クーポンコード検証 |
-| POST | `/webhooks/line` | LINE Webhook |
-| POST | `/webhooks/telegram` | Telegram Webhook |
-| POST | `/webhooks/stripe` | Stripe Webhook（プラン更新・クレジットリセット） |
-| GET | `/health` | ヘルスチェック |
-| GET | `/status` | サービスステータスページ |
-| GET | `/og.svg` | OGP画像（SVG） |
+## Pricing
 
-## ライセンス
+| Plan | Price | What you get |
+|------|-------|--------------|
+| **Free** | $0/mo | 1,000 credits, GPT-4o-mini, Gemini Flash |
+| **Starter** | $9/mo | 25,000 credits + GPT-4o, Claude Sonnet |
+| **Pro** | $29/mo | 300,000 credits + Claude Opus, all models |
 
-MIT
+Use coupon code `LAUNCH2026` for a free first month on Starter.
+
+---
+
+## Ecosystem
+
+| Product | Description | Link |
+|---------|-------------|------|
+| **chatweb.ai** | Consumer AI assistant (Web, LINE, Telegram) | [chatweb.ai](https://chatweb.ai) |
+| **teai.io** | Developer platform and API | [teai.io](https://teai.io) |
+| **ElioChat** | Offline-capable iOS AI companion | [App Store](https://apps.apple.com/app/eliochat/id6742071881) |
+
+---
+
+## Contributing
+
+Contributions are welcome! Here's how to get started:
+
+```bash
+git clone https://github.com/yukihamada/nanobot.git
+cd nanobot
+cargo test --all
+cargo run -- gateway --http --http-port 3000
+```
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feat/my-feature`)
+3. Write tests for your changes
+4. Submit a pull request
+
+Please open an issue first for large changes so we can discuss the approach.
+
+---
+
+## License
+
+[MIT](LICENSE) -- Copyright (c) 2025-2026 nanobot contributors
+
+---
+
+<div align="center">
+
+**If nanobot helps you, consider giving it a star!**
+
+[![Star History Chart](https://api.star-history.com/svg?repos=yukihamada/nanobot&type=Date)](https://star-history.com/#yukihamada/nanobot&Date)
+
+</div>

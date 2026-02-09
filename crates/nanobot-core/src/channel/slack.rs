@@ -34,7 +34,7 @@ impl SlackChannel {
     async fn get_ws_url(&self) -> anyhow::Result<String> {
         let resp: serde_json::Value = self
             .client
-            .post(format!("{}/apps.connections.open", SLACK_API_BASE))
+            .post(format!("{SLACK_API_BASE}/apps.connections.open"))
             .header("Authorization", format!("Bearer {}", self.config.app_token))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .send()
@@ -47,7 +47,7 @@ impl SlackChannel {
                 .get("error")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
-            return Err(anyhow::anyhow!("Slack connections.open failed: {}", err));
+            return Err(anyhow::anyhow!("Slack connections.open failed: {err}"));
         }
 
         resp.get("url")
@@ -154,7 +154,7 @@ impl SlackChannel {
 
     /// Send a message via Slack Web API chat.postMessage.
     async fn post_message(&self, channel: &str, text: &str) -> anyhow::Result<()> {
-        let url = format!("{}/chat.postMessage", SLACK_API_BASE);
+        let url = format!("{SLACK_API_BASE}/chat.postMessage");
 
         for _attempt in 0..3 {
             let resp = self
@@ -186,7 +186,7 @@ impl SlackChannel {
                     .get("error")
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown");
-                return Err(anyhow::anyhow!("Slack chat.postMessage error: {}", err));
+                return Err(anyhow::anyhow!("Slack chat.postMessage error: {err}"));
             }
             return Ok(());
         }

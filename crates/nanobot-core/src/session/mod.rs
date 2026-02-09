@@ -146,7 +146,7 @@ mod tests {
     fn test_session_get_history() {
         let mut session = Session::new("test");
         for i in 0..10 {
-            session.add_message("user", &format!("msg {}", i));
+            session.add_message("user", &format!("msg {i}"));
         }
 
         let history = session.get_history(3);

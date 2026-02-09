@@ -48,7 +48,7 @@ impl ContextBuilder {
         // Memory context
         let memory = self.memory.get_memory_context();
         if !memory.is_empty() {
-            parts.push(format!("# Memory\n\n{}", memory));
+            parts.push(format!("# Memory\n\n{memory}"));
         }
 
         // Skills - progressive loading
@@ -56,7 +56,7 @@ impl ContextBuilder {
         if !always_skills.is_empty() {
             let content = self.skills.load_skills_for_context(&always_skills);
             if !content.is_empty() {
-                parts.push(format!("# Active Skills\n\n{}", content));
+                parts.push(format!("# Active Skills\n\n{content}"));
             }
         }
 
@@ -66,8 +66,7 @@ impl ContextBuilder {
                 "# Skills\n\n\
                 The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.\n\
                 Skills with available=\"false\" need dependencies installed first - you can try installing them with apt/brew.\n\n\
-                {}",
-                summary
+                {summary}"
             ));
         }
 
@@ -127,7 +126,7 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"#
             let file_path = self.workspace.join(filename);
             if file_path.exists() {
                 if let Ok(content) = std::fs::read_to_string(&file_path) {
-                    parts.push(format!("## {}\n\n{}", filename, content));
+                    parts.push(format!("## {filename}\n\n{content}"));
                 }
             }
         }
@@ -149,8 +148,7 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"#
         let mut system_prompt = self.build_system_prompt();
         if let (Some(ch), Some(id)) = (channel, chat_id) {
             system_prompt.push_str(&format!(
-                "\n\n## Current Session\nChannel: {}\nChat ID: {}",
-                ch, id
+                "\n\n## Current Session\nChannel: {ch}\nChat ID: {id}"
             ));
         }
         messages.push(Message::system(system_prompt));

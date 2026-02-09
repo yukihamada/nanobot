@@ -75,13 +75,13 @@ impl TelegramChannel {
 
     /// Build a Telegram API URL from a token and method name.
     fn api_url_with_token(token: &str, method: &str) -> String {
-        format!("https://api.telegram.org/bot{}/{}", token, method)
+        format!("https://api.telegram.org/bot{token}/{method}")
     }
 
     async fn get_updates(&self, offset: i64) -> anyhow::Result<Vec<serde_json::Value>> {
         let response: serde_json::Value = self
             .client
-            .post(&self.api_url("getUpdates"))
+            .post(self.api_url("getUpdates"))
             .json(&json!({
                 "offset": offset,
                 "timeout": 30,
@@ -213,7 +213,7 @@ impl TelegramChannel {
         let sender_id = if username.is_empty() {
             user_id.to_string()
         } else {
-            format!("{}|{}", user_id, username)
+            format!("{user_id}|{username}")
         };
 
         if !is_allowed(&sender_id, &self.config.allow_from) {
@@ -229,7 +229,7 @@ impl TelegramChannel {
 
         debug!("Telegram message from {}: {}...", sender_id, &text[..text.len().min(50)]);
 
-        let msg = InboundMessage::new("telegram", &sender_id, &chat_id.to_string(), text);
+        let msg = InboundMessage::new("telegram", &sender_id, chat_id.to_string(), text);
         self.inbound_tx.send(msg).await?;
 
         Ok(())

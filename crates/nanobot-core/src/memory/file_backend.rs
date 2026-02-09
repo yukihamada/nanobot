@@ -41,7 +41,7 @@ impl MemoryBackend for FileMemoryBackend {
         let path = self.today_file();
         let new_content = if path.exists() {
             let existing = std::fs::read_to_string(&path).unwrap_or_default();
-            format!("{}\n{}", existing, content)
+            format!("{existing}\n{content}")
         } else {
             format!("# {}\n\n{}", today_date(), content)
         };
@@ -67,7 +67,7 @@ impl MemoryBackend for FileMemoryBackend {
         for i in 0..days {
             let date = today - chrono::Duration::days(i as i64);
             let date_str = date.format("%Y-%m-%d").to_string();
-            let file_path = self.memory_dir.join(format!("{}.md", date_str));
+            let file_path = self.memory_dir.join(format!("{date_str}.md"));
 
             if file_path.exists() {
                 if let Ok(content) = std::fs::read_to_string(&file_path) {
@@ -109,12 +109,12 @@ impl MemoryBackend for FileMemoryBackend {
 
         let long_term = self.read_long_term();
         if !long_term.is_empty() {
-            parts.push(format!("## Long-term Memory\n{}", long_term));
+            parts.push(format!("## Long-term Memory\n{long_term}"));
         }
 
         let today = self.read_today();
         if !today.is_empty() {
-            parts.push(format!("## Today's Notes\n{}", today));
+            parts.push(format!("## Today's Notes\n{today}"));
         }
 
         parts.join("\n\n")

@@ -114,10 +114,9 @@ impl Channel for FeishuChannel {
         let response = self
             .client
             .post(format!(
-                "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type={}",
-                receive_id_type
+                "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type={receive_id_type}"
             ))
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .json(&json!({
                 "receive_id": msg.chat_id,
                 "msg_type": "text",

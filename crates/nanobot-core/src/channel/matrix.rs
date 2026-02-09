@@ -177,7 +177,7 @@ impl MatrixChannel {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!("Matrix send error: {} {}", status, text));
+            return Err(anyhow::anyhow!("Matrix send error: {status} {text}"));
         }
 
         Ok(())

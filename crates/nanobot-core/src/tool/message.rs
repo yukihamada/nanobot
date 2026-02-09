@@ -83,8 +83,8 @@ impl Tool for MessageTool {
 
         let msg = OutboundMessage::new(&channel, &chat_id, &content);
         match self.outbound_tx.send(msg).await {
-            Ok(_) => format!("Message sent to {}:{}", channel, chat_id),
-            Err(e) => format!("Error sending message: {}", e),
+            Ok(_) => format!("Message sent to {channel}:{chat_id}"),
+            Err(e) => format!("Error sending message: {e}"),
         }
     }
 }

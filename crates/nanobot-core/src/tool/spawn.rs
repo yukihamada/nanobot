@@ -83,8 +83,7 @@ impl Tool for SpawnTool {
         (self.spawn_fn)(task, label.clone(), channel, chat_id);
 
         format!(
-            "Subagent [{}] started. I'll notify you when it completes.",
-            display_label
+            "Subagent [{display_label}] started. I'll notify you when it completes."
         )
     }
 }

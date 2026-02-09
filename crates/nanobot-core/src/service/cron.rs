@@ -60,7 +60,7 @@ impl CronSchedule {
                 // cron crate expects 6 or 7 fields, standard crontab has 5
                 // Prepend seconds field "0" if only 5 fields
                 let cron_expr = if expr.split_whitespace().count() == 5 {
-                    format!("0 {}", expr)
+                    format!("0 {expr}")
                 } else {
                     expr.clone()
                 };
@@ -102,6 +102,7 @@ fn default_payload_kind() -> String {
 /// Runtime state of a job.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct CronJobState {
     pub next_run_at_ms: Option<u64>,
     pub last_run_at_ms: Option<u64>,
@@ -109,16 +110,6 @@ pub struct CronJobState {
     pub last_error: Option<String>,
 }
 
-impl Default for CronJobState {
-    fn default() -> Self {
-        Self {
-            next_run_at_ms: None,
-            last_run_at_ms: None,
-            last_status: None,
-            last_error: None,
-        }
-    }
-}
 
 /// A scheduled job.
 #[derive(Debug, Clone, Serialize, Deserialize)]

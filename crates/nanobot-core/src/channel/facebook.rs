@@ -53,6 +53,12 @@ pub struct FacebookChannel {
     client: reqwest::Client,
 }
 
+impl Default for FacebookChannel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FacebookChannel {
     pub fn new() -> Self {
         Self {
@@ -74,8 +80,7 @@ impl FacebookChannel {
         text: &str,
     ) -> anyhow::Result<()> {
         let url = format!(
-            "https://graph.facebook.com/v21.0/me/messages?access_token={}",
-            page_access_token
+            "https://graph.facebook.com/v21.0/me/messages?access_token={page_access_token}"
         );
 
         let response = client
@@ -92,7 +97,7 @@ impl FacebookChannel {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             error!("Facebook Send API error {}: {}", status, body);
-            anyhow::bail!("Facebook Send API returned {}", status);
+            anyhow::bail!("Facebook Send API returned {status}");
         }
 
         Ok(())

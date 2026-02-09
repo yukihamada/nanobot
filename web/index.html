@@ -1895,6 +1895,13 @@
       footer { padding: 20px 16px; font-size: 11px; line-height: 2; }
     }
   </style>
+  <!-- PostHog Analytics (enable by replacing YOUR_PROJECT_KEY) -->
+  <!--
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('YOUR_PROJECT_KEY',{api_host:'https://us.i.posthog.com',person_profiles:'identified_only'});
+  </script>
+  -->
 </head>
 <body>
   <nav>
@@ -2235,6 +2242,12 @@
         <input type="email" class="auth-input" id="login-email" placeholder="Email" onkeydown="if(event.key==='Enter')emailAuth()">
         <button class="auth-submit" id="email-auth-btn" onclick="emailAuth()">メールでログイン</button>
       </div>
+      <div id="auth-form-verify" style="display:none;">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:8px;" id="verify-hint">認証コードをメールに送信しました</p>
+        <input type="text" class="auth-input" id="verify-code" placeholder="6桁の認証コード" maxlength="6" inputmode="numeric" pattern="[0-9]*" onkeydown="if(event.key==='Enter')verifyCode()" style="text-align:center;letter-spacing:6px;font-size:20px;">
+        <button class="auth-submit" onclick="verifyCode()">認証する</button>
+        <button class="auth-submit" style="background:transparent;color:var(--muted);margin-top:4px;" onclick="showEmailForm()">戻る</button>
+      </div>
       <div class="auth-divider"><span>or</span></div>
       <button class="auth-google-btn" onclick="googleLogin()">
         <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
@@ -2247,6 +2260,11 @@
   <div class="modal-overlay" id="modal" onclick="closeModal(event)" style="z-index:300;">
     <div class="modal" id="modal-content">
       <h3 id="modal-title"></h3>
+      <div id="modal-steps" style="display:flex;justify-content:center;gap:8px;margin:8px 0 12px;font-size:12px;color:var(--muted);">
+        <span style="background:var(--accent);color:#fff;border-radius:12px;padding:2px 10px;">1. QR</span>
+        <span style="opacity:.5;border-radius:12px;padding:2px 10px;border:1px solid var(--border);">2. 送信</span>
+        <span style="opacity:.5;border-radius:12px;padding:2px 10px;border:1px solid var(--border);">3. 完了</span>
+      </div>
       <p id="modal-desc"></p>
       <div class="qr-wrapper">
         <div class="qr-spinner" id="qr-spinner"></div>
@@ -2280,7 +2298,9 @@
     </div>
   </div>
 
-  <!-- App Mode Container (shown when authenticated) -->
+  </main>
+
+  <!-- App Mode Container (shown when authenticated, OUTSIDE main so display:none doesn't hide it) -->
   <div class="app-container" id="app-container">
     <div class="app-sidebar-backdrop" id="app-sidebar-backdrop" onclick="document.getElementById('app-sidebar').classList.remove('open');this.classList.remove('show');"></div>
     <div class="app-sidebar" id="app-sidebar">
@@ -2336,9 +2356,12 @@
           </button>
         </div>
         <input type="hidden" id="app-agent-select" value="auto">
+        <label id="multi-model-toggle" style="display:none;font-size:11px;color:var(--muted);cursor:pointer;user-select:none;margin-top:4px;text-align:right;">
+          <input type="checkbox" id="multi-model-check" style="vertical-align:middle;margin-right:4px;">Multi-Model Race
+        </label>
       </div>
     </div>
-  </main>
+  </div>
 
   <footer>
     <a href="/pricing" id="footer-pricing">Pricing</a> &middot;
@@ -3146,17 +3169,9 @@
       return 'https://teams.microsoft.com/l/app/chatweb-ai';
     }
     function openChannelLink(ch) {
-      const l = document.documentElement.lang || 'ja';
       const c = CHANNELS[ch];
       if (!c) return;
-      const t = c[l] || c.ja;
-      // Confirm before opening
-      const msg = l === 'ja'
-        ? t.title + 'しますか？\n\n' + t.desc
-        : t.title + '?\n\n' + t.desc;
-      if (confirm(msg)) {
-        showModal(ch);
-      }
+      showModal(ch);
     }
 
     // Agent selector (always auto)
@@ -3274,6 +3289,16 @@
       const t = c[l] || c.ja;
       const deepLink = getDeepLink(ch);
       document.getElementById('modal-title').textContent = t.title;
+      // Update step labels based on locale
+      const steps = document.getElementById('modal-steps');
+      if (steps) {
+        const s = l === 'ja'
+          ? ['1. QRを読む', '2. メッセージ送信', '3. 連携完了']
+          : ['1. Scan QR', '2. Send message', '3. Linked'];
+        steps.innerHTML = '<span style="background:var(--accent);color:#fff;border-radius:12px;padding:2px 10px;">' + s[0] + '</span>'
+          + '<span style="opacity:.5;border-radius:12px;padding:2px 10px;border:1px solid var(--border);">' + s[1] + '</span>'
+          + '<span style="opacity:.5;border-radius:12px;padding:2px 10px;border:1px solid var(--border);">' + s[2] + '</span>';
+      }
       document.getElementById('modal-desc').textContent = t.desc;
       const qrImg = document.getElementById('modal-qr');
       const qrSpinner = document.getElementById('qr-spinner');
@@ -3317,17 +3342,28 @@
       el.style.display = '';
     }
 
+    let pendingVerifyEmail = '';
+
     async function emailAuth() {
       const email = document.getElementById('login-email').value.trim();
       if (!email) return showAuthError('メールアドレスを入力してください');
       try {
+        document.getElementById('email-auth-btn').disabled = true;
+        document.getElementById('email-auth-btn').textContent = '送信中...';
         const r = await fetch(API + '/api/v1/auth/email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, session_id: webSessionId }),
         });
         const d = await r.json();
-        if (d.ok) {
+        if (d.ok && d.pending_verification) {
+          // Show verification code input
+          pendingVerifyEmail = email;
+          document.getElementById('auth-form-email').style.display = 'none';
+          document.getElementById('auth-form-verify').style.display = '';
+          document.getElementById('auth-error').style.display = 'none';
+          document.getElementById('verify-code').focus();
+        } else if (d.ok) {
           localStorage.setItem('authToken', d.token);
           authToken = d.token;
           closeAuthModal();
@@ -3336,6 +3372,39 @@
           showAuthError(d.error || 'Login failed');
         }
       } catch(e) { showAuthError('Network error'); }
+      finally {
+        document.getElementById('email-auth-btn').disabled = false;
+        document.getElementById('email-auth-btn').textContent = 'メールでログイン';
+      }
+    }
+
+    async function verifyCode() {
+      const code = document.getElementById('verify-code').value.trim();
+      if (!code || code.length !== 6) return showAuthError('6桁の認証コードを入力してください');
+      try {
+        const r = await fetch(API + '/api/v1/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: pendingVerifyEmail, code, session_id: webSessionId }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          localStorage.setItem('authToken', d.token);
+          authToken = d.token;
+          closeAuthModal();
+          showEmailForm();
+          await checkAuth();
+        } else {
+          showAuthError(d.error || 'Verification failed');
+        }
+      } catch(e) { showAuthError('Network error'); }
+    }
+
+    function showEmailForm() {
+      document.getElementById('auth-form-email').style.display = '';
+      document.getElementById('auth-form-verify').style.display = 'none';
+      document.getElementById('verify-code').value = '';
+      pendingVerifyEmail = '';
     }
 
     function googleLogin() {
@@ -3380,6 +3449,11 @@
           // Show credits if available
           if (d.credits_remaining !== undefined) {
             updateCredits(d.credits_remaining);
+          }
+          // Show multi-model toggle for paid users
+          const mmToggle = document.getElementById('multi-model-toggle');
+          if (mmToggle && d.plan && d.plan !== 'free') {
+            mmToggle.style.display = '';
           }
           // Enter ChatGPT-like app mode
           enterAppMode();
@@ -3799,7 +3873,29 @@
         const agentSel = document.getElementById('app-agent-select').value;
         const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
 
-        // SSE streaming for real-time response
+        // Check multi-model mode
+        const multiModel = document.getElementById('multi-model-check')?.checked || false;
+
+        // SSE streaming for real-time response (disable SSE for multi-model — needs full response)
+        if (multiModel) {
+          const r = await fetch(API + '/api/v1/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msgToSend, session_id: webSessionId, channel: 'web', multi_model: true }),
+          });
+          const d = await r.json();
+          clearInterval(statusInterval);
+          thinking.remove();
+          let botMsg = d.response;
+          if (d.model_used) botMsg += '\n\n<small style="color:var(--muted);">Model: ' + d.model_used + (d.models_consulted ? ' (' + d.models_consulted.length + ' raced)' : '') + '</small>';
+          appAddMsg(botMsg, 'bot', d.agent || null, d.tools_used || null);
+          knownMsgCount += 2;
+          if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
+          autoPlayTTS(d.response);
+          appLoadConversations();
+          return;
+        }
+
         const r = await fetch(API + '/api/v1/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

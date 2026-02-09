@@ -83,7 +83,7 @@ impl std::str::FromStr for Plan {
             "starter" => Ok(Plan::Starter),
             "pro" => Ok(Plan::Pro),
             "enterprise" => Ok(Plan::Enterprise),
-            _ => Err(format!("Unknown plan: {}", s)),
+            _ => Err(format!("Unknown plan: {s}")),
         }
     }
 }
@@ -117,6 +117,17 @@ pub fn credit_rate(model: &str) -> CreditRate {
             input_per_1k: 30,
             output_per_1k: 90,
         }
+    } else if model_lower.contains("llama") || model_lower.contains("mixtral") || model_lower.contains("groq") {
+        // Groq: fast inference, low cost
+        CreditRate {
+            input_per_1k: 1,
+            output_per_1k: 2,
+        }
+    } else if model_lower.contains("kimi") || model_lower.contains("moonshot") {
+        CreditRate {
+            input_per_1k: 3,
+            output_per_1k: 9,
+        }
     } else {
         // Default rate
         CreditRate {
@@ -143,14 +154,14 @@ pub fn hash_api_key(key: &str) -> String {
     std::hash::Hash::hash(&key, &mut hasher);
     let hash = std::hash::Hasher::finish(&hasher);
     let mut s = String::new();
-    write!(s, "{:016x}", hash).ok();
+    write!(s, "{hash:016x}").ok();
     s
 }
 
 /// Generate a new API key with prefix.
 pub fn generate_api_key(prefix: &str) -> String {
     let random = uuid::Uuid::new_v4().to_string().replace('-', "");
-    format!("{}_{}", prefix, random)
+    format!("{prefix}_{random}")
 }
 
 #[cfg(test)]
