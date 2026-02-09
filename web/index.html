@@ -3154,9 +3154,16 @@
           URL.revokeObjectURL(url);
         };
 
-        demoAudio.play();
+        demoAudio.play().catch(function(e) {
+          console.warn('Demo TTS autoplay blocked:', e.message);
+          // Autoplay policy blocked — stop playing state
+          if (demoPlayingIdx === idx) {
+            demoPlayingIdx = -1;
+            if (btns[idx]) btns[idx].classList.remove('playing');
+          }
+        });
       } catch(e) {
-        // TTS failed — typewriter continues independently, no-op here
+        console.warn('Demo TTS fetch failed:', e.message);
       }
     }
 
@@ -3693,7 +3700,7 @@
           currentUser = d;
           document.getElementById('login-btn').style.display = 'none';
           document.getElementById('user-menu').style.display = '';
-          document.getElementById('user-display-name').textContent = d.display_name || d.email || 'User';
+          document.getElementById('user-display-name').textContent = d.display_name || 'User';
           document.getElementById('chat-login-overlay').classList.add('hidden');
           // Show credits if available
           if (d.credits_remaining !== undefined) {
@@ -3883,7 +3890,7 @@
       document.getElementById('sidebar-toggle').style.display = 'none';
       document.getElementById('sidebar').classList.remove('open');
       // Set user info in sidebar
-      const name = currentUser.display_name || currentUser.email || 'User';
+      const name = currentUser.display_name || 'User';
       document.getElementById('app-user-name').textContent = name;
       document.getElementById('app-user-avatar').textContent = name.charAt(0).toUpperCase();
       // Load conversations into app sidebar
