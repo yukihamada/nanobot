@@ -1645,29 +1645,42 @@
       border-color: var(--accent);
     }
 
-    /* Auto-TTS toggle */
-    .auto-tts-toggle {
-      display: inline-flex;
+    /* Settings modal */
+    .settings-modal { max-width: 420px; text-align: left; }
+    .settings-modal h3 { text-align: center; }
+    .settings-item {
+      display: flex;
       align-items: center;
-      gap: 4px;
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--muted);
+      justify-content: space-between;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .settings-item:last-child { border-bottom: none; }
+    .settings-item-info { flex: 1; }
+    .settings-item-label { font-size: 14px; font-weight: 600; color: var(--text); }
+    .settings-item-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .settings-toggle {
+      position: relative;
+      width: 44px; height: 24px;
+      background: var(--border);
+      border-radius: 12px;
       cursor: pointer;
-      font-size: 12px;
-      padding: 3px 10px;
-      border-radius: 14px;
-      transition: all 0.2s;
-      user-select: none;
-      white-space: nowrap;
+      transition: background 0.2s;
+      flex-shrink: 0;
+      margin-left: 12px;
+      border: none;
     }
-    .auto-tts-toggle:hover { border-color: var(--accent); color: var(--text); }
-    .auto-tts-toggle.active {
-      background: rgba(99,102,241,0.15);
-      border-color: var(--accent);
-      color: var(--accent);
+    .settings-toggle.active { background: var(--accent); }
+    .settings-toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 20px; height: 20px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
     }
-    .auto-tts-toggle .tts-icon { font-size: 14px; }
+    .settings-toggle.active::after { transform: translateX(20px); }
 
     /* Credit display */
     .credit-display {
@@ -2554,6 +2567,73 @@
     </div>
   </div>
 
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
+    <div class="modal settings-modal" onclick="event.stopPropagation()">
+      <h3 id="settings-modal-title">Settings</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;" id="settings-modal-desc">chatweb.aiの動作をカスタマイズ</p>
+      <div class="settings-item">
+        <div class="settings-item-info">
+          <div class="settings-item-label" id="settings-tts-label">&#128266; 自動読み上げ</div>
+          <div class="settings-item-desc" id="settings-tts-desc">AIの応答を自動で音声再生します</div>
+        </div>
+        <button class="settings-toggle active" id="settings-tts-toggle" onclick="toggleAutoTTS()"></button>
+      </div>
+      <div class="settings-item">
+        <div class="settings-item-info">
+          <div class="settings-item-label" id="settings-explore-label">&#128269; Explore</div>
+          <div class="settings-item-desc" id="settings-explore-desc">複数のAIモデルに同時に質問して比較</div>
+        </div>
+        <button class="settings-toggle" id="settings-explore-toggle" onclick="toggleExploreSetting()"></button>
+      </div>
+      <button class="close-btn" onclick="document.getElementById('settings-modal').classList.remove('show')">Close</button>
+    </div>
+  </div>
+
+  <!-- Top Up Modal -->
+  <div class="modal-overlay" id="topup-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
+    <div class="modal settings-modal" onclick="event.stopPropagation()">
+      <h3 id="topup-modal-title">クレジットをチャージ</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:16px;" id="topup-modal-desc">お好きな方法でクレジットを追加できます</p>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button onclick="startStripeCheckout('starter')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:24px;">💳</span>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);">Starter — $5/mo</div>
+            <div style="font-size:12px;color:var(--muted);">5,000 credits + tools</div>
+          </div>
+          <span style="font-size:12px;color:var(--accent);">Stripe ›</span>
+        </button>
+        <button onclick="startStripeCheckout('pro')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border:2px solid var(--accent);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:24px;">⚡</span>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:700;color:var(--text);">Pro — $20/mo</div>
+            <div style="font-size:12px;color:var(--muted);">25,000 credits + priority</div>
+          </div>
+          <span style="font-size:12px;color:var(--accent);">Stripe ›</span>
+        </button>
+        <button onclick="startStripeCheckout('enterprise')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:24px;">🏢</span>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);">Enterprise — $100/mo</div>
+            <div style="font-size:12px;color:var(--muted);">Unlimited credits + SLA</div>
+          </div>
+          <span style="font-size:12px;color:var(--accent);">Stripe ›</span>
+        </button>
+        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--muted);font-size:11px;"><hr style="flex:1;border:none;border-top:1px solid var(--border);"><span>or</span><hr style="flex:1;border:none;border-top:1px solid var(--border);"></div>
+        <button onclick="document.getElementById('topup-modal').classList.remove('show');showCryptoTopup()" style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:24px;">◆</span>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);">Crypto</div>
+            <div style="font-size:12px;color:var(--muted);">ETH / MATIC / Base</div>
+          </div>
+          <span style="font-size:12px;color:#8b5cf6;">MetaMask ›</span>
+        </button>
+      </div>
+      <button class="close-btn" onclick="document.getElementById('topup-modal').classList.remove('show')">Close</button>
+    </div>
+  </div>
+
   <!-- App Mode Container (shown when authenticated, OUTSIDE main so display:none doesn't hide it) -->
   <div class="app-container" id="app-container">
     <div class="app-sidebar-backdrop" id="app-sidebar-backdrop" onclick="document.getElementById('app-sidebar').classList.remove('open');this.classList.remove('show');"></div>
@@ -2592,12 +2672,12 @@
       <div class="app-sidebar-links">
         <button class="app-sidebar-link" onclick="openApiKeysModal()" id="app-link-apikeys">API Keys</button>
         <a class="app-sidebar-link" href="/docs" id="app-link-docs">API Docs</a>
-        <a class="app-sidebar-link" href="/settings" id="app-link-settings">Settings</a>
+        <button class="app-sidebar-link" onclick="openSettingsModal()" id="app-link-settings">Settings</button>
       </div>
       <div class="app-sidebar-footer">
         <div class="credit-display" id="credit-display" style="display:none;">
           <span>&#9889;</span> <span class="credit-count" id="credit-count">--</span> <span style="font-size:11px;">credits</span>
-          <button onclick="showCryptoTopup()" style="margin-left:8px;background:linear-gradient(135deg,#627eea,#8b5cf6);color:#fff;border:none;border-radius:12px;padding:2px 10px;font-size:11px;cursor:pointer;white-space:nowrap;" title="仮想通貨でチャージ">&#9830; Crypto</button>
+          <button onclick="showTopupModal()" style="margin-left:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:12px;padding:2px 10px;font-size:11px;cursor:pointer;white-space:nowrap;" title="クレジットをチャージ">+ Top Up</button>
         </div>
         <div class="app-sidebar-user" onclick="logout()">
           <div class="app-sidebar-user-avatar" id="app-user-avatar"></div>
@@ -2629,17 +2709,8 @@
           </button>
         </div>
         <input type="hidden" id="app-agent-select" value="auto">
-        <div style="display:flex;gap:12px;justify-content:flex-end;align-items:center;margin-top:4px;">
-          <button class="auto-tts-toggle active" id="auto-tts-btn" onclick="toggleAutoTTS()" title="自動読み上げ ON/OFF">
-            <span class="tts-icon">&#128266;</span><span id="auto-tts-label">自動読み上げ</span>
-          </button>
-          <label id="multi-model-toggle" style="display:none;font-size:11px;color:var(--muted);cursor:pointer;user-select:none;">
-            <input type="checkbox" id="multi-model-check" style="vertical-align:middle;margin-right:4px;">Multi-Model Race
-          </label>
-          <label id="explore-toggle" style="font-size:11px;color:var(--muted);cursor:pointer;user-select:none;">
-            <input type="checkbox" id="explore-check" style="vertical-align:middle;margin-right:4px;">Explore
-          </label>
-        </div>
+        <input type="checkbox" id="explore-check" style="display:none;">
+        <input type="checkbox" id="multi-model-check" style="display:none;">
       </div>
     </div>
   </div>
@@ -4828,18 +4899,42 @@
     function toggleAutoTTS() {
       autoTtsEnabled = !autoTtsEnabled;
       localStorage.setItem('autoTtsEnabled', autoTtsEnabled);
-      const btn = document.getElementById('auto-tts-btn');
-      if (btn) {
-        btn.classList.toggle('active', autoTtsEnabled);
-      }
-      // If turning off, stop all TTS
+      const btn = document.getElementById('settings-tts-toggle');
+      if (btn) btn.classList.toggle('active', autoTtsEnabled);
       if (!autoTtsEnabled) stopTTS();
     }
 
-    // Initialize toggle state on load
-    (function initAutoTtsToggle() {
-      const btn = document.getElementById('auto-tts-btn');
+    function toggleExploreSetting() {
+      const chk = document.getElementById('explore-check');
+      if (chk) chk.checked = !chk.checked;
+      const btn = document.getElementById('settings-explore-toggle');
+      if (btn) btn.classList.toggle('active', chk && chk.checked);
+      localStorage.setItem('exploreEnabled', chk && chk.checked ? 'true' : 'false');
+    }
+
+    function openSettingsModal() {
+      const l = document.documentElement.lang || 'ja';
+      document.getElementById('settings-modal-title').textContent = l === 'ja' ? '設定' : 'Settings';
+      document.getElementById('settings-modal-desc').textContent = l === 'ja' ? 'chatweb.aiの動作をカスタマイズ' : 'Customize chatweb.ai behavior';
+      document.getElementById('settings-tts-label').innerHTML = '&#128266; ' + (l === 'ja' ? '自動読み上げ' : 'Auto Read Aloud');
+      document.getElementById('settings-tts-desc').textContent = l === 'ja' ? 'AIの応答を自動で音声再生します' : 'Automatically play AI responses as speech';
+      document.getElementById('settings-explore-label').innerHTML = '&#128269; Explore';
+      document.getElementById('settings-explore-desc').textContent = l === 'ja' ? '複数のAIモデルに同時に質問して比較' : 'Ask multiple AI models simultaneously and compare';
+      // sync toggle states
+      document.getElementById('settings-tts-toggle').classList.toggle('active', autoTtsEnabled);
+      const exploreOn = document.getElementById('explore-check')?.checked || false;
+      document.getElementById('settings-explore-toggle').classList.toggle('active', exploreOn);
+      document.getElementById('settings-modal').classList.add('show');
+    }
+
+    // Initialize settings on load
+    (function initSettings() {
+      const btn = document.getElementById('settings-tts-toggle');
       if (btn) btn.classList.toggle('active', autoTtsEnabled);
+      // Restore explore state
+      const exploreStored = localStorage.getItem('exploreEnabled') === 'true';
+      const chk = document.getElementById('explore-check');
+      if (chk) chk.checked = exploreStored;
     })();
 
     // Auto-play TTS on every bot response (when enabled)
@@ -5064,6 +5159,35 @@
           updateCredits(d.credits_remaining);
         }
       } catch(e) { /* ignore */ }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Top-up modal + Stripe Checkout
+    // ---------------------------------------------------------------------------
+    function showTopupModal() {
+      const l = document.documentElement.lang || 'ja';
+      document.getElementById('topup-modal-title').textContent = l === 'ja' ? 'クレジットをチャージ' : 'Top Up Credits';
+      document.getElementById('topup-modal-desc').textContent = l === 'ja' ? 'お好きな方法でクレジットを追加できます' : 'Add credits using your preferred payment method';
+      document.getElementById('topup-modal').classList.add('show');
+    }
+
+    async function startStripeCheckout(plan) {
+      try {
+        const r = await fetch(API + '/api/v1/billing/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (authToken || '') },
+          body: JSON.stringify({ plan }),
+        });
+        const d = await r.json();
+        if (d.checkout_url) {
+          window.open(d.checkout_url, '_blank');
+          document.getElementById('topup-modal').classList.remove('show');
+        } else if (d.error) {
+          alert(d.error);
+        }
+      } catch(e) {
+        alert('Error: ' + e.message);
+      }
     }
 
     // ---------------------------------------------------------------------------
