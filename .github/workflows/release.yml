@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+            method: native
+          - target: x86_64-apple-darwin
+            os: macos-13
+            method: native
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            method: zigbuild
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            method: native
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cargo-zigbuild
+        if: matrix.method == 'zigbuild'
+        run: |
+          pip3 install ziglang
+          cargo install cargo-zigbuild
+
+      - name: Build (native)
+        if: matrix.method == 'native'
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build (zigbuild)
+        if: matrix.method == 'zigbuild'
+        run: cargo zigbuild --release --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf nanobot-${{ matrix.target }}.tar.gz nanobot
+          shasum -a 256 nanobot-${{ matrix.target }}.tar.gz > nanobot-${{ matrix.target }}.tar.gz.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nanobot-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/nanobot-${{ matrix.target }}.tar.gz
+            target/${{ matrix.target }}/release/nanobot-${{ matrix.target }}.tar.gz.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect assets
+        run: |
+          mkdir -p release
+          find artifacts -name '*.tar.gz' -exec cp {} release/ \;
+          cd release
+          cat ../artifacts/*/nanobot-*.sha256 > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "nanobot ${{ github.ref_name }}" \
+            --generate-notes \
+            release/nanobot-*.tar.gz \
+            release/checksums.txt

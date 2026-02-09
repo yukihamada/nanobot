@@ -108,11 +108,19 @@ Parameters:
     NoEcho: true
     Description: Facebook webhook verify token
     Default: ''
+  LocalModelUrl:
+    Type: String
+    Description: URL to GGUF model file for local LLM fallback (S3 presigned or public)
+    Default: ''
+  LocalTokenizerUrl:
+    Type: String
+    Description: URL to tokenizer.json for local LLM fallback
+    Default: ''
 
 Globals:
   Function:
     Timeout: 120
-    MemorySize: 1024
+    MemorySize: 2048
 
 Resources:
   # ====== Lambda Function ======
@@ -150,6 +158,8 @@ Resources:
           TELEGRAM_WEBHOOK_SECRET: !Ref TelegramWebhookSecret
           FACEBOOK_PAGE_ACCESS_TOKEN: !Ref FacebookPageAccessToken
           FACEBOOK_VERIFY_TOKEN: !Ref FacebookVerifyToken
+          LOCAL_MODEL_URL: !Ref LocalModelUrl
+          LOCAL_TOKENIZER_URL: !Ref LocalTokenizerUrl
           DYNAMODB_SESSIONS_TABLE: !Ref SessionsTable
       Policies:
         - DynamoDBCrudPolicy:

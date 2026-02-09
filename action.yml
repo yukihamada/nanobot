@@ -1,0 +1,58 @@
+name: "nanobot CLI"
+description: "Install and run the chatweb.ai nanobot CLI in GitHub Actions"
+branding:
+  icon: "terminal"
+  color: "blue"
+
+inputs:
+  session-id:
+    description: "chatweb.ai session ID for authenticated access"
+    required: false
+  version:
+    description: "CLI version to install (default: latest)"
+    required: false
+    default: "latest"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Detect platform
+      id: platform
+      shell: bash
+      run: |
+        ARCH="$(uname -m)"
+        case "$ARCH" in
+          x86_64|amd64)   ARCH="x86_64"  ;;
+          aarch64|arm64)   ARCH="aarch64" ;;
+          *) echo "::error::Unsupported architecture: $ARCH"; exit 1 ;;
+        esac
+        echo "target=${ARCH}-unknown-linux-gnu" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve version
+      id: version
+      shell: bash
+      run: |
+        if [ "${{ inputs.version }}" = "latest" ]; then
+          VER=$(curl -fsSL "https://api.github.com/repos/yukihamada/nanobot/releases/latest" \
+            | grep '"tag_name"' | head -1 \
+            | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+        else
+          VER="${{ inputs.version }}"
+        fi
+        echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+    - name: Install nanobot
+      shell: bash
+      run: |
+        ASSET="nanobot-${{ steps.platform.outputs.target }}.tar.gz"
+        URL="https://github.com/yukihamada/nanobot/releases/download/${{ steps.version.outputs.version }}/${ASSET}"
+        echo "Downloading ${URL}..."
+        curl -fsSL "${URL}" -o "/tmp/${ASSET}"
+        sudo tar xzf "/tmp/${ASSET}" -C /usr/local/bin
+        chmod +x /usr/local/bin/nanobot
+        nanobot --version
+
+    - name: Set session
+      if: inputs.session-id != ''
+      shell: bash
+      run: echo "NANOBOT_SESSION_ID=${{ inputs.session-id }}" >> "$GITHUB_ENV"

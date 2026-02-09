@@ -78,6 +78,7 @@
   <a href="/" class="logo"><span>chat</span>web.ai <span style="color:var(--m);font-weight:400;font-size:14px;margin-left:8px">API Docs</span></a>
   <div class="nav-r">
     <a href="/">Chat</a>
+    <a href="/playground">Playground</a>
     <a href="/pricing" id="nav-pricing">Pricing</a>
     <a href="/comparison">Comparison</a>
     <div class="lang-sw">
@@ -95,12 +96,16 @@
     <a href="#errors" id="sn-errors">Errors</a>
 
     <h4 id="sn-cat-auth">Auth</h4>
+    <a href="#auth-register"><span class="method post">POST</span>/auth/register</a>
+    <a href="#auth-login"><span class="method post">POST</span>/auth/login</a>
     <a href="#auth-email"><span class="method post">POST</span>/auth/email</a>
+    <a href="#auth-verify"><span class="method post">POST</span>/auth/verify</a>
     <a href="#auth-google"><span class="method get">GET</span>/auth/google</a>
     <a href="#auth-me"><span class="method get">GET</span>/auth/me</a>
 
     <h4 id="sn-cat-chat">Chat</h4>
     <a href="#chat"><span class="method post">POST</span>/chat</a>
+    <a href="#chat-stream"><span class="method post">POST</span>/chat/stream</a>
 
     <h4 id="sn-cat-sessions">Sessions</h4>
     <a href="#sessions-list"><span class="method get">GET</span>/sessions</a>
@@ -112,6 +117,8 @@
     <a href="#conv-create"><span class="method post">POST</span>/conversations</a>
     <a href="#conv-msgs"><span class="method get">GET</span>/conversations/{id}/messages</a>
     <a href="#conv-delete"><span class="method delete">DEL</span>/conversations/{id}</a>
+    <a href="#conv-share"><span class="method post">POST</span>/share</a>
+    <a href="#conv-share-get"><span class="method get">GET</span>/shared/{hash}</a>
 
     <h4 id="sn-cat-settings">Settings</h4>
     <a href="#settings-get"><span class="method get">GET</span>/settings/{id}</a>
@@ -125,6 +132,15 @@
     <a href="#billing-checkout"><span class="method post">POST</span>/billing/checkout</a>
     <a href="#billing-portal"><span class="method get">GET</span>/billing/portal</a>
     <a href="#coupon-validate"><span class="method post">POST</span>/coupon/validate</a>
+    <a href="#coupon-redeem"><span class="method post">POST</span>/coupon/redeem</a>
+
+    <h4 id="sn-cat-speech">Speech</h4>
+    <a href="#speech-synthesize"><span class="method post">POST</span>/speech/synthesize</a>
+
+    <h4 id="sn-cat-apikeys">API Keys</h4>
+    <a href="#apikeys-list"><span class="method get">GET</span>/apikeys</a>
+    <a href="#apikeys-create"><span class="method post">POST</span>/apikeys</a>
+    <a href="#apikeys-delete"><span class="method delete">DEL</span>/apikeys/{id}</a>
 
     <h4 id="sn-cat-misc">Misc</h4>
     <a href="#providers"><span class="method get">GET</span>/providers</a>
@@ -132,6 +148,9 @@
     <a href="#integrations"><span class="method get">GET</span>/integrations</a>
     <a href="#devices"><span class="method get">GET</span>/devices</a>
     <a href="#health"><span class="method get">GET</span>/health</a>
+
+    <h4 id="sn-cat-mcp">MCP</h4>
+    <a href="#mcp"><span class="method post">POST</span>/mcp</a>
 
     <h4 id="sn-cat-webhooks">Webhooks</h4>
     <a href="#webhooks">LINE / Telegram / Stripe</a>
@@ -185,9 +204,52 @@ curl -H "Authorization: Bearer YOUR_TOKEN" https://api.chatweb.ai/api/v1/convers
     </div>
 
     <!-- ============ AUTH ============ -->
-    <div class="section" id="auth-email">
+    <div class="section" id="auth-register">
       <h2>Auth</h2>
 
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/auth/register</span></h3>
+        <div class="desc" data-ja="メール＋パスワードで新規ユーザー登録" data-en="Register a new user with email and password">メール＋パスワードで新規ユーザー登録</div>
+        <div class="params">
+          <h4>Request Body</h4>
+          <div class="param"><span class="param-name">email<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc">Email address</span></div>
+          <div class="param"><span class="param-name">password<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc" data-ja="パスワード（8〜128文字）" data-en="Password (8-128 characters)">パスワード（8〜128文字）</span></div>
+        </div>
+        <pre><code>// Request
+POST /api/v1/auth/register
+{"email": "user@example.com", "password": "mypassword123"}
+
+// Response 200
+{"ok": true, "token": "uuid-token", "user_id": "user:uuid", "email": "user@example.com"}
+
+// Error 409
+{"error": "Email already registered"}</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="auth-login">
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/auth/login</span></h3>
+        <div class="desc" data-ja="メール＋パスワードでログイン" data-en="Login with email and password">メール＋パスワードでログイン</div>
+        <div class="params">
+          <h4>Request Body</h4>
+          <div class="param"><span class="param-name">email<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc">Email address</span></div>
+          <div class="param"><span class="param-name">password<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc">Password</span></div>
+          <div class="param"><span class="param-name">session_id<span class="optional">?</span></span><span class="param-type">string</span><span class="param-desc" data-ja="紐付けるセッションID" data-en="Session ID to link">紐付けるセッションID</span></div>
+        </div>
+        <pre><code>// Request
+POST /api/v1/auth/login
+{"email": "user@example.com", "password": "mypassword123", "session_id": "webchat:abc123"}
+
+// Response 200
+{"ok": true, "token": "uuid-token", "user_id": "user:uuid", "email": "user@example.com"}
+
+// Error 401
+{"error": "Invalid email or password"}</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="auth-email">
       <div class="endpoint">
         <h3><span class="method post">POST</span><span class="path">/api/v1/auth/email</span></h3>
         <div class="desc" data-ja="メールアドレスでログイン・自動登録（パスワード不要）" data-en="Login or auto-register with email (no password required)">メールアドレスでログイン・自動登録（パスワード不要）</div>
@@ -236,6 +298,28 @@ Authorization: Bearer YOUR_TOKEN
       </div>
     </div>
 
+    <div class="section" id="auth-verify">
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/auth/verify</span></h3>
+        <div class="desc" data-ja="メール認証コード（6桁）を検証" data-en="Verify email with a 6-digit code">メール認証コード（6桁）を検証</div>
+        <div class="params">
+          <h4>Request Body</h4>
+          <div class="param"><span class="param-name">email<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc">Email address</span></div>
+          <div class="param"><span class="param-name">code<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc" data-ja="6桁の認証コード" data-en="6-digit verification code">6桁の認証コード</span></div>
+          <div class="param"><span class="param-name">session_id<span class="optional">?</span></span><span class="param-type">string</span><span class="param-desc" data-ja="紐付けるセッションID" data-en="Session ID to link">紐付けるセッションID</span></div>
+        </div>
+        <pre><code>// Request
+POST /api/v1/auth/verify
+{"email": "user@example.com", "code": "123456"}
+
+// Response 200
+{"ok": true, "token": "uuid-token", "user_id": "user:uuid"}
+
+// Error 400
+{"error": "Invalid verification code format"}</code></pre>
+      </div>
+    </div>
+
     <!-- ============ CHAT ============ -->
     <div class="section" id="chat">
       <h2>Chat</h2>
@@ -254,14 +338,34 @@ POST /api/v1/chat
 
 // Response 200
 {
-  "reply": "東京の現在の天気は晴れ、気温は15℃です。",
+  "response": "東京の現在の天気は晴れ、気温は15℃です。",
+  "session_id": "webchat:abc123",
   "agent": "researcher",
   "tools_used": ["weather"],
-  "session_id": "webchat:abc123",
-  "message_count": 5,
   "credits_used": 10,
-  "credits_remaining": 990
+  "credits_remaining": 990,
+  "model_used": "anthropic/claude-sonnet-4-5-20250929"
 }</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="chat-stream">
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/chat/stream</span></h3>
+        <div class="desc" data-ja="SSEストリーミングでAIの応答をリアルタイムに受信" data-en="Receive AI response in real-time via Server-Sent Events (SSE)">SSEストリーミングでAIの応答をリアルタイムに受信</div>
+        <div class="params">
+          <h4>Request Body</h4>
+          <div class="param"><span class="param-name">message<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc" data-ja="ユーザーのメッセージ（最大32,000文字）" data-en="User message (max 32,000 chars)">ユーザーのメッセージ（最大32,000文字）</span></div>
+          <div class="param"><span class="param-name">session_id<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc" data-ja="セッションID (例: webchat:uuid)" data-en="Session ID (e.g. webchat:uuid)">セッションID (例: webchat:uuid)</span></div>
+        </div>
+        <div class="params">
+          <h4>Response: <code>text/event-stream</code></h4>
+        </div>
+        <pre><code>// Each SSE event is a JSON object:
+data: {"type":"chunk","content":"東京の"}
+data: {"type":"chunk","content":"天気は"}
+data: {"type":"chunk","content":"晴れです。"}
+data: {"type":"done","content":"","credits_used":10,"credits_remaining":990,"model_used":"anthropic/claude-sonnet-4-5-20250929"}</code></pre>
       </div>
     </div>
 
@@ -335,6 +439,44 @@ POST /api/v1/chat
         <div class="desc" data-ja="会話を削除" data-en="Delete a conversation">会話を削除</div>
         <pre><code>// Response 200
 {"ok": true}</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="conv-share">
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/conversations/{id}/share</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="会話の共有リンクを生成" data-en="Generate a shareable link for a conversation">会話の共有リンクを生成</div>
+        <pre><code>// Response 200
+{"ok": true, "share_url": "https://chatweb.ai/c/aBcDeFgHiJ", "hash": "aBcDeFgHiJ"}
+
+// Already shared
+{"ok": true, "share_url": "https://chatweb.ai/c/aBcDeFgHiJ", "hash": "aBcDeFgHiJ", "existing": true}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <h3><span class="method delete">DELETE</span><span class="path">/api/v1/conversations/{id}/share</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="会話の共有リンクを無効化" data-en="Revoke the shared link for a conversation">会話の共有リンクを無効化</div>
+        <pre><code>// Response 200
+{"ok": true}</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="conv-share-get">
+      <div class="endpoint">
+        <h3><span class="method get">GET</span><span class="path">/api/v1/shared/{hash}</span><span class="badge badge-free">Public</span></h3>
+        <div class="desc" data-ja="共有された会話のメッセージを取得（認証不要）" data-en="Get messages from a shared conversation (no auth required)">共有された会話のメッセージを取得（認証不要）</div>
+        <pre><code>// Response 200
+{
+  "title": "東京の天気",
+  "messages": [
+    {"role": "user", "content": "東京の天気は？"},
+    {"role": "assistant", "content": "東京の現在の天気は晴れです。"}
+  ],
+  "shared_at": "2026-02-09T12:00:00Z"
+}
+
+// Error 404 (revoked or not found)
+{"error": "Shared conversation not found"}</code></pre>
       </div>
     </div>
 
@@ -457,6 +599,82 @@ POST /api/v1/settings/webchat:abc123
       </div>
     </div>
 
+    <div class="section" id="coupon-redeem">
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/coupon/redeem</span></h3>
+        <div class="desc" data-ja="クーポンを適用してクレジットを付与＋プランをアップグレード" data-en="Redeem a coupon to grant credits and upgrade plan">クーポンを適用してクレジットを付与＋プランをアップグレード</div>
+        <div class="params">
+          <h4>Request Body</h4>
+          <div class="param"><span class="param-name">code<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc" data-ja="クーポンコード" data-en="Coupon code">クーポンコード</span></div>
+          <div class="param"><span class="param-name">session_id<span class="optional">?</span></span><span class="param-type">string</span><span class="param-desc">Session ID</span></div>
+        </div>
+        <pre><code>// Response 200
+{"ok": true, "credits_added": 5000, "plan": "starter", "message": "Coupon redeemed! 5000 credits added."}
+
+// Error 400
+{"error": "Coupon is no longer active"}</code></pre>
+      </div>
+    </div>
+
+    <!-- ============ SPEECH ============ -->
+    <div class="section" id="speech-synthesize">
+      <h2>Speech</h2>
+
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/speech/synthesize</span></h3>
+        <div class="desc" data-ja="テキストから音声を合成（OpenAI TTS）。MP3バイナリを返す。" data-en="Synthesize speech from text (OpenAI TTS). Returns MP3 binary.">テキストから音声を合成（OpenAI TTS）。MP3バイナリを返す。</div>
+        <div class="params">
+          <h4>Request Body</h4>
+          <div class="param"><span class="param-name">text<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc" data-ja="音声にするテキスト（1〜4096文字）" data-en="Text to synthesize (1-4096 chars)">音声にするテキスト（1〜4096文字）</span></div>
+          <div class="param"><span class="param-name">voice<span class="optional">?</span></span><span class="param-type">string</span><span class="param-desc" data-ja="音声モデル名（デフォルト: nova）" data-en="Voice model name (default: nova)">音声モデル名（デフォルト: nova）</span></div>
+          <div class="param"><span class="param-name">speed<span class="optional">?</span></span><span class="param-type">number</span><span class="param-desc" data-ja="再生速度（デフォルト: 1.0）" data-en="Playback speed (default: 1.0)">再生速度（デフォルト: 1.0）</span></div>
+          <div class="param"><span class="param-name">session_id<span class="optional">?</span></span><span class="param-type">string</span><span class="param-desc">Session ID</span></div>
+        </div>
+        <div class="params">
+          <h4 data-ja="レスポンス: audio/mpeg バイナリ" data-en="Response: audio/mpeg binary">レスポンス: <code>audio/mpeg</code> バイナリ</h4>
+        </div>
+        <pre><code>// Request
+POST /api/v1/speech/synthesize
+{"text": "こんにちは、世界！", "voice": "nova", "speed": 1.0}
+
+// Response: MP3 binary (Content-Type: audio/mpeg)</code></pre>
+      </div>
+    </div>
+
+    <!-- ============ API KEYS ============ -->
+    <div class="section" id="apikeys-list">
+      <h2>API Keys</h2>
+
+      <div class="endpoint">
+        <h3><span class="method get">GET</span><span class="path">/api/v1/apikeys</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="APIキー一覧を取得" data-en="List your API keys">APIキー一覧を取得</div>
+        <pre><code>// Response 200
+{"keys": [{"id": "uuid", "name": "default", "prefix": "cw_abcd1234...", "created_at": "2026-01-01T00:00:00Z"}]}</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="apikeys-create">
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/apikeys</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="新しいAPIキーを作成" data-en="Create a new API key">新しいAPIキーを作成</div>
+        <div class="params">
+          <h4>Request Body</h4>
+          <div class="param"><span class="param-name">name<span class="optional">?</span></span><span class="param-type">string</span><span class="param-desc" data-ja="キー名（デフォルト: default）" data-en="Key name (default: default)">キー名（デフォルト: default）</span></div>
+        </div>
+        <pre><code>// Response 200
+{"ok": true, "api_key": "cw_abcdef1234567890", "key_id": "uuid", "name": "default"}</code></pre>
+      </div>
+    </div>
+
+    <div class="section" id="apikeys-delete">
+      <div class="endpoint">
+        <h3><span class="method delete">DELETE</span><span class="path">/api/v1/apikeys/{id}</span><span class="badge badge-auth">Auth Required</span></h3>
+        <div class="desc" data-ja="APIキーを削除" data-en="Delete an API key">APIキーを削除</div>
+        <pre><code>// Response 200
+{"ok": true}</code></pre>
+      </div>
+    </div>
+
     <!-- ============ MISC ============ -->
     <div class="section" id="providers">
       <h2>Misc</h2>
@@ -509,6 +727,72 @@ POST /api/v1/settings/webchat:abc123
       </div>
     </div>
 
+    <!-- ============ PLAYGROUND RESULTS ============ -->
+    <div class="section" id="results">
+      <h2>Playground Results</h2>
+
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/api/v1/results</span></h3>
+        <div class="desc" data-ja="Playgroundの実行結果を保存して共有URLを取得" data-en="Save a playground result and get a shareable URL">Playgroundの実行結果を保存して共有URLを取得</div>
+        <pre><code>// Request
+POST /api/v1/results
+{"method": "POST", "url": "/api/v1/chat", "request_body": "...", "status": 200, "response_body": "...", "elapsed_ms": 150}
+
+// Response 200
+{"ok": true, "id": "aBcDeFgHiJ"}</code></pre>
+      </div>
+
+      <div class="endpoint">
+        <h3><span class="method get">GET</span><span class="path">/api/v1/results/{id}</span></h3>
+        <div class="desc" data-ja="保存された実行結果を取得" data-en="Retrieve a saved playground result">保存された実行結果を取得</div>
+        <pre><code>// Response 200
+{"method": "POST", "url": "/api/v1/chat", "request_body": "...", "status": 200, "response_body": "...", "elapsed_ms": 150}</code></pre>
+      </div>
+    </div>
+
+    <!-- ============ MCP ============ -->
+    <div class="section" id="mcp">
+      <h2>MCP (Model Context Protocol)</h2>
+
+      <div class="endpoint">
+        <h3><span class="method post">POST</span><span class="path">/mcp</span></h3>
+        <div class="desc" data-ja="AI agentがchatweb.aiをツールとして使うためのMCPエンドポイント（JSON-RPC 2.0）" data-en="MCP endpoint for AI agents to use chatweb.ai as a tool provider (JSON-RPC 2.0)">AI agentがchatweb.aiをツールとして使うためのMCPエンドポイント（JSON-RPC 2.0）</div>
+        <div class="params">
+          <h4 data-ja="利用可能なツール" data-en="Available Tools">Available Tools</h4>
+          <div class="param"><span class="param-name">chat</span><span class="param-type">tool</span><span class="param-desc" data-ja="AIにメッセージを送信して応答を取得" data-en="Send a message to AI and get a response">AIにメッセージを送信して応答を取得</span></div>
+          <div class="param"><span class="param-name">tts</span><span class="param-type">tool</span><span class="param-desc" data-ja="テキストから音声を合成" data-en="Text-to-speech synthesis">テキストから音声を合成</span></div>
+          <div class="param"><span class="param-name">providers</span><span class="param-type">tool</span><span class="param-desc" data-ja="利用可能なAIプロバイダーを一覧" data-en="List available AI providers">利用可能なAIプロバイダーを一覧</span></div>
+          <div class="param"><span class="param-name">status</span><span class="param-type">tool</span><span class="param-desc" data-ja="サービス状態とレイテンシを確認" data-en="Check service status and latency">サービス状態とレイテンシを確認</span></div>
+        </div>
+        <pre><code>// Initialize
+POST /mcp
+{"jsonrpc": "2.0", "id": 1, "method": "initialize"}
+
+// List tools
+POST /mcp
+{"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+
+// Call chat tool
+POST /mcp
+{
+  "jsonrpc": "2.0", "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "chat",
+    "arguments": {"message": "Hello!"}
+  }
+}
+
+// Response
+{
+  "jsonrpc": "2.0", "id": 3,
+  "result": {
+    "content": [{"type": "text", "text": "Hello! How can I help you?"}]
+  }
+}</code></pre>
+      </div>
+    </div>
+
     <!-- ============ WEBHOOKS ============ -->
     <div class="section" id="webhooks">
       <h2>Webhooks</h2>
@@ -521,6 +805,11 @@ POST /api/v1/settings/webchat:abc123
       <div class="endpoint">
         <h3><span class="method post">POST</span><span class="path">/webhooks/telegram</span><span class="badge badge-free">No prefix</span></h3>
         <div class="desc" data-ja="Telegram Bot APIのWebhookエンドポイント。" data-en="Telegram Bot API webhook endpoint.">Telegram Bot APIのWebhookエンドポイント。</div>
+      </div>
+
+      <div class="endpoint">
+        <h3><span class="method get">GET</span><span class="method post">POST</span><span class="path">/webhooks/facebook</span><span class="badge badge-free">No prefix</span></h3>
+        <div class="desc" data-ja="Facebook Messenger Webhookエンドポイント。GETはverify、POSTはメッセージ受信。" data-en="Facebook Messenger webhook. GET for verification, POST for messages.">Facebook Messenger Webhookエンドポイント。GETはverify、POSTはメッセージ受信。</div>
       </div>
 
       <div class="endpoint">
@@ -582,8 +871,8 @@ function setLang(l) {
   document.getElementById('nav-pricing').textContent = l === 'ja' ? '料金' : 'Pricing';
   // Sidebar navigation
   const sn = {
-    ja: { overview: '概要', intro: 'はじめに', auth: '認証', errors: 'エラー', catAuth: '認証API', catChat: 'チャット', catSessions: 'セッション', catConv: '会話履歴', catSettings: '設定', catAccount: 'アカウント', catBilling: '課金', catMisc: 'その他', catWebhooks: 'Webhook' },
-    en: { overview: 'Overview', intro: 'Introduction', auth: 'Authentication', errors: 'Errors', catAuth: 'Auth', catChat: 'Chat', catSessions: 'Sessions', catConv: 'Conversations', catSettings: 'Settings', catAccount: 'Account', catBilling: 'Billing', catMisc: 'Misc', catWebhooks: 'Webhooks' }
+    ja: { overview: '概要', intro: 'はじめに', auth: '認証', errors: 'エラー', catAuth: '認証API', catChat: 'チャット', catSessions: 'セッション', catConv: '会話履歴', catSettings: '設定', catAccount: 'アカウント', catBilling: '課金', catSpeech: '音声合成', catApikeys: 'APIキー', catMisc: 'その他', catWebhooks: 'Webhook' },
+    en: { overview: 'Overview', intro: 'Introduction', auth: 'Authentication', errors: 'Errors', catAuth: 'Auth', catChat: 'Chat', catSessions: 'Sessions', catConv: 'Conversations', catSettings: 'Settings', catAccount: 'Account', catBilling: 'Billing', catSpeech: 'Speech', catApikeys: 'API Keys', catMisc: 'Misc', catWebhooks: 'Webhooks' }
   };
   const s = sn[l];
   document.getElementById('sn-overview').textContent = s.overview;
@@ -597,6 +886,8 @@ function setLang(l) {
   document.getElementById('sn-cat-settings').textContent = s.catSettings;
   document.getElementById('sn-cat-account').textContent = s.catAccount;
   document.getElementById('sn-cat-billing').textContent = s.catBilling;
+  if (document.getElementById('sn-cat-speech')) document.getElementById('sn-cat-speech').textContent = s.catSpeech;
+  if (document.getElementById('sn-cat-apikeys')) document.getElementById('sn-cat-apikeys').textContent = s.catApikeys;
   document.getElementById('sn-cat-misc').textContent = s.catMisc;
   document.getElementById('sn-cat-webhooks').textContent = s.catWebhooks;
 }

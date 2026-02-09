@@ -9,6 +9,9 @@ license = "MIT"
 name = "bootstrap"
 path = "src/main.rs"
 
+[features]
+local-fallback = ["nanobot-core/local-fallback"]
+
 [dependencies]
 nanobot-core = { path = "../nanobot-core", features = ["saas"] }
 lambda_http = "0.13"

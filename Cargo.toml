@@ -20,6 +20,7 @@ dynamodb-backend = ["nanobot-core/dynamodb-backend"]
 stripe = ["nanobot-core/stripe"]
 lambda = ["nanobot-core/lambda"]
 saas = ["nanobot-core/saas"]
+local-fallback = ["nanobot-core/local-fallback"]
 
 [dependencies]
 nanobot-core = { path = "crates/nanobot-core" }

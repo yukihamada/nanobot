@@ -1,6 +1,8 @@
 pub mod openai_compat;
 pub mod anthropic;
 pub mod gemini;
+#[cfg(feature = "local-fallback")]
+pub mod local;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -320,6 +322,99 @@ impl LoadBalancedProvider {
             Err(ProviderError::Other("All parallel providers failed".to_string()))
         }
     }
+
+    /// Explore mode: run all providers in parallel and return ALL results (not just fastest).
+    /// Results are sent via an mpsc channel as they arrive.
+    /// Includes hierarchical re-query support: initial results can be escalated.
+    pub async fn chat_explore(
+        &self,
+        messages: &[Message],
+        tools: Option<&[serde_json::Value]>,
+        max_tokens: u32,
+        temperature: f64,
+    ) -> Vec<ExploreResult> {
+        let parallel_models = self.available_parallel_models();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<ExploreResult>(parallel_models.len() + 1);
+        let msgs = messages.to_vec();
+        let tools_owned: Option<Vec<serde_json::Value>> = tools.map(|t| t.to_vec());
+
+        // Launch all remote providers in parallel
+        for (model_name, idx) in &parallel_models {
+            let provider = self.providers[*idx].clone();
+            let model = model_name.clone();
+            let msgs = msgs.clone();
+            let tools = tools_owned.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let start = std::time::Instant::now();
+                let tools_ref = tools.as_deref();
+                match provider.chat(&msgs, tools_ref, &model, max_tokens, temperature).await {
+                    Ok(resp) => {
+                        let elapsed = start.elapsed().as_millis() as u64;
+                        let _ = tx.send(ExploreResult {
+                            model: model.clone(),
+                            response: resp.content.unwrap_or_default(),
+                            response_time_ms: elapsed,
+                            input_tokens: resp.usage.prompt_tokens,
+                            output_tokens: resp.usage.completion_tokens,
+                            is_fallback: false,
+                        }).await;
+                    }
+                    Err(e) => {
+                        tracing::warn!("Explore: {} failed: {}", model, e);
+                    }
+                }
+            });
+        }
+
+        // Also run local fallback if available
+        #[cfg(feature = "local-fallback")]
+        {
+            if let Some(local_provider) = local::LocalProvider::from_env() {
+                let msgs = msgs.clone();
+                let tx = tx.clone();
+                tokio::spawn(async move {
+                    let start = std::time::Instant::now();
+                    match local_provider.chat(&msgs, None, "local-qwen3-0.6b", max_tokens.min(512), temperature).await {
+                        Ok(resp) => {
+                            let elapsed = start.elapsed().as_millis() as u64;
+                            let _ = tx.send(ExploreResult {
+                                model: "local-qwen3-0.6b".to_string(),
+                                response: resp.content.unwrap_or_default(),
+                                response_time_ms: elapsed,
+                                input_tokens: resp.usage.prompt_tokens,
+                                output_tokens: resp.usage.completion_tokens,
+                                is_fallback: true,
+                            }).await;
+                        }
+                        Err(e) => {
+                            tracing::warn!("Explore: local fallback failed: {}", e);
+                        }
+                    }
+                });
+            }
+        }
+
+        drop(tx); // close sender so rx will end when all tasks finish
+
+        // Collect all results
+        let mut results = Vec::new();
+        while let Some(result) = rx.recv().await {
+            results.push(result);
+        }
+        results
+    }
+}
+
+/// Result from a single model in explore mode.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ExploreResult {
+    pub model: String,
+    pub response: String,
+    pub response_time_ms: u64,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub is_fallback: bool,
 }
 
 #[async_trait]
@@ -333,30 +428,84 @@ impl LlmProvider for LoadBalancedProvider {
         temperature: f64,
     ) -> Result<CompletionResponse, ProviderError> {
         let total = self.providers.len();
-        let start = self.counter.load(Ordering::Relaxed);
+        if total == 0 {
+            return Err(ProviderError::Other("No providers configured".to_string()));
+        }
 
-        // Try with matching provider first, then failover to others
+        let timeout_dur = std::time::Duration::from_secs(25);
+
+        // Phase 1: Try primary provider with timeout
         let primary = self.select_provider(model);
-        match primary.chat(messages, tools, model, max_tokens, temperature).await {
-            Ok(resp) => return Ok(resp),
-            Err(e) => {
-                tracing::warn!("Primary provider failed for model {}: {}, trying fallback", model, e);
+        let primary_result = tokio::time::timeout(
+            timeout_dur,
+            primary.chat(messages, tools, model, max_tokens, temperature),
+        ).await;
+
+        match primary_result {
+            Ok(Ok(resp)) => return Ok(resp),
+            Ok(Err(e)) => {
+                tracing::warn!("Primary provider failed for model {}: {}, trying parallel fallback", model, e);
+            }
+            Err(_) => {
+                tracing::warn!("Primary provider timed out for model {} ({}s), trying parallel fallback", model, timeout_dur.as_secs());
             }
         }
 
-        // Failover: try other providers with model name conversion
-        for i in 1..total {
-            let idx = (start + i) % total;
-            let provider = self.providers[idx].as_ref();
-            let converted_model = Self::convert_model_for_provider(provider, model);
-            tracing::info!("Fallback provider {}: converting model {} -> {}", idx, model, converted_model);
-            match provider.chat(messages, tools, &converted_model, max_tokens, temperature).await {
-                Ok(resp) => {
-                    tracing::info!("Fallback provider {} succeeded with model {}", idx, converted_model);
-                    return Ok(resp);
-                }
-                Err(e) => {
-                    tracing::warn!("Fallback provider {} failed: {}", idx, e);
+        // Phase 2: Try ALL remaining providers in PARALLEL, return first success
+        if total > 1 {
+            let start = self.counter.load(Ordering::Relaxed);
+            let msgs = messages.to_vec();
+            let tools_owned: Option<Vec<serde_json::Value>> = tools.map(|t| t.to_vec());
+
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<CompletionResponse>(total);
+
+            for i in 1..total {
+                let idx = (start + i) % total;
+                let provider = self.providers[idx].clone();
+                let converted_model = Self::convert_model_for_provider(provider.as_ref(), model);
+                let msgs = msgs.clone();
+                let tools = tools_owned.clone();
+                let tx = tx.clone();
+                let timeout_dur = timeout_dur;
+
+                tokio::spawn(async move {
+                    let tools_ref = tools.as_deref();
+                    match tokio::time::timeout(
+                        timeout_dur,
+                        provider.chat(&msgs, tools_ref, &converted_model, max_tokens, temperature),
+                    ).await {
+                        Ok(Ok(resp)) => {
+                            tracing::info!("Parallel fallback succeeded with model {}", converted_model);
+                            let _ = tx.send(resp).await;
+                        }
+                        Ok(Err(e)) => {
+                            tracing::warn!("Parallel fallback {} failed: {}", converted_model, e);
+                        }
+                        Err(_) => {
+                            tracing::warn!("Parallel fallback {} timed out", converted_model);
+                        }
+                    }
+                });
+            }
+            drop(tx);
+
+            // Wait for first successful response
+            if let Some(resp) = rx.recv().await {
+                return Ok(resp);
+            }
+        }
+
+        // Phase 3: Local fallback (if feature enabled)
+        #[cfg(feature = "local-fallback")]
+        {
+            tracing::warn!("All remote providers failed — trying local fallback");
+            if let Some(local_provider) = local::LocalProvider::from_env() {
+                match local_provider.chat(messages, tools, "local-qwen3-0.6b", max_tokens.min(512), temperature).await {
+                    Ok(resp) => {
+                        tracing::info!("Local fallback succeeded");
+                        return Ok(resp);
+                    }
+                    Err(e) => tracing::error!("Local fallback also failed: {}", e),
                 }
             }
         }

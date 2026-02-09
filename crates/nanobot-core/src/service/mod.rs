@@ -9,5 +9,8 @@ pub mod integrations;
 #[cfg(feature = "http-api")]
 pub mod http;
 
+#[cfg(feature = "http-api")]
+pub mod commands;
+
 #[cfg(feature = "stripe")]
 pub mod stripe;

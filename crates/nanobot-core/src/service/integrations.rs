@@ -57,6 +57,11 @@ impl ToolRegistry {
             Box::new(NewsSearchTool),
             Box::new(GoogleCalendarTool),
             Box::new(GmailTool),
+            // Sandbox tools — code execution and file operations
+            Box::new(CodeExecuteTool),
+            Box::new(SandboxFileReadTool),
+            Box::new(SandboxFileWriteTool),
+            Box::new(SandboxFileListTool),
         ];
 
         // Register GitHub self-edit tools if GITHUB_TOKEN is available (requires http-api feature)
@@ -2324,6 +2329,331 @@ fn extract_gmail_body(data: &serde_json::Value) -> String {
     String::new()
 }
 
+// ---------------------------------------------------------------------------
+// Sandbox tools — code execution and file operations in /tmp/sandbox/
+// ---------------------------------------------------------------------------
+
+/// Code execution tool — runs shell commands (with optional Python/Node.js) in a sandbox.
+pub struct CodeExecuteTool;
+
+impl CodeExecuteTool {
+    /// Check if an interpreter is available on the system.
+    fn interpreter_available(cmd: &str) -> bool {
+        std::process::Command::new("which")
+            .arg(cmd)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    /// Run a command in the sandbox with timeout.
+    async fn run_in_sandbox(cmd: &str, args: &[&str], sandbox_dir: &str) -> String {
+        std::fs::create_dir_all(sandbox_dir).ok();
+
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            tokio::process::Command::new(cmd)
+                .args(args)
+                .current_dir(sandbox_dir)
+                .env("HOME", sandbox_dir)
+                .env("TMPDIR", sandbox_dir)
+                .output(),
+        ).await {
+            Ok(Ok(output)) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let mut result = String::new();
+                if !stdout.is_empty() {
+                    result.push_str(&stdout);
+                }
+                if !stderr.trim().is_empty() {
+                    if !result.is_empty() { result.push('\n'); }
+                    result.push_str(&format!("STDERR: {}", stderr));
+                }
+                if !output.status.success() {
+                    if !result.is_empty() { result.push('\n'); }
+                    result.push_str(&format!("Exit code: {}", output.status.code().unwrap_or(-1)));
+                }
+                if result.is_empty() {
+                    result = "(no output)".to_string();
+                }
+                // Truncate long output
+                if result.len() > 8000 {
+                    let end = result.char_indices().nth(8000).map(|(i, _)| i).unwrap_or(result.len());
+                    result = format!("{}...\n[truncated, {} total bytes]", &result[..end], result.len());
+                }
+                result
+            }
+            Ok(Err(e)) => format!("[TOOL_ERROR] Failed to execute: {e}"),
+            Err(_) => "[TOOL_ERROR] Code execution timed out after 10s".to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl Tool for CodeExecuteTool {
+    fn name(&self) -> &str { "code_execute" }
+    fn description(&self) -> &str {
+        "Execute code in a sandboxed environment. \
+         IMPORTANT: Use language='shell' for best compatibility — it works everywhere. \
+         Shell supports awk, sed, bc, and standard Unix tools for calculations and text processing. \
+         Python and Node.js are available only if installed on the server. \
+         Use file_write to create script files, then execute them with shell. \
+         The sandbox persists files across calls within the same session. \
+         Example shell math: echo $((1+2+3)) or echo '1+2+3' | bc or awk 'BEGIN{for(i=1;i<=100;i++)s+=i;print s}'"
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "language": {
+                    "type": "string",
+                    "enum": ["shell", "python", "nodejs"],
+                    "description": "Language to use. 'shell' is always available. 'python' and 'nodejs' may not be installed."
+                },
+                "code": {
+                    "type": "string",
+                    "description": "The code to execute"
+                }
+            },
+            "required": ["language", "code"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let language = params.get("language").and_then(|v| v.as_str()).unwrap_or("shell");
+        let code = params.get("code").and_then(|v| v.as_str()).unwrap_or("");
+        let sandbox_dir = params.get("_sandbox_dir").and_then(|v| v.as_str()).unwrap_or("/tmp/sandbox/default");
+
+        if code.is_empty() {
+            return "Error: 'code' parameter is required".to_string();
+        }
+        if code.len() > 32_000 {
+            return "Error: code too large (max 32KB)".to_string();
+        }
+
+        // Safety: deny dangerous patterns
+        let lower = code.to_lowercase();
+        let deny_patterns = [
+            "rm -rf /", "rm -rf /*", "mkfs", "dd if=", "> /dev/", "shutdown", "reboot",
+            ":(){ :|:& };:", "fork()",
+        ];
+        for pat in &deny_patterns {
+            if lower.contains(pat) {
+                return "[TOOL_ERROR] Code blocked by safety guard: dangerous pattern detected".to_string();
+            }
+        }
+
+        match language {
+            "shell" => {
+                Self::run_in_sandbox("sh", &["-c", code], sandbox_dir).await
+            }
+            "python" => {
+                // Try python3, then python, then fallback to writing a script and running via sh
+                for interpreter in &["python3", "python"] {
+                    if Self::interpreter_available(interpreter) {
+                        return Self::run_in_sandbox(interpreter, &["-c", code], sandbox_dir).await;
+                    }
+                }
+                // Fallback: write to file and try to run
+                let script_path = format!("{}/_.py", sandbox_dir);
+                std::fs::create_dir_all(sandbox_dir).ok();
+                if let Err(e) = std::fs::write(&script_path, code) {
+                    return format!("[TOOL_ERROR] Failed to write script: {e}");
+                }
+                // Try common Python paths
+                for path in &["/usr/bin/python3", "/usr/local/bin/python3", "/opt/python/bin/python3"] {
+                    if std::path::Path::new(path).exists() {
+                        return Self::run_in_sandbox(path, &[&script_path], sandbox_dir).await;
+                    }
+                }
+                "[TOOL_ERROR] Python is not available on this server. Please use language='shell' instead. \
+                 Shell supports awk for calculations: awk 'BEGIN{for(i=0;i<20;i++){if(i<2)a[i]=i;else a[i]=a[i-1]+a[i-2];print a[i]}}'".to_string()
+            }
+            "nodejs" => {
+                if Self::interpreter_available("node") {
+                    return Self::run_in_sandbox("node", &["-e", code], sandbox_dir).await;
+                }
+                "[TOOL_ERROR] Node.js is not available on this server. Please use language='shell' instead.".to_string()
+            }
+            _ => format!("[TOOL_ERROR] Unsupported language: {language}. Use 'shell', 'python', or 'nodejs'."),
+        }
+    }
+}
+
+/// File read tool — reads files from the session sandbox.
+pub struct SandboxFileReadTool;
+
+#[async_trait]
+impl Tool for SandboxFileReadTool {
+    fn name(&self) -> &str { "file_read" }
+    fn description(&self) -> &str {
+        "Read the contents of a file in the sandbox. Use after code_execute to inspect generated files."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative file path within the sandbox (e.g., 'output.txt', 'src/main.py')"
+                }
+            },
+            "required": ["path"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let path = params.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let sandbox_dir = params.get("_sandbox_dir").and_then(|v| v.as_str()).unwrap_or("/tmp/sandbox/default");
+
+        if path.is_empty() {
+            return "Error: 'path' parameter is required".to_string();
+        }
+        if path.contains("..") {
+            return "[TOOL_ERROR] Path traversal not allowed".to_string();
+        }
+
+        let full_path = std::path::Path::new(sandbox_dir).join(path);
+        if !full_path.starts_with(sandbox_dir) {
+            return "[TOOL_ERROR] Path outside sandbox".to_string();
+        }
+        if !full_path.exists() {
+            return format!("Error: File not found: {path}");
+        }
+        if !full_path.is_file() {
+            return format!("Error: Not a file: {path}");
+        }
+        match std::fs::read_to_string(&full_path) {
+            Ok(content) => {
+                if content.len() > 32_000 {
+                    let end = content.char_indices().nth(32_000).map(|(i, _)| i).unwrap_or(content.len());
+                    format!("{}...\n[truncated, {} total bytes]", &content[..end], content.len())
+                } else {
+                    content
+                }
+            }
+            Err(e) => format!("Error reading file: {e}"),
+        }
+    }
+}
+
+/// File write tool — writes files into the session sandbox.
+pub struct SandboxFileWriteTool;
+
+#[async_trait]
+impl Tool for SandboxFileWriteTool {
+    fn name(&self) -> &str { "file_write" }
+    fn description(&self) -> &str {
+        "Write content to a file in the sandbox. Creates parent directories automatically. Max 100KB."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative file path within the sandbox (e.g., 'output.txt', 'src/main.py')"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The content to write to the file"
+                }
+            },
+            "required": ["path", "content"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let path = params.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let content = params.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let sandbox_dir = params.get("_sandbox_dir").and_then(|v| v.as_str()).unwrap_or("/tmp/sandbox/default");
+
+        if path.is_empty() {
+            return "Error: 'path' parameter is required".to_string();
+        }
+        if path.contains("..") {
+            return "[TOOL_ERROR] Path traversal not allowed".to_string();
+        }
+        if content.len() > 102_400 {
+            return "[TOOL_ERROR] File too large (max 100KB)".to_string();
+        }
+
+        let full_path = std::path::Path::new(sandbox_dir).join(path);
+        if !full_path.starts_with(sandbox_dir) {
+            return "[TOOL_ERROR] Path outside sandbox".to_string();
+        }
+
+        if let Some(parent) = full_path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+
+        match std::fs::write(&full_path, content) {
+            Ok(_) => format!("Successfully wrote {} bytes to {}", content.len(), path),
+            Err(e) => format!("Error writing file: {e}"),
+        }
+    }
+}
+
+/// File list tool — lists files in the sandbox directory.
+pub struct SandboxFileListTool;
+
+#[async_trait]
+impl Tool for SandboxFileListTool {
+    fn name(&self) -> &str { "file_list" }
+    fn description(&self) -> &str {
+        "List files and directories in the sandbox. Useful to see what files have been created."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative directory path within the sandbox (default: root of sandbox)"
+                }
+            }
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let path = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+        let sandbox_dir = params.get("_sandbox_dir").and_then(|v| v.as_str()).unwrap_or("/tmp/sandbox/default");
+
+        if path.contains("..") {
+            return "[TOOL_ERROR] Path traversal not allowed".to_string();
+        }
+
+        let full_path = std::path::Path::new(sandbox_dir).join(path);
+        if !full_path.starts_with(sandbox_dir) {
+            return "[TOOL_ERROR] Path outside sandbox".to_string();
+        }
+        if !full_path.exists() {
+            return format!("Directory not found: {path}");
+        }
+
+        match std::fs::read_dir(&full_path) {
+            Ok(entries) => {
+                let mut items: Vec<String> = Vec::new();
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    let meta = entry.metadata().ok();
+                    let suffix = if meta.as_ref().map(|m| m.is_dir()).unwrap_or(false) {
+                        "/"
+                    } else {
+                        ""
+                    };
+                    let size = meta.map(|m| m.len()).unwrap_or(0);
+                    items.push(format!("{}{} ({}B)", name, suffix, size));
+                }
+                if items.is_empty() {
+                    "(empty directory)".to_string()
+                } else {
+                    items.sort();
+                    items.join("\n")
+                }
+            }
+            Err(e) => format!("Error listing directory: {e}"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2371,7 +2701,7 @@ mod tests {
         // Clear GITHUB_TOKEN to get deterministic count
         std::env::remove_var("GITHUB_TOKEN");
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 11);
+        assert_eq!(registry.len(), 15); // 11 original + 4 sandbox tools
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
@@ -2385,6 +2715,11 @@ mod tests {
         assert!(names.contains(&"datetime"));
         assert!(names.contains(&"qr_code"));
         assert!(names.contains(&"news_search"));
+        // Sandbox tools
+        assert!(names.contains(&"code_execute"));
+        assert!(names.contains(&"file_read"));
+        assert!(names.contains(&"file_write"));
+        assert!(names.contains(&"file_list"));
     }
 
     #[test]
@@ -2392,7 +2727,7 @@ mod tests {
     fn test_tool_registry_with_github_token() {
         std::env::set_var("GITHUB_TOKEN", "test-token");
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 12); // 9 base + 3 GitHub tools
+        assert_eq!(registry.len(), 18); // 15 base + 3 GitHub tools
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))

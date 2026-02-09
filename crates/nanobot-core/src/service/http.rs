@@ -30,10 +30,16 @@ use crate::service::stripe::{process_webhook_event, verify_webhook_signature};
 #[cfg(feature = "dynamodb-backend")]
 use aws_sdk_dynamodb::types::AttributeValue;
 
+/// Get the base URL for this instance. Defaults to "https://chatweb.ai".
+/// Set BASE_URL env var to customize for self-hosted instances.
+pub fn get_base_url() -> String {
+    std::env::var("BASE_URL").unwrap_or_else(|_| "https://chatweb.ai".to_string())
+}
+
 /// Check if a session key, user ID, or email is an admin.
 /// Reads from ADMIN_SESSION_KEYS environment variable (comma-separated).
 /// Supports both session keys (e.g. "webchat:xxx") and emails (e.g. "user@example.com").
-fn is_admin(key: &str) -> bool {
+pub fn is_admin(key: &str) -> bool {
     let keys = std::env::var("ADMIN_SESSION_KEYS").unwrap_or_default();
     keys.split(',').map(|k| k.trim()).any(|k| !k.is_empty() && k == key)
 }
@@ -75,6 +81,8 @@ pub struct AppState {
     pub dynamo_client: Option<aws_sdk_dynamodb::Client>,
     #[cfg(feature = "dynamodb-backend")]
     pub config_table: Option<String>,
+    /// Cached status ping result (timestamp, json value)
+    pub ping_cache: Mutex<Option<(std::time::Instant, serde_json::Value)>>,
 }
 
 impl AppState {
@@ -106,6 +114,7 @@ impl AppState {
             dynamo_client: None,
             #[cfg(feature = "dynamodb-backend")]
             config_table: None,
+            ping_cache: Mutex::new(None),
         }
     }
 
@@ -378,210 +387,6 @@ async fn resolve_session_key(
             channel_key.to_string()
         }
     }
-}
-
-/// Result of processing a `/link` command.
-#[cfg(feature = "dynamodb-backend")]
-enum LinkResult {
-    /// A new link code was generated; reply with this message.
-    CodeGenerated(String),
-    /// Channels were successfully linked.
-    Linked(String),
-    /// An error occurred.
-    Error(String),
-}
-
-/// Handle `/link` commands.
-/// - `/link` (no args) → generate a 6-char code, store in DynamoDB with 5-min TTL.
-/// - `/link CODE` → look up the code, link the two channels, merge sessions.
-#[cfg(feature = "dynamodb-backend")]
-async fn handle_link_command(
-    dynamo: &aws_sdk_dynamodb::Client,
-    config_table: &str,
-    channel_key: &str,
-    code_arg: Option<&str>,
-    sessions: &Mutex<Box<dyn SessionStore>>,
-) -> LinkResult {
-    match code_arg {
-        None => {
-            // Generate a 6-char alphanumeric code from UUID
-            let raw = uuid::Uuid::new_v4().to_string().replace('-', "");
-            let code: String = raw.chars().filter(|c| c.is_ascii_alphanumeric()).take(6).collect();
-            let code = code.to_uppercase();
-
-            let ttl = (chrono::Utc::now().timestamp() + 1800).to_string(); // 30 min
-
-            let result = dynamo
-                .put_item()
-                .table_name(config_table)
-                .item("pk", AttributeValue::S(format!("LINKCODE#{}", code)))
-                .item("sk", AttributeValue::S("PENDING".to_string()))
-                .item("channel_key", AttributeValue::S(channel_key.to_string()))
-                .item("ttl", AttributeValue::N(ttl))
-                .send()
-                .await;
-
-            match result {
-                Ok(_) => LinkResult::CodeGenerated(
-                    format!("リンクコード: {}\n別のチャネル（LINE/Telegram/Web）で「/link {}」と送信してください。\n有効期限: 30分", code, code)
-                ),
-                Err(e) => {
-                    tracing::error!("Failed to store link code: {}", e);
-                    LinkResult::Error("リンクコードの生成に失敗しました。".to_string())
-                }
-            }
-        }
-        Some(code) => {
-            let code = code.trim().to_uppercase();
-
-            // Look up the pending code
-            let resp = dynamo
-                .get_item()
-                .table_name(config_table)
-                .key("pk", AttributeValue::S(format!("LINKCODE#{}", code)))
-                .key("sk", AttributeValue::S("PENDING".to_string()))
-                .send()
-                .await;
-
-            let other_channel_key = match resp {
-                Ok(output) => {
-                    match output.item {
-                        Some(item) => {
-                            // Check TTL
-                            if let Some(ttl_val) = item.get("ttl").and_then(|v| v.as_n().ok()) {
-                                if let Ok(ttl) = ttl_val.parse::<i64>() {
-                                    if chrono::Utc::now().timestamp() > ttl {
-                                        return LinkResult::Error("リンクコードの有効期限が切れています。もう一度 /link で新しいコードを生成してください。".to_string());
-                                    }
-                                }
-                            }
-                            match item.get("channel_key").and_then(|v| v.as_s().ok()) {
-                                Some(k) => k.clone(),
-                                None => return LinkResult::Error("無効なリンクコードです。".to_string()),
-                            }
-                        }
-                        None => return LinkResult::Error("リンクコードが見つかりません。正しいコードか確認してください。".to_string()),
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("Failed to look up link code: {}", e);
-                    return LinkResult::Error("リンクコードの確認に失敗しました。".to_string());
-                }
-            };
-
-            if other_channel_key == channel_key {
-                return LinkResult::Error("同じチャネルではリンクできません。別のチャネルからコードを入力してください。".to_string());
-            }
-
-            // Determine unified user_id: check if either channel already has one
-            let existing_a = resolve_session_key(dynamo, config_table, &other_channel_key).await;
-            let existing_b = resolve_session_key(dynamo, config_table, channel_key).await;
-
-            let user_id = if existing_a.starts_with("user:") {
-                existing_a.clone()
-            } else if existing_b.starts_with("user:") {
-                existing_b.clone()
-            } else {
-                format!("user:{}", uuid::Uuid::new_v4())
-            };
-
-            // Write LINK# records for both channels
-            let now = chrono::Utc::now().to_rfc3339();
-            for ck in [&other_channel_key, &channel_key.to_string()] {
-                let _ = dynamo
-                    .put_item()
-                    .table_name(config_table)
-                    .item("pk", AttributeValue::S(format!("LINK#{}", ck)))
-                    .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
-                    .item("user_id", AttributeValue::S(user_id.clone()))
-                    .item("linked_at", AttributeValue::S(now.clone()))
-                    .send()
-                    .await;
-            }
-
-            // Merge session histories into the unified session
-            {
-                let mut store = sessions.lock().await;
-                // Collect messages from both old sessions
-                let old_key_a = if existing_a.starts_with("user:") { existing_a.clone() } else { other_channel_key.clone() };
-                let old_key_b = if existing_b.starts_with("user:") { existing_b.clone() } else { channel_key.to_string() };
-
-                let mut all_msgs: Vec<(String, String)> = Vec::new();
-
-                // Gather from old session A
-                {
-                    let session_a = store.get_or_create(&old_key_a);
-                    for m in &session_a.messages {
-                        all_msgs.push((m.role.clone(), m.content.clone()));
-                    }
-                }
-                // Gather from old session B (only if different key)
-                if old_key_b != old_key_a {
-                    let session_b = store.get_or_create(&old_key_b);
-                    for m in &session_b.messages {
-                        all_msgs.push((m.role.clone(), m.content.clone()));
-                    }
-                }
-
-                // Write into unified session
-                if !all_msgs.is_empty() {
-                    let unified = store.get_or_create(&user_id);
-                    if unified.messages.is_empty() {
-                        for (role, content) in &all_msgs {
-                            unified.add_message(role, content);
-                        }
-                    }
-                    store.save_by_key(&user_id);
-                }
-            }
-
-            // Delete the used link code
-            let _ = dynamo
-                .delete_item()
-                .table_name(config_table)
-                .key("pk", AttributeValue::S(format!("LINKCODE#{}", code)))
-                .key("sk", AttributeValue::S("PENDING".to_string()))
-                .send()
-                .await;
-
-            info!("Channels linked: {} <-> {} => {}", other_channel_key, channel_key, user_id);
-            LinkResult::Linked("リンク完了！これからどのチャネルでも同じ会話を続けられます。".to_string())
-        }
-    }
-}
-
-/// Parse a `/link` command from text. Returns `Some(None)` for bare `/link`,
-/// `Some(Some(code))` for `/link CODE`, or `None` if not a link command.
-#[cfg(feature = "dynamodb-backend")]
-fn parse_link_command(text: &str) -> Option<Option<&str>> {
-    let trimmed = text.trim();
-    // Exact "/link" command
-    if trimmed == "/link" {
-        return Some(None);
-    }
-    // "/link CODE" at the start
-    if let Some(rest) = trimmed.strip_prefix("/link ") {
-        let code = rest.trim();
-        if !code.is_empty() {
-            // Extract just the 6-char code (first word)
-            let first_word = code.split_whitespace().next().unwrap_or(code);
-            return Some(Some(first_word));
-        }
-        return Some(None);
-    }
-    // Search for "/link XXXXXX" anywhere in the text (for copy-paste)
-    if let Some(pos) = trimmed.find("/link ") {
-        let after = &trimmed[pos + 6..];
-        let code = after.trim();
-        if !code.is_empty() {
-            let first_word = code.split_whitespace().next().unwrap_or(code);
-            // Only match if it looks like a 6-char alphanumeric code
-            if first_word.len() == 6 && first_word.chars().all(|c| c.is_ascii_alphanumeric()) {
-                return Some(Some(first_word));
-            }
-        }
-    }
-    None
 }
 
 /// Check if text looks like a session ID (e.g. "api:xxxx-xxxx-..." or "cli:xxxx-xxxx-...").
@@ -887,6 +692,13 @@ const AGENTS: &[AgentProfile] = &[
              - **Googleカレンダー連携**: 予定の確認・作成（連携済みの場合）\n\
              - **Gmail連携**: メールの検索・閲覧・送信（連携済みの場合）\n\
              - **マルチチャネル**: LINE, Telegram, Discord, Slack, Teams, WhatsApp, Facebook — 14+チャネル対応\n\n\
+             ## チャネル連携の案内\n\
+             ユーザーがLINE・Telegram等との連携について聞いたら、以下を案内してください:\n\
+             - **LINE**: 友だち追加 → https://line.me/R/oaMessage/@619jcqqh/ （またはWeb画面のLINEボタンをタップ）\n\
+             - **Telegram**: @chatweb_ai_bot を検索して /start （またはWeb画面のTelegramボタンをタップ）\n\
+             - **連携方法**: Web画面の入力欄横にある LINE/TG ボタンを押すと、QRコードが表示されます。スマホならそのまま開いて自動連携。\n\
+             - **/link コマンド**: どのチャネルでも `/link` と送信するとリンクコードが発行されます。別チャネルで `/link <コード>` を送ると連携完了。\n\
+             - 一度連携すると、どのチャネルでも同じ会話・クレジット・記憶が共有されます。\n\n\
              ## yukihamada.jpサービス連携\n\
              以下のサービスとネイティブに連携します:\n\
              - **chatweb.ai**: 日本語 voice-first AIアシスタント（このシステムの日本語フロントエンド）\n\
@@ -1283,6 +1095,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/coupon/redeem", post(handle_coupon_redeem))
         // SSE streaming chat
         .route("/api/v1/chat/stream", post(handle_chat_stream))
+        // Multi-model explore (SSE — all models, progressive)
+        .route("/api/v1/chat/explore", post(handle_chat_explore))
         // Webhooks
         .route("/webhooks/line", post(handle_line_webhook))
         .route("/webhooks/telegram", post(handle_telegram_webhook))
@@ -1302,6 +1116,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/conversations", post(handle_create_conversation))
         .route("/api/v1/conversations/{id}/messages", get(handle_get_conversation_messages))
         .route("/api/v1/conversations/{id}", delete(handle_delete_conversation))
+        .route("/api/v1/conversations/{id}/share", post(handle_share_conversation))
+        .route("/api/v1/conversations/{id}/share", delete(handle_revoke_share))
+        .route("/api/v1/shared/{hash}", get(handle_get_shared))
+        .route("/c/{hash}", get(handle_shared_page))
         // Sync (ElioChat ↔ chatweb.ai)
         .route("/api/v1/sync/conversations", get(handle_sync_list_conversations))
         .route("/api/v1/sync/conversations/{id}", get(handle_sync_get_conversation))
@@ -1319,6 +1137,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/contact", post(handle_contact_submit))
         // Status
         .route("/status", get(handle_status))
+        .route("/api/v1/status/ping", get(handle_status_ping))
         // Admin (requires ?sid=<admin session key>)
         .route("/admin", get(handle_admin))
         .route("/api/v1/admin/check", get(handle_admin_check))
@@ -1329,8 +1148,22 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/apikeys", get(handle_list_apikeys))
         .route("/api/v1/apikeys", post(handle_create_apikey))
         .route("/api/v1/apikeys/{id}", delete(handle_delete_apikey))
-        // Install script
+        // Install script & download redirect
         .route("/install.sh", get(handle_install_sh))
+        .route("/dl/{filename}", get(handle_dl_redirect))
+        // Playground
+        .route("/playground", get(handle_playground))
+        .route("/api/v1/results", post(handle_save_result))
+        .route("/api/v1/results/{id}", get(handle_get_result))
+        // Link code generation for QR flow
+        .route("/api/v1/link/generate", post(handle_link_generate))
+        // MCP endpoint
+        .route("/mcp", post(handle_mcp))
+        // AI agent friendly
+        .route("/robots.txt", get(handle_robots_txt))
+        .route("/llms.txt", get(handle_llms_txt))
+        .route("/llms-full.txt", get(handle_llms_full_txt))
+        .route("/.well-known/ai-plugin.json", get(handle_ai_plugin))
         // Health
         .route("/health", get(handle_health))
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1MB max body
@@ -1359,6 +1192,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                         "https://teai.io".parse().unwrap(),
                         "https://api.teai.io".parse().unwrap(),
                     ];
+                    // Add custom BASE_URL to CORS if set
+                    if let Ok(base) = std::env::var("BASE_URL") {
+                        if let Ok(v) = base.parse() { origins.push(v); }
+                    }
                     if std::env::var("DEV_MODE").is_ok() || cfg!(debug_assertions) {
                         origins.push("http://localhost:3000".parse().unwrap());
                     }
@@ -1418,24 +1255,55 @@ async fn handle_chat(
         }
     };
 
-    // Handle /link command
-    #[cfg(feature = "dynamodb-backend")]
-    if let Some(code_arg) = parse_link_command(&req.message) {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
-            let result = handle_link_command(dynamo, table, &req.session_id, code_arg, &state.sessions).await;
-            let response = match result {
-                LinkResult::CodeGenerated(msg) | LinkResult::Linked(msg) | LinkResult::Error(msg) => msg,
-            };
-            return Json(ChatResponse {
-                response,
-                session_id: req.session_id,
-                agent: None,
-                tools_used: None,
-                credits_used: None,
-                credits_remaining: None,
-                model_used: None,
-                models_consulted: None,
-            });
+    // Handle slash commands (/link, /help, /status, /share, /improve)
+    if let Some(cmd) = super::commands::parse_command(&req.message) {
+        let conv_id = req.session_id.strip_prefix("webchat:").map(|s| s.to_string());
+        // Resolve user_id from auth token for /share
+        let user_id_opt = {
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                let token = headers.get("authorization")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.trim_start_matches("Bearer ").to_string())
+                    .unwrap_or_default();
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    let uid = resolve_user_from_token(dynamo, table, &token).await;
+                    if uid.is_empty() { None } else { Some(uid) }
+                } else {
+                    None
+                }
+            }
+            #[cfg(not(feature = "dynamodb-backend"))]
+            {
+                None::<String>
+            }
+        };
+        let ctx = super::commands::CommandContext {
+            channel_key: &req.session_id,
+            session_key: &session_key,
+            user_id: user_id_opt.as_deref(),
+            conv_id: conv_id.as_deref(),
+            sessions: &state.sessions,
+            #[cfg(feature = "dynamodb-backend")]
+            dynamo: state.dynamo_client.as_ref(),
+            #[cfg(feature = "dynamodb-backend")]
+            config_table: state.config_table.as_deref(),
+        };
+        let result = super::commands::execute_command(cmd, &ctx).await;
+        match result {
+            super::commands::CommandResult::Reply(response) => {
+                return Json(ChatResponse {
+                    response,
+                    session_id: req.session_id,
+                    agent: None,
+                    tools_used: None,
+                    credits_used: None,
+                    credits_remaining: None,
+                    model_used: None,
+                    models_consulted: None,
+                });
+            }
+            super::commands::CommandResult::NotACommand => { /* fall through to LLM */ }
         }
     }
 
@@ -1802,16 +1670,30 @@ async fn handle_chat(
                 }
             }
 
-            // Handle tool calls: up to 3 rounds (search → fetch → answer)
+            // Handle tool calls: multi-iteration agentic loop (up to max_iterations rounds)
             let mut current = completion;
             let mut conversation = messages.clone();
             let mut all_tool_results: Vec<(String, String, String)> = Vec::new();
 
-            // Execute tool calls and get final answer
-            if current.has_tool_calls() {
-                // If any Google tools are requested, look up the user's refresh token
+            // Determine max iterations based on user plan
+            let max_iterations: usize = {
+                #[cfg(feature = "dynamodb-backend")]
+                {
+                    match cached_user.as_ref().map(|u| u.plan.as_str()) {
+                        Some("pro") | Some("enterprise") => 5,
+                        Some("starter") => 3,
+                        _ => 1, // free plan: single turn (backward compat)
+                    }
+                }
+                #[cfg(not(feature = "dynamodb-backend"))]
+                { 5 }
+            };
+            let mut iteration: usize = 0;
+
+            // Look up Google refresh token once (reused across iterations)
+            let google_refresh_token: Option<String> = {
                 let needs_google = current.tool_calls.iter().any(|tc| tc.name == "google_calendar" || tc.name == "gmail");
-                let google_refresh_token: Option<String> = if needs_google {
+                if needs_google {
                     #[cfg(feature = "dynamodb-backend")]
                     {
                         if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
@@ -1835,31 +1717,46 @@ async fn handle_chat(
                     { None }
                 } else {
                     None
-                };
-
-                // Limit to max 3 tool calls (10s timeout each = max 10s parallel, leaving room for LLM calls)
-                let tool_calls_to_run: Vec<_> = current.tool_calls.iter().take(3).collect();
-                if current.tool_calls.len() > 3 {
-                    info!("Limiting tool calls from {} to 3", current.tool_calls.len());
                 }
+            };
+
+            // Create sandbox directory for code_execute / file tools
+            let sandbox_dir = format!("/tmp/sandbox/{}", session_key.replace(':', "_"));
+            std::fs::create_dir_all(&sandbox_dir).ok();
+
+            // Multi-iteration tool loop
+            while current.has_tool_calls() && iteration < max_iterations {
+                iteration += 1;
+                info!("Tool iteration {}/{}: {} tool calls", iteration, max_iterations, current.tool_calls.len());
+
+                // Limit to max 5 tool calls per iteration
+                let tool_calls_to_run: Vec<_> = current.tool_calls.iter().take(5).collect();
+                if current.tool_calls.len() > 5 {
+                    info!("Limiting tool calls from {} to 5", current.tool_calls.len());
+                }
+
                 // Execute tool calls in parallel
                 let registry = &state.tool_registry;
+                let sandbox_dir_ref = &sandbox_dir;
                 let futures: Vec<_> = tool_calls_to_run.iter().map(|tc| {
                     let name = tc.name.clone();
                     let mut args = tc.arguments.clone();
                     let id = tc.id.clone();
-                    // Inject Google refresh token as parameter for Google tools
+                    // Inject Google refresh token for Google tools
                     if name == "google_calendar" || name == "gmail" {
                         if let Some(ref token) = google_refresh_token {
                             args.insert("_refresh_token".to_string(), serde_json::Value::String(token.clone()));
                         }
                     }
+                    // Inject sandbox directory for sandbox tools
+                    if name == "code_execute" || name == "file_read" || name == "file_write" || name == "file_list" {
+                        args.insert("_sandbox_dir".to_string(), serde_json::Value::String(sandbox_dir_ref.to_string()));
+                    }
                     async move {
-                        info!("Tool call: {} args={:?}", name, args);
+                        info!("Tool call [iter {}]: {} args={:?}", iteration, name, args);
                         let raw_result = registry.execute(&name, &args).await;
                         // Classify tool results for better LLM decision-making
                         let result = if raw_result.starts_with("[TOOL_ERROR]") {
-                            // Already classified (e.g. timeout from ToolRegistry)
                             raw_result
                         } else if raw_result.starts_with("Error") || raw_result.starts_with("error")
                             || raw_result.contains("request failed") || raw_result.contains("timed out")
@@ -1909,7 +1806,8 @@ async fn handle_chat(
                     }
                 }
 
-                let tc_json: Vec<serde_json::Value> = current.tool_calls.iter().take(3).map(|tc| {
+                // Add assistant message with tool calls + tool results to conversation
+                let tc_json: Vec<serde_json::Value> = current.tool_calls.iter().take(5).map(|tc| {
                     serde_json::json!({
                         "id": tc.id,
                         "type": "function",
@@ -1925,13 +1823,17 @@ async fn handle_chat(
                     conversation.push(Message::tool_result(id, name, result));
                 }
 
-                // Clean up Google refresh token env var
-                // Google refresh token is now passed via _refresh_token parameter, no env cleanup needed
+                // Follow-up call: pass tools if more iterations remain, None on last iteration
+                let follow_up_tools = if iteration < max_iterations {
+                    Some(&tools[..])
+                } else {
+                    None // Force text generation on final iteration
+                };
 
-                // Follow-up call WITHOUT tools — force text generation
-                match active_provider.chat(&conversation, None, &model, max_tokens, temperature).await {
+                match active_provider.chat(&conversation, follow_up_tools, &model, max_tokens, temperature).await {
                     Ok(resp) => {
-                        info!("Follow-up: finish={:?}, content_len={}, tool_calls={}",
+                        info!("Follow-up [iter {}]: finish={:?}, content_len={}, tool_calls={}",
+                            iteration,
                             resp.finish_reason,
                             resp.content.as_ref().map(|c| c.len()).unwrap_or(0),
                             resp.tool_calls.len());
@@ -1947,7 +1849,7 @@ async fn handle_chat(
                         current = resp;
                     }
                     Err(e) => {
-                        tracing::error!("LLM follow-up error: {}", e);
+                        tracing::error!("LLM follow-up error [iter {}]: {}", iteration, e);
                         let fallback = all_tool_results.iter()
                             .map(|(_, name, result)| format!("[{}] {}", name, result))
                             .collect::<Vec<_>>().join("\n");
@@ -1957,8 +1859,13 @@ async fn handle_chat(
                             finish_reason: crate::types::FinishReason::Stop,
                             usage: crate::types::TokenUsage::default(),
                         };
+                        break; // Stop iterating on error
                     }
                 }
+            }
+
+            if iteration > 0 {
+                info!("Agentic loop completed: {} iterations, {} total tool calls", iteration, all_tool_results.len());
             }
 
             // Collect tool names used
@@ -2460,14 +2367,21 @@ async fn handle_line_webhook(
                         }
                     };
 
-                    // Handle /link command
-                    #[cfg(feature = "dynamodb-backend")]
-                    if let Some(code_arg) = parse_link_command(text) {
-                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
-                            let result = handle_link_command(dynamo, table, &channel_key, code_arg, &state.sessions).await;
-                            let reply = match result {
-                                LinkResult::CodeGenerated(msg) | LinkResult::Linked(msg) | LinkResult::Error(msg) => msg,
-                            };
+                    // Handle slash commands
+                    if let Some(cmd) = super::commands::parse_command(text) {
+                        let ctx = super::commands::CommandContext {
+                            channel_key: &channel_key,
+                            session_key: &session_key,
+                            user_id: None,
+                            conv_id: None,
+                            sessions: &state.sessions,
+                            #[cfg(feature = "dynamodb-backend")]
+                            dynamo: state.dynamo_client.as_ref(),
+                            #[cfg(feature = "dynamodb-backend")]
+                            config_table: state.config_table.as_deref(),
+                        };
+                        let result = super::commands::execute_command(cmd, &ctx).await;
+                        if let super::commands::CommandResult::Reply(reply) = result {
                             if let Err(e) = LineChannel::reply(&access_token, reply_token, &reply).await {
                                 tracing::error!("Failed to reply to LINE: {}", e);
                             }
@@ -2695,14 +2609,21 @@ async fn handle_telegram_webhook(
         }
     };
 
-    // Handle /link command
-    #[cfg(feature = "dynamodb-backend")]
-    if let Some(code_arg) = parse_link_command(text) {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
-            let result = handle_link_command(dynamo, table, &channel_key, code_arg, &state.sessions).await;
-            let reply = match result {
-                LinkResult::CodeGenerated(msg) | LinkResult::Linked(msg) | LinkResult::Error(msg) => msg,
-            };
+    // Handle slash commands
+    if let Some(cmd) = super::commands::parse_command(text) {
+        let ctx = super::commands::CommandContext {
+            channel_key: &channel_key,
+            session_key: &session_key,
+            user_id: None,
+            conv_id: None,
+            sessions: &state.sessions,
+            #[cfg(feature = "dynamodb-backend")]
+            dynamo: state.dynamo_client.as_ref(),
+            #[cfg(feature = "dynamodb-backend")]
+            config_table: state.config_table.as_deref(),
+        };
+        let result = super::commands::execute_command(cmd, &ctx).await;
+        if let super::commands::CommandResult::Reply(reply) = result {
             let client = reqwest::Client::new();
             if let Err(e) = TelegramChannel::send_message_static(&client, token, &chat_id, &reply).await {
                 tracing::error!("Failed to send Telegram reply: {}", e);
@@ -2948,7 +2869,7 @@ async fn handle_chat_stream(
     Json(req): Json<ChatRequest>,
 ) -> impl IntoResponse {
     use axum::response::sse::{Event, Sse};
-    use futures::stream::{self, StreamExt};
+    use futures::stream;
     use std::convert::Infallible;
 
     // Input validation
@@ -3070,39 +2991,179 @@ async fn handle_chat_stream(
         .and_then(|s| s.temperature)
         .unwrap_or(state.config.agents.defaults.temperature);
 
-    // Since the current LlmProvider trait doesn't support streaming,
-    // we call the LLM, then stream the result in fast chunks for instant display.
-    // This gives the UX of streaming while we add true streaming later.
+    // Agentic SSE stream: supports multi-iteration tool calling with progress events.
+    // Collects all SSE events into a Vec (API Gateway v2 compatible — no async_stream).
     let req_message = req.message.clone();
     let req_session_id = req.session_id.clone();
     let state_clone = state.clone();
     let session_key_clone = session_key.clone();
 
-    let response_stream = stream::once(async move {
-        // Send "start" event immediately
-        Ok::<_, Infallible>(Event::default().data(
-            serde_json::json!({"type":"start","session_id": req_session_id}).to_string()
-        ))
-    })
-    .chain(stream::once(async move {
-        // Call LLM (this is the blocking part)
-        match provider.chat(&messages, None, &model, max_tokens, temperature).await {
-            Ok(completion) => {
-                let response_text = completion.content.unwrap_or_default();
+    // Get tools definitions for the stream handler
+    let tools: Vec<serde_json::Value> = state.tool_registry.get_definitions();
 
-                // Deduct credits and save session
-                let credits_remaining = {
-                    #[cfg(feature = "dynamodb-backend")]
-                    {
-                        if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
-                            let (_credits, remaining) = deduct_credits(dynamo, table, &session_key_clone, &model,
-                                completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
-                            remaining
-                        } else { None }
+    // Determine max iterations based on user plan
+    let max_iterations: usize = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            match stream_user.as_ref().map(|u| u.plan.as_str()) {
+                Some("pro") | Some("enterprise") => 5,
+                Some("starter") => 3,
+                _ => 1,
+            }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { 5 }
+    };
+
+    let response_stream = stream::once(async move {
+        // Collect all SSE events into a Vec, then join as multi-line SSE
+        // (API Gateway v2 compatible — futures::stream::once pattern)
+        let mut events: Vec<serde_json::Value> = Vec::new();
+
+        // Start event
+        events.push(serde_json::json!({"type":"start","session_id": req_session_id}));
+
+        let tools_ref = if tools.is_empty() { None } else { Some(&tools[..]) };
+
+        // First LLM call (with tools for agentic mode)
+        let first_result = provider.chat(&messages, tools_ref, &model, max_tokens, temperature).await;
+
+        match first_result {
+            Ok(completion) => {
+                let mut total_credits_used: i64 = 0;
+                let mut last_remaining: Option<i64> = None;
+
+                // Deduct credits for first call
+                #[cfg(feature = "dynamodb-backend")]
+                {
+                    if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                        let (credits, remaining) = deduct_credits(dynamo, table, &session_key_clone, &model,
+                            completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
+                        total_credits_used += credits;
+                        if remaining.is_some() { last_remaining = remaining; }
                     }
-                    #[cfg(not(feature = "dynamodb-backend"))]
-                    { None::<i64> }
-                };
+                }
+
+                let mut current = completion;
+                let mut conversation = messages.clone();
+                let mut all_tools_used: Vec<String> = Vec::new();
+                let mut iteration: usize = 0;
+
+                // Create sandbox directory
+                let sandbox_dir = format!("/tmp/sandbox/{}", session_key_clone.replace(':', "_"));
+                std::fs::create_dir_all(&sandbox_dir).ok();
+
+                // Multi-iteration tool loop
+                while current.has_tool_calls() && iteration < max_iterations {
+                    iteration += 1;
+                    let tool_calls_to_run: Vec<_> = current.tool_calls.iter().take(5).collect();
+
+                    // Emit tool_start events
+                    for tc in &tool_calls_to_run {
+                        events.push(serde_json::json!({
+                            "type": "tool_start",
+                            "tool": tc.name,
+                            "iteration": iteration,
+                        }));
+                    }
+
+                    // Execute tool calls in parallel
+                    let registry = &state_clone.tool_registry;
+                    let futures_vec: Vec<_> = tool_calls_to_run.iter().map(|tc| {
+                        let name = tc.name.clone();
+                        let mut args = tc.arguments.clone();
+                        let id = tc.id.clone();
+                        if name == "code_execute" || name == "file_read" || name == "file_write" || name == "file_list" {
+                            args.insert("_sandbox_dir".to_string(), serde_json::Value::String(sandbox_dir.clone()));
+                        }
+                        async move {
+                            let raw_result = registry.execute(&name, &args).await;
+                            let result = if raw_result.starts_with("[TOOL_ERROR]") {
+                                raw_result
+                            } else if raw_result.starts_with("Error") || raw_result.starts_with("error")
+                                || raw_result.contains("request failed") || raw_result.contains("timed out")
+                            {
+                                format!("[TOOL_ERROR] {}\nYou may retry with different parameters or use an alternative approach.", raw_result)
+                            } else if raw_result.is_empty() || raw_result == "No results found."
+                                || raw_result.contains("No results") || raw_result.contains("no results")
+                            {
+                                format!("[NO_RESULTS] {}\nTry rephrasing the query or using a different tool.", if raw_result.is_empty() { "Empty response" } else { &raw_result })
+                            } else {
+                                raw_result
+                            };
+                            (id, name, result)
+                        }
+                    }).collect();
+                    let tool_results: Vec<_> = futures::future::join_all(futures_vec).await;
+
+                    // Emit tool_result events
+                    for (_, name, result) in &tool_results {
+                        all_tools_used.push(name.clone());
+                        let preview_end = result.char_indices().nth(500).map(|(i, _)| i).unwrap_or(result.len());
+                        events.push(serde_json::json!({
+                            "type": "tool_result",
+                            "tool": name,
+                            "result": &result[..preview_end],
+                            "iteration": iteration,
+                        }));
+                    }
+
+                    // Build conversation with tool calls + results
+                    let tc_json: Vec<serde_json::Value> = current.tool_calls.iter().take(5).map(|tc| {
+                        serde_json::json!({
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": serde_json::to_string(&tc.arguments).unwrap_or_default(),
+                            }
+                        })
+                    }).collect();
+                    conversation.push(Message::assistant_with_tool_calls(current.content.clone(), tc_json));
+                    for (id, name, result) in &tool_results {
+                        conversation.push(Message::tool_result(id, name, result));
+                    }
+
+                    // Emit thinking event
+                    events.push(serde_json::json!({
+                        "type": "thinking",
+                        "iteration": iteration,
+                    }));
+
+                    // Follow-up LLM call: pass tools if more iterations remain
+                    let follow_up_tools = if iteration < max_iterations {
+                        Some(&tools[..])
+                    } else {
+                        None
+                    };
+
+                    match provider.chat(&conversation, follow_up_tools, &model, max_tokens, temperature).await {
+                        Ok(resp) => {
+                            #[cfg(feature = "dynamodb-backend")]
+                            {
+                                if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                                    let (credits, remaining) = deduct_credits(dynamo, table, &session_key_clone, &model,
+                                        resp.usage.prompt_tokens, resp.usage.completion_tokens).await;
+                                    total_credits_used += credits;
+                                    if remaining.is_some() { last_remaining = remaining; }
+                                }
+                            }
+                            current = resp;
+                        }
+                        Err(e) => {
+                            tracing::error!("LLM follow-up error in stream: {}", e);
+                            current = crate::types::CompletionResponse {
+                                content: Some(format!("Error during follow-up: {e}")),
+                                tool_calls: vec![],
+                                finish_reason: crate::types::FinishReason::Stop,
+                                usage: crate::types::TokenUsage::default(),
+                            };
+                            break;
+                        }
+                    }
+                }
+
+                let response_text = current.content.unwrap_or_default();
 
                 // Save to session
                 {
@@ -3113,31 +3174,228 @@ async fn handle_chat_stream(
                     sessions.save_by_key(&session_key_clone);
                 }
 
-                Ok::<_, Infallible>(Event::default().data(
-                    serde_json::json!({
-                        "type": "content",
-                        "content": response_text,
-                        "credits_remaining": credits_remaining,
-                    }).to_string()
-                ))
+                // Content event (final answer)
+                events.push(serde_json::json!({
+                    "type": "content",
+                    "content": response_text,
+                    "credits_remaining": last_remaining,
+                    "credits_used": if total_credits_used > 0 { Some(total_credits_used) } else { None::<i64> },
+                    "tools_used": if all_tools_used.is_empty() { None } else { Some(&all_tools_used) },
+                    "iterations": iteration,
+                }));
             }
             Err(e) => {
                 tracing::error!("LLM stream error: {}", e);
-                Ok::<_, Infallible>(Event::default().data(
-                    serde_json::json!({"type":"error","content": format!("Error: {}", e)}).to_string()
-                ))
+                events.push(serde_json::json!({"type":"error","content": format!("Error: {}", e)}));
             }
         }
-    }))
-    .chain(stream::once(async {
+
+        // Done event
+        events.push(serde_json::json!({"type":"done"}));
+
+        // Emit all events as a single SSE data payload (API Gateway v2 compatible)
+        // Client parses the JSON array to reconstruct individual events
         Ok::<_, Infallible>(Event::default().data(
-            serde_json::json!({"type":"done"}).to_string()
+            serde_json::to_string(&events).unwrap_or_else(|_| "[]".to_string())
         ))
-    }));
+    });
 
     Sse::new(response_stream)
         .keep_alive(axum::response::sse::KeepAlive::default())
         .into_response()
+}
+
+/// POST /api/v1/chat/explore — Multi-model explore with SSE streaming.
+/// Runs all available providers in parallel, streams results as they arrive.
+/// Supports hierarchical re-query: if initial results are insufficient,
+/// can escalate with multiple prompt variations for improved accuracy.
+/// All costs are deducted from user credits.
+async fn handle_chat_explore(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ExploreRequest>,
+) -> impl IntoResponse {
+    use axum::response::sse::{Event, Sse};
+    use std::convert::Infallible;
+
+    // Input validation
+    if req.message.len() > 32_000 {
+        let err_stream = futures::stream::once(async {
+            Ok::<_, Infallible>(Event::default()
+                .event("error")
+                .data(serde_json::json!({"error": "Message too long"}).to_string()))
+        });
+        return Sse::new(err_stream).into_response();
+    }
+
+    // Resolve session key
+    let session_key = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                resolve_session_key(dynamo, table, &req.session_id).await
+            } else {
+                req.session_id.clone()
+            }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { req.session_id.clone() }
+    };
+
+    // Check credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user = get_or_create_user(dynamo, table, &session_key).await;
+            if user.credits_remaining <= 0 {
+                let err_stream = futures::stream::once(async {
+                    Ok::<_, Infallible>(Event::default()
+                        .event("error")
+                        .data(serde_json::json!({"error": "No credits remaining"}).to_string()))
+                });
+                return Sse::new(err_stream).into_response();
+            }
+            // Note: All plans (including free) can use explore mode.
+            // Credits are deducted per model, so free users burn credits faster — incentivizing upgrades.
+        }
+    }
+
+    let lb_raw = match &state.lb_raw {
+        Some(lb) => lb.clone(),
+        None => {
+            let err_stream = futures::stream::once(async {
+                Ok::<_, Infallible>(Event::default()
+                    .event("error")
+                    .data(serde_json::json!({"error": "No providers available"}).to_string()))
+            });
+            return Sse::new(err_stream).into_response();
+        }
+    };
+
+    // Build messages
+    let mut messages = vec![Message::system(
+        "あなたは nanobot — OpenClaw派生のRust製AIエージェントシステムです。\
+         ユーザーの質問に正確かつ詳しく回答してください。"
+    )];
+
+    // Add session history
+    {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions.refresh(&session_key);
+        let history = session.get_history(10);
+        for msg in &history {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            match role {
+                "user" => messages.push(Message::user(content)),
+                "assistant" => messages.push(Message::assistant(content)),
+                _ => {}
+            }
+        }
+    }
+
+    // Hierarchical prompts: multiple prompt variations for accuracy
+    // Level 0 (default): direct question
+    // Level 1 (re-query): adds "think step by step" instruction
+    // Level 2 (deep): adds expert persona + structured output request
+    let level = req.level.unwrap_or(0);
+    let user_msg = match level {
+        1 => format!(
+            "{}\n\n上記の質問について、ステップバイステップで考えてから回答してください。",
+            req.message
+        ),
+        2 => format!(
+            "あなたはこの分野の専門家です。以下の質問について、\
+             まず前提条件を整理し、複数の観点から分析し、\
+             最終的な結論を根拠とともに示してください。\n\n質問: {}",
+            req.message
+        ),
+        _ => req.message.clone(),
+    };
+    messages.push(Message::user(&user_msg));
+
+    let max_tokens = 2048u32;
+    let temperature = 0.7;
+
+    // Run explore — collect all results first, then stream as SSE events
+    let state_clone = state.clone();
+    let session_key_clone = session_key.clone();
+    let original_msg = req.message.clone();
+
+    let response_stream = futures::stream::once(async move {
+        let start = std::time::Instant::now();
+        let results = lb_raw.chat_explore(&messages, None, max_tokens, temperature).await;
+        let total_time = start.elapsed().as_millis() as u64;
+
+        // Deduct credits for each result
+        let mut total_credits: i64 = 0;
+        let mut last_remaining: Option<i64> = None;
+
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                for result in &results {
+                    let (credits, remaining) = deduct_credits(
+                        dynamo, table, &session_key_clone, &result.model,
+                        result.input_tokens, result.output_tokens,
+                    ).await;
+                    total_credits += credits;
+                    if remaining.is_some() { last_remaining = remaining; }
+                }
+            }
+        }
+
+        // Save to session
+        {
+            let mut sessions = state_clone.sessions.lock().await;
+            let session = sessions.get_or_create(&session_key_clone);
+            session.add_message_from_channel("user", &original_msg, "web");
+            if let Some(best) = results.first() {
+                session.add_message_from_channel("assistant",
+                    &format!("[Explore: {} models] {}", results.len(), best.response), "web");
+            }
+            sessions.save_by_key(&session_key_clone);
+        }
+
+        // Build all SSE events as a single response (API Gateway v2 compatible)
+        let mut events_json = Vec::new();
+        for (idx, result) in results.iter().enumerate() {
+            events_json.push(serde_json::json!({
+                "model": result.model,
+                "response": result.response,
+                "time_ms": result.response_time_ms,
+                "index": idx,
+                "is_fallback": result.is_fallback,
+                "credits_used": crate::service::auth::calculate_credits(
+                    &result.model, result.input_tokens, result.output_tokens
+                ),
+            }));
+        }
+
+        Ok::<_, Infallible>(Event::default().data(
+            serde_json::json!({
+                "type": "explore_results",
+                "results": events_json,
+                "total_models": results.len(),
+                "total_time_ms": total_time,
+                "total_credits_used": total_credits,
+                "credits_remaining": last_remaining,
+                "level": level,
+                "can_escalate": level < 2,
+            }).to_string()
+        ))
+    });
+
+    Sse::new(response_stream).into_response()
+}
+
+/// Request body for the explore endpoint.
+#[derive(Debug, Deserialize)]
+pub struct ExploreRequest {
+    pub message: String,
+    #[serde(default = "default_session_id")]
+    pub session_id: String,
+    /// Hierarchical level: 0=direct, 1=step-by-step, 2=expert-deep
+    pub level: Option<u32>,
 }
 
 /// POST /api/v1/billing/checkout — Create Stripe Checkout session
@@ -3941,12 +4199,831 @@ async fn handle_install_sh() -> impl IntoResponse {
     )
 }
 
+/// GET /dl/{filename} — Redirect to GitHub Releases latest binary
+async fn handle_dl_redirect(
+    axum::extract::Path(filename): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let url = format!(
+        "https://github.com/yukihamada/nanobot/releases/latest/download/{}",
+        filename
+    );
+    axum::response::Redirect::temporary(&url)
+}
+
 /// GET /health — Health check
 async fn handle_health() -> impl IntoResponse {
     Json(HealthResponse {
         status: "ok".to_string(),
         version: crate::VERSION.to_string(),
     })
+}
+
+// ---------------------------------------------------------------------------
+// AI Agent Friendly: robots.txt, llms.txt, ai-plugin.json
+// ---------------------------------------------------------------------------
+
+async fn handle_robots_txt() -> impl IntoResponse {
+    let base = get_base_url();
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        format!(
+            "User-agent: *\n\
+             Allow: /\n\
+             \n\
+             # AI Agents\n\
+             User-agent: GPTBot\n\
+             Allow: /\n\
+             \n\
+             User-agent: ChatGPT-User\n\
+             Allow: /\n\
+             \n\
+             User-agent: Claude-Web\n\
+             Allow: /\n\
+             \n\
+             User-agent: Googlebot\n\
+             Allow: /\n\
+             \n\
+             User-agent: anthropic-ai\n\
+             Allow: /\n\
+             \n\
+             User-agent: cohere-ai\n\
+             Allow: /\n\
+             \n\
+             Sitemap: {base}/sitemap.xml\n"
+        ),
+    )
+}
+
+async fn handle_llms_txt() -> impl IntoResponse {
+    let base = get_base_url();
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        format!(
+            "# chatweb.ai\n\
+             \n\
+             > Voice-first, multi-channel AI assistant platform.\n\
+             \n\
+             chatweb.ai is a multi-model AI chat platform with voice interface,\n\
+             LINE/Telegram/Facebook integration, and real-time streaming.\n\
+             Built with Rust on AWS Lambda.\n\
+             \n\
+             ## API\n\
+             \n\
+             - Base URL: {base}/api/v1\n\
+             - [API Documentation]({base}/docs)\n\
+             - Auth: Bearer token or x-session-id header\n\
+             \n\
+             ## Endpoints\n\
+             \n\
+             - POST /api/v1/chat — Send message, get AI response\n\
+             - POST /api/v1/chat/stream — SSE streaming response\n\
+             - POST /api/v1/speech/synthesize — Text-to-speech (MP3)\n\
+             - GET /api/v1/conversations — List conversations\n\
+             - GET /api/v1/shared/{{hash}} — Get shared conversation (public)\n\
+             - GET /api/v1/providers — List available AI models\n\
+             - GET /health — Health check\n\
+             - POST /mcp — MCP (Model Context Protocol) endpoint for AI agents\n\
+             \n\
+             ## Links\n\
+             \n\
+             - [Full API docs]({base}/llms-full.txt)\n\
+             - [API Playground]({base}/playground)\n\
+             - [Pricing]({base}/pricing)\n\
+             - [Status]({base}/status)\n\
+             - [GitHub](https://github.com/yukihamada/nanobot)\n"
+        ),
+    )
+}
+
+async fn handle_llms_full_txt() -> impl IntoResponse {
+    let base = get_base_url();
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        format!(
+            "# chatweb.ai — Full API Reference\n\
+             \n\
+             > Voice-first, multi-channel AI assistant platform.\n\
+             \n\
+             Base URL: {base}\n\
+             All endpoints use /api/v1/ prefix unless noted.\n\
+         \n\
+         ## Authentication\n\
+         \n\
+         - POST /api/v1/auth/register — Register with email + password\n\
+         - POST /api/v1/auth/login — Login with email + password\n\
+         - POST /api/v1/auth/email — Passwordless email auth\n\
+         - POST /api/v1/auth/verify — Verify email code (6 digits)\n\
+         - GET /auth/google — Google OAuth redirect\n\
+         - GET /api/v1/auth/me — Get current user info (Bearer token)\n\
+         \n\
+         ## Chat\n\
+         \n\
+         - POST /api/v1/chat\n\
+           Body: {{\"message\": \"text\", \"session_id\": \"webchat:uuid\"}}\n\
+           Response: {{\"response\": \"...\", \"session_id\": \"...\", \"credits_used\": N, \"credits_remaining\": N, \"model_used\": \"...\"}}\n\
+         \n\
+         - POST /api/v1/chat/stream\n\
+           Same body. Returns SSE: data: {{\"type\":\"chunk\",\"content\":\"...\"}}\n\
+         \n\
+         ## Speech\n\
+         \n\
+         - POST /api/v1/speech/synthesize\n\
+           Body: {{\"text\": \"...\", \"voice\": \"nova\", \"speed\": 1.0}}\n\
+           Response: audio/mpeg binary\n\
+         \n\
+         ## Conversations\n\
+         \n\
+         - GET /api/v1/conversations — List (Auth: Bearer)\n\
+         - POST /api/v1/conversations — Create new (Auth: Bearer)\n\
+         - GET /api/v1/conversations/{{id}}/messages — Get messages (Auth: Bearer)\n\
+         - DELETE /api/v1/conversations/{{id}} — Delete (Auth: Bearer)\n\
+         - POST /api/v1/conversations/{{id}}/share — Generate share link (Auth: Bearer)\n\
+         - DELETE /api/v1/conversations/{{id}}/share — Revoke share (Auth: Bearer)\n\
+         - GET /api/v1/shared/{{hash}} — Get shared conversation (public, no auth)\n\
+         \n\
+         ## Sessions\n\
+         \n\
+         - GET /api/v1/sessions — List sessions (x-session-id header)\n\
+         - GET /api/v1/sessions/{{id}} — Get session details\n\
+         - DELETE /api/v1/sessions/{{id}} — Delete session\n\
+         \n\
+         ## Settings\n\
+         \n\
+         - GET /api/v1/settings/{{id}} — Get user settings\n\
+         - POST /api/v1/settings/{{id}} — Update settings\n\
+         \n\
+         ## Account & Billing\n\
+         \n\
+         - GET /api/v1/account/{{id}} — Account info (plan, credits)\n\
+         - GET /api/v1/usage — Usage summary\n\
+         - POST /api/v1/billing/checkout — Create Stripe checkout\n\
+         - GET /api/v1/billing/portal — Stripe customer portal\n\
+         - POST /api/v1/coupon/validate — Validate coupon code\n\
+         - POST /api/v1/coupon/redeem — Redeem coupon\n\
+         \n\
+         ## API Keys\n\
+         \n\
+         - GET /api/v1/apikeys — List keys (Auth: Bearer)\n\
+         - POST /api/v1/apikeys — Create key (Auth: Bearer)\n\
+         - DELETE /api/v1/apikeys/{{id}} — Delete key (Auth: Bearer)\n\
+         \n\
+         ## Misc\n\
+         \n\
+         - GET /api/v1/providers — List AI providers/models\n\
+         - GET /api/v1/agents — List AI agents\n\
+         - GET /api/v1/integrations — List tools\n\
+         - GET /api/v1/devices — List connected CLI devices\n\
+         - GET /health — Health check\n\
+         - GET /api/v1/status/ping — Service status with latencies\n\
+         \n\
+         ## Slash Commands (in chat)\n\
+         \n\
+         - /help — Show available commands\n\
+         - /status — Show system status inline\n\
+         - /share — Generate share link for current conversation\n\
+         - /link [code] — Link channels (Web + LINE + Telegram)\n\
+         - /improve <description> — Admin: create self-improvement PR\n\
+         \n\
+         ## Rate Limits\n\
+         \n\
+         - Free: 10 concurrent, 1,000 credits/month\n\
+         - Starter ($9/mo): 100 concurrent, 25,000 credits/month\n\
+         - Pro ($29/mo): 1,000 concurrent, 300,000 credits/month\n\
+             \n\
+             ## MCP (Model Context Protocol)\n\
+             \n\
+             - POST /mcp — JSON-RPC endpoint for AI agent tool use\n\
+             - Tools: chat, web_search, tts\n\
+             \n\
+             ## API Playground\n\
+             \n\
+             - GET /playground — Interactive API explorer with shareable result URLs\n\
+             - GET /api/v1/results/{{id}} — Retrieve saved playground results\n"
+        ),
+    )
+}
+
+async fn handle_ai_plugin() -> impl IntoResponse {
+    let base = get_base_url();
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        serde_json::json!({
+            "schema_version": "v1",
+            "name_for_human": "chatweb.ai",
+            "name_for_model": "chatweb",
+            "description_for_human": "Voice-first, multi-channel AI assistant with LINE, Telegram, and web integration.",
+            "description_for_model": format!("chatweb.ai is a multi-model AI chat API. Use POST /api/v1/chat with {{\"message\": \"...\", \"session_id\": \"...\"}} to chat. Supports streaming via /api/v1/chat/stream (SSE). MCP endpoint at POST /mcp. Auth via Bearer token or x-session-id header. Full docs at {base}/docs"),
+            "auth": {
+                "type": "none"
+            },
+            "api": {
+                "type": "openapi",
+                "url": format!("{base}/docs")
+            },
+            "logo_url": format!("{base}/og.svg"),
+            "contact_email": "hello@chatweb.ai",
+            "legal_info_url": format!("{base}/terms")
+        }).to_string(),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// API Playground
+// ---------------------------------------------------------------------------
+
+async fn handle_playground() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/playground.html"))
+}
+
+/// POST /api/v1/link/generate — Generate a link code for QR-based channel linking
+/// Called by the frontend when showing the QR modal on PC.
+/// Returns a 6-char code that the user sends via `/link CODE` from their phone.
+async fn handle_link_generate(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let session_id = headers
+            .get("x-session-id")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        if session_id.is_empty() {
+            return Json(serde_json::json!({ "error": "Missing x-session-id header" }));
+        }
+
+        let (dynamo, table) = match (&state.dynamo_client, &state.config_table) {
+            (Some(d), Some(t)) => (d, t.as_str()),
+            _ => return Json(serde_json::json!({ "error": "DynamoDB not configured" })),
+        };
+
+        // Generate 6-char alphanumeric code
+        let raw = uuid::Uuid::new_v4().to_string().replace('-', "");
+        let code: String = raw
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .take(6)
+            .collect::<String>()
+            .to_uppercase();
+
+        let ttl = (chrono::Utc::now().timestamp() + 1800).to_string(); // 30 min
+
+        let result = dynamo
+            .put_item()
+            .table_name(table)
+            .item("pk", aws_sdk_dynamodb::types::AttributeValue::S(format!("LINKCODE#{}", code)))
+            .item("sk", aws_sdk_dynamodb::types::AttributeValue::S("PENDING".to_string()))
+            .item("channel_key", aws_sdk_dynamodb::types::AttributeValue::S(session_id.to_string()))
+            .item("ttl", aws_sdk_dynamodb::types::AttributeValue::N(ttl))
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => Json(serde_json::json!({
+                "code": code,
+                "expires_in": 1800,
+            })),
+            Err(e) => {
+                tracing::error!("Failed to generate link code: {}", e);
+                Json(serde_json::json!({ "error": "Failed to generate code" }))
+            }
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (state, headers);
+        Json(serde_json::json!({ "error": "DynamoDB backend required" }))
+    }
+}
+
+/// POST /api/v1/results — Save a playground result for sharing
+async fn handle_save_result(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let id = super::commands::generate_share_hash();
+
+    #[cfg(feature = "dynamodb-backend")]
+    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        let now = chrono::Utc::now().to_rfc3339();
+        let body_str = serde_json::to_string(&body).unwrap_or_default();
+        let ttl = (chrono::Utc::now().timestamp() + 86400 * 30).to_string(); // 30 days
+
+        let _ = dynamo
+            .put_item()
+            .table_name(table.as_str())
+            .item("pk", AttributeValue::S(format!("RESULT#{}", id)))
+            .item("sk", AttributeValue::S("DATA".to_string()))
+            .item("body", AttributeValue::S(body_str))
+            .item("created_at", AttributeValue::S(now))
+            .item("ttl", AttributeValue::N(ttl))
+            .send()
+            .await;
+
+        return Json(serde_json::json!({ "ok": true, "id": id }));
+    }
+
+    // Fallback without DynamoDB — return the ID but note it's ephemeral
+    Json(serde_json::json!({ "ok": true, "id": id, "note": "Result not persisted (no DynamoDB)" }))
+}
+
+/// GET /api/v1/results/{id} — Retrieve a saved playground result
+async fn handle_get_result(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        let result = dynamo
+            .get_item()
+            .table_name(table.as_str())
+            .key("pk", AttributeValue::S(format!("RESULT#{}", id)))
+            .key("sk", AttributeValue::S("DATA".to_string()))
+            .send()
+            .await;
+
+        if let Ok(output) = result {
+            if let Some(item) = output.item {
+                let body_str = item.get("body").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                    return (StatusCode::OK, Json(parsed));
+                }
+            }
+        }
+    }
+
+    (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Result not found" })))
+}
+
+// ---------------------------------------------------------------------------
+// MCP (Model Context Protocol) Endpoint
+// ---------------------------------------------------------------------------
+
+/// POST /mcp — JSON-RPC endpoint for AI agents to use chatweb.ai as a tool provider
+async fn handle_mcp(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let method = req.get("method").and_then(|v| v.as_str()).unwrap_or("");
+    let id = req.get("id").cloned().unwrap_or(serde_json::json!(null));
+    let params = req.get("params").cloned().unwrap_or(serde_json::json!({}));
+
+    match method {
+        "initialize" => {
+            Json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": {}
+                    },
+                    "serverInfo": {
+                        "name": "chatweb",
+                        "version": crate::VERSION
+                    }
+                }
+            }))
+        }
+        "tools/list" => {
+            Json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "tools": [
+                        {
+                            "name": "chat",
+                            "description": "Send a message to the AI assistant and get a response. Supports multiple models including GPT-4o, Claude, Gemini.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "message": { "type": "string", "description": "The message to send" },
+                                    "session_id": { "type": "string", "description": "Session ID for conversation continuity (optional, default: mcp-session)" }
+                                },
+                                "required": ["message"]
+                            }
+                        },
+                        {
+                            "name": "tts",
+                            "description": "Convert text to speech using OpenAI TTS. Returns audio as base64.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "text": { "type": "string", "description": "Text to synthesize (max 4096 chars)" },
+                                    "voice": { "type": "string", "description": "Voice model (default: nova)", "enum": ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] },
+                                    "speed": { "type": "number", "description": "Playback speed (default: 1.0)" }
+                                },
+                                "required": ["text"]
+                            }
+                        },
+                        {
+                            "name": "providers",
+                            "description": "List available AI providers and their models.",
+                            "inputSchema": { "type": "object", "properties": {} }
+                        },
+                        {
+                            "name": "status",
+                            "description": "Get service status and latency for all AI providers.",
+                            "inputSchema": { "type": "object", "properties": {} }
+                        }
+                    ]
+                }
+            }))
+        }
+        "tools/call" => {
+            let tool_name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let args = params.get("arguments").cloned().unwrap_or(serde_json::json!({}));
+
+            match tool_name {
+                "chat" => {
+                    let message = args.get("message").and_then(|v| v.as_str()).unwrap_or("Hello");
+                    let session_id = args.get("session_id").and_then(|v| v.as_str()).unwrap_or("mcp-session");
+
+                    // Use the provider directly for MCP calls
+                    let provider = match &state.provider {
+                        Some(p) => p.clone(),
+                        None => return Json(serde_json::json!({
+                            "jsonrpc": "2.0", "id": id,
+                            "error": { "code": -32000, "message": "No LLM provider configured" }
+                        })),
+                    };
+                    let messages = vec![
+                        Message::system("You are a helpful AI assistant (chatweb.ai MCP tool). Be concise."),
+                        Message::user(message),
+                    ];
+                    let model = state.config.agents.defaults.model.clone();
+                    let max_tokens = state.config.agents.defaults.max_tokens;
+
+                    match provider.chat(&messages, None, &model, max_tokens, 0.7).await {
+                        Ok(resp) => {
+                            let text = resp.content.as_deref().unwrap_or("");
+                            // Store in session for continuity
+                            {
+                                let mut sessions = state.sessions.lock().await;
+                                let session = sessions.get_or_create(session_id);
+                                session.add_message("user", message);
+                                session.add_message("assistant", text);
+                            }
+                            Json(serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": {
+                                    "content": [{ "type": "text", "text": text }]
+                                }
+                            }))
+                        }
+                        Err(e) => {
+                            Json(serde_json::json!({
+                                "jsonrpc": "2.0", "id": id,
+                                "error": { "code": -32000, "message": format!("Chat error: {e}") }
+                            }))
+                        }
+                    }
+                }
+                "providers" => {
+                    let mut providers = Vec::new();
+                    if std::env::var("OPENAI_API_KEY").is_ok() {
+                        providers.push(serde_json::json!({"id":"openai","models":["gpt-4o","gpt-4o-mini"]}));
+                    }
+                    if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+                        providers.push(serde_json::json!({"id":"anthropic","models":["claude-sonnet","claude-opus"]}));
+                    }
+                    if std::env::var("GEMINI_API_KEY").is_ok() || std::env::var("GOOGLE_API_KEY").is_ok() {
+                        providers.push(serde_json::json!({"id":"google","models":["gemini-2.5-flash","gemini-2.5-pro"]}));
+                    }
+                    Json(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "content": [{
+                                "type": "text",
+                                "text": serde_json::to_string_pretty(&providers).unwrap_or_default()
+                            }]
+                        }
+                    }))
+                }
+                "status" => {
+                    let base = get_base_url();
+                    // Just fetch our own status endpoint
+                    let status_text = match reqwest::get(format!("{base}/api/v1/status/ping")).await {
+                        Ok(resp) => resp.text().await.unwrap_or_default(),
+                        Err(e) => format!("{{\"error\": \"{}\"}}", e),
+                    };
+                    Json(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "content": [{ "type": "text", "text": status_text }]
+                        }
+                    }))
+                }
+                "tts" => {
+                    let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                    if text.is_empty() || text.len() > 4096 {
+                        return Json(serde_json::json!({
+                            "jsonrpc": "2.0", "id": id,
+                            "error": { "code": -32602, "message": "Text must be 1-4096 characters" }
+                        }));
+                    }
+                    Json(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "content": [{
+                                "type": "text",
+                                "text": format!("TTS available via POST {}/api/v1/speech/synthesize with body: {{\"text\": \"{}\"}}", get_base_url(), text.chars().take(50).collect::<String>())
+                            }]
+                        }
+                    }))
+                }
+                _ => {
+                    Json(serde_json::json!({
+                        "jsonrpc": "2.0", "id": id,
+                        "error": { "code": -32601, "message": format!("Unknown tool: {tool_name}") }
+                    }))
+                }
+            }
+        }
+        _ => {
+            Json(serde_json::json!({
+                "jsonrpc": "2.0", "id": id,
+                "error": { "code": -32601, "message": format!("Unknown method: {method}") }
+            }))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Status Ping API
+// ---------------------------------------------------------------------------
+
+/// GET /api/v1/status/ping — Ping LLM providers and services, return latency
+async fn handle_status_ping(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    // Check cache (60s TTL)
+    {
+        let cache = state.ping_cache.lock().await;
+        if let Some((ts, ref value)) = *cache {
+            if ts.elapsed().as_secs() < 60 {
+                let mut cached = value.clone();
+                if let Some(obj) = cached.as_object_mut() {
+                    obj.insert("cached".to_string(), serde_json::Value::Bool(true));
+                }
+                return Json(cached);
+            }
+        }
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap_or_default();
+
+    let mut handles: Vec<tokio::task::JoinHandle<serde_json::Value>> = Vec::new();
+
+    // --- OpenAI ---
+    let openai_key = std::env::var("OPENAI_API_KEY").ok().filter(|k| !k.is_empty());
+    if let Some(key) = openai_key {
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            let start = std::time::Instant::now();
+            let res = c.get("https://api.openai.com/v1/models")
+                .header("Authorization", format!("Bearer {key}"))
+                .send().await;
+            let ms = start.elapsed().as_millis() as u64;
+            match res {
+                Ok(r) if r.status().is_success() => serde_json::json!({
+                    "name": "OpenAI", "status": "ok", "latency_ms": ms
+                }),
+                Ok(r) => serde_json::json!({
+                    "name": "OpenAI", "status": "error",
+                    "latency_ms": ms, "detail": format!("HTTP {}", r.status())
+                }),
+                Err(e) => serde_json::json!({
+                    "name": "OpenAI", "status": "error",
+                    "latency_ms": ms, "detail": e.to_string()
+                }),
+            }
+        }));
+    } else {
+        handles.push(tokio::spawn(async {
+            serde_json::json!({"name": "OpenAI", "status": "not_configured"})
+        }));
+    }
+
+    // --- Anthropic ---
+    let anthropic_configured = std::env::var("ANTHROPIC_API_KEY").map(|k| !k.is_empty()).unwrap_or(false);
+    if anthropic_configured {
+        let key = std::env::var("ANTHROPIC_API_KEY").unwrap();
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            let start = std::time::Instant::now();
+            // Use POST /v1/messages with minimal payload — any non-timeout response means API is reachable
+            let res = c.post("https://api.anthropic.com/v1/messages")
+                .header("x-api-key", &key)
+                .header("anthropic-version", "2023-06-01")
+                .header("content-type", "application/json")
+                .body(r#"{"model":"claude-haiku-4-5-20251001","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}"#)
+                .send().await;
+            let ms = start.elapsed().as_millis() as u64;
+            match res {
+                Ok(r) => {
+                    let status = r.status();
+                    if status.is_success() || status.as_u16() == 400 {
+                        serde_json::json!({ "name": "Anthropic", "status": "ok", "latency_ms": ms })
+                    } else if status.as_u16() == 529 || status.is_server_error() {
+                        serde_json::json!({ "name": "Anthropic", "status": "error", "latency_ms": ms, "detail": format!("HTTP {}", status) })
+                    } else {
+                        // 401/403/429 etc — API is reachable, key or rate issue
+                        serde_json::json!({ "name": "Anthropic", "status": "ok", "latency_ms": ms })
+                    }
+                }
+                Err(e) => serde_json::json!({
+                    "name": "Anthropic", "status": "error",
+                    "latency_ms": ms, "detail": e.to_string()
+                }),
+            }
+        }));
+    } else {
+        handles.push(tokio::spawn(async {
+            serde_json::json!({"name": "Anthropic", "status": "not_configured"})
+        }));
+    }
+
+    // --- Gemini ---
+    let gemini_key = std::env::var("GEMINI_API_KEY")
+        .or_else(|_| std::env::var("GOOGLE_API_KEY"))
+        .ok()
+        .filter(|k| !k.is_empty());
+    if let Some(key) = gemini_key {
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            let start = std::time::Instant::now();
+            // Use generateContent with minimal payload to test end-to-end
+            let url = format!(
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
+            );
+            let res = c.post(&url)
+                .header("content-type", "application/json")
+                .body(r#"{"contents":[{"parts":[{"text":"ping"}]}],"generationConfig":{"maxOutputTokens":1}}"#)
+                .send().await;
+            let ms = start.elapsed().as_millis() as u64;
+            match res {
+                Ok(r) => {
+                    let status = r.status();
+                    if status.is_success() || status.as_u16() == 400 {
+                        serde_json::json!({ "name": "Gemini", "status": "ok", "latency_ms": ms })
+                    } else if status.is_server_error() {
+                        serde_json::json!({ "name": "Gemini", "status": "error", "latency_ms": ms, "detail": format!("HTTP {}", status) })
+                    } else {
+                        // 401/403/429 — API reachable, key or rate issue
+                        serde_json::json!({ "name": "Gemini", "status": "ok", "latency_ms": ms })
+                    }
+                }
+                Err(e) => serde_json::json!({
+                    "name": "Gemini", "status": "error",
+                    "latency_ms": ms, "detail": e.to_string()
+                }),
+            }
+        }));
+    } else {
+        handles.push(tokio::spawn(async {
+            serde_json::json!({"name": "Gemini", "status": "not_configured"})
+        }));
+    }
+
+    // --- Groq ---
+    let groq_configured = std::env::var("GROQ_API_KEY").map(|k| !k.is_empty()).unwrap_or(false);
+    if groq_configured {
+        let key = std::env::var("GROQ_API_KEY").unwrap();
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            let start = std::time::Instant::now();
+            let res = c.get("https://api.groq.com/openai/v1/models")
+                .header("Authorization", format!("Bearer {key}"))
+                .send().await;
+            let ms = start.elapsed().as_millis() as u64;
+            match res {
+                Ok(r) if r.status().is_success() => serde_json::json!({
+                    "name": "Groq", "status": "ok", "latency_ms": ms
+                }),
+                Ok(r) => serde_json::json!({
+                    "name": "Groq", "status": "error",
+                    "latency_ms": ms, "detail": format!("HTTP {}", r.status())
+                }),
+                Err(e) => serde_json::json!({
+                    "name": "Groq", "status": "error",
+                    "latency_ms": ms, "detail": e.to_string()
+                }),
+            }
+        }));
+    } else {
+        handles.push(tokio::spawn(async {
+            serde_json::json!({"name": "Groq", "status": "not_configured"})
+        }));
+    }
+
+    // --- Kimi / Moonshot ---
+    let kimi_key = std::env::var("KIMI_API_KEY")
+        .or_else(|_| std::env::var("MOONSHOT_API_KEY"))
+        .ok()
+        .filter(|k| !k.is_empty());
+    if let Some(key) = kimi_key {
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            let start = std::time::Instant::now();
+            let res = c.get("https://api.moonshot.cn/v1/models")
+                .header("Authorization", format!("Bearer {key}"))
+                .send().await;
+            let ms = start.elapsed().as_millis() as u64;
+            match res {
+                Ok(r) if r.status().is_success() => serde_json::json!({
+                    "name": "Kimi", "status": "ok", "latency_ms": ms
+                }),
+                Ok(r) => serde_json::json!({
+                    "name": "Kimi", "status": "error",
+                    "latency_ms": ms, "detail": format!("HTTP {}", r.status())
+                }),
+                Err(e) => serde_json::json!({
+                    "name": "Kimi", "status": "error",
+                    "latency_ms": ms, "detail": e.to_string()
+                }),
+            }
+        }));
+    } else {
+        handles.push(tokio::spawn(async {
+            serde_json::json!({"name": "Kimi", "status": "not_configured"})
+        }));
+    }
+
+    // --- DynamoDB ---
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref ddb), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let ddb = ddb.clone();
+            let table = table.clone();
+            handles.push(tokio::spawn(async move {
+                let start = std::time::Instant::now();
+                // Use get_item on a non-existent key — requires only read permissions
+                let res = ddb.get_item()
+                    .table_name(&table)
+                    .key("pk", aws_sdk_dynamodb::types::AttributeValue::S("HEALTH_CHECK".to_string()))
+                    .key("sk", aws_sdk_dynamodb::types::AttributeValue::S("PING".to_string()))
+                    .send().await;
+                let ms = start.elapsed().as_millis() as u64;
+                match res {
+                    Ok(_) => serde_json::json!({
+                        "name": "DynamoDB", "status": "ok", "latency_ms": ms
+                    }),
+                    Err(e) => serde_json::json!({
+                        "name": "DynamoDB", "status": "error",
+                        "latency_ms": ms, "detail": e.to_string()
+                    }),
+                }
+            }));
+        } else {
+            handles.push(tokio::spawn(async {
+                serde_json::json!({"name": "DynamoDB", "status": "not_configured"})
+            }));
+        }
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        handles.push(tokio::spawn(async {
+            serde_json::json!({"name": "DynamoDB", "status": "not_configured"})
+        }));
+    }
+
+    // --- API (self) ---
+    handles.push(tokio::spawn(async {
+        serde_json::json!({"name": "API (self)", "status": "ok", "latency_ms": 1})
+    }));
+
+    // Collect results
+    let mut services = Vec::new();
+    for h in handles {
+        match h.await {
+            Ok(v) => services.push(v),
+            Err(_) => {}
+        }
+    }
+
+    let result = serde_json::json!({
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "services": services,
+        "cached": false,
+    });
+
+    // Store in cache
+    {
+        let mut cache = state.ping_cache.lock().await;
+        *cache = Some((std::time::Instant::now(), result.clone()));
+    }
+
+    Json(result)
 }
 
 // ---------------------------------------------------------------------------
@@ -5200,6 +6277,300 @@ async fn handle_delete_conversation(
         }
     }
 
+    Json(serde_json::json!({ "error": "DynamoDB not configured" }))
+}
+
+// ---------------------------------------------------------------------------
+// Shared conversation endpoints
+// ---------------------------------------------------------------------------
+
+/// GET /c/{hash} — Serve the SPA for shared conversation view
+async fn handle_shared_page(
+    Path(_hash): Path<String>,
+) -> impl IntoResponse {
+    // Serve the same index.html — frontend detects /c/{hash} and enters shared mode
+    axum::response::Html(include_str!("../../../../web/index.html"))
+}
+
+/// GET /api/v1/shared/{hash} — Get shared conversation messages (public, read-only)
+async fn handle_get_shared(
+    State(state): State<Arc<AppState>>,
+    Path(hash): Path<String>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            // Look up the share record
+            let resp = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(format!("SHARE#{hash}")))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .send()
+                .await;
+
+            let item = match resp {
+                Ok(output) => match output.item {
+                    Some(item) => item,
+                    None => return Json(serde_json::json!({ "error": "Share not found" })),
+                },
+                Err(e) => {
+                    tracing::error!("Failed to get share: {}", e);
+                    return Json(serde_json::json!({ "error": "Internal error" }));
+                }
+            };
+
+            // Check if revoked
+            let revoked = item
+                .get("revoked")
+                .and_then(|v| v.as_bool().ok())
+                .copied()
+                .unwrap_or(false);
+            if revoked {
+                return Json(serde_json::json!({ "error": "This share has been revoked" }));
+            }
+
+            let conv_id = item
+                .get("conv_id")
+                .and_then(|v| v.as_s().ok())
+                .cloned()
+                .unwrap_or_default();
+            let user_id = item
+                .get("user_id")
+                .and_then(|v| v.as_s().ok())
+                .cloned()
+                .unwrap_or_default();
+            let shared_at = item
+                .get("created_at")
+                .and_then(|v| v.as_s().ok())
+                .cloned()
+                .unwrap_or_default();
+
+            // Get the conversation title
+            let user_pk = format!("USER#{}", user_id);
+            let conv_resp = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S(format!("CONV#{}", conv_id)))
+                .send()
+                .await;
+
+            let title = if let Ok(output) = conv_resp {
+                output.item.and_then(|item| {
+                    item.get("title").and_then(|v| v.as_s().ok()).cloned()
+                }).unwrap_or_else(|| "Shared conversation".to_string())
+            } else {
+                "Shared conversation".to_string()
+            };
+
+            // Get session_id from conv record to fetch messages
+            let session_id = format!("webchat:{}", conv_id);
+
+            let mut store = state.sessions.lock().await;
+            let session = store.get_or_create(&session_id);
+            let messages: Vec<serde_json::Value> = session
+                .messages
+                .iter()
+                .filter(|m| m.role == "user" || m.role == "assistant")
+                .map(|m| {
+                    serde_json::json!({
+                        "role": m.role,
+                        "content": m.content,
+                    })
+                })
+                .collect();
+
+            return Json(serde_json::json!({
+                "title": title,
+                "messages": messages,
+                "shared_at": shared_at,
+            }));
+        }
+    }
+
+    let _ = &state;
+    Json(serde_json::json!({ "error": "DynamoDB not configured" }))
+}
+
+/// POST /api/v1/conversations/{id}/share — Create a share link for a conversation
+async fn handle_share_conversation(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_id = match auth_user_id(&state, &headers).await {
+                Some(uid) => uid,
+                None => return Json(serde_json::json!({ "error": "Not authenticated" })),
+            };
+
+            // Verify user owns this conversation
+            let user_pk = format!("USER#{}", user_id);
+            let conv_resp = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S(format!("CONV#{}", id)))
+                .send()
+                .await;
+
+            match conv_resp {
+                Ok(output) if output.item.is_some() => {}
+                _ => return Json(serde_json::json!({ "error": "Conversation not found" })),
+            }
+
+            // Check if already shared
+            let existing_resp = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(format!("CONV_SHARE#{id}")))
+                .key("sk", AttributeValue::S("HASH".to_string()))
+                .send()
+                .await;
+
+            if let Ok(output) = existing_resp {
+                if let Some(item) = output.item {
+                    if let Some(hash) = item.get("share_hash").and_then(|v| v.as_s().ok()) {
+                        // Verify the share is not revoked
+                        let share_resp = dynamo
+                            .get_item()
+                            .table_name(table.as_str())
+                            .key("pk", AttributeValue::S(format!("SHARE#{hash}")))
+                            .key("sk", AttributeValue::S("INFO".to_string()))
+                            .send()
+                            .await;
+                        let revoked = share_resp.ok().and_then(|o| o.item).map(|item| {
+                            item.get("revoked")
+                                .and_then(|v| v.as_bool().ok())
+                                .copied()
+                                .unwrap_or(false)
+                        }).unwrap_or(true);
+
+                        if !revoked {
+                            return Json(serde_json::json!({
+                                "share_url": format!("{}/c/{hash}", get_base_url()),
+                                "hash": hash,
+                                "already_shared": true,
+                            }));
+                        }
+                    }
+                }
+            }
+
+            // Generate new share
+            let hash = super::commands::generate_share_hash();
+            let now = chrono::Utc::now().to_rfc3339();
+
+            let put_result = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(format!("SHARE#{hash}")))
+                .item("sk", AttributeValue::S("INFO".to_string()))
+                .item("conv_id", AttributeValue::S(id.clone()))
+                .item("user_id", AttributeValue::S(user_id))
+                .item("created_at", AttributeValue::S(now))
+                .item("revoked", AttributeValue::Bool(false))
+                .send()
+                .await;
+
+            if let Err(e) = put_result {
+                tracing::error!("Failed to create share: {}", e);
+                return Json(serde_json::json!({ "error": "Failed to create share link" }));
+            }
+
+            // Reverse lookup
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(format!("CONV_SHARE#{id}")))
+                .item("sk", AttributeValue::S("HASH".to_string()))
+                .item("share_hash", AttributeValue::S(hash.clone()))
+                .send()
+                .await;
+
+            return Json(serde_json::json!({
+                "share_url": format!("{}/c/{hash}", get_base_url()),
+                "hash": hash,
+                "already_shared": false,
+            }));
+        }
+    }
+
+    let _ = (&state, &headers);
+    Json(serde_json::json!({ "error": "DynamoDB not configured" }))
+}
+
+/// DELETE /api/v1/conversations/{id}/share — Revoke a share link
+async fn handle_revoke_share(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_id = match auth_user_id(&state, &headers).await {
+                Some(uid) => uid,
+                None => return Json(serde_json::json!({ "error": "Not authenticated" })),
+            };
+
+            // Verify user owns this conversation
+            let user_pk = format!("USER#{}", user_id);
+            let conv_resp = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S(format!("CONV#{}", id)))
+                .send()
+                .await;
+
+            match conv_resp {
+                Ok(output) if output.item.is_some() => {}
+                _ => return Json(serde_json::json!({ "error": "Conversation not found" })),
+            }
+
+            // Find the share hash
+            let hash_resp = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(format!("CONV_SHARE#{id}")))
+                .key("sk", AttributeValue::S("HASH".to_string()))
+                .send()
+                .await;
+
+            let hash = match hash_resp {
+                Ok(output) => output
+                    .item
+                    .and_then(|item| item.get("share_hash").and_then(|v| v.as_s().ok()).cloned()),
+                Err(_) => None,
+            };
+
+            match hash {
+                Some(hash) => {
+                    // Set revoked = true
+                    let _ = dynamo
+                        .update_item()
+                        .table_name(table.as_str())
+                        .key("pk", AttributeValue::S(format!("SHARE#{hash}")))
+                        .key("sk", AttributeValue::S("INFO".to_string()))
+                        .update_expression("SET revoked = :r")
+                        .expression_attribute_values(":r", AttributeValue::Bool(true))
+                        .send()
+                        .await;
+
+                    return Json(serde_json::json!({ "ok": true }));
+                }
+                None => {
+                    return Json(serde_json::json!({ "error": "No share link found for this conversation" }));
+                }
+            }
+        }
+    }
+
+    let _ = (&state, &headers);
     Json(serde_json::json!({ "error": "DynamoDB not configured" }))
 }
 

@@ -41,7 +41,7 @@ impl Plan {
 
     pub fn monthly_credits(&self) -> i64 {
         match self {
-            Plan::Free => 1_000,
+            Plan::Free => 100,
             Plan::Starter => 25_000,
             Plan::Pro => 300_000,
             Plan::Enterprise => i64::MAX,
@@ -60,6 +60,31 @@ impl Plan {
                 "claude-opus",
             ],
         }
+    }
+
+    /// Maximum tool-calling iterations per chat request.
+    pub fn max_tool_iterations(&self) -> usize {
+        match self {
+            Plan::Free => 1,
+            Plan::Starter => 3,
+            Plan::Pro | Plan::Enterprise => 5,
+        }
+    }
+
+    /// Tools allowed for this plan. Returns None = all tools allowed.
+    pub fn allowed_tools(&self) -> Option<&[&str]> {
+        match self {
+            Plan::Free => Some(&[
+                "web_search", "web_fetch", "calculator", "weather",
+                "translate", "wikipedia", "date_time", "qr_code", "news_search",
+            ]),
+            _ => None, // Starter, Pro, Enterprise: all tools
+        }
+    }
+
+    /// Whether sandbox (code execution, file operations) is available.
+    pub fn has_sandbox(&self) -> bool {
+        !matches!(self, Plan::Free)
     }
 }
 
@@ -97,6 +122,13 @@ pub struct CreditRate {
 /// Get credit rate for a model.
 pub fn credit_rate(model: &str) -> CreditRate {
     let model_lower = model.to_lowercase();
+    // Local fallback models are free (0 credits)
+    if model_lower.starts_with("local-") {
+        return CreditRate {
+            input_per_1k: 0,
+            output_per_1k: 0,
+        };
+    }
     if model_lower.contains("gpt-4o-mini") || model_lower.contains("gemini-flash") {
         CreditRate {
             input_per_1k: 1,
@@ -140,9 +172,15 @@ pub fn credit_rate(model: &str) -> CreditRate {
 /// Calculate credits consumed for a given model and token usage.
 pub fn calculate_credits(model: &str, input_tokens: u32, output_tokens: u32) -> u64 {
     let rate = credit_rate(model);
-    let input_credits = (input_tokens as u64 * rate.input_per_1k as u64) / 1000;
-    let output_credits = (output_tokens as u64 * rate.output_per_1k as u64) / 1000;
-    input_credits + output_credits
+    if rate.input_per_1k == 0 && rate.output_per_1k == 0 {
+        return 0; // free models (e.g. local fallback)
+    }
+    // Use ceiling division to ensure any API usage costs at least 1 credit
+    let input_credits = ((input_tokens as u64 * rate.input_per_1k as u64) + 999) / 1000;
+    let output_credits = ((output_tokens as u64 * rate.output_per_1k as u64) + 999) / 1000;
+    // Minimum 1 credit for any non-zero token usage
+    let total = input_credits + output_credits;
+    if total == 0 && (input_tokens > 0 || output_tokens > 0) { 1 } else { total }
 }
 
 /// Hash an API key using SHA-256 for storage lookup.
@@ -195,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_plan_monthly_credits() {
-        assert_eq!(Plan::Free.monthly_credits(), 1_000);
+        assert_eq!(Plan::Free.monthly_credits(), 100);
         assert_eq!(Plan::Starter.monthly_credits(), 25_000);
         assert_eq!(Plan::Pro.monthly_credits(), 300_000);
     }

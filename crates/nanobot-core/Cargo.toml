@@ -13,6 +13,7 @@ dynamodb-backend = ["aws-config", "aws-sdk-dynamodb"]
 stripe = ["async-stripe"]
 lambda = ["lambda_http"]
 saas = ["dynamodb-backend", "stripe", "lambda", "http-api"]
+local-fallback = ["candle-core", "candle-transformers", "candle-nn", "tokenizers", "hf-hub"]
 
 [dependencies]
 # Error handling
@@ -74,6 +75,16 @@ async-stripe = { version = "0.39", features = ["runtime-tokio-hyper-rustls"], op
 
 # Lambda (optional)
 lambda_http = { version = "0.13", optional = true }
+
+# Async stream for SSE
+async-stream = "0.3"
+
+# Local LLM fallback (optional)
+candle-core = { version = "0.8", optional = true, default-features = false }
+candle-nn = { version = "0.8", optional = true, default-features = false }
+candle-transformers = { version = "0.8", optional = true, default-features = false }
+tokenizers = { version = "0.20", optional = true, default-features = false, features = ["onig"] }
+hf-hub = { version = "0.3", optional = true, default-features = false, features = ["tokio", "online"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util", "macros"] }

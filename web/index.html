@@ -41,8 +41,15 @@
       {"@type": "Offer", "name": "Starter", "price": "9", "priceCurrency": "USD"},
       {"@type": "Offer", "name": "Pro", "price": "29", "priceCurrency": "USD"}
     ],
-    "featureList": "Voice Input, Web Search, Multi-Channel (LINE, Telegram, Web), 5+ AI Models, Long-term Memory, TTS",
-    "inLanguage": ["ja", "en"]
+    "featureList": "Voice Input, Web Search, Multi-Channel (LINE, Telegram, Web), 5+ AI Models, Long-term Memory, TTS, REST API, SSE Streaming, Slash Commands, Conversation Sharing",
+    "inLanguage": ["ja", "en"],
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://chatweb.ai/?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    },
+    "documentation": "https://chatweb.ai/docs",
+    "sameAs": ["https://github.com/yukihamada/nanobot", "https://teai.io"]
   }
   </script>
   <!-- Preconnect to API Gateway for faster first request -->
@@ -1660,6 +1667,154 @@
       min-width: 0;
     }
 
+    /* Explore mode cards */
+    .explore-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .explore-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      transition: border-color 0.2s;
+    }
+    .explore-card:hover {
+      border-color: var(--accent);
+    }
+    .explore-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .explore-model-name {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .explore-time-badge {
+      background: var(--bg);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .explore-fallback-badge {
+      background: #f59e0b22;
+      color: #f59e0b;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .explore-card-body {
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .explore-card-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+    }
+    .explore-adopt-btn {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+      background: transparent;
+      color: var(--accent);
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .explore-adopt-btn:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+    .explore-actions-bar {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .explore-action-btn {
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .explore-action-btn:hover {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+    .explore-level-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      margin-left: auto;
+    }
+    .explore-pending {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      padding: 6px 0;
+    }
+    .explore-pending .dot-pulse {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      animation: pulse-glow 1s infinite;
+    }
+
+    /* Agent progress (tool execution steps) */
+    .agent-progress {
+      margin: 8px 0;
+      padding: 8px 12px;
+      background: var(--surface, #f5f5f5);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--muted, #888);
+      border-left: 3px solid var(--primary, #4f46e5);
+    }
+    [data-theme="dark"] .agent-progress {
+      background: #1a1a2e;
+    }
+    .agent-progress .tool-step { padding: 4px 0; }
+    .agent-progress .tool-step pre {
+      margin: 2px 0 0 18px;
+      font-size: 12px;
+      max-height: 120px;
+      overflow: auto;
+      background: var(--code-bg, #1e1e1e);
+      color: var(--code-fg, #d4d4d4);
+      padding: 6px 8px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
     /* API Keys modal */
     .apikey-modal { max-width: 480px; text-align: left; }
     .apikey-modal h3 { text-align: center; }
@@ -2253,10 +2408,21 @@
         <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
         Sign in with Google
       </button>
+      <div style="margin-top:12px;padding:10px;background:linear-gradient(135deg,#6366f122,#8b5cf622);border:1px solid var(--accent);border-radius:10px;text-align:center;">
+        <div style="font-size:12px;font-weight:600;color:var(--accent);" id="auth-bonus-text">100 credits free on signup!</div>
+        <div style="display:flex;gap:6px;margin-top:8px;align-items:center;">
+          <input type="text" id="auth-coupon-input" placeholder="Coupon code" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;">
+          <button onclick="redeemCouponFromAuth()" style="padding:6px 12px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-size:11px;cursor:pointer;white-space:nowrap;">Redeem</button>
+        </div>
+        <div id="auth-coupon-result" style="font-size:11px;margin-top:6px;display:none;"></div>
+      </div>
       <button class="close-btn" onclick="closeAuthModal()">Close</button>
     </div>
   </div>
 
+  </main>
+
+  <!-- Channel QR Modal (outside main so it's visible in app-mode) -->
   <div class="modal-overlay" id="modal" onclick="closeModal(event)" style="z-index:300;">
     <div class="modal" id="modal-content">
       <h3 id="modal-title"></h3>
@@ -2275,7 +2441,7 @@
     </div>
   </div>
 
-  <!-- API Keys Modal -->
+  <!-- API Keys Modal (outside main so it's visible in app-mode) -->
   <div class="modal-overlay" id="apikey-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
     <div class="modal apikey-modal" onclick="event.stopPropagation()">
       <h3 id="apikey-modal-title">API Keys</h3>
@@ -2297,8 +2463,6 @@
       <button class="close-btn" onclick="document.getElementById('apikey-modal').classList.remove('show')">Close</button>
     </div>
   </div>
-
-  </main>
 
   <!-- App Mode Container (shown when authenticated, OUTSIDE main so display:none doesn't hide it) -->
   <div class="app-container" id="app-container">
@@ -2356,9 +2520,14 @@
           </button>
         </div>
         <input type="hidden" id="app-agent-select" value="auto">
-        <label id="multi-model-toggle" style="display:none;font-size:11px;color:var(--muted);cursor:pointer;user-select:none;margin-top:4px;text-align:right;">
-          <input type="checkbox" id="multi-model-check" style="vertical-align:middle;margin-right:4px;">Multi-Model Race
-        </label>
+        <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:4px;">
+          <label id="multi-model-toggle" style="display:none;font-size:11px;color:var(--muted);cursor:pointer;user-select:none;">
+            <input type="checkbox" id="multi-model-check" style="vertical-align:middle;margin-right:4px;">Multi-Model Race
+          </label>
+          <label id="explore-toggle" style="font-size:11px;color:var(--muted);cursor:pointer;user-select:none;">
+            <input type="checkbox" id="explore-check" style="vertical-align:middle;margin-right:4px;">Explore
+          </label>
+        </div>
       </div>
     </div>
   </div>
@@ -3101,6 +3270,8 @@
       const lang2 = document.documentElement.lang || 'ja';
       document.getElementById('auth-modal-title').textContent = lang2 === 'ja' ? 'ログイン' : 'Login';
       document.getElementById('email-auth-btn').textContent = lang2 === 'ja' ? 'メールでログイン' : 'Login with Email';
+      const bonusEl = document.getElementById('auth-bonus-text');
+      if (bonusEl) bonusEl.textContent = lang2 === 'ja' ? '登録で100クレジット無料!' : '100 credits free on signup!';
       document.getElementById('sidebar-title').textContent = t.sidebarTitle;
       document.getElementById('new-conv-btn').textContent = t.newConv;
       // App mode translations
@@ -3147,8 +3318,8 @@
 
     // Channel deep links with auto-link session ID
     function getLineDeepLink() {
-      // LINE OA message deep link with session ID prefilled
-      return 'https://line.me/R/oaMessage/@619jcqqh/?' + encodeURIComponent(webSessionId);
+      // LINE OA message deep link with /link command + session ID prefilled
+      return 'https://line.me/R/oaMessage/@619jcqqh/?%2Flink%20' + encodeURIComponent(webSessionId);
     }
     function getTgDeepLink() {
       // Telegram deep link: /start payload (replace : with _ for Telegram)
@@ -3241,8 +3412,8 @@
 
     const CHANNELS = {
       line: {
-        ja: { title: 'LINEで友だち追加', desc: 'ボタンを押すとLINEが開き、自動でこのWebの会話と連携されます。', link: 'LINEで開く' },
-        en: { title: 'Add on LINE', desc: 'Tap the button to open LINE. Your Web conversation will be auto-linked.', link: 'Open in LINE' },
+        ja: { title: 'LINEで友だち追加', desc: 'QRコードをスマホで読み取り、表示されるメッセージをそのまま送信してください。自動でWebの会話と連携されます。', descMobile: 'ボタンを押すとLINEが開きます。表示されるメッセージを送信で連携完了。', link: 'LINEで開く' },
+        en: { title: 'Add on LINE', desc: 'Scan QR with your phone, then send the pre-filled message. Your Web conversation will be auto-linked.', descMobile: 'Tap the button to open LINE. Send the pre-filled message to link.', link: 'Open in LINE' },
         bg: 'line-bg',
       },
       tg: {
@@ -3282,38 +3453,83 @@
         default: return '#';
       }
     }
-    function showModal(ch) {
+    function isMobileDevice() {
+      return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+        || (navigator.maxTouchPoints > 0 && window.innerWidth < 768);
+    }
+    // Generate a link code via backend for QR-based channel linking
+    async function generateLinkCode() {
+      try {
+        const resp = await fetch(API + '/api/v1/link/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-session-id': webSessionId }
+        });
+        const data = await resp.json();
+        return data.code || null;
+      } catch (e) { return null; }
+    }
+    function buildDeepLinkWithCode(ch, code) {
+      switch (ch) {
+        case 'line': return 'https://line.me/R/oaMessage/@619jcqqh/?%2Flink%20' + code;
+        case 'tg': return 'https://t.me/chatweb_ai_bot?start=link_' + code;
+        default: return getDeepLink(ch);
+      }
+    }
+    async function showModal(ch) {
       const c = CHANNELS[ch];
       if (!c) return;
       const l = document.documentElement.lang || 'ja';
       const t = c[l] || c.ja;
-      const deepLink = getDeepLink(ch);
+      const mobile = isMobileDevice();
+      // Show modal immediately with spinner
       document.getElementById('modal-title').textContent = t.title;
-      // Update step labels based on locale
       const steps = document.getElementById('modal-steps');
       if (steps) {
-        const s = l === 'ja'
-          ? ['1. QRを読む', '2. メッセージ送信', '3. 連携完了']
-          : ['1. Scan QR', '2. Send message', '3. Linked'];
+        const s = mobile
+          ? (l === 'ja' ? ['1. アプリを開く', '2. メッセージ送信', '3. 連携完了'] : ['1. Open app', '2. Send message', '3. Linked'])
+          : (l === 'ja' ? ['1. QRを読む', '2. メッセージ送信', '3. 連携完了'] : ['1. Scan QR', '2. Send message', '3. Linked']);
         steps.innerHTML = '<span style="background:var(--accent);color:#fff;border-radius:12px;padding:2px 10px;">' + s[0] + '</span>'
           + '<span style="opacity:.5;border-radius:12px;padding:2px 10px;border:1px solid var(--border);">' + s[1] + '</span>'
           + '<span style="opacity:.5;border-radius:12px;padding:2px 10px;border:1px solid var(--border);">' + s[2] + '</span>';
       }
-      document.getElementById('modal-desc').textContent = t.desc;
+      document.getElementById('modal-desc').textContent = (mobile && t.descMobile) ? t.descMobile : t.desc;
       const qrImg = document.getElementById('modal-qr');
       const qrSpinner = document.getElementById('qr-spinner');
       qrImg.classList.remove('loaded');
       qrSpinner.classList.remove('hidden');
-      qrImg.onload = function() {
-        qrSpinner.classList.add('hidden');
-        qrImg.classList.add('loaded');
-      };
-      qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
+      qrImg.src = '';
       const link = document.getElementById('modal-link');
-      link.href = deepLink;
-      link.textContent = t.link;
       link.className = 'modal-link ' + (c.bg || 'tg-bg');
       document.getElementById('modal').classList.add('show');
+      // For LINE/Telegram: generate a link code, then build QR with it
+      if (ch === 'line' || ch === 'tg') {
+        const code = await generateLinkCode();
+        if (code) {
+          const deepLink = buildDeepLinkWithCode(ch, code);
+          qrImg.onload = function() { qrSpinner.classList.add('hidden'); qrImg.classList.add('loaded'); };
+          qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
+          link.href = deepLink;
+          link.textContent = t.link;
+          // Show the code for manual entry
+          document.getElementById('modal-desc').textContent =
+            (mobile && t.descMobile ? t.descMobile : t.desc)
+            + (l === 'ja' ? '\n\n手動入力の場合: /link ' + code : '\n\nManual: /link ' + code);
+        } else {
+          // Fallback: use direct deep link without link code
+          const deepLink = getDeepLink(ch);
+          qrImg.onload = function() { qrSpinner.classList.add('hidden'); qrImg.classList.add('loaded'); };
+          qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
+          link.href = deepLink;
+          link.textContent = t.link;
+        }
+      } else {
+        // Other channels: use direct deep link
+        const deepLink = getDeepLink(ch);
+        qrImg.onload = function() { qrSpinner.classList.add('hidden'); qrImg.classList.add('loaded'); };
+        qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
+        link.href = deepLink;
+        link.textContent = t.link;
+      }
     }
     function closeModal(e) {
       if (e.target === document.getElementById('modal')) {
@@ -3340,6 +3556,39 @@
       const el = document.getElementById('auth-error');
       el.textContent = msg;
       el.style.display = '';
+    }
+    async function redeemCouponFromAuth() {
+      const code = document.getElementById('auth-coupon-input').value.trim();
+      const resultEl = document.getElementById('auth-coupon-result');
+      if (!code) return;
+      resultEl.style.display = '';
+      resultEl.style.color = 'var(--muted)';
+      resultEl.textContent = 'Validating...';
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          resultEl.style.color = '#ef4444';
+          resultEl.textContent = document.documentElement.lang === 'ja' ? 'まずログインしてください' : 'Please login first';
+          return;
+        }
+        const r = await fetch(API + '/api/v1/coupon/redeem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ code: code, session_id: webSessionId }),
+        });
+        const d = await r.json();
+        if (d.success) {
+          resultEl.style.color = '#22c55e';
+          resultEl.textContent = (document.documentElement.lang === 'ja' ? '+' + d.credits_granted + ' クレジット獲得!' : '+' + d.credits_granted + ' credits granted!');
+          if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
+        } else {
+          resultEl.style.color = '#ef4444';
+          resultEl.textContent = d.error || 'Invalid coupon';
+        }
+      } catch {
+        resultEl.style.color = '#ef4444';
+        resultEl.textContent = 'Error';
+      }
     }
 
     let pendingVerifyEmail = '';
@@ -3692,8 +3941,20 @@
         appConversations.forEach(conv => {
           const item = document.createElement('div');
           item.className = 'app-conv-item' + (conv.id === appCurrentConvId ? ' active' : '');
-          item.textContent = conv.title || (document.documentElement.lang === 'ja' ? '新しい会話' : 'New conversation');
-          item.onclick = () => appLoadConversation(conv.id, conv.session_id);
+          item.style.cssText = 'display:flex;align-items:center;gap:4px;';
+          const title = document.createElement('span');
+          title.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+          title.textContent = conv.title || (document.documentElement.lang === 'ja' ? '新しい会話' : 'New conversation');
+          title.onclick = () => appLoadConversation(conv.id, conv.session_id);
+          item.appendChild(title);
+          const shareBtn = document.createElement('button');
+          shareBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+          shareBtn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;flex-shrink:0;opacity:0;transition:opacity 0.15s;';
+          shareBtn.title = 'Share';
+          shareBtn.onclick = (e) => { e.stopPropagation(); shareConversation(conv.id); };
+          item.appendChild(shareBtn);
+          item.onmouseenter = () => shareBtn.style.opacity = '1';
+          item.onmouseleave = () => shareBtn.style.opacity = '0';
           list.appendChild(item);
         });
       } catch(e) { /* ignore */ }
@@ -3873,6 +4134,15 @@
         const agentSel = document.getElementById('app-agent-select').value;
         const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
 
+        // Check explore mode
+        const exploreMode = document.getElementById('explore-check')?.checked || false;
+        if (exploreMode) {
+          clearInterval(statusInterval);
+          thinking.remove();
+          await appExplore(msgToSend, text, 0);
+          return;
+        }
+
         // Check multi-model mode
         const multiModel = document.getElementById('multi-model-check')?.checked || false;
 
@@ -3918,11 +4188,73 @@
           autoPlayTTS(d.response);
           appLoadConversations();
         } else {
-          // Read SSE stream
+          // Read SSE stream (supports agentic multi-iteration tool events)
           const reader = r.body.getReader();
           const decoder = new TextDecoder();
           let buf = '';
           let gotContent = false;
+
+          // Agent progress container (inserted before final answer)
+          let agentProgressEl = null;
+          function ensureAgentProgress() {
+            if (agentProgressEl) return agentProgressEl;
+            agentProgressEl = document.createElement('div');
+            agentProgressEl.className = 'agent-progress';
+            agentProgressEl.style.cssText = 'margin:8px 0;padding:8px 12px;background:var(--surface,#f5f5f5);border-radius:8px;font-size:13px;color:var(--muted,#888);';
+            const msgsEl = document.getElementById('app-messages');
+            if (msgsEl) msgsEl.appendChild(agentProgressEl);
+            return agentProgressEl;
+          }
+
+          function processEvent(evt) {
+            if (evt.type === 'tool_start') {
+              const p = ensureAgentProgress();
+              const toolEl = document.createElement('div');
+              toolEl.className = 'tool-step';
+              toolEl.id = 'tool-step-' + evt.tool + '-' + evt.iteration;
+              toolEl.innerHTML = '<span class="dot-pulse" style="display:inline-block;width:6px;height:6px;background:var(--primary,#4f46e5);border-radius:50%;animation:pulse 1s infinite;margin-right:6px;"></span>' +
+                '<strong>' + evt.tool + '</strong> ' + (lang === 'ja' ? '実行中...' : 'running...');
+              toolEl.style.cssText = 'padding:4px 0;';
+              p.appendChild(toolEl);
+            } else if (evt.type === 'tool_result') {
+              const stepEl = document.getElementById('tool-step-' + evt.tool + '-' + evt.iteration);
+              if (stepEl) {
+                const preview = (evt.result || '').substring(0, 200);
+                const isError = preview.startsWith('[TOOL_ERROR]');
+                stepEl.innerHTML = (isError ? '&#10060;' : '&#9989;') + ' <strong>' + evt.tool + '</strong>';
+                if (preview) {
+                  const pre = document.createElement('pre');
+                  pre.style.cssText = 'margin:2px 0 0 18px;font-size:12px;max-height:120px;overflow:auto;background:var(--code-bg,#1e1e1e);color:var(--code-fg,#d4d4d4);padding:6px 8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;';
+                  pre.textContent = preview;
+                  stepEl.appendChild(pre);
+                }
+              }
+            } else if (evt.type === 'thinking') {
+              const p = ensureAgentProgress();
+              const thinkEl = document.createElement('div');
+              thinkEl.style.cssText = 'padding:4px 0;color:var(--muted,#888);font-style:italic;';
+              thinkEl.textContent = lang === 'ja' ? '結果を分析中...' : 'Analyzing results...';
+              thinkEl.className = 'thinking-step';
+              p.appendChild(thinkEl);
+            } else if (evt.type === 'content' && !gotContent) {
+              gotContent = true;
+              clearInterval(statusInterval);
+              thinking.remove();
+              // Remove thinking indicators
+              if (agentProgressEl) {
+                const thinkSteps = agentProgressEl.querySelectorAll('.thinking-step');
+                thinkSteps.forEach(el => el.remove());
+              }
+              appAddMsg(evt.content, 'bot', null, evt.tools_used || null);
+              knownMsgCount += 2;
+              if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
+              autoPlayTTS(evt.content);
+            } else if (evt.type === 'error') {
+              clearInterval(statusInterval);
+              thinking.remove();
+              appAddMsg(evt.content || 'Error', 'bot');
+            }
+          }
 
           while (true) {
             const { done, value } = await reader.read();
@@ -3938,19 +4270,15 @@
               const data = line.slice(5).trim();
               if (!data || data === '') continue;
               try {
-                const evt = JSON.parse(data);
-                if (evt.type === 'content' && !gotContent) {
-                  gotContent = true;
-                  clearInterval(statusInterval);
-                  thinking.remove();
-                  appAddMsg(evt.content, 'bot', null, null);
-                  knownMsgCount += 2;
-                  if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
-                  autoPlayTTS(evt.content);
-                } else if (evt.type === 'error') {
-                  clearInterval(statusInterval);
-                  thinking.remove();
-                  appAddMsg(evt.content || 'Error', 'bot');
+                const parsed = JSON.parse(data);
+                // New format: JSON array of events
+                if (Array.isArray(parsed)) {
+                  for (const evt of parsed) {
+                    processEvent(evt);
+                  }
+                } else {
+                  // Legacy format: single event object
+                  processEvent(parsed);
                 }
               } catch {}
             }
@@ -3968,6 +4296,210 @@
         thinking.remove();
         appAddMsg(lang === 'ja' ? 'エラーが発生しました。もう一度お試しください。' : 'Something went wrong. Please try again.', 'bot');
       }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Explore mode — multi-model parallel + hierarchical re-query
+    // ---------------------------------------------------------------------------
+    async function appExplore(msgToSend, originalText, level) {
+      const msgsEl = document.getElementById('app-messages');
+      const lang = document.documentElement.lang || 'ja';
+
+      // Create explore container
+      const container = document.createElement('div');
+      container.className = 'explore-container';
+      const levelLabels = ['Direct', 'Step-by-Step', 'Expert Deep'];
+      if (level > 0) {
+        const levelHeader = document.createElement('div');
+        levelHeader.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:4px;';
+        levelHeader.textContent = (lang === 'ja' ? '再調査 Lv.' : 'Re-query Lv.') + level + ' — ' + levelLabels[level];
+        container.appendChild(levelHeader);
+      }
+
+      // Pending indicator
+      const pending = document.createElement('div');
+      pending.className = 'explore-pending';
+      pending.innerHTML = '<span class="dot-pulse"></span> ' +
+        (lang === 'ja' ? '全モデルに問い合わせ中...' : 'Querying all models...');
+      container.appendChild(pending);
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'app-msg app-msg-bot';
+      const avatar = document.createElement('div');
+      avatar.className = 'app-msg-avatar';
+      avatar.textContent = 'cw';
+      wrapper.appendChild(avatar);
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'app-msg-content';
+      contentDiv.style.width = '100%';
+      contentDiv.appendChild(container);
+      wrapper.appendChild(contentDiv);
+      msgsEl.appendChild(wrapper);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+
+      try {
+        const r = await fetch(API + '/api/v1/chat/explore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: msgToSend,
+            session_id: webSessionId,
+            level: level,
+          }),
+        });
+
+        if (!r.ok || !r.body) {
+          pending.textContent = lang === 'ja' ? 'エラーが発生しました' : 'Error occurred';
+          return;
+        }
+
+        // Read SSE response (single event with all results)
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let exploreData = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+        }
+
+        // Parse SSE data lines
+        for (const line of buf.split('\n')) {
+          if (!line.startsWith('data:')) continue;
+          const dataStr = line.slice(5).trim();
+          if (!dataStr) continue;
+          try {
+            const data = JSON.parse(dataStr);
+
+            if (data.type === 'explore_results' && data.results) {
+              pending.remove();
+              exploreData = data;
+
+              // Render each model result as a card
+              for (const result of data.results) {
+                const card = document.createElement('div');
+                card.className = 'explore-card';
+                card.innerHTML = '<div class="explore-card-header">'
+                  + '<span class="explore-model-name">' + modelIcon(result.model) + ' ' + result.model + '</span>'
+                  + '<span class="explore-time-badge">' + (result.time_ms / 1000).toFixed(1) + 's</span>'
+                  + (result.is_fallback ? '<span class="explore-fallback-badge">fallback</span>' : '')
+                  + (result.credits_used > 0 ? '<span style="font-size:10px;color:var(--muted);">' + result.credits_used + ' credits</span>' : '')
+                  + '</div>'
+                  + '<div class="explore-card-body">' + escapeHtml(result.response) + '</div>'
+                  + '<div class="explore-card-actions">'
+                  + '<button class="explore-adopt-btn" onclick="exploreAdopt(this)" data-response="' + escapeAttr(result.response) + '">'
+                  + (lang === 'ja' ? 'この回答を採用' : 'Use this answer') + '</button>'
+                  + '</div>';
+                container.appendChild(card);
+              }
+
+              if (data.credits_remaining !== undefined && data.credits_remaining !== null) updateCredits(data.credits_remaining);
+            }
+
+            if (data.error) {
+              pending.textContent = data.error;
+            }
+          } catch {}
+        }
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+
+        // Add action buttons
+        if (exploreData) {
+          const actions = document.createElement('div');
+          actions.className = 'explore-actions-bar';
+
+          const summaryBtn = document.createElement('button');
+          summaryBtn.className = 'explore-action-btn';
+          summaryBtn.textContent = lang === 'ja' ? 'まとめる' : 'Summarize';
+          summaryBtn.onclick = function() {
+            const allResponses = container.querySelectorAll('.explore-card-body');
+            let combined = '';
+            allResponses.forEach((el, i) => {
+              combined += (lang === 'ja' ? '回答' : 'Answer') + (i + 1) + ':\n' + el.textContent + '\n\n';
+            });
+            const summaryPrompt = lang === 'ja'
+              ? '以下の複数の回答をまとめて、最も正確で包括的な回答を作成してください:\n\n' + combined
+              : 'Summarize the following answers into one accurate, comprehensive response:\n\n' + combined;
+            document.getElementById('app-input').value = summaryPrompt;
+            document.getElementById('explore-check').checked = false;
+            appSend();
+          };
+          actions.appendChild(summaryBtn);
+
+          if (exploreData.can_escalate) {
+            const reQueryBtn = document.createElement('button');
+            reQueryBtn.className = 'explore-action-btn';
+            const nextLevel = (exploreData.level || 0) + 1;
+            reQueryBtn.textContent = lang === 'ja' ? '再調査 (Lv.' + nextLevel + ')' : 'Re-query (Lv.' + nextLevel + ')';
+            reQueryBtn.onclick = function() {
+              appExplore(msgToSend, originalText, nextLevel);
+            };
+            actions.appendChild(reQueryBtn);
+          }
+
+          const totalInfo = document.createElement('span');
+          totalInfo.className = 'explore-level-badge';
+          totalInfo.textContent = exploreData.total_models + ' models / '
+            + (exploreData.total_time_ms / 1000).toFixed(1) + 's'
+            + (exploreData.total_credits_used > 0 ? ' / ' + exploreData.total_credits_used + ' credits' : '');
+          actions.appendChild(totalInfo);
+
+          container.appendChild(actions);
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+        }
+
+        knownMsgCount += 2;
+        appLoadConversations();
+
+      } catch (e) {
+        pending.textContent = lang === 'ja' ? 'エラーが発生しました' : 'Error occurred';
+        console.error('Explore error:', e);
+      }
+    }
+
+    function modelIcon(model) {
+      if (model.includes('claude')) return '\ud83d\udfe3';
+      if (model.includes('gpt')) return '\u26a1';
+      if (model.includes('gemini')) return '\ud83d\udd35';
+      if (model.includes('llama') || model.includes('groq')) return '\ud83e\uddac';
+      if (model.includes('kimi') || model.includes('moonshot')) return '\ud83c\udf19';
+      if (model.includes('local')) return '\ud83d\udfe2';
+      return '\ud83e\udd16';
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function escapeAttr(str) {
+      return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function exploreAdopt(btn) {
+      const response = btn.dataset.response;
+      // Show adopted response as the final bot message
+      const msgsEl = document.getElementById('app-messages');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'app-msg app-msg-bot';
+      const avatar = document.createElement('div');
+      avatar.className = 'app-msg-avatar';
+      avatar.textContent = 'cw';
+      wrapper.appendChild(avatar);
+      const content = document.createElement('div');
+      content.className = 'app-msg-content';
+      content.textContent = response;
+      // TTS button
+      const ttsBtn = document.createElement('button');
+      ttsBtn.className = 'app-tts-btn';
+      ttsBtn.textContent = '\ud83d\udd0a';
+      ttsBtn.dataset.text = response;
+      ttsBtn.onclick = function() { playTTS(this); };
+      content.appendChild(ttsBtn);
+      wrapper.appendChild(content);
+      msgsEl.appendChild(wrapper);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
     }
 
     // ---------------------------------------------------------------------------
@@ -4216,8 +4748,85 @@
       } catch(e) { /* ignore */ }
     }
 
-    // Check auth on page load
-    checkAuth();
+    // ---------------------------------------------------------------------------
+    // Shared conversation view
+    // ---------------------------------------------------------------------------
+    async function enterSharedViewMode(hash) {
+      try {
+        const r = await fetch(API + '/api/v1/shared/' + encodeURIComponent(hash));
+        const d = await r.json();
+        if (d.error) {
+          document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui;color:#ccc;background:#0d0d0d;"><h1 style="font-size:24px;margin-bottom:8px;">chatweb.ai</h1><p style="color:#888;">' + (d.error || 'Share not found') + '</p><a href="/" style="margin-top:24px;color:#4f8eff;">chatweb.ai\u3067\u4f1a\u8a71\u3092\u59cb\u3081\u308b</a></div>';
+          return;
+        }
+        // Hide everything and show shared view
+        document.body.classList.add('app-mode');
+        document.getElementById('app-sidebar').style.display = 'none';
+        document.getElementById('app-sidebar-toggle').style.display = 'none';
+        document.getElementById('app-sidebar-backdrop').style.display = 'none';
+        const inputArea = document.querySelector('.app-chat-input-area');
+        if (inputArea) inputArea.style.display = 'none';
+        const msgsEl = document.getElementById('app-messages');
+        msgsEl.innerHTML = '';
+        const emptyEl = document.getElementById('app-empty');
+        if (emptyEl) emptyEl.remove();
+        // Shared header
+        const header = document.createElement('div');
+        header.style.cssText = 'padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;';
+        header.innerHTML = '<div style="font-size:15px;color:#aaa;">\u5171\u6709\u3055\u308c\u305f\u4f1a\u8a71' + (d.title ? ' \u2014 ' + d.title.replace(/</g,'&lt;') : '') + '</div>';
+        msgsEl.parentElement.insertBefore(header, msgsEl);
+        // Render messages
+        (d.messages || []).forEach(m => {
+          appAddMsg(m.content, m.role === 'user' ? 'user' : 'bot');
+        });
+        // CTA
+        const cta = document.createElement('div');
+        cta.style.cssText = 'padding:24px;text-align:center;';
+        cta.innerHTML = '<a href="/" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#4f8eff,#3b6fd4);color:#fff;border-radius:12px;text-decoration:none;font-size:15px;font-weight:600;">chatweb.ai\u3067\u4f1a\u8a71\u3092\u59cb\u3081\u308b</a>';
+        msgsEl.appendChild(cta);
+      } catch(e) {
+        document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui;color:#ccc;background:#0d0d0d;"><h1>chatweb.ai</h1><p style="color:#888;">\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f</p><a href="/" style="margin-top:24px;color:#4f8eff;">chatweb.ai\u3067\u4f1a\u8a71\u3092\u59cb\u3081\u308b</a></div>';
+      }
+    }
+
+    async function shareConversation(convId) {
+      if (!authToken || !convId) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations/' + encodeURIComponent(convId) + '/share', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        if (d.share_url) {
+          await navigator.clipboard.writeText(d.share_url);
+          showToast(d.already_shared ? '\u5171\u6709\u30ea\u30f3\u30af\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f' : '\u5171\u6709\u30ea\u30f3\u30af\u3092\u751f\u6210\u3057\u307e\u3057\u305f');
+        } else {
+          showToast(d.error || '\u5171\u6709\u306b\u5931\u6557\u3057\u307e\u3057\u305f');
+        }
+      } catch(e) {
+        showToast('\u5171\u6709\u306b\u5931\u6557\u3057\u307e\u3057\u305f');
+      }
+    }
+
+    function showToast(msg) {
+      const existing = document.getElementById('toast-notification');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.id = 'toast-notification';
+      toast.textContent = msg;
+      toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:10000;transition:opacity 0.3s;';
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2500);
+    }
+
+    // Detect shared view URL before normal init
+    const shareMatch = window.location.pathname.match(/^\/c\/([a-zA-Z0-9]{8,12})$/);
+    if (shareMatch) {
+      enterSharedViewMode(shareMatch[1]);
+    } else {
+      // Check auth on page load
+      checkAuth();
+    }
 
     // IntersectionObserver for scroll-triggered fade-up
     (function() {

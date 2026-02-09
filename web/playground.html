@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Playground - chatweb.ai</title>
+  <meta name="description" content="Interactive API playground for chatweb.ai. Try endpoints, see results, share via URL.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <style>
+    :root{--bg:#09090b;--s:#18181b;--s2:#1e1e24;--b:#27272a;--t:#fafafa;--m:#71717a;--a:#6366f1;--ah:#818cf8;--g:#22c55e;--r:#ef4444;--code:#1a1a2e}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP','SF Mono',monospace,sans-serif;background:var(--bg);color:var(--t);min-height:100vh}
+    nav{padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b)}
+    .logo{font-size:18px;font-weight:700;text-decoration:none;color:var(--t)}.logo span{color:var(--a)}
+    .nav-r{display:flex;gap:16px;align-items:center}
+    .nav-r a{color:var(--m);text-decoration:none;font-size:14px}.nav-r a:hover{color:var(--t)}
+    .main{max-width:960px;margin:0 auto;padding:32px 24px 80px}
+    h1{font-size:28px;font-weight:800;margin-bottom:8px}
+    .subtitle{color:var(--m);font-size:14px;margin-bottom:32px}
+    .endpoint-picker{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
+    .ep-btn{padding:8px 16px;background:var(--s);border:1px solid var(--b);border-radius:8px;color:var(--m);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+    .ep-btn:hover{border-color:var(--a);color:var(--t)}
+    .ep-btn.active{background:rgba(99,102,241,.15);border-color:var(--a);color:var(--ah)}
+    .method-tag{font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:4px}
+    .method-tag.get{background:rgba(34,197,94,.15);color:var(--g)}
+    .method-tag.post{background:rgba(99,102,241,.15);color:var(--a)}
+    .editor-area{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+    @media(max-width:768px){.editor-area{grid-template-columns:1fr}}
+    .panel{background:var(--s);border:1px solid var(--b);border-radius:12px;overflow:hidden}
+    .panel-header{padding:12px 16px;border-bottom:1px solid var(--b);display:flex;justify-content:space-between;align-items:center}
+    .panel-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--m)}
+    .panel-body{padding:0}
+    textarea{width:100%;min-height:200px;background:var(--code);border:none;color:var(--t);font-family:'SF Mono',Menlo,monospace;font-size:13px;line-height:1.6;padding:16px;resize:vertical;outline:none}
+    .response-area{min-height:200px;background:var(--code);padding:16px;font-family:'SF Mono',Menlo,monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;overflow-y:auto;max-height:500px}
+    .response-area.empty{color:var(--m);display:flex;align-items:center;justify-content:center}
+    .actions{display:flex;gap:8px;margin-bottom:24px}
+    .btn{padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+    .btn-primary{background:var(--a);color:#fff}.btn-primary:hover{background:var(--ah)}
+    .btn-primary:disabled{opacity:.5;cursor:not-allowed}
+    .btn-secondary{background:var(--s);color:var(--t);border:1px solid var(--b)}.btn-secondary:hover{border-color:var(--a)}
+    .btn-sm{padding:6px 12px;font-size:12px}
+    .status-bar{display:flex;gap:16px;align-items:center;font-size:12px;color:var(--m);margin-bottom:24px}
+    .status-bar .status{font-weight:700}.status.s2xx{color:var(--g)}.status.s4xx{color:#f59e0b}.status.s5xx{color:var(--r)}
+    .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--a);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:200}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    .saved-result{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:20px;margin-bottom:24px}
+    .saved-result h3{font-size:15px;font-weight:600;margin-bottom:8px}
+    .saved-result .meta{font-size:12px;color:var(--m)}
+    .url-input{display:flex;gap:8px;margin-bottom:24px}
+    .url-input input{flex:1;padding:10px 14px;background:var(--s);border:1px solid var(--b);border-radius:8px;color:var(--t);font-family:monospace;font-size:13px;outline:none}
+    .url-input input:focus{border-color:var(--a)}
+    .header-rows{padding:8px 16px}
+    .header-row{display:flex;gap:8px;margin-bottom:6px;align-items:center}
+    .header-row input{flex:1;padding:6px 10px;background:var(--code);border:1px solid var(--b);border-radius:4px;color:var(--t);font-family:monospace;font-size:12px;outline:none}
+    .header-row input:focus{border-color:var(--a)}
+    .header-row .remove-hdr{background:none;border:none;color:var(--r);cursor:pointer;font-size:14px;padding:4px}
+    .add-hdr{background:none;border:none;color:var(--a);font-size:12px;cursor:pointer;padding:4px 0;font-weight:600}
+    .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;margin-right:6px;vertical-align:middle}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+<nav>
+  <a href="/" class="logo"><span>chat</span>web.ai <span style="color:var(--m);font-weight:400;font-size:14px;margin-left:8px">Playground</span></a>
+  <div class="nav-r">
+    <a href="/">Chat</a>
+    <a href="/docs">Docs</a>
+    <a href="/status">Status</a>
+  </div>
+</nav>
+
+<div class="main">
+  <h1>API Playground</h1>
+  <p class="subtitle">Try API endpoints interactively. Share results via URL.</p>
+
+  <div class="endpoint-picker" id="ep-picker">
+    <button class="ep-btn active" data-ep="chat" data-method="POST" data-path="/api/v1/chat"><span class="method-tag post">POST</span>/chat</button>
+    <button class="ep-btn" data-ep="stream" data-method="POST" data-path="/api/v1/chat/stream"><span class="method-tag post">POST</span>/chat/stream</button>
+    <button class="ep-btn" data-ep="providers" data-method="GET" data-path="/api/v1/providers"><span class="method-tag get">GET</span>/providers</button>
+    <button class="ep-btn" data-ep="agents" data-method="GET" data-path="/api/v1/agents"><span class="method-tag get">GET</span>/agents</button>
+    <button class="ep-btn" data-ep="health" data-method="GET" data-path="/health"><span class="method-tag get">GET</span>/health</button>
+    <button class="ep-btn" data-ep="speech" data-method="POST" data-path="/api/v1/speech/synthesize"><span class="method-tag post">POST</span>/speech</button>
+    <button class="ep-btn" data-ep="usage" data-method="GET" data-path="/api/v1/usage"><span class="method-tag get">GET</span>/usage</button>
+    <button class="ep-btn" data-ep="custom" data-method="GET" data-path=""><span class="method-tag get">?</span>Custom</button>
+  </div>
+
+  <div class="url-input">
+    <select id="req-method" style="padding:10px;background:var(--s);border:1px solid var(--b);border-radius:8px;color:var(--a);font-weight:700;font-size:13px;outline:none">
+      <option value="GET">GET</option>
+      <option value="POST" selected>POST</option>
+      <option value="DELETE">DELETE</option>
+    </select>
+    <input type="text" id="req-url" value="/api/v1/chat" placeholder="/api/v1/...">
+  </div>
+
+  <div class="editor-area">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Request Body</span>
+      </div>
+      <div class="panel-body">
+        <div class="header-rows" id="headers-area">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:11px;color:var(--m);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Headers</span>
+            <button class="add-hdr" id="add-header">+ Add</button>
+          </div>
+          <div class="header-row">
+            <input type="text" placeholder="Key" value="Content-Type" class="hdr-key">
+            <input type="text" placeholder="Value" value="application/json" class="hdr-val">
+            <button class="remove-hdr">&times;</button>
+          </div>
+        </div>
+        <textarea id="req-body" spellcheck="false">{
+  "message": "3泊4日の京都旅行プランを立ててください。予算は1人5万円、グルメと歴史スポット中心で。",
+  "session_id": "webchat:playground-test"
+}</textarea>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Response</span>
+        <span id="resp-status" class="status-bar" style="margin:0"></span>
+      </div>
+      <div class="panel-body">
+        <div class="response-area empty" id="resp-body">Click "Send" to execute the request</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" id="btn-send">Send Request</button>
+    <button class="btn btn-secondary" id="btn-share" disabled>Share Result</button>
+    <button class="btn btn-secondary btn-sm" id="btn-clear">Clear</button>
+  </div>
+
+  <!-- Saved result view (shown when viewing /playground?r=xxx) -->
+  <div id="saved-view" style="display:none">
+    <div class="saved-result">
+      <h3 id="saved-title">Shared API Result</h3>
+      <div class="meta" id="saved-meta"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Link copied!</div>
+
+<footer style="text-align:center;padding:24px;font-size:12px;color:var(--m);border-top:1px solid var(--b)">
+  <a href="/" style="color:var(--m);text-decoration:none">Chat</a> &middot;
+  <a href="/docs" style="color:var(--m);text-decoration:none">Docs</a> &middot;
+  <a href="/status" style="color:var(--m);text-decoration:none">Status</a> &middot;
+  chatweb.ai &copy; 2025-2026
+</footer>
+
+<script>
+var currentResult = null;
+var templates = {
+  chat: { method: 'POST', path: '/api/v1/chat', body: '{\n  "message": "3泊4日の京都旅行プランを立ててください。予算は1人5万円、グルメと歴史スポット中心で。",\n  "session_id": "webchat:playground-test"\n}' },
+  stream: { method: 'POST', path: '/api/v1/chat/stream', body: '{\n  "message": "以下の英文を自然な日本語に翻訳してください：\\n\\nThe rapid advancement of artificial intelligence has fundamentally transformed how businesses operate, from automating routine tasks to enabling sophisticated data-driven decision making across industries.",\n  "session_id": "webchat:playground-test"\n}' },
+  providers: { method: 'GET', path: '/api/v1/providers', body: '' },
+  agents: { method: 'GET', path: '/api/v1/agents', body: '' },
+  health: { method: 'GET', path: '/health', body: '' },
+  speech: { method: 'POST', path: '/api/v1/speech/synthesize', body: '{\n  "text": "こんにちは！chatweb.aiへようこそ。何でもお気軽にご質問ください。",\n  "voice": "nova",\n  "speed": 1.0\n}' },
+  usage: { method: 'GET', path: '/api/v1/usage', body: '' },
+  custom: { method: 'GET', path: '', body: '' }
+};
+
+// Endpoint picker
+document.getElementById('ep-picker').addEventListener('click', function(e) {
+  var btn = e.target.closest('.ep-btn');
+  if (!btn) return;
+  document.querySelectorAll('.ep-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  var ep = btn.dataset.ep;
+  var t = templates[ep];
+  if (t) {
+    document.getElementById('req-method').value = t.method;
+    document.getElementById('req-url').value = t.path;
+    document.getElementById('req-body').value = t.body;
+  }
+});
+
+// Add header row
+document.getElementById('add-header').addEventListener('click', function() {
+  var row = document.createElement('div');
+  row.className = 'header-row';
+  row.innerHTML = '<input type="text" placeholder="Key" class="hdr-key"><input type="text" placeholder="Value" class="hdr-val"><button class="remove-hdr">&times;</button>';
+  document.getElementById('headers-area').appendChild(row);
+});
+
+// Remove header row
+document.getElementById('headers-area').addEventListener('click', function(e) {
+  if (e.target.classList.contains('remove-hdr')) {
+    e.target.closest('.header-row').remove();
+  }
+});
+
+// Send request
+document.getElementById('btn-send').addEventListener('click', async function() {
+  var btn = this;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Sending...';
+  var method = document.getElementById('req-method').value;
+  var url = document.getElementById('req-url').value;
+  var body = document.getElementById('req-body').value;
+  var respEl = document.getElementById('resp-body');
+  var statusEl = document.getElementById('resp-status');
+
+  // Collect headers
+  var headers = {};
+  document.querySelectorAll('.header-row').forEach(function(row) {
+    var k = row.querySelector('.hdr-key');
+    var v = row.querySelector('.hdr-val');
+    if (k && v && k.value.trim()) headers[k.value.trim()] = v.value;
+  });
+
+  var startTime = performance.now();
+
+  // Special handling for streaming
+  if (url.includes('/stream')) {
+    respEl.className = 'response-area';
+    respEl.textContent = '';
+    try {
+      var fetchOpts = { method: method, headers: headers };
+      if (method !== 'GET' && body.trim()) fetchOpts.body = body;
+      var resp = await fetch(url, fetchOpts);
+      var elapsed = Math.round(performance.now() - startTime);
+      var statusClass = resp.status < 300 ? 's2xx' : resp.status < 500 ? 's4xx' : 's5xx';
+      statusEl.innerHTML = '<span class="status ' + statusClass + '">' + resp.status + '</span> ' + elapsed + 'ms';
+
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var fullText = '';
+      while (true) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        var text = decoder.decode(chunk.value, { stream: true });
+        fullText += text;
+        respEl.textContent = fullText;
+        respEl.scrollTop = respEl.scrollHeight;
+      }
+      currentResult = { method: method, url: url, request_body: body, status: resp.status, response_body: fullText, elapsed_ms: elapsed, headers: headers };
+      document.getElementById('btn-share').disabled = false;
+    } catch (err) {
+      respEl.textContent = 'Error: ' + err.message;
+      statusEl.innerHTML = '<span class="status s5xx">ERR</span>';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Send Request';
+    return;
+  }
+
+  try {
+    var fetchOpts = { method: method, headers: headers };
+    if (method !== 'GET' && body.trim()) fetchOpts.body = body;
+    var resp = await fetch(url, fetchOpts);
+    var elapsed = Math.round(performance.now() - startTime);
+    var statusClass = resp.status < 300 ? 's2xx' : resp.status < 500 ? 's4xx' : 's5xx';
+    statusEl.innerHTML = '<span class="status ' + statusClass + '">' + resp.status + '</span> ' + elapsed + 'ms';
+
+    var ct = resp.headers.get('content-type') || '';
+    var respText;
+    if (ct.includes('json')) {
+      var json = await resp.json();
+      respText = JSON.stringify(json, null, 2);
+    } else if (ct.includes('audio')) {
+      respText = '[Binary audio data — ' + (await resp.blob()).size + ' bytes]';
+    } else {
+      respText = await resp.text();
+    }
+    respEl.className = 'response-area';
+    respEl.textContent = respText;
+    currentResult = { method: method, url: url, request_body: body, status: resp.status, response_body: respText, elapsed_ms: elapsed, headers: headers };
+    document.getElementById('btn-share').disabled = false;
+  } catch (err) {
+    respEl.className = 'response-area';
+    respEl.textContent = 'Error: ' + err.message;
+    statusEl.innerHTML = '<span class="status s5xx">ERR</span>';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Send Request';
+});
+
+// Share result
+document.getElementById('btn-share').addEventListener('click', async function() {
+  if (!currentResult) return;
+  try {
+    var resp = await fetch('/api/v1/results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentResult)
+    });
+    var data = await resp.json();
+    if (data.id) {
+      var shareUrl = location.origin + '/playground?r=' + data.id;
+      await navigator.clipboard.writeText(shareUrl);
+      showToast('Link copied: ' + shareUrl);
+    } else {
+      showToast('Error saving result');
+    }
+  } catch (err) {
+    showToast('Error: ' + err.message);
+  }
+});
+
+// Clear
+document.getElementById('btn-clear').addEventListener('click', function() {
+  document.getElementById('resp-body').className = 'response-area empty';
+  document.getElementById('resp-body').textContent = 'Click "Send" to execute the request';
+  document.getElementById('resp-status').innerHTML = '';
+  document.getElementById('btn-share').disabled = true;
+  currentResult = null;
+});
+
+// Toast
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 3000);
+}
+
+// Load shared result from URL
+(async function() {
+  var params = new URLSearchParams(location.search);
+  var rid = params.get('r');
+  if (!rid) return;
+  try {
+    var resp = await fetch('/api/v1/results/' + encodeURIComponent(rid));
+    if (!resp.ok) return;
+    var data = await resp.json();
+    // Populate the playground with the saved result
+    document.getElementById('req-method').value = data.method || 'POST';
+    document.getElementById('req-url').value = data.url || '';
+    document.getElementById('req-body').value = data.request_body || '';
+    var respEl = document.getElementById('resp-body');
+    respEl.className = 'response-area';
+    respEl.textContent = data.response_body || '';
+    var statusClass = (data.status || 0) < 300 ? 's2xx' : (data.status || 0) < 500 ? 's4xx' : 's5xx';
+    document.getElementById('resp-status').innerHTML =
+      '<span class="status ' + statusClass + '">' + (data.status || '?') + '</span> ' + (data.elapsed_ms || '?') + 'ms' +
+      ' <span style="color:var(--m)">| Shared result</span>';
+    currentResult = data;
+    document.getElementById('btn-share').disabled = false;
+  } catch (e) { /* ignore */ }
+})();
+</script>
+</body>
+</html>
