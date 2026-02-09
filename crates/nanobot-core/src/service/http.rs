@@ -16,10 +16,19 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::info;
 
+use crate::channel::is_allowed;
 use crate::channel::facebook::FacebookChannel;
+#[allow(unused_imports)]
+use crate::channel::feishu::FeishuChannel;
+#[allow(unused_imports)]
+use crate::channel::google_chat::GoogleChatChannel;
 use crate::channel::line::LineChannel;
+use crate::channel::teams::TeamsChannel;
 use crate::channel::telegram::TelegramChannel;
-use crate::channel::{is_allowed};
+#[allow(unused_imports)]
+use crate::channel::whatsapp::WhatsAppChannel;
+#[allow(unused_imports)]
+use crate::channel::zalo::ZaloChannel;
 use crate::config::Config;
 use crate::provider::{self, LlmProvider};
 use crate::session::store::SessionStore;
@@ -1102,6 +1111,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/webhooks/telegram", post(handle_telegram_webhook))
         .route("/webhooks/facebook", get(handle_facebook_verify))
         .route("/webhooks/facebook", post(handle_facebook_webhook))
+        .route("/webhooks/teams", post(handle_teams_webhook))
+        .route("/webhooks/google_chat", post(handle_google_chat_webhook))
+        .route("/webhooks/zalo", post(handle_zalo_webhook))
+        .route("/webhooks/feishu", post(handle_feishu_webhook))
+        .route("/webhooks/whatsapp", post(handle_whatsapp_webhook))
         .route("/webhooks/stripe", post(handle_stripe_webhook))
         // Auth
         .route("/auth/google", get(handle_google_auth))
@@ -2853,6 +2867,627 @@ async fn handle_facebook_webhook(
             }
         }
     }
+
+    StatusCode::OK
+}
+
+// ---------------------------------------------------------------------------
+// Teams Webhook
+// ---------------------------------------------------------------------------
+
+/// POST /webhooks/teams — MS Teams Bot Framework incoming activities
+async fn handle_teams_webhook(
+    State(state): State<Arc<AppState>>,
+    body: String,
+) -> impl IntoResponse {
+    info!("Teams webhook received: {} bytes", body.len());
+
+    let activity = match TeamsChannel::parse_activity(&body) {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::error!("Failed to parse Teams activity: {}", e);
+            return StatusCode::BAD_REQUEST;
+        }
+    };
+
+    if activity.activity_type != "message" {
+        return StatusCode::OK;
+    }
+
+    let text = match activity.text.as_deref() {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => return StatusCode::OK,
+    };
+
+    let sender_id = activity.from.as_ref().map(|f| f.id.as_str()).unwrap_or("").to_string();
+    let conversation_id = activity.conversation.as_ref().map(|c| c.id.as_str()).unwrap_or("").to_string();
+    let service_url = activity.service_url.as_deref().unwrap_or("https://smba.trafficmanager.net/teams/").to_string();
+
+    if sender_id.is_empty() || conversation_id.is_empty() {
+        return StatusCode::OK;
+    }
+
+    let channel_key = format!("teams:{}", sender_id);
+    let session_key = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                resolve_session_key(dynamo, table, &channel_key).await
+            } else { channel_key.clone() }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { channel_key.clone() }
+    };
+
+    let provider = match state.get_provider() {
+        Some(p) => p.clone(),
+        None => return StatusCode::OK,
+    };
+
+    let system_prompt = "あなたは nanobot — Rust製AIエージェントです。Microsoft Teamsで会話しています。300文字以内で簡潔に回答してください。";
+    let mut messages = vec![Message::system(system_prompt)];
+    {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions.refresh(&session_key);
+        for msg in session.get_history(10) {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            match role {
+                "user" => messages.push(Message::user(content)),
+                "assistant" => messages.push(Message::assistant(content)),
+                _ => {}
+            }
+        }
+    }
+    messages.push(Message::user(&text));
+
+    let model = &state.config.agents.defaults.model;
+    let max_tokens = state.config.agents.defaults.max_tokens;
+    let temperature = state.config.agents.defaults.temperature;
+
+    let reply = match provider.chat(&messages, None, model, max_tokens, temperature).await {
+        Ok(completion) => {
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    let _ = deduct_credits(dynamo, table, &session_key, model,
+                        completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
+                }
+            }
+            let resp = completion.content.unwrap_or_default();
+            {
+                let mut sessions = state.sessions.lock().await;
+                let session = sessions.get_or_create(&session_key);
+                session.add_message_from_channel("user", &text, "teams");
+                session.add_message_from_channel("assistant", &resp, "teams");
+                sessions.save_by_key(&session_key);
+            }
+            resp
+        }
+        Err(e) => {
+            tracing::error!("LLM error for Teams: {}", e);
+            "申し訳ありません。エラーが発生しました。".to_string()
+        }
+    };
+
+    // Reply via Bot Framework REST API
+    let url = format!("{}v3/conversations/{}/activities", service_url, conversation_id);
+    let app_id = std::env::var("TEAMS_APP_ID").unwrap_or_default();
+    let app_password = std::env::var("TEAMS_APP_PASSWORD").unwrap_or_default();
+
+    if !app_id.is_empty() && !app_password.is_empty() {
+        let client = reqwest::Client::new();
+        if let Ok(token_resp) = client.post("https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token")
+            .form(&[
+                ("grant_type", "client_credentials"),
+                ("client_id", app_id.as_str()),
+                ("client_secret", app_password.as_str()),
+                ("scope", "https://api.botframework.com/.default"),
+            ])
+            .send().await
+        {
+            if let Ok(token_json) = token_resp.json::<serde_json::Value>().await {
+                if let Some(token) = token_json.get("access_token").and_then(|v| v.as_str()) {
+                    let _ = client.post(&url)
+                        .header("Authorization", format!("Bearer {}", token))
+                        .json(&serde_json::json!({ "type": "message", "text": reply }))
+                        .send().await;
+                }
+            }
+        }
+    }
+
+    StatusCode::OK
+}
+
+// ---------------------------------------------------------------------------
+// Google Chat Webhook
+// ---------------------------------------------------------------------------
+
+/// POST /webhooks/google_chat — Google Chat incoming events
+async fn handle_google_chat_webhook(
+    State(state): State<Arc<AppState>>,
+    body: String,
+) -> impl IntoResponse {
+    info!("Google Chat webhook received: {} bytes", body.len());
+
+    let event = match GoogleChatChannel::parse_event(&body) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::error!("Failed to parse Google Chat event: {}", e);
+            return (StatusCode::BAD_REQUEST, "{}".to_string()).into_response();
+        }
+    };
+
+    if event.event_type == "ADDED_TO_SPACE" {
+        return axum::Json(serde_json::json!({ "text": "こんにちは！何でもお聞きください 🎉" })).into_response();
+    }
+
+    if event.event_type != "MESSAGE" {
+        return (StatusCode::OK, "{}".to_string()).into_response();
+    }
+
+    let text = match event.message.as_ref().and_then(|m| m.text.as_deref()) {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => return (StatusCode::OK, "{}".to_string()).into_response(),
+    };
+
+    let sender_id = event.user.as_ref().map(|u| u.name.as_str()).unwrap_or("").to_string();
+    let channel_key = format!("gchat:{}", sender_id);
+    let session_key = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                resolve_session_key(dynamo, table, &channel_key).await
+            } else { channel_key.clone() }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { channel_key.clone() }
+    };
+
+    let provider = match state.get_provider() {
+        Some(p) => p.clone(),
+        None => return axum::Json(serde_json::json!({ "text": "AI provider not configured." })).into_response(),
+    };
+
+    let system_prompt = "あなたは nanobot — Rust製AIエージェントです。Google Chatで会話しています。300文字以内で簡潔に回答してください。";
+    let mut messages = vec![Message::system(system_prompt)];
+    {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions.refresh(&session_key);
+        for msg in session.get_history(10) {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            match role {
+                "user" => messages.push(Message::user(content)),
+                "assistant" => messages.push(Message::assistant(content)),
+                _ => {}
+            }
+        }
+    }
+    messages.push(Message::user(&text));
+
+    let model = &state.config.agents.defaults.model;
+    let max_tokens = state.config.agents.defaults.max_tokens;
+    let temperature = state.config.agents.defaults.temperature;
+
+    let reply = match provider.chat(&messages, None, model, max_tokens, temperature).await {
+        Ok(completion) => {
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    let _ = deduct_credits(dynamo, table, &session_key, model,
+                        completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
+                }
+            }
+            let resp = completion.content.unwrap_or_default();
+            {
+                let mut sessions = state.sessions.lock().await;
+                let session = sessions.get_or_create(&session_key);
+                session.add_message_from_channel("user", &text, "google_chat");
+                session.add_message_from_channel("assistant", &resp, "google_chat");
+                sessions.save_by_key(&session_key);
+            }
+            resp
+        }
+        Err(e) => {
+            tracing::error!("LLM error for Google Chat: {}", e);
+            "申し訳ありません。エラーが発生しました。".to_string()
+        }
+    };
+
+    axum::Json(serde_json::json!({ "text": reply })).into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Zalo Webhook
+// ---------------------------------------------------------------------------
+
+/// POST /webhooks/zalo — Zalo OA incoming events
+async fn handle_zalo_webhook(
+    State(state): State<Arc<AppState>>,
+    body: String,
+) -> impl IntoResponse {
+    info!("Zalo webhook received: {} bytes", body.len());
+
+    let event = match ZaloChannel::parse_event(&body) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::error!("Failed to parse Zalo event: {}", e);
+            return StatusCode::BAD_REQUEST;
+        }
+    };
+
+    if event.event_name != "user_send_text" {
+        return StatusCode::OK;
+    }
+
+    let text = match event.message.as_ref().and_then(|m| m.text.as_deref()) {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => return StatusCode::OK,
+    };
+
+    let sender_id = match event.sender.as_ref() {
+        Some(s) if !s.id.is_empty() => s.id.clone(),
+        _ => return StatusCode::OK,
+    };
+
+    let zalo_token = std::env::var("ZALO_BOT_TOKEN").unwrap_or_default();
+    if zalo_token.is_empty() {
+        tracing::error!("ZALO_BOT_TOKEN not set");
+        return StatusCode::OK;
+    }
+
+    let channel_key = format!("zalo:{}", sender_id);
+    let session_key = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                resolve_session_key(dynamo, table, &channel_key).await
+            } else { channel_key.clone() }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { channel_key.clone() }
+    };
+
+    let provider = match state.get_provider() {
+        Some(p) => p.clone(),
+        None => return StatusCode::OK,
+    };
+
+    let system_prompt = "あなたは nanobot — Rust製AIエージェントです。Zaloで会話しています。300文字以内で簡潔に回答してください。";
+    let mut messages = vec![Message::system(system_prompt)];
+    {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions.refresh(&session_key);
+        for msg in session.get_history(10) {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            match role {
+                "user" => messages.push(Message::user(content)),
+                "assistant" => messages.push(Message::assistant(content)),
+                _ => {}
+            }
+        }
+    }
+    messages.push(Message::user(&text));
+
+    let model = &state.config.agents.defaults.model;
+    let max_tokens = state.config.agents.defaults.max_tokens;
+    let temperature = state.config.agents.defaults.temperature;
+
+    let reply = match provider.chat(&messages, None, model, max_tokens, temperature).await {
+        Ok(completion) => {
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    let _ = deduct_credits(dynamo, table, &session_key, model,
+                        completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
+                }
+            }
+            let resp = completion.content.unwrap_or_default();
+            {
+                let mut sessions = state.sessions.lock().await;
+                let session = sessions.get_or_create(&session_key);
+                session.add_message_from_channel("user", &text, "zalo");
+                session.add_message_from_channel("assistant", &resp, "zalo");
+                sessions.save_by_key(&session_key);
+            }
+            resp
+        }
+        Err(e) => {
+            tracing::error!("LLM error for Zalo: {}", e);
+            "Xin lỗi, đã xảy ra lỗi.".to_string()
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let _ = client.post("https://openapi.zalo.me/v3.0/oa/message/cs")
+        .header("access_token", &zalo_token)
+        .json(&serde_json::json!({
+            "recipient": { "user_id": sender_id },
+            "message": { "text": reply },
+        }))
+        .send().await;
+
+    StatusCode::OK
+}
+
+// ---------------------------------------------------------------------------
+// Feishu Webhook
+// ---------------------------------------------------------------------------
+
+/// POST /webhooks/feishu — Feishu/Lark event subscription
+async fn handle_feishu_webhook(
+    State(state): State<Arc<AppState>>,
+    body: String,
+) -> impl IntoResponse {
+    info!("Feishu webhook received: {} bytes", body.len());
+
+    let payload: serde_json::Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!("Failed to parse Feishu event: {}", e);
+            return (StatusCode::BAD_REQUEST, "{}".to_string()).into_response();
+        }
+    };
+
+    // URL verification challenge (required by Feishu)
+    if payload.get("type").and_then(|v| v.as_str()) == Some("url_verification") {
+        let challenge = payload.get("challenge").and_then(|v| v.as_str()).unwrap_or("");
+        return axum::Json(serde_json::json!({ "challenge": challenge })).into_response();
+    }
+
+    let event = match payload.get("event") {
+        Some(e) => e,
+        None => return (StatusCode::OK, "{}".to_string()).into_response(),
+    };
+
+    let msg_type = event.pointer("/message/message_type").and_then(|v| v.as_str()).unwrap_or("");
+    if msg_type != "text" {
+        return (StatusCode::OK, "{}".to_string()).into_response();
+    }
+
+    let content_str = event.pointer("/message/content").and_then(|v| v.as_str()).unwrap_or("{}");
+    let content_json: serde_json::Value = serde_json::from_str(content_str).unwrap_or_default();
+    let text = content_json.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+    if text.is_empty() {
+        return (StatusCode::OK, "{}".to_string()).into_response();
+    }
+
+    let sender_id = event.pointer("/sender/sender_id/open_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let chat_id = event.pointer("/message/chat_id").and_then(|v| v.as_str()).unwrap_or(&sender_id).to_string();
+
+    if sender_id.is_empty() {
+        return (StatusCode::OK, "{}".to_string()).into_response();
+    }
+
+    let app_id = std::env::var("FEISHU_APP_ID").unwrap_or_default();
+    let app_secret = std::env::var("FEISHU_APP_SECRET").unwrap_or_default();
+    if app_id.is_empty() || app_secret.is_empty() {
+        tracing::error!("FEISHU_APP_ID/FEISHU_APP_SECRET not set");
+        return (StatusCode::OK, "{}".to_string()).into_response();
+    }
+
+    let channel_key = format!("feishu:{}", sender_id);
+    let session_key = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                resolve_session_key(dynamo, table, &channel_key).await
+            } else { channel_key.clone() }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { channel_key.clone() }
+    };
+
+    let provider = match state.get_provider() {
+        Some(p) => p.clone(),
+        None => return (StatusCode::OK, "{}".to_string()).into_response(),
+    };
+
+    let system_prompt = "あなたは nanobot — Rust製AIエージェントです。Feishu/Larkで会話しています。300文字以内で簡潔に回答してください。";
+    let mut messages_vec = vec![Message::system(system_prompt)];
+    {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions.refresh(&session_key);
+        for msg in session.get_history(10) {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            match role {
+                "user" => messages_vec.push(Message::user(content)),
+                "assistant" => messages_vec.push(Message::assistant(content)),
+                _ => {}
+            }
+        }
+    }
+    messages_vec.push(Message::user(&text));
+
+    let model = &state.config.agents.defaults.model;
+    let max_tokens = state.config.agents.defaults.max_tokens;
+    let temperature = state.config.agents.defaults.temperature;
+
+    let reply = match provider.chat(&messages_vec, None, model, max_tokens, temperature).await {
+        Ok(completion) => {
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    let _ = deduct_credits(dynamo, table, &session_key, model,
+                        completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
+                }
+            }
+            let resp = completion.content.unwrap_or_default();
+            {
+                let mut sessions = state.sessions.lock().await;
+                let session = sessions.get_or_create(&session_key);
+                session.add_message_from_channel("user", &text, "feishu");
+                session.add_message_from_channel("assistant", &resp, "feishu");
+                sessions.save_by_key(&session_key);
+            }
+            resp
+        }
+        Err(e) => {
+            tracing::error!("LLM error for Feishu: {}", e);
+            "申し訳ありません。エラーが発生しました。".to_string()
+        }
+    };
+
+    let client = reqwest::Client::new();
+    if let Ok(token_resp) = client.post("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal")
+        .json(&serde_json::json!({ "app_id": app_id, "app_secret": app_secret }))
+        .send().await
+    {
+        if let Ok(token_json) = token_resp.json::<serde_json::Value>().await {
+            if let Some(token) = token_json.get("tenant_access_token").and_then(|v| v.as_str()) {
+                let receive_id_type = if chat_id.starts_with("oc_") { "chat_id" } else { "open_id" };
+                let content = serde_json::json!({"text": reply}).to_string();
+                let _ = client.post(format!("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type={}", receive_id_type))
+                    .header("Authorization", format!("Bearer {}", token))
+                    .json(&serde_json::json!({
+                        "receive_id": chat_id,
+                        "msg_type": "text",
+                        "content": content,
+                    }))
+                    .send().await;
+            }
+        }
+    }
+
+    (StatusCode::OK, "{}".to_string()).into_response()
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp Webhook (Cloud API)
+// ---------------------------------------------------------------------------
+
+/// POST /webhooks/whatsapp — WhatsApp Cloud API incoming messages
+async fn handle_whatsapp_webhook(
+    State(state): State<Arc<AppState>>,
+    body: String,
+) -> impl IntoResponse {
+    info!("WhatsApp webhook received: {} bytes", body.len());
+
+    let payload: serde_json::Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!("Failed to parse WhatsApp webhook: {}", e);
+            return StatusCode::BAD_REQUEST;
+        }
+    };
+
+    let entry = match payload.get("entry").and_then(|v| v.as_array()) {
+        Some(e) if !e.is_empty() => &e[0],
+        _ => return StatusCode::OK,
+    };
+
+    let changes = match entry.get("changes").and_then(|v| v.as_array()) {
+        Some(c) if !c.is_empty() => &c[0],
+        _ => return StatusCode::OK,
+    };
+
+    let value = match changes.get("value") {
+        Some(v) => v,
+        None => return StatusCode::OK,
+    };
+
+    let wa_messages = match value.get("messages").and_then(|v| v.as_array()) {
+        Some(m) if !m.is_empty() => m,
+        _ => return StatusCode::OK,
+    };
+
+    let wa_msg = &wa_messages[0];
+    if wa_msg.get("type").and_then(|v| v.as_str()).unwrap_or("") != "text" {
+        return StatusCode::OK;
+    }
+
+    let text = wa_msg.pointer("/text/body").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let sender_phone = wa_msg.get("from").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let phone_number_id = value.pointer("/metadata/phone_number_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+    if text.is_empty() || sender_phone.is_empty() {
+        return StatusCode::OK;
+    }
+
+    let wa_token = std::env::var("WHATSAPP_TOKEN").unwrap_or_default();
+    if wa_token.is_empty() {
+        tracing::error!("WHATSAPP_TOKEN not set");
+        return StatusCode::OK;
+    }
+
+    let channel_key = format!("wa:{}", sender_phone);
+    let session_key = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                resolve_session_key(dynamo, table, &channel_key).await
+            } else { channel_key.clone() }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { channel_key.clone() }
+    };
+
+    let provider = match state.get_provider() {
+        Some(p) => p.clone(),
+        None => return StatusCode::OK,
+    };
+
+    let system_prompt = "あなたは nanobot — Rust製AIエージェントです。WhatsAppで会話しています。300文字以内で簡潔に回答してください。";
+    let mut messages_vec = vec![Message::system(system_prompt)];
+    {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions.refresh(&session_key);
+        for msg in session.get_history(10) {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            match role {
+                "user" => messages_vec.push(Message::user(content)),
+                "assistant" => messages_vec.push(Message::assistant(content)),
+                _ => {}
+            }
+        }
+    }
+    messages_vec.push(Message::user(&text));
+
+    let model = &state.config.agents.defaults.model;
+    let max_tokens = state.config.agents.defaults.max_tokens;
+    let temperature = state.config.agents.defaults.temperature;
+
+    let reply = match provider.chat(&messages_vec, None, model, max_tokens, temperature).await {
+        Ok(completion) => {
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    let _ = deduct_credits(dynamo, table, &session_key, model,
+                        completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
+                }
+            }
+            let resp = completion.content.unwrap_or_default();
+            {
+                let mut sessions = state.sessions.lock().await;
+                let session = sessions.get_or_create(&session_key);
+                session.add_message_from_channel("user", &text, "whatsapp");
+                session.add_message_from_channel("assistant", &resp, "whatsapp");
+                sessions.save_by_key(&session_key);
+            }
+            resp
+        }
+        Err(e) => {
+            tracing::error!("LLM error for WhatsApp: {}", e);
+            "Sorry, an error occurred.".to_string()
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let _ = client.post(format!("https://graph.facebook.com/v21.0/{}/messages", phone_number_id))
+        .header("Authorization", format!("Bearer {}", wa_token))
+        .json(&serde_json::json!({
+            "messaging_product": "whatsapp",
+            "to": sender_phone,
+            "type": "text",
+            "text": { "body": reply },
+        }))
+        .send().await;
 
     StatusCode::OK
 }
