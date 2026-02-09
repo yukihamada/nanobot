@@ -2482,18 +2482,28 @@
   <div class="modal-overlay" id="modal" onclick="closeModal(event)" style="z-index:300;">
     <div class="modal" id="modal-content">
       <h3 id="modal-title"></h3>
-      <div id="modal-steps" style="display:flex;justify-content:center;gap:8px;margin:8px 0 12px;font-size:12px;color:var(--muted);">
-        <span style="background:var(--accent);color:#fff;border-radius:12px;padding:2px 10px;">1. QR</span>
-        <span style="opacity:.5;border-radius:12px;padding:2px 10px;border:1px solid var(--border);">2. 送信</span>
-        <span style="opacity:.5;border-radius:12px;padding:2px 10px;border:1px solid var(--border);">3. 完了</span>
-      </div>
-      <p id="modal-desc"></p>
-      <div class="qr-wrapper">
+      <div id="modal-steps" style="display:flex;justify-content:center;gap:8px;margin:8px 0 12px;font-size:12px;color:var(--muted);"></div>
+      <p id="modal-desc" style="white-space:pre-line;"></p>
+      <!-- Primary CTA: big button for mobile -->
+      <a id="modal-cta" class="modal-link" target="_blank" style="display:none;font-size:16px;padding:14px 28px;margin:12px 0;"></a>
+      <!-- QR code for desktop -->
+      <div class="qr-wrapper" id="modal-qr-wrap">
         <div class="qr-spinner" id="qr-spinner"></div>
         <img id="modal-qr" alt="QR Code">
       </div>
-      <a id="modal-link" class="modal-link" target="_blank"></a>
-      <button class="close-btn" onclick="document.getElementById('modal').classList.remove('show')">閉じる</button>
+      <!-- Secondary link -->
+      <a id="modal-link" class="modal-link" target="_blank" style="font-size:13px;"></a>
+      <!-- Manual code copy -->
+      <div id="modal-code-row" style="display:none;margin:8px 0;text-align:center;">
+        <span style="font-size:11px;color:var(--muted);" id="modal-code-label"></span>
+        <code id="modal-code-val" style="background:var(--surface);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:14px;letter-spacing:1px;" onclick="navigator.clipboard.writeText(this.textContent);this.style.background='var(--green)';this.style.color='#fff';setTimeout(()=>{this.style.background='var(--surface)';this.style.color=''},500);"></code>
+      </div>
+      <!-- Success state -->
+      <div id="modal-success" style="display:none;text-align:center;padding:20px 0;">
+        <div style="font-size:48px;margin-bottom:8px;">&#x2705;</div>
+        <div id="modal-success-text" style="font-size:16px;font-weight:600;color:var(--green);"></div>
+      </div>
+      <button class="close-btn" id="modal-close-btn" onclick="document.getElementById('modal').classList.remove('show');stopLinkPoll();">閉じる</button>
     </div>
   </div>
 
@@ -3556,65 +3566,145 @@
         default: return getDeepLink(ch);
       }
     }
+    let linkPollTimer = null;
+    function stopLinkPoll() { if (linkPollTimer) { clearInterval(linkPollTimer); linkPollTimer = null; } }
+
+    function setModalStep(n) {
+      const spans = document.querySelectorAll('#modal-steps span');
+      spans.forEach((s, i) => {
+        if (i < n) { s.style.background = 'var(--green)'; s.style.color = '#fff'; s.style.opacity = '1'; s.style.border = 'none'; }
+        else if (i === n) { s.style.background = 'var(--accent)'; s.style.color = '#fff'; s.style.opacity = '1'; s.style.border = 'none'; }
+        else { s.style.background = 'transparent'; s.style.color = ''; s.style.opacity = '.5'; s.style.border = '1px solid var(--border)'; }
+      });
+    }
+
+    function showLinkSuccess(ch) {
+      stopLinkPoll();
+      setModalStep(2);
+      const l = document.documentElement.lang || 'ja';
+      document.getElementById('modal-qr-wrap').style.display = 'none';
+      document.getElementById('modal-cta').style.display = 'none';
+      document.getElementById('modal-link').style.display = 'none';
+      document.getElementById('modal-code-row').style.display = 'none';
+      document.getElementById('modal-desc').style.display = 'none';
+      const succ = document.getElementById('modal-success');
+      succ.style.display = '';
+      const chName = ch === 'line' ? 'LINE' : ch === 'tg' ? 'Telegram' : ch;
+      document.getElementById('modal-success-text').textContent = l === 'ja'
+        ? chName + ' 連携完了！' : chName + ' linked!';
+      document.getElementById('modal-close-btn').textContent = l === 'ja' ? '閉じる' : 'Close';
+      // Update channel status
+      if (ch === 'line') { document.getElementById('ch-bar-line')?.classList.add('connected'); document.getElementById('line-card')?.classList.add('connected'); }
+      if (ch === 'tg') { document.getElementById('ch-bar-tg')?.classList.add('connected'); document.getElementById('tg-card')?.classList.add('connected'); }
+      // Auto close after 2s
+      setTimeout(() => {
+        document.getElementById('modal').classList.remove('show');
+        showToast(l === 'ja' ? chName + ' 連携完了' : chName + ' linked');
+      }, 2000);
+    }
+
+    function startLinkPoll(ch) {
+      stopLinkPoll();
+      linkPollTimer = setInterval(async () => {
+        try {
+          const r = await fetch(API + '/api/v1/sessions/' + encodeURIComponent(webSessionId));
+          const data = await r.json();
+          if (data.linked_channels) {
+            const target = ch === 'tg' ? 'telegram' : ch;
+            if (data.linked_channels.includes(target)) {
+              showLinkSuccess(ch);
+            }
+          }
+        } catch(e) {}
+      }, 2000);
+    }
+
     async function showModal(ch) {
       const c = CHANNELS[ch];
       if (!c) return;
       const l = document.documentElement.lang || 'ja';
       const t = c[l] || c.ja;
       const mobile = isMobileDevice();
-      // Show modal immediately with spinner
+
+      // Reset all elements
+      document.getElementById('modal-success').style.display = 'none';
+      document.getElementById('modal-desc').style.display = '';
+      document.getElementById('modal-qr-wrap').style.display = '';
+      document.getElementById('modal-cta').style.display = 'none';
+      document.getElementById('modal-code-row').style.display = 'none';
       document.getElementById('modal-title').textContent = t.title;
+
       const steps = document.getElementById('modal-steps');
-      if (steps) {
-        const s = mobile
-          ? (l === 'ja' ? ['1. アプリを開く', '2. メッセージ送信', '3. 連携完了'] : ['1. Open app', '2. Send message', '3. Linked'])
-          : (l === 'ja' ? ['1. QRを読む', '2. メッセージ送信', '3. 連携完了'] : ['1. Scan QR', '2. Send message', '3. Linked']);
-        steps.innerHTML = '<span style="background:var(--accent);color:#fff;border-radius:12px;padding:2px 10px;">' + s[0] + '</span>'
-          + '<span style="opacity:.5;border-radius:12px;padding:2px 10px;border:1px solid var(--border);">' + s[1] + '</span>'
-          + '<span style="opacity:.5;border-radius:12px;padding:2px 10px;border:1px solid var(--border);">' + s[2] + '</span>';
-      }
+      const stepLabels = mobile
+        ? (l === 'ja' ? ['1. タップ', '2. 送信', '3. 完了'] : ['1. Tap', '2. Send', '3. Done'])
+        : (l === 'ja' ? ['1. QR読取', '2. 送信', '3. 完了'] : ['1. Scan', '2. Send', '3. Done']);
+      steps.innerHTML = stepLabels.map((s,i) =>
+        '<span style="border-radius:12px;padding:2px 10px;' + (i===0 ? 'background:var(--accent);color:#fff;' : 'opacity:.5;border:1px solid var(--border);') + '">' + s + '</span>'
+      ).join('');
+
       document.getElementById('modal-desc').textContent = (mobile && t.descMobile) ? t.descMobile : t.desc;
+
       const qrImg = document.getElementById('modal-qr');
       const qrSpinner = document.getElementById('qr-spinner');
       qrImg.classList.remove('loaded');
       qrSpinner.classList.remove('hidden');
       qrImg.src = '';
+
+      const cta = document.getElementById('modal-cta');
       const link = document.getElementById('modal-link');
       link.className = 'modal-link ' + (c.bg || 'tg-bg');
+      cta.className = 'modal-link ' + (c.bg || 'tg-bg');
       document.getElementById('modal').classList.add('show');
-      // For LINE/Telegram: generate a link code, then build QR with it
+
+      let deepLink;
+      let code = null;
+
       if (ch === 'line' || ch === 'tg') {
-        const code = await generateLinkCode();
-        if (code) {
-          const deepLink = buildDeepLinkWithCode(ch, code);
-          qrImg.onload = function() { qrSpinner.classList.add('hidden'); qrImg.classList.add('loaded'); };
-          qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
-          link.href = deepLink;
-          link.textContent = t.link;
-          // Show the code for manual entry
-          document.getElementById('modal-desc').textContent =
-            (mobile && t.descMobile ? t.descMobile : t.desc)
-            + (l === 'ja' ? '\n\n手動入力の場合: /link ' + code : '\n\nManual: /link ' + code);
-        } else {
-          // Fallback: use direct deep link without link code
-          const deepLink = getDeepLink(ch);
-          qrImg.onload = function() { qrSpinner.classList.add('hidden'); qrImg.classList.add('loaded'); };
-          qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
-          link.href = deepLink;
-          link.textContent = t.link;
-        }
+        code = await generateLinkCode();
+        deepLink = code ? buildDeepLinkWithCode(ch, code) : getDeepLink(ch);
       } else {
-        // Other channels: use direct deep link
-        const deepLink = getDeepLink(ch);
-        qrImg.onload = function() { qrSpinner.classList.add('hidden'); qrImg.classList.add('loaded'); };
-        qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
+        deepLink = getDeepLink(ch);
+      }
+
+      // QR code (always generated)
+      qrImg.onload = function() { qrSpinner.classList.add('hidden'); qrImg.classList.add('loaded'); };
+      qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
+
+      if (mobile) {
+        // Mobile: big CTA button first, QR smaller below
+        cta.style.display = '';
+        cta.href = deepLink;
+        cta.textContent = t.link || (l === 'ja' ? 'アプリで開く' : 'Open app');
+        document.getElementById('modal-qr-wrap').style.display = 'none';
+        link.style.display = 'none';
+      } else {
+        // Desktop: QR prominent, text link below
+        cta.style.display = 'none';
         link.href = deepLink;
         link.textContent = t.link;
+        link.style.display = '';
       }
+
+      // Show link code for manual entry
+      if (code) {
+        const codeRow = document.getElementById('modal-code-row');
+        codeRow.style.display = '';
+        document.getElementById('modal-code-label').textContent = l === 'ja' ? '手動入力: /link ' : 'Manual: /link ';
+        document.getElementById('modal-code-val').textContent = code;
+      }
+
+      // Start polling for link completion
+      if (ch === 'line' || ch === 'tg') {
+        startLinkPoll(ch);
+      }
+
+      document.getElementById('modal-close-btn').textContent = l === 'ja' ? '閉じる' : 'Close';
     }
+
     function closeModal(e) {
       if (e.target === document.getElementById('modal')) {
         document.getElementById('modal').classList.remove('show');
+        stopLinkPoll();
       }
     }
 
