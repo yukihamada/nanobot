@@ -11,58 +11,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  build-macos:
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: aarch64-apple-darwin
-            os: macos-14
-            method: native
           - target: x86_64-apple-darwin
-            os: macos-14
-            method: cross
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            method: cross
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            method: native
-
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-
-      - name: Install cross
-        if: matrix.method == 'cross' && matrix.os == 'ubuntu-latest'
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Build (native)
-        if: matrix.method == 'native'
-        run: cargo build --release --target ${{ matrix.target }} -p nanobot
-
-      - name: Build (cross — macOS x86_64 from ARM)
-        if: matrix.method == 'cross'
-        run: cargo build --release --target ${{ matrix.target }} -p nanobot
-
-      - name: Build (cross — Linux ARM64 from x86_64)
-        if: matrix.method == 'cross' && matrix.os == 'ubuntu-latest'
-        run: cross build --release --target ${{ matrix.target }} -p nanobot
-
+      - run: cargo build --release --target ${{ matrix.target }} -p nanobot
       - name: Package
         run: |
           cd target/${{ matrix.target }}/release
           tar czf nanobot-${{ matrix.target }}.tar.gz nanobot
           shasum -a 256 nanobot-${{ matrix.target }}.tar.gz > nanobot-${{ matrix.target }}.tar.gz.sha256
-
       - uses: actions/upload-artifact@v4
         with:
           name: nanobot-${{ matrix.target }}
@@ -70,16 +40,61 @@ jobs:
             target/${{ matrix.target }}/release/nanobot-${{ matrix.target }}.tar.gz
             target/${{ matrix.target }}/release/nanobot-${{ matrix.target }}.tar.gz.sha256
 
-  release:
-    needs: build
+  build-linux-x86:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --target x86_64-unknown-linux-gnu -p nanobot
+      - name: Package
+        run: |
+          cd target/x86_64-unknown-linux-gnu/release
+          tar czf nanobot-x86_64-unknown-linux-gnu.tar.gz nanobot
+          shasum -a 256 nanobot-x86_64-unknown-linux-gnu.tar.gz > nanobot-x86_64-unknown-linux-gnu.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nanobot-x86_64-unknown-linux-gnu
+          path: |
+            target/x86_64-unknown-linux-gnu/release/nanobot-x86_64-unknown-linux-gnu.tar.gz
+            target/x86_64-unknown-linux-gnu/release/nanobot-x86_64-unknown-linux-gnu.tar.gz.sha256
 
+  build-linux-arm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Build
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --release --target aarch64-unknown-linux-gnu -p nanobot
+      - name: Package
+        run: |
+          cd target/aarch64-unknown-linux-gnu/release
+          tar czf nanobot-aarch64-unknown-linux-gnu.tar.gz nanobot
+          shasum -a 256 nanobot-aarch64-unknown-linux-gnu.tar.gz > nanobot-aarch64-unknown-linux-gnu.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nanobot-aarch64-unknown-linux-gnu
+          path: |
+            target/aarch64-unknown-linux-gnu/release/nanobot-aarch64-unknown-linux-gnu.tar.gz
+            target/aarch64-unknown-linux-gnu/release/nanobot-aarch64-unknown-linux-gnu.tar.gz.sha256
+
+  release:
+    needs: [build-macos, build-linux-x86, build-linux-arm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
       - name: Collect assets
         run: |
           mkdir -p release
@@ -87,7 +102,6 @@ jobs:
           cd release
           cat ../artifacts/*/nanobot-*.sha256 > checksums.txt
           cat checksums.txt
-
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
