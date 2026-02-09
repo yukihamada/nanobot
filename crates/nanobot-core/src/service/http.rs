@@ -164,7 +164,7 @@ fn emit_audit_log(
         let _ = dynamo
             .put_item()
             .table_name(&config_table)
-            .item("pk", AttributeValue::S(format!("AUDIT#{}", date)))
+            .item("tenant_id", AttributeValue::S(format!("AUDIT#{}", date)))
             .item("sk", AttributeValue::S(sk))
             .item("event_type", AttributeValue::S(event_type))
             .item("user_id", AttributeValue::S(user_id))
@@ -200,7 +200,7 @@ async fn check_rate_limit(
     let result = dynamo
         .update_item()
         .table_name(config_table)
-        .key("pk", AttributeValue::S(pk))
+        .key("tenant_id", AttributeValue::S(pk))
         .key("sk", AttributeValue::S(sk))
         .update_expression("SET #cnt = if_not_exists(#cnt, :zero) + :one, #ttl = :ttl")
         .expression_attribute_names("#cnt", "count")
@@ -252,13 +252,13 @@ async fn read_memory_context(
         dynamo
             .get_item()
             .table_name(config_table)
-            .key("pk", AttributeValue::S(pk.clone()))
+            .key("tenant_id", AttributeValue::S(pk.clone()))
             .key("sk", AttributeValue::S("LONG_TERM".to_string()))
             .send(),
         dynamo
             .get_item()
             .table_name(config_table)
-            .key("pk", AttributeValue::S(pk))
+            .key("tenant_id", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(format!("DAILY#{}", today)))
             .send()
     );
@@ -307,7 +307,7 @@ async fn save_memory(
     let _ = dynamo
         .put_item()
         .table_name(config_table)
-        .item("pk", AttributeValue::S(pk))
+        .item("tenant_id", AttributeValue::S(pk))
         .item("sk", AttributeValue::S(sk))
         .item("content", AttributeValue::S(content.to_string()))
         .item("updated_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
@@ -331,7 +331,7 @@ async fn append_daily_memory(
     let existing = if let Ok(output) = dynamo
         .get_item()
         .table_name(config_table)
-        .key("pk", AttributeValue::S(pk.clone()))
+        .key("tenant_id", AttributeValue::S(pk.clone()))
         .key("sk", AttributeValue::S(sk.clone()))
         .send()
         .await
@@ -352,7 +352,7 @@ async fn append_daily_memory(
     let _ = dynamo
         .put_item()
         .table_name(config_table)
-        .item("pk", AttributeValue::S(pk))
+        .item("tenant_id", AttributeValue::S(pk))
         .item("sk", AttributeValue::S(sk))
         .item("content", AttributeValue::S(new_content))
         .item("updated_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
@@ -377,7 +377,7 @@ async fn resolve_session_key(
     let resp = dynamo
         .get_item()
         .table_name(config_table)
-        .key("pk", AttributeValue::S(pk))
+        .key("tenant_id", AttributeValue::S(pk))
         .key("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
         .send()
         .await;
@@ -434,7 +434,7 @@ async fn auto_link_session(
         let _ = dynamo
             .put_item()
             .table_name(config_table)
-            .item("pk", AttributeValue::S(format!("LINK#{}", ck)))
+            .item("tenant_id", AttributeValue::S(format!("LINK#{}", ck)))
             .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
             .item("user_id", AttributeValue::S(user_id.clone()))
             .item("linked_at", AttributeValue::S(now.clone()))
@@ -494,7 +494,7 @@ async fn get_or_create_user(
     if let Ok(output) = dynamo
         .get_item()
         .table_name(config_table)
-        .key("pk", AttributeValue::S(pk.clone()))
+        .key("tenant_id", AttributeValue::S(pk.clone()))
         .key("sk", AttributeValue::S("PROFILE".to_string()))
         .send()
         .await
@@ -535,7 +535,7 @@ async fn get_or_create_user(
     let _ = dynamo
         .put_item()
         .table_name(config_table)
-        .item("pk", AttributeValue::S(pk))
+        .item("tenant_id", AttributeValue::S(pk))
         .item("sk", AttributeValue::S("PROFILE".to_string()))
         .item("user_id", AttributeValue::S(user_id.to_string()))
         .item("plan", AttributeValue::S("free".to_string()))
@@ -581,7 +581,7 @@ async fn deduct_credits(
     let remaining = match dynamo
         .update_item()
         .table_name(config_table)
-        .key("pk", AttributeValue::S(pk))
+        .key("tenant_id", AttributeValue::S(pk))
         .key("sk", AttributeValue::S("PROFILE".to_string()))
         .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
         .expression_attribute_values(":c", AttributeValue::N(credits.to_string()))
@@ -606,7 +606,7 @@ async fn deduct_credits(
         let _ = dynamo
             .put_item()
             .table_name(&config_table)
-            .item("pk", AttributeValue::S(usage_pk))
+            .item("tenant_id", AttributeValue::S(usage_pk))
             .item("sk", AttributeValue::S(format!("{}#{}", now.timestamp_millis(), model)))
             .item("user_id", AttributeValue::S(user_id))
             .item("model", AttributeValue::S(model))
@@ -638,7 +638,7 @@ async fn link_stripe_to_user(
     let _ = dynamo
         .update_item()
         .table_name(config_table)
-        .key("pk", AttributeValue::S(pk))
+        .key("tenant_id", AttributeValue::S(pk))
         .key("sk", AttributeValue::S("PROFILE".to_string()))
         .update_expression("SET #p = :plan, stripe_customer_id = :cus, email = :email, credits_remaining = :cr, updated_at = :now")
         .expression_attribute_names("#p", "plan")
@@ -672,7 +672,7 @@ fn spawn_update_conv_meta(
         let _ = dynamo
             .update_item()
             .table_name(&config_table)
-            .key("pk", AttributeValue::S(user_pk.clone()))
+            .key("tenant_id", AttributeValue::S(user_pk.clone()))
             .key("sk", AttributeValue::S(sk.clone()))
             .update_expression("SET message_count = :mc, updated_at = :now")
             .expression_attribute_values(":mc", AttributeValue::N(message_count.to_string()))
@@ -694,7 +694,7 @@ fn spawn_update_conv_meta(
         let _ = dynamo
             .update_item()
             .table_name(&config_table)
-            .key("pk", AttributeValue::S(user_pk))
+            .key("tenant_id", AttributeValue::S(user_pk))
             .key("sk", AttributeValue::S(sk))
             .update_expression("SET title = :title")
             .condition_expression("title = :default OR attribute_not_exists(title)")
@@ -1775,7 +1775,7 @@ async fn handle_chat(
                             let user_pk = format!("USER#{}", session_key);
                             if let Ok(output) = dynamo.get_item()
                                 .table_name(table.as_str())
-                                .key("pk", AttributeValue::S(user_pk))
+                                .key("tenant_id", AttributeValue::S(user_pk))
                                 .key("sk", AttributeValue::S("PROFILE".to_string()))
                                 .send().await
                             {
@@ -1868,7 +1868,7 @@ async fn handle_chat(
                             };
                             let _ = dynamo.put_item()
                                 .table_name(table)
-                                .item("pk", AttributeValue::S(usage_pk))
+                                .item("tenant_id", AttributeValue::S(usage_pk))
                                 .item("sk", AttributeValue::S(usage_sk))
                                 .item("tool", AttributeValue::S(tool_name.clone()))
                                 .item("result_len", AttributeValue::N(tool_result.len().to_string()))
@@ -2066,7 +2066,7 @@ async fn handle_devices(
             let resp = dynamo
                 .query()
                 .table_name(table.as_str())
-                .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
+                .key_condition_expression("tenant_id = :pk AND begins_with(sk, :sk)")
                 .expression_attribute_values(":pk", AttributeValue::S(format!("DEVICE#{}", user_key)))
                 .expression_attribute_values(":sk", AttributeValue::S("HB#".to_string()))
                 .scan_index_forward(false)
@@ -2130,7 +2130,7 @@ async fn handle_device_heartbeat(
             let mut item_builder = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(format!("DEVICE#{}", user_key)))
+                .item("tenant_id", AttributeValue::S(format!("DEVICE#{}", user_key)))
                 .item("sk", AttributeValue::S(format!("HB#{}", req.hostname)))
                 .item("session_id", AttributeValue::S(req.session_id.clone()))
                 .item("hostname", AttributeValue::S(req.hostname.clone()))
@@ -2255,7 +2255,7 @@ async fn get_linked_channels(
     let resp = dynamo
         .query()
         .table_name(table)
-        .key_condition_expression("pk = :pk")
+        .key_condition_expression("tenant_id = :pk")
         .expression_attribute_values(":pk", AttributeValue::S(pk))
         .limit(10)
         .send()
@@ -2276,7 +2276,7 @@ async fn get_linked_channels(
 
     if let Ok(output) = scan_resp {
         for item in output.items.unwrap_or_default() {
-            if let Some(pk_val) = item.get("pk").and_then(|v| v.as_s().ok()) {
+            if let Some(pk_val) = item.get("tenant_id").and_then(|v| v.as_s().ok()) {
                 let key = pk_val.trim_start_matches("LINK#");
                 if key.starts_with("line:") && !channels.contains(&"line".to_string()) {
                     channels.push("line".to_string());
@@ -4310,7 +4310,7 @@ async fn handle_stripe_webhook(
                     let put_result = client
                         .put_item()
                         .table_name(table)
-                        .item("pk", AttributeValue::S(format!("TENANT#{}", customer_id)))
+                        .item("tenant_id", AttributeValue::S(format!("TENANT#{}", customer_id)))
                         .item("sk", AttributeValue::S("CONFIG".to_string()))
                         .item("tenant_id", AttributeValue::S(customer_id.to_string()))
                         .item("email", AttributeValue::S(customer_email.to_string()))
@@ -4378,7 +4378,7 @@ async fn handle_coupon_validate(
         let resp = dynamo
             .get_item()
             .table_name(table)
-            .key("pk", AttributeValue::S(format!("COUPON#{}", code)))
+            .key("tenant_id", AttributeValue::S(format!("COUPON#{}", code)))
             .key("sk", AttributeValue::S("CONFIG".to_string()))
             .send()
             .await;
@@ -4443,7 +4443,7 @@ async fn handle_coupon_redeem(
         let coupon_resp = dynamo
             .get_item()
             .table_name(table)
-            .key("pk", AttributeValue::S(format!("COUPON#{}", code)))
+            .key("tenant_id", AttributeValue::S(format!("COUPON#{}", code)))
             .key("sk", AttributeValue::S("CONFIG".to_string()))
             .send()
             .await;
@@ -4487,7 +4487,7 @@ async fn handle_coupon_redeem(
         let redeem_check = dynamo
             .get_item()
             .table_name(table)
-            .key("pk", AttributeValue::S(format!("REDEEM#{}#{}", resolved_user, code)))
+            .key("tenant_id", AttributeValue::S(format!("REDEEM#{}#{}", resolved_user, code)))
             .key("sk", AttributeValue::S("INFO".to_string()))
             .send()
             .await;
@@ -4521,7 +4521,7 @@ async fn handle_coupon_redeem(
         let _ = dynamo
             .update_item()
             .table_name(table)
-            .key("pk", AttributeValue::S(pk))
+            .key("tenant_id", AttributeValue::S(pk))
             .key("sk", AttributeValue::S("PROFILE".to_string()))
             .update_expression("SET credits_remaining = credits_remaining + :c, #p = :plan, coupon_code = :coupon, coupon_expires = :exp, updated_at = :now")
             .expression_attribute_names("#p", "plan")
@@ -4538,7 +4538,7 @@ async fn handle_coupon_redeem(
         let _ = dynamo
             .put_item()
             .table_name(table)
-            .item("pk", AttributeValue::S(format!("REDEEM#{}#{}", resolved_user, code)))
+            .item("tenant_id", AttributeValue::S(format!("REDEEM#{}#{}", resolved_user, code)))
             .item("sk", AttributeValue::S("INFO".to_string()))
             .item("user_id", AttributeValue::S(resolved_user.clone()))
             .item("code", AttributeValue::S(code.clone()))
@@ -4666,7 +4666,7 @@ async fn handle_crypto_initiate(
                 let _ = dynamo
                     .put_item()
                     .table_name(table)
-                    .item("pk", AttributeValue::S(format!("CRYPTO_TX#{}", tx_id)))
+                    .item("tenant_id", AttributeValue::S(format!("CRYPTO_TX#{}", tx_id)))
                     .item("sk", AttributeValue::S("PENDING".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
                     .item("amount_usd", AttributeValue::N(req.amount.to_string()))
@@ -4769,7 +4769,7 @@ async fn handle_crypto_confirm(
         let _ = dynamo
             .put_item()
             .table_name(table)
-            .item("pk", AttributeValue::S(format!("CRYPTO_TX#{}", req.tx_hash)))
+            .item("tenant_id", AttributeValue::S(format!("CRYPTO_TX#{}", req.tx_hash)))
             .item("sk", AttributeValue::S("CONFIRMED".to_string()))
             .item("user_id", AttributeValue::S(user_id.clone()))
             .item("confirmed_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
@@ -5001,7 +5001,7 @@ async fn handle_contact_submit(
             let result = dynamo
                 .put_item()
                 .table_name(table)
-                .item("pk", AttributeValue::S(format!("CONTACT#{}", id)))
+                .item("tenant_id", AttributeValue::S(format!("CONTACT#{}", id)))
                 .item("sk", AttributeValue::S("SUBMITTED".to_string()))
                 .item("category", AttributeValue::S(req.category.clone()))
                 .item("message", AttributeValue::S(req.message.clone()))
@@ -5492,7 +5492,7 @@ async fn handle_link_generate(
         let result = dynamo
             .put_item()
             .table_name(table)
-            .item("pk", aws_sdk_dynamodb::types::AttributeValue::S(format!("LINKCODE#{}", code)))
+            .item("tenant_id", aws_sdk_dynamodb::types::AttributeValue::S(format!("LINKCODE#{}", code)))
             .item("sk", aws_sdk_dynamodb::types::AttributeValue::S("PENDING".to_string()))
             .item("channel_key", aws_sdk_dynamodb::types::AttributeValue::S(session_id.to_string()))
             .item("ttl", aws_sdk_dynamodb::types::AttributeValue::N(ttl))
@@ -5534,7 +5534,7 @@ async fn handle_save_result(
         let _ = dynamo
             .put_item()
             .table_name(table.as_str())
-            .item("pk", AttributeValue::S(format!("RESULT#{}", id)))
+            .item("tenant_id", AttributeValue::S(format!("RESULT#{}", id)))
             .item("sk", AttributeValue::S("DATA".to_string()))
             .item("body", AttributeValue::S(body_str))
             .item("created_at", AttributeValue::S(now))
@@ -5559,7 +5559,7 @@ async fn handle_get_result(
         let result = dynamo
             .get_item()
             .table_name(table.as_str())
-            .key("pk", AttributeValue::S(format!("RESULT#{}", id)))
+            .key("tenant_id", AttributeValue::S(format!("RESULT#{}", id)))
             .key("sk", AttributeValue::S("DATA".to_string()))
             .send()
             .await;
@@ -5990,7 +5990,7 @@ async fn handle_status_ping(
                 // Use get_item on a non-existent key — requires only read permissions
                 let res = ddb.get_item()
                     .table_name(&table)
-                    .key("pk", aws_sdk_dynamodb::types::AttributeValue::S("HEALTH_CHECK".to_string()))
+                    .key("tenant_id", aws_sdk_dynamodb::types::AttributeValue::S("HEALTH_CHECK".to_string()))
                     .key("sk", aws_sdk_dynamodb::types::AttributeValue::S("PING".to_string()))
                     .send().await;
                 let ms = start.elapsed().as_millis() as u64;
@@ -6128,7 +6128,7 @@ async fn get_user_settings(
     if let Ok(output) = dynamo
         .get_item()
         .table_name(config_table)
-        .key("pk", AttributeValue::S(pk))
+        .key("tenant_id", AttributeValue::S(pk))
         .key("sk", AttributeValue::S("SETTINGS".to_string()))
         .send()
         .await
@@ -6218,7 +6218,7 @@ async fn save_user_settings(
     let _ = dynamo
         .update_item()
         .table_name(config_table)
-        .key("pk", AttributeValue::S(pk))
+        .key("tenant_id", AttributeValue::S(pk))
         .key("sk", AttributeValue::S("SETTINGS".to_string()))
         .update_expression(&update_expression)
         .set_expression_attribute_values(Some(expr_values))
@@ -6361,7 +6361,7 @@ async fn handle_google_callback(
             let existing = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(google_pk.clone()))
+                .key("tenant_id", AttributeValue::S(google_pk.clone()))
                 .key("sk", AttributeValue::S("USER_MAP".to_string()))
                 .send()
                 .await;
@@ -6382,7 +6382,7 @@ async fn handle_google_callback(
                     let _ = dynamo
                         .put_item()
                         .table_name(table.as_str())
-                        .item("pk", AttributeValue::S(google_pk.clone()))
+                        .item("tenant_id", AttributeValue::S(google_pk.clone()))
                         .item("sk", AttributeValue::S("USER_MAP".to_string()))
                         .item("user_id", AttributeValue::S(uid.clone()))
                         .item("email", AttributeValue::S(email.clone()))
@@ -6402,7 +6402,7 @@ async fn handle_google_callback(
             let mut update_req = dynamo
                 .update_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(user_pk))
+                .key("tenant_id", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S("PROFILE".to_string()))
                 .expression_attribute_values(":email", AttributeValue::S(email.clone()))
                 .expression_attribute_values(":name", AttributeValue::S(display_name.clone()))
@@ -6423,7 +6423,7 @@ async fn handle_google_callback(
                 let _ = dynamo
                     .put_item()
                     .table_name(table.as_str())
-                    .item("pk", AttributeValue::S(link_pk))
+                    .item("tenant_id", AttributeValue::S(link_pk))
                     .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
                     .item("linked_at", AttributeValue::S(now.clone()))
@@ -6437,7 +6437,7 @@ async fn handle_google_callback(
             let _ = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
+                .item("tenant_id", AttributeValue::S(format!("AUTH#{}", auth_token)))
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
                 .item("email", AttributeValue::S(email.clone()))
@@ -6478,7 +6478,7 @@ async fn handle_auth_me(
             if let Ok(output) = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(auth_pk))
+                .key("tenant_id", AttributeValue::S(auth_pk))
                 .key("sk", AttributeValue::S("TOKEN".to_string()))
                 .send()
                 .await
@@ -6538,7 +6538,7 @@ async fn handle_auth_register(
             if let Ok(output) = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(email_pk.clone()))
+                .key("tenant_id", AttributeValue::S(email_pk.clone()))
                 .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
                 .send()
                 .await
@@ -6557,7 +6557,7 @@ async fn handle_auth_register(
             let _ = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(email_pk))
+                .item("tenant_id", AttributeValue::S(email_pk))
                 .item("sk", AttributeValue::S("CREDENTIALS".to_string()))
                 .item("password_hash", AttributeValue::S(password_hash))
                 .item("salt", AttributeValue::S(salt))
@@ -6574,7 +6574,7 @@ async fn handle_auth_register(
             let _ = dynamo
                 .update_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(user_pk))
+                .key("tenant_id", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S("PROFILE".to_string()))
                 .update_expression("SET email = :email, auth_method = :auth, updated_at = :now")
                 .expression_attribute_values(":email", AttributeValue::S(email.clone()))
@@ -6589,7 +6589,7 @@ async fn handle_auth_register(
             let _ = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
+                .item("tenant_id", AttributeValue::S(format!("AUTH#{}", auth_token)))
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
                 .item("email", AttributeValue::S(email.clone()))
@@ -6634,7 +6634,7 @@ async fn handle_auth_login(
             let cred_result = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(email_pk))
+                .key("tenant_id", AttributeValue::S(email_pk))
                 .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
                 .send()
                 .await;
@@ -6660,7 +6660,7 @@ async fn handle_auth_login(
                             let _ = dynamo
                                 .put_item()
                                 .table_name(table.as_str())
-                                .item("pk", AttributeValue::S(link_pk))
+                                .item("tenant_id", AttributeValue::S(link_pk))
                                 .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                                 .item("user_id", AttributeValue::S(user_id.clone()))
                                 .item("linked_at", AttributeValue::S(now.clone()))
@@ -6675,7 +6675,7 @@ async fn handle_auth_login(
                     let _ = dynamo
                         .put_item()
                         .table_name(table.as_str())
-                        .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
+                        .item("tenant_id", AttributeValue::S(format!("AUTH#{}", auth_token)))
                         .item("sk", AttributeValue::S("TOKEN".to_string()))
                         .item("user_id", AttributeValue::S(user_id.clone()))
                         .item("email", AttributeValue::S(email.clone()))
@@ -6771,7 +6771,7 @@ async fn handle_auth_email(
                 let _ = dynamo
                     .put_item()
                     .table_name(table.as_str())
-                    .item("pk", AttributeValue::S(verify_pk))
+                    .item("tenant_id", AttributeValue::S(verify_pk))
                     .item("sk", AttributeValue::S("CODE".to_string()))
                     .item("code", AttributeValue::S(code.clone()))
                     .item("attempts", AttributeValue::N("0".to_string()))
@@ -6805,7 +6805,7 @@ async fn handle_auth_email(
             let existing = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(email_pk.clone()))
+                .key("tenant_id", AttributeValue::S(email_pk.clone()))
                 .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
                 .send()
                 .await;
@@ -6820,7 +6820,7 @@ async fn handle_auth_email(
                     let _ = dynamo
                         .put_item()
                         .table_name(table.as_str())
-                        .item("pk", AttributeValue::S(email_pk))
+                        .item("tenant_id", AttributeValue::S(email_pk))
                         .item("sk", AttributeValue::S("CREDENTIALS".to_string()))
                         .item("user_id", AttributeValue::S(new_user_id.clone()))
                         .item("auth_method", AttributeValue::S("email_passwordless".to_string()))
@@ -6834,7 +6834,7 @@ async fn handle_auth_email(
                     let _ = dynamo
                         .update_item()
                         .table_name(table.as_str())
-                        .key("pk", AttributeValue::S(user_pk))
+                        .key("tenant_id", AttributeValue::S(user_pk))
                         .key("sk", AttributeValue::S("PROFILE".to_string()))
                         .update_expression("SET email = :email, auth_method = :auth, updated_at = :now")
                         .expression_attribute_values(":email", AttributeValue::S(email.clone()))
@@ -6861,7 +6861,7 @@ async fn handle_auth_email(
                     let _ = dynamo
                         .put_item()
                         .table_name(table.as_str())
-                        .item("pk", AttributeValue::S(link_pk))
+                        .item("tenant_id", AttributeValue::S(link_pk))
                         .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                         .item("user_id", AttributeValue::S(user_id.clone()))
                         .item("linked_at", AttributeValue::S(now.clone()))
@@ -6875,7 +6875,7 @@ async fn handle_auth_email(
             let _ = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
+                .item("tenant_id", AttributeValue::S(format!("AUTH#{}", auth_token)))
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
                 .item("email", AttributeValue::S(email.clone()))
@@ -6920,7 +6920,7 @@ async fn handle_auth_verify(
             let stored = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(verify_pk.clone()))
+                .key("tenant_id", AttributeValue::S(verify_pk.clone()))
                 .key("sk", AttributeValue::S("CODE".to_string()))
                 .send()
                 .await;
@@ -6965,7 +6965,7 @@ async fn handle_auth_verify(
             let _ = dynamo
                 .update_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(verify_pk.clone()))
+                .key("tenant_id", AttributeValue::S(verify_pk.clone()))
                 .key("sk", AttributeValue::S("CODE".to_string()))
                 .update_expression("SET attempts = attempts + :one")
                 .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
@@ -6983,7 +6983,7 @@ async fn handle_auth_verify(
             let _ = dynamo
                 .delete_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(verify_pk))
+                .key("tenant_id", AttributeValue::S(verify_pk))
                 .key("sk", AttributeValue::S("CODE".to_string()))
                 .send()
                 .await;
@@ -6993,7 +6993,7 @@ async fn handle_auth_verify(
             let existing = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(email_pk.clone()))
+                .key("tenant_id", AttributeValue::S(email_pk.clone()))
                 .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
                 .send()
                 .await;
@@ -7008,7 +7008,7 @@ async fn handle_auth_verify(
                     let _ = dynamo
                         .put_item()
                         .table_name(table.as_str())
-                        .item("pk", AttributeValue::S(email_pk))
+                        .item("tenant_id", AttributeValue::S(email_pk))
                         .item("sk", AttributeValue::S("CREDENTIALS".to_string()))
                         .item("user_id", AttributeValue::S(new_user_id.clone()))
                         .item("auth_method", AttributeValue::S("email_verified".to_string()))
@@ -7021,7 +7021,7 @@ async fn handle_auth_verify(
                     let _ = dynamo
                         .update_item()
                         .table_name(table.as_str())
-                        .key("pk", AttributeValue::S(user_pk))
+                        .key("tenant_id", AttributeValue::S(user_pk))
                         .key("sk", AttributeValue::S("PROFILE".to_string()))
                         .update_expression("SET email = :email, auth_method = :auth, updated_at = :now")
                         .expression_attribute_values(":email", AttributeValue::S(email.clone()))
@@ -7049,7 +7049,7 @@ async fn handle_auth_verify(
                 let _ = dynamo
                     .put_item()
                     .table_name(table.as_str())
-                    .item("pk", AttributeValue::S(link_pk))
+                    .item("tenant_id", AttributeValue::S(link_pk))
                     .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
                     .item("linked_at", AttributeValue::S(now.clone()))
@@ -7063,7 +7063,7 @@ async fn handle_auth_verify(
             let _ = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
+                .item("tenant_id", AttributeValue::S(format!("AUTH#{}", auth_token)))
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
                 .item("email", AttributeValue::S(email.clone()))
@@ -7114,7 +7114,7 @@ async fn handle_list_conversations(
             let resp = dynamo
                 .query()
                 .table_name(table.as_str())
-                .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
+                .key_condition_expression("tenant_id = :pk AND begins_with(sk, :sk)")
                 .expression_attribute_values(":pk", AttributeValue::S(user_pk))
                 .expression_attribute_values(":sk", AttributeValue::S("CONV#".to_string()))
                 .scan_index_forward(false)
@@ -7171,7 +7171,7 @@ async fn handle_create_conversation(
             let _ = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(user_pk))
+                .item("tenant_id", AttributeValue::S(user_pk))
                 .item("sk", AttributeValue::S(format!("CONV#{}", conv_id)))
                 .item("conv_id", AttributeValue::S(conv_id.clone()))
                 .item("title", AttributeValue::S("New conversation".to_string()))
@@ -7187,7 +7187,7 @@ async fn handle_create_conversation(
             let _ = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(link_pk))
+                .item("tenant_id", AttributeValue::S(link_pk))
                 .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                 .item("user_id", AttributeValue::S(user_id))
                 .item("linked_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
@@ -7229,7 +7229,7 @@ async fn handle_get_conversation_messages(
             let conv_resp = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(user_pk))
+                .key("tenant_id", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", id)))
                 .send()
                 .await;
@@ -7288,7 +7288,7 @@ async fn handle_delete_conversation(
             let _ = dynamo
                 .delete_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(user_pk))
+                .key("tenant_id", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", id)))
                 .send()
                 .await;
@@ -7324,7 +7324,7 @@ async fn handle_get_shared(
             let resp = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(format!("SHARE#{hash}")))
+                .key("tenant_id", AttributeValue::S(format!("SHARE#{hash}")))
                 .key("sk", AttributeValue::S("INFO".to_string()))
                 .send()
                 .await;
@@ -7371,7 +7371,7 @@ async fn handle_get_shared(
             let conv_resp = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(user_pk))
+                .key("tenant_id", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", conv_id)))
                 .send()
                 .await;
@@ -7432,7 +7432,7 @@ async fn handle_share_conversation(
             let conv_resp = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(user_pk))
+                .key("tenant_id", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", id)))
                 .send()
                 .await;
@@ -7446,7 +7446,7 @@ async fn handle_share_conversation(
             let existing_resp = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(format!("CONV_SHARE#{id}")))
+                .key("tenant_id", AttributeValue::S(format!("CONV_SHARE#{id}")))
                 .key("sk", AttributeValue::S("HASH".to_string()))
                 .send()
                 .await;
@@ -7458,7 +7458,7 @@ async fn handle_share_conversation(
                         let share_resp = dynamo
                             .get_item()
                             .table_name(table.as_str())
-                            .key("pk", AttributeValue::S(format!("SHARE#{hash}")))
+                            .key("tenant_id", AttributeValue::S(format!("SHARE#{hash}")))
                             .key("sk", AttributeValue::S("INFO".to_string()))
                             .send()
                             .await;
@@ -7487,7 +7487,7 @@ async fn handle_share_conversation(
             let put_result = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(format!("SHARE#{hash}")))
+                .item("tenant_id", AttributeValue::S(format!("SHARE#{hash}")))
                 .item("sk", AttributeValue::S("INFO".to_string()))
                 .item("conv_id", AttributeValue::S(id.clone()))
                 .item("user_id", AttributeValue::S(user_id))
@@ -7505,7 +7505,7 @@ async fn handle_share_conversation(
             let _ = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(format!("CONV_SHARE#{id}")))
+                .item("tenant_id", AttributeValue::S(format!("CONV_SHARE#{id}")))
                 .item("sk", AttributeValue::S("HASH".to_string()))
                 .item("share_hash", AttributeValue::S(hash.clone()))
                 .send()
@@ -7542,7 +7542,7 @@ async fn handle_revoke_share(
             let conv_resp = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(user_pk))
+                .key("tenant_id", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", id)))
                 .send()
                 .await;
@@ -7556,7 +7556,7 @@ async fn handle_revoke_share(
             let hash_resp = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(format!("CONV_SHARE#{id}")))
+                .key("tenant_id", AttributeValue::S(format!("CONV_SHARE#{id}")))
                 .key("sk", AttributeValue::S("HASH".to_string()))
                 .send()
                 .await;
@@ -7574,7 +7574,7 @@ async fn handle_revoke_share(
                     let _ = dynamo
                         .update_item()
                         .table_name(table.as_str())
-                        .key("pk", AttributeValue::S(format!("SHARE#{hash}")))
+                        .key("tenant_id", AttributeValue::S(format!("SHARE#{hash}")))
                         .key("sk", AttributeValue::S("INFO".to_string()))
                         .update_expression("SET revoked = :r")
                         .expression_attribute_values(":r", AttributeValue::Bool(true))
@@ -7608,7 +7608,7 @@ async fn resolve_user_from_token(
     if let Ok(output) = dynamo
         .get_item()
         .table_name(config_table)
-        .key("pk", AttributeValue::S(auth_pk))
+        .key("tenant_id", AttributeValue::S(auth_pk))
         .key("sk", AttributeValue::S("TOKEN".to_string()))
         .send()
         .await
@@ -7637,7 +7637,7 @@ async fn auth_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Opti
         if let Ok(output) = dynamo
             .get_item()
             .table_name(table.as_str())
-            .key("pk", AttributeValue::S(auth_pk))
+            .key("tenant_id", AttributeValue::S(auth_pk))
             .key("sk", AttributeValue::S("TOKEN".to_string()))
             .send()
             .await
@@ -7666,7 +7666,7 @@ async fn handle_list_apikeys(
             if let Ok(output) = dynamo
                 .query()
                 .table_name(table.as_str())
-                .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+                .key_condition_expression("tenant_id = :pk AND begins_with(sk, :prefix)")
                 .expression_attribute_values(":pk", AttributeValue::S(pk))
                 .expression_attribute_values(":prefix", AttributeValue::S("APIKEY#".to_string()))
                 .send()
@@ -7716,7 +7716,7 @@ async fn handle_create_apikey(
             let _ = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                .item("tenant_id", AttributeValue::S(format!("USER#{}", user_id)))
                 .item("sk", AttributeValue::S(format!("APIKEY#{}", key_id)))
                 .item("name", AttributeValue::S(name.clone()))
                 .item("api_key_hash", AttributeValue::S(api_key.clone())) // In production, hash this
@@ -7728,7 +7728,7 @@ async fn handle_create_apikey(
             let _ = dynamo
                 .put_item()
                 .table_name(table.as_str())
-                .item("pk", AttributeValue::S(format!("APIKEY#{}", api_key)))
+                .item("tenant_id", AttributeValue::S(format!("APIKEY#{}", api_key)))
                 .item("sk", AttributeValue::S("LOOKUP".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
                 .item("key_id", AttributeValue::S(key_id.clone()))
@@ -7770,7 +7770,7 @@ async fn handle_delete_apikey(
             if let Ok(get_output) = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(pk.clone()))
+                .key("tenant_id", AttributeValue::S(pk.clone()))
                 .key("sk", AttributeValue::S(sk.clone()))
                 .send()
                 .await
@@ -7781,7 +7781,7 @@ async fn handle_delete_apikey(
                         let _ = dynamo
                             .delete_item()
                             .table_name(table.as_str())
-                            .key("pk", AttributeValue::S(format!("APIKEY#{}", api_key)))
+                            .key("tenant_id", AttributeValue::S(format!("APIKEY#{}", api_key)))
                             .key("sk", AttributeValue::S("LOOKUP".to_string()))
                             .send()
                             .await;
@@ -7792,7 +7792,7 @@ async fn handle_delete_apikey(
             let _ = dynamo
                 .delete_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(pk))
+                .key("tenant_id", AttributeValue::S(pk))
                 .key("sk", AttributeValue::S(sk))
                 .send()
                 .await;
@@ -7998,7 +7998,7 @@ async fn handle_speech_synthesize(
                         let _ = dynamo
                             .update_item()
                             .table_name(table)
-                            .key("pk", AttributeValue::S(pk))
+                            .key("tenant_id", AttributeValue::S(pk))
                             .key("sk", AttributeValue::S("PROFILE".to_string()))
                             .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
                             .expression_attribute_values(":c", AttributeValue::N(tts_credits.to_string()))
@@ -8057,7 +8057,7 @@ async fn handle_sync_list_conversations(
             let mut query = dynamo
                 .query()
                 .table_name(table.as_str())
-                .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
+                .key_condition_expression("tenant_id = :pk AND begins_with(sk, :sk)")
                 .expression_attribute_values(":pk", AttributeValue::S(user_pk))
                 .expression_attribute_values(":sk", AttributeValue::S("CONV#".to_string()))
                 .scan_index_forward(false)
@@ -8134,7 +8134,7 @@ async fn handle_sync_get_conversation(
             let conv_resp = dynamo
                 .get_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(user_pk))
+                .key("tenant_id", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", id)))
                 .send()
                 .await;
@@ -8220,7 +8220,7 @@ async fn handle_sync_push(
                 let _ = dynamo
                     .put_item()
                     .table_name(table.as_str())
-                    .item("pk", AttributeValue::S(user_pk.clone()))
+                    .item("tenant_id", AttributeValue::S(user_pk.clone()))
                     .item("sk", AttributeValue::S(format!("CONV#{}", conv_id)))
                     .item("conv_id", AttributeValue::S(conv_id.clone()))
                     .item("title", AttributeValue::S(conv.title.clone()))
@@ -8238,7 +8238,7 @@ async fn handle_sync_push(
                 let _ = dynamo
                     .put_item()
                     .table_name(table.as_str())
-                    .item("pk", AttributeValue::S(link_pk))
+                    .item("tenant_id", AttributeValue::S(link_pk))
                     .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
                     .item("linked_at", AttributeValue::S(now.clone()))
@@ -8318,7 +8318,7 @@ async fn handle_cron_list(
             let resp = dynamo
                 .query()
                 .table_name(table.as_str())
-                .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
+                .key_condition_expression("tenant_id = :pk AND begins_with(sk, :sk)")
                 .expression_attribute_values(":pk", AttributeValue::S(user_pk))
                 .expression_attribute_values(":sk", AttributeValue::S("JOB#".to_string()))
                 .scan_index_forward(false)
@@ -8389,7 +8389,7 @@ async fn handle_cron_create(
             let user_pk = format!("CRON#{}", user_id);
             let count_resp = dynamo.query()
                 .table_name(table.as_str())
-                .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
+                .key_condition_expression("tenant_id = :pk AND begins_with(sk, :sk)")
                 .expression_attribute_values(":pk", AttributeValue::S(user_pk.clone()))
                 .expression_attribute_values(":sk", AttributeValue::S("JOB#".to_string()))
                 .select(aws_sdk_dynamodb::types::Select::Count)
@@ -8414,7 +8414,7 @@ async fn handle_cron_create(
 
             let now = chrono::Utc::now().to_rfc3339();
             let mut item = std::collections::HashMap::new();
-            item.insert("pk".to_string(), AttributeValue::S(user_pk));
+            item.insert("tenant_id".to_string(), AttributeValue::S(user_pk));
             item.insert("sk".to_string(), AttributeValue::S(format!("JOB#{}", job_id)));
             item.insert("job_id".to_string(), AttributeValue::S(job_id.clone()));
             item.insert("name".to_string(), AttributeValue::S(req.name));
@@ -8479,7 +8479,7 @@ async fn handle_cron_update(
             let update_expr = format!("SET {}", update_expr_parts.join(", "));
             let mut builder = dynamo.update_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(user_pk))
+                .key("tenant_id", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(sk))
                 .update_expression(&update_expr);
             for (k, v) in &attr_values {
@@ -8520,7 +8520,7 @@ async fn handle_cron_delete(
             let sk = format!("JOB#{}", id);
             match dynamo.delete_item()
                 .table_name(table.as_str())
-                .key("pk", AttributeValue::S(user_pk))
+                .key("tenant_id", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(sk))
                 .send().await
             {
