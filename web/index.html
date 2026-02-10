@@ -3394,30 +3394,46 @@
         }
         // Update connected channel status
         if (data.linked_channels) {
-          updateChannelStatus(data.linked_channels);
+          updateChannelStatus(data.linked_channels, data.linked_channel_details);
         }
       } catch(e) { /* ignore poll errors */ }
       isPolling = false;
     }
 
-    function updateChannelStatus(channels) {
+    function updateChannelStatus(channels, details) {
       const lineBar = document.getElementById('ch-bar-line');
       const tgBar = document.getElementById('ch-bar-tg');
       const lineCard = document.getElementById('line-card');
       const tgCard = document.getElementById('tg-card');
       if (channels.includes('line')) {
-        lineBar.classList.add('connected');
-        lineCard.classList.add('connected');
+        lineBar && lineBar.classList.add('connected');
+        lineCard && lineCard.classList.add('connected');
       }
       if (channels.includes('telegram')) {
-        tgBar.classList.add('connected');
-        tgCard.classList.add('connected');
+        tgBar && tgBar.classList.add('connected');
+        tgCard && tgCard.classList.add('connected');
       }
-      // Also update app-mode sidebar channel buttons
+      // Also update app-mode sidebar channel buttons with linked info
       const chMap = { line: 'app-ch-line', telegram: 'app-ch-tg', whatsapp: 'app-ch-whatsapp', discord: 'app-ch-discord', slack: 'app-ch-slack', teams: 'app-ch-teams' };
       channels.forEach(ch => {
         const el = document.getElementById(chMap[ch]);
-        if (el) el.classList.add('connected');
+        if (el) {
+          el.classList.add('connected');
+          // Show linked detail (e.g. "Telegram (@username)")
+          if (details && details.length) {
+            const d = details.find(dd => dd.type === ch);
+            if (d && d.name) {
+              let label = el.querySelector('.app-ch-linked');
+              if (!label) {
+                label = document.createElement('span');
+                label.className = 'app-ch-linked';
+                label.style.cssText = 'font-size:8px;color:var(--green);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;';
+                el.appendChild(label);
+              }
+              label.textContent = d.name;
+            }
+          }
+        }
       });
     }
 
@@ -4107,6 +4123,7 @@
           if (data.linked_channels) {
             const target = ch === 'tg' ? 'telegram' : ch;
             if (data.linked_channels.includes(target)) {
+              updateChannelStatus(data.linked_channels, data.linked_channel_details);
               showLinkSuccess(ch);
             }
           }
@@ -4823,6 +4840,18 @@
       textarea.style.height = 'auto';
       appAddMsg(text, 'user');
 
+      // Immediately update conversation title client-side (avoid race with backend)
+      if (appCurrentConvId && appConversations) {
+        const conv = appConversations.find(c => c.id === appCurrentConvId);
+        if (conv && (!conv.title || conv.title === 'New conversation')) {
+          const trimmed = text.trim();
+          conv.title = trimmed.length > 50 ? trimmed.substring(0, 50) + '...' : trimmed;
+          // Update the active sidebar item directly without re-fetching
+          const activeItem = document.querySelector('.app-conv-item.active span');
+          if (activeItem) activeItem.textContent = conv.title;
+        }
+      }
+
       // Show thinking indicator
       const msgsEl = document.getElementById('app-messages');
       const thinking = document.createElement('div');
@@ -4902,7 +4931,7 @@
           knownMsgCount += 2;
           if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
           autoPlayTTS(d.response);
-          appLoadConversations();
+          setTimeout(() => appLoadConversations(), 1500);
           return;
         }
 
@@ -4936,7 +4965,7 @@
           knownMsgCount += 2;
           if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
           autoPlayTTS(d.response);
-          appLoadConversations();
+          setTimeout(() => appLoadConversations(), 1500);
         } else {
           // Read SSE stream (supports agentic multi-iteration tool events)
           const reader = r.body.getReader();
@@ -5045,7 +5074,7 @@
             thinking.remove();
             appAddMsg(lang === 'ja' ? 'レスポンスを受信できませんでした。' : 'No response received.', 'bot');
           }
-          appLoadConversations();
+          setTimeout(() => appLoadConversations(), 1500);
         }
       } catch (e) {
         clearTimeout(frontendTimeout);
@@ -5218,7 +5247,7 @@
         }
 
         knownMsgCount += 2;
-        appLoadConversations();
+        setTimeout(() => appLoadConversations(), 1500);
 
       } catch (e) {
         pending.textContent = lang === 'ja' ? 'エラーが発生しました' : 'Error occurred';

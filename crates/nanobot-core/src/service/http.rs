@@ -2375,18 +2375,19 @@ async fn handle_get_session(
     };
 
     // Query linked channels for this user
-    let linked_channels = {
+    let (linked_channels, linked_channel_details) = {
         #[cfg(feature = "dynamodb-backend")]
         {
             if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
-                get_linked_channels(dynamo, table, &session_key).await
+                let info = get_linked_channels(dynamo, table, &session_key).await;
+                (info.types, info.details)
             } else {
-                vec![]
+                (vec![], vec![])
             }
         }
         #[cfg(not(feature = "dynamodb-backend"))]
         {
-            Vec::<String>::new()
+            (Vec::<String>::new(), Vec::<serde_json::Value>::new())
         }
     };
 
@@ -2400,7 +2401,17 @@ async fn handle_get_session(
         "messages": history,
         "message_count": history.len(),
         "linked_channels": linked_channels,
+        "linked_channel_details": linked_channel_details,
     }))
+}
+
+/// Linked channel info returned from DynamoDB.
+#[cfg(feature = "dynamodb-backend")]
+struct LinkedChannelInfo {
+    /// Channel type names: ["web", "line", "telegram"]
+    types: Vec<String>,
+    /// Rich details: [{"type":"line","name":"LINE","linked_at":"2025-..."},...]
+    details: Vec<serde_json::Value>,
 }
 
 /// Query DynamoDB for linked channels associated with a user.
@@ -2409,7 +2420,7 @@ async fn get_linked_channels(
     dynamo: &aws_sdk_dynamodb::Client,
     table: &str,
     session_key: &str,
-) -> Vec<String> {
+) -> LinkedChannelInfo {
     // Query LINK# records that point to this user_id
     let pk = format!("LINK#api:{}", session_key.trim_start_matches("api:"));
     let resp = dynamo
@@ -2421,7 +2432,8 @@ async fn get_linked_channels(
         .send()
         .await;
 
-    let mut channels = vec!["web".to_string()];
+    let mut types = vec!["web".to_string()];
+    let mut details: Vec<serde_json::Value> = Vec::new();
 
     // Also scan for reverse links: any LINK# records with user_id = session_key
     let scan_resp = dynamo
@@ -2438,10 +2450,25 @@ async fn get_linked_channels(
         for item in output.items.unwrap_or_default() {
             if let Some(pk_val) = item.get("pk").and_then(|v| v.as_s().ok()) {
                 let key = pk_val.trim_start_matches("LINK#");
-                if key.starts_with("line:") && !channels.contains(&"line".to_string()) {
-                    channels.push("line".to_string());
-                } else if key.starts_with("telegram:") && !channels.contains(&"telegram".to_string()) {
-                    channels.push("telegram".to_string());
+                let ch_type = if key.starts_with("line:") {
+                    "line"
+                } else if key.starts_with("tg:") || key.starts_with("telegram:") {
+                    "telegram"
+                } else if key.starts_with("fb:") {
+                    "facebook"
+                } else {
+                    continue;
+                };
+                if !types.contains(&ch_type.to_string()) {
+                    types.push(ch_type.to_string());
+                    let ch_name = item.get("channel_name").and_then(|v| v.as_s().ok()).unwrap_or(ch_type);
+                    let linked_at = item.get("linked_at").and_then(|v| v.as_s().ok()).unwrap_or("");
+                    details.push(serde_json::json!({
+                        "type": ch_type,
+                        "name": ch_name,
+                        "channel_key": key,
+                        "linked_at": linked_at,
+                    }));
                 }
             }
         }
@@ -2452,18 +2479,29 @@ async fn get_linked_channels(
         for item in output.items.unwrap_or_default() {
             if let Some(uid) = item.get("user_id").and_then(|v| v.as_s().ok()) {
                 if uid != session_key {
-                    // This link record exists — there's a linked channel
-                    if uid.starts_with("line:") && !channels.contains(&"line".to_string()) {
-                        channels.push("line".to_string());
-                    } else if uid.starts_with("telegram:") && !channels.contains(&"telegram".to_string()) {
-                        channels.push("telegram".to_string());
+                    let ch_name = item.get("channel_name").and_then(|v| v.as_s().ok()).unwrap_or("");
+                    let linked_at = item.get("linked_at").and_then(|v| v.as_s().ok()).unwrap_or("");
+                    if uid.starts_with("line:") && !types.contains(&"line".to_string()) {
+                        types.push("line".to_string());
+                        details.push(serde_json::json!({
+                            "type": "line",
+                            "name": if ch_name.is_empty() { "LINE" } else { ch_name },
+                            "linked_at": linked_at,
+                        }));
+                    } else if uid.starts_with("telegram:") && !types.contains(&"telegram".to_string()) {
+                        types.push("telegram".to_string());
+                        details.push(serde_json::json!({
+                            "type": "telegram",
+                            "name": if ch_name.is_empty() { "Telegram" } else { ch_name },
+                            "linked_at": linked_at,
+                        }));
                     }
                 }
             }
         }
     }
 
-    channels
+    LinkedChannelInfo { types, details }
 }
 
 /// DELETE /api/v1/sessions/:id — Delete session

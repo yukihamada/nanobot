@@ -3039,10 +3039,13 @@ mod tests {
 
     #[test]
     fn test_tool_registry_builtins() {
-        // Clear GITHUB_TOKEN to get deterministic count
+        // Clear env vars for deterministic count
         std::env::remove_var("GITHUB_TOKEN");
+        std::env::remove_var("CONNECT_INSTANCE_ID");
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 16); // 11 original + 4 sandbox + 1 github_read_file (public)
+        // 15 base (11 original + 4 sandbox), +1 github_read_file when http-api
+        let expected = if cfg!(feature = "http-api") { 16 } else { 15 };
+        assert_eq!(registry.len(), expected);
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
@@ -3067,8 +3070,9 @@ mod tests {
     #[cfg(feature = "http-api")]
     fn test_tool_registry_with_github_token() {
         std::env::set_var("GITHUB_TOKEN", "test-token");
+        std::env::remove_var("CONNECT_INSTANCE_ID");
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 18); // 15 base + 3 GitHub tools
+        assert_eq!(registry.len(), 18); // 15 base + 1 github_read_file + 2 github_write tools
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))

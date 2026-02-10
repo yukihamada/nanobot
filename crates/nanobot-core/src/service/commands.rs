@@ -498,6 +498,28 @@ async fn resolve_session_key(
     }
 }
 
+/// Extract a human-readable channel display name from a channel_key.
+/// e.g. "line:U12345" → "LINE", "tg:123|yukibot" → "Telegram (@yukibot)", "webchat:xxx" → "Web"
+/// Returns (display_name, identifier).
+#[allow(dead_code)]
+fn channel_display_name(channel_key: &str) -> (String, String) {
+    if let Some(rest) = channel_key.strip_prefix("line:") {
+        ("LINE".to_string(), rest.to_string())
+    } else if let Some(rest) = channel_key.strip_prefix("tg:") {
+        if let Some((_id, username)) = rest.split_once('|') {
+            (format!("Telegram (@{})", username), username.to_string())
+        } else {
+            ("Telegram".to_string(), rest.to_string())
+        }
+    } else if channel_key.starts_with("webchat:") || channel_key.starts_with("api:") {
+        ("Web".to_string(), String::new())
+    } else if let Some(rest) = channel_key.strip_prefix("fb:") {
+        ("Facebook".to_string(), rest.to_string())
+    } else {
+        ("Unknown".to_string(), channel_key.to_string())
+    }
+}
+
 #[cfg(feature = "dynamodb-backend")]
 async fn handle_link_command(
     dynamo: &aws_sdk_dynamodb::Client,
@@ -608,7 +630,10 @@ async fn handle_link_command(
             };
 
             let now = chrono::Utc::now().to_rfc3339();
+            let (other_display, _) = channel_display_name(&other_channel_key);
+            let (this_display, _) = channel_display_name(channel_key);
             for ck in [&other_channel_key, &channel_key.to_string()] {
+                let (ch_name, _) = channel_display_name(ck);
                 let _ = dynamo
                     .put_item()
                     .table_name(config_table)
@@ -616,6 +641,7 @@ async fn handle_link_command(
                     .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
                     .item("linked_at", AttributeValue::S(now.clone()))
+                    .item("channel_name", AttributeValue::S(ch_name))
                     .send()
                     .await;
             }
@@ -674,9 +700,10 @@ async fn handle_link_command(
                 channel_key,
                 user_id
             );
-            LinkResult::Linked(
-                "リンク完了！これからどのチャネルでも同じ会話を続けられます。".to_string(),
-            )
+            LinkResult::Linked(format!(
+                "リンク完了！{} ↔ {} が連携されました。これからどのチャネルでも同じ会話を続けられます。",
+                other_display, this_display
+            ))
         }
     }
 }
@@ -775,5 +802,27 @@ mod tests {
         // Should be unique
         let hash2 = generate_share_hash();
         assert_ne!(hash, hash2);
+    }
+
+    #[test]
+    fn test_channel_display_name() {
+        let (name, _) = channel_display_name("line:U12345");
+        assert_eq!(name, "LINE");
+
+        let (name, id) = channel_display_name("tg:123456|yukibot");
+        assert_eq!(name, "Telegram (@yukibot)");
+        assert_eq!(id, "yukibot");
+
+        let (name, _) = channel_display_name("tg:123456");
+        assert_eq!(name, "Telegram");
+
+        let (name, _) = channel_display_name("webchat:abc");
+        assert_eq!(name, "Web");
+
+        let (name, _) = channel_display_name("api:xyz");
+        assert_eq!(name, "Web");
+
+        let (name, _) = channel_display_name("fb:12345");
+        assert_eq!(name, "Facebook");
     }
 }
