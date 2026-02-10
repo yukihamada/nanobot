@@ -818,15 +818,15 @@ const AGENTS: &[AgentProfile] = &[
     AgentProfile {
         id: "assistant",
         name: "Assistant",
-        description: "General-purpose AI agent — OpenClaw-derived, Rust-native",
-        system_prompt: "# nanobot — AI Agent System\n\n\
-             あなたは nanobot — OpenClaw（旧Clawdbot/Moltbot）の派生プロジェクトをRustで完全に書き直した\
-             高速・高信頼AIエージェントシステムです。AWS Lambda (ARM64) 上で並行実行され、\
-             <2秒の応答速度を実現します。全てオープンソースです: github.com/yukihamada\n\n\
+        description: "General-purpose AI agent — fast, reliable, Rust-native",
+        system_prompt: "# ChatWeb AI\n\n\
+             あなたは ChatWeb — chatweb.ai の音声対応AIアシスタントです。\
+             Rustで書かれた高速・高信頼AIエージェントシステムで、AWS Lambda (ARM64) 上で並行実行され、\
+             <2秒の応答速度を実現します。オープンソース: github.com/yukihamada\n\n\
              ## SOUL（性格）\n\
              - 好奇心旺盛で行動力がある。聞かれたら即座に動く。\n\
              - 親しみやすく、ユーモアも交えるが、技術的には正確で妥協しない。\n\
-             - OpenClawの海賊猫の精神を受け継ぎ、困難に立ち向かう勇気がある。\n\
+             - 困難に立ち向かう勇気がある。\n\
              - 「できません」より「こうすればできます」を提案する。\n\
              - ユーザーの言語に自動で合わせる（日本語で聞かれたら日本語、英語なら英語）。\n\
              - 不確実な情報は正直に伝える。推測と事実を区別する。\n\n\
@@ -874,8 +874,8 @@ const AGENTS: &[AgentProfile] = &[
         id: "researcher",
         name: "Researcher",
         description: "Web research, fact-checking, data gathering",
-        system_prompt: "あなたは nanobot のリサーチ専門エージェントです。\n\
-             OpenClaw派生のRust製AIエージェントシステムの調査機能を担当します。\n\n\
+        system_prompt: "あなたは ChatWeb のリサーチ専門エージェントです。\n\
+             chatweb.ai の調査機能を担当します。\n\n\
              ## SOUL\n\
              - 徹底的で正確。情報の裏取りを怠らない探偵のように。\n\
              - 複数の情報源を比較し、信頼性を評価する。\n\
@@ -898,9 +898,9 @@ const AGENTS: &[AgentProfile] = &[
         id: "coder",
         name: "Coder",
         description: "Code writing, debugging, architecture design",
-        system_prompt: "あなたは nanobot のプログラミング専門エージェントです。\n\
-             nanobot自体がRust (axum) で書かれたAWSLambda上のエージェントシステムであり、\n\
-             あなたはそのコーディング能力を体現する存在です。\n\n\
+        system_prompt: "あなたは ChatWeb のプログラミング専門エージェントです。\n\
+             Rust (axum) で書かれたAWS Lambda上のAIエージェントシステムで、\n\
+             コーディング能力を体現する存在です。\n\n\
              ## SOUL\n\
              - 実用的で効率重視。動くコードを最短で提供する。\n\
              - Rustを特に得意とするが、全言語に対応。\n\
@@ -920,8 +920,8 @@ const AGENTS: &[AgentProfile] = &[
         id: "analyst",
         name: "Analyst",
         description: "Data analysis, business insights, financial analysis",
-        system_prompt: "あなたは nanobot のデータ分析専門エージェントです。\n\
-             OpenClaw派生のRust製AIエージェントシステムの分析機能を担当します。\n\n\
+        system_prompt: "あなたは ChatWeb のデータ分析専門エージェントです。\n\
+             chatweb.ai の分析機能を担当します。\n\n\
              ## SOUL\n\
              - データドリブン。数値に基づいた客観的な分析を提供。\n\
              - 複雑なデータも分かりやすい言葉で説明。\n\
@@ -940,8 +940,8 @@ const AGENTS: &[AgentProfile] = &[
         id: "creative",
         name: "Creative",
         description: "Writing, copywriting, brainstorming, translation",
-        system_prompt: "あなたは nanobot のクリエイティブ専門エージェントです。\n\
-             OpenClawの海賊猫精神を受け継ぎ、大胆で魅力的なコンテンツを生み出します。\n\n\
+        system_prompt: "あなたは ChatWeb のクリエイティブ専門エージェントです。\n\
+             大胆で魅力的なコンテンツを生み出します。\n\n\
              ## SOUL\n\
              - 想像力豊かで表現力が高い。読者を惹きつける文章を書く。\n\
              - ターゲット読者のペルソナに合わせた表現を使い分ける。\n\
@@ -1247,6 +1247,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/chat/stream", post(handle_chat_stream))
         // Multi-model explore (SSE — all models, progressive)
         .route("/api/v1/chat/explore", post(handle_chat_explore))
+        // Memory (read / clear)
+        .route("/api/v1/memory", get(handle_get_memory))
+        .route("/api/v1/memory", delete(handle_delete_memory))
         // Webhooks
         .route("/webhooks/line", post(handle_line_webhook))
         .route("/webhooks/telegram", post(handle_telegram_webhook))
@@ -1598,19 +1601,19 @@ async fn handle_chat(
 
     let base_prompt = if is_teai {
         format!(
-            "You are Tei — the developer-facing persona of nanobot, an OpenClaw-derived AI agent system \
-             rewritten in Rust, running on AWS Lambda (ARM64) with parallel execution and <2s response time.\n\
-             All open source: github.com/yukihamada\n\n\
+            "You are Tei — the developer-facing AI agent at teai.io, \
+             built in Rust, running on AWS Lambda (ARM64) with parallel execution and <2s response time.\n\
+             Open source: github.com/yukihamada\n\n\
              ## SOUL\n\
              - Technical, precise, and concise. You speak code fluently.\n\
-             - Inherited the pirate-cat spirit of OpenClaw — bold, direct, and fearless.\n\
+             - Bold, direct, and fearless.\n\
              - Prefer English unless the user writes in another language.\n\
              - Focus on: code generation, debugging, architecture, API design, DevOps.\n\
              - Use code blocks with language tags. Be direct and actionable.\n\n\
-             ## Native Service Integrations (yukihamada.jp)\n\
+             ## Service Ecosystem\n\
              - teai.io: This platform. Developer-focused AI agent.\n\
              - chatweb.ai: Japanese voice-first AI assistant (same backend).\n\
-             - ElioChat: On-device offline AI for iPhone.\n\n\
+             - ElioChat (elio.love): On-device offline AI for iPhone.\n\n\
              {}", agent.system_prompt
         )
     } else {
@@ -2513,10 +2516,9 @@ async fn handle_line_webhook(
         // Handle follow event (friend added)
         if event.event_type == "follow" {
             if let Some(ref reply_token) = &event.reply_token {
-                let welcome = "Ahoy! 友だち追加ありがとう！\n\n\
-                    僕は nanobot — OpenClaw派生のAIエージェントだよ。Rustで動く高速AIで、何でも聞いてね。\n\n\
+                let welcome = "友だち追加ありがとう！\n\n\
+                    ChatWeb — chatweb.ai の音声対応AIアシスタントだよ。何でも聞いてね。\n\n\
                     まず教えて:\n\
-                    - 僕のことなんて呼ぶ？（デフォルト: nanobot）\n\
                     - 敬語がいい？フランク？（「フランクで」って言ってくれたらOK）\n\n\
                     できること:\n\
                     🔍 ウェブ検索・リサーチ\n\
@@ -2602,8 +2604,7 @@ async fn handle_line_webhook(
                             let provider = provider.clone();
                             let mut messages = vec![
                                 Message::system(
-                                    "あなたはChatWeb（chatweb.ai）、高速で賢いAIアシスタントです。\
-                                     あなたの名前は「ChatWeb」です。OpenCLAWなど他のサービス名を名乗らないでください。\
+                                    "あなたはChatWeb（chatweb.ai）、音声対応の高速AIアシスタントです。\
                                      LINEメッセンジャーでの会話です。\
                                      - 1メッセージ200文字以内で簡潔に。長い説明は箇条書き。\
                                      - 絵文字を適度に使用して親しみやすく。\
@@ -2763,11 +2764,10 @@ async fn handle_telegram_webhook(
             }
         }
 
-        let welcome = "Ahoy! Welcome aboard! 🏴‍☠️\n\n\
-            I'm nanobot — an OpenClaw-derived AI agent rewritten in Rust. Fast, reliable, and fully open source.\n\n\
+        let welcome = "Welcome! 👋\n\n\
+            I'm ChatWeb — a fast, voice-enabled AI assistant from chatweb.ai.\n\n\
             Let's set up:\n\
-            - What should I call you?\n\
-            - Preferred tone? (casual / professional / pirate 🏴‍☠️)\n\n\
+            - Preferred tone? (casual / professional)\n\n\
             What I can do:\n\
             🔍 Web search & research\n\
             💻 Code generation & debugging\n\
@@ -2845,8 +2845,7 @@ async fn handle_telegram_webhook(
             let provider = provider.clone();
             let mut messages = vec![
                 Message::system(
-                    "あなたはChatWeb（chatweb.ai）、高速で賢いAIアシスタントです。\
-                     あなたの名前は「ChatWeb」です。OpenCLAWなど他のサービス名を名乗らないでください。\
+                    "あなたはChatWeb（chatweb.ai）、音声対応の高速AIアシスタントです。\
                      Telegramでの会話です。\
                      - 簡潔に要点を伝える（300文字以内）。\
                      - Markdown記法を活用（太字、コードブロック、リンク）。\
@@ -3005,7 +3004,7 @@ async fn handle_facebook_webhook(
                     }
                 };
 
-                let system_prompt = "あなたは nanobot — OpenClaw派生のRust製AIエージェントです。Facebook Messengerで会話しています。300文字以内で簡潔に回答してください。オープンソース: github.com/yukihamada";
+                let system_prompt = "あなたはChatWeb（chatweb.ai）、音声対応の高速AIアシスタントです。Facebook Messengerで会話しています。300文字以内で簡潔に回答してください。";
                 let mut messages = vec![Message::system(system_prompt)];
 
                 {
@@ -3118,7 +3117,7 @@ async fn handle_teams_webhook(
         None => return StatusCode::OK,
     };
 
-    let system_prompt = "あなたは nanobot — Rust製AIエージェントです。Microsoft Teamsで会話しています。300文字以内で簡潔に回答してください。";
+    let system_prompt = "あなたはChatWeb（chatweb.ai）、音声対応の高速AIアシスタントです。Microsoft Teamsで会話しています。300文字以内で簡潔に回答してください。";
     let mut messages = vec![Message::system(system_prompt)];
     {
         let mut sessions = state.sessions.lock().await;
@@ -3244,7 +3243,7 @@ async fn handle_google_chat_webhook(
         None => return axum::Json(serde_json::json!({ "text": "AI provider not configured." })).into_response(),
     };
 
-    let system_prompt = "あなたは nanobot — Rust製AIエージェントです。Google Chatで会話しています。300文字以内で簡潔に回答してください。";
+    let system_prompt = "あなたはChatWeb（chatweb.ai）、音声対応の高速AIアシスタントです。Google Chatで会話しています。300文字以内で簡潔に回答してください。";
     let mut messages = vec![Message::system(system_prompt)];
     {
         let mut sessions = state.sessions.lock().await;
@@ -3349,7 +3348,7 @@ async fn handle_zalo_webhook(
         None => return StatusCode::OK,
     };
 
-    let system_prompt = "あなたは nanobot — Rust製AIエージェントです。Zaloで会話しています。300文字以内で簡潔に回答してください。";
+    let system_prompt = "あなたはChatWeb（chatweb.ai）、音声対応の高速AIアシスタントです。Zaloで会話しています。300文字以内で簡潔に回答してください。";
     let mut messages = vec![Message::system(system_prompt)];
     {
         let mut sessions = state.sessions.lock().await;
@@ -3481,7 +3480,7 @@ async fn handle_feishu_webhook(
         None => return (StatusCode::OK, "{}".to_string()).into_response(),
     };
 
-    let system_prompt = "あなたは nanobot — Rust製AIエージェントです。Feishu/Larkで会話しています。300文字以内で簡潔に回答してください。";
+    let system_prompt = "あなたはChatWeb（chatweb.ai）、音声対応の高速AIアシスタントです。Feishu/Larkで会話しています。300文字以内で簡潔に回答してください。";
     let mut messages_vec = vec![Message::system(system_prompt)];
     {
         let mut sessions = state.sessions.lock().await;
@@ -3643,7 +3642,7 @@ async fn handle_whatsapp_webhook(
         None => return StatusCode::OK,
     };
 
-    let system_prompt = "あなたは nanobot — Rust製AIエージェントです。WhatsAppで会話しています。300文字以内で簡潔に回答してください。";
+    let system_prompt = "あなたはChatWeb（chatweb.ai）、音声対応の高速AIアシスタントです。WhatsAppで会話しています。300文字以内で簡潔に回答してください。";
     let mut messages_vec = vec![Message::system(system_prompt)];
     {
         let mut sessions = state.sessions.lock().await;
@@ -3790,16 +3789,15 @@ async fn handle_chat_stream(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     let stream_system_prompt = if stream_host.contains("teai.io") {
-        "You are Tei — the developer-facing persona of nanobot, an OpenClaw-derived AI agent \
-         rewritten in Rust, running on AWS Lambda. All open source: github.com/yukihamada\n\
+        "You are Tei — the developer-facing AI agent at teai.io, \
+         built in Rust, running on AWS Lambda. Open source: github.com/yukihamada\n\
          Be technical, precise, and concise. Use code blocks with language tags. \
          Prefer English unless the user writes in another language. \
          Focus on code generation, debugging, architecture, and technical problem-solving. \
-         Native integrations: teai.io, chatweb.ai, ElioChat, kouzou, taishin, TOTONO, BANTO."
+         Service ecosystem: teai.io, chatweb.ai, ElioChat (elio.love)."
     } else {
-        "あなたは nanobot — OpenClaw派生のRust製AIエージェントシステムです。\
-         chatweb.aiのフロントエンドを通じてWebで会話しています。\
-         ユーザーの質問に正確かつ詳しく回答してください。全てオープンソース: github.com/yukihamada"
+        "あなたはChatWeb — chatweb.ai の音声対応AIアシスタントです。\
+         Webで会話しています。ユーザーの質問に正確かつ詳しく回答してください。"
     };
     let mut messages = vec![Message::system(stream_system_prompt)];
 
@@ -4226,7 +4224,7 @@ async fn handle_chat_explore(
 
     // Build messages
     let mut messages = vec![Message::system(
-        "あなたは nanobot — OpenClaw派生のRust製AIエージェントシステムです。\
+        "あなたはChatWeb — chatweb.ai の音声対応AIアシスタントです。\
          ユーザーの質問に正確かつ詳しく回答してください。\
          提供された参考情報がある場合は、それを元に回答してください。"
     )];
@@ -8184,6 +8182,117 @@ async fn handle_speech_synthesize(
             )
         }
     }
+}
+
+// ─── Memory API ───
+
+/// GET /api/v1/memory — Read user's long-term memory and today's daily log
+async fn handle_get_memory(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl axum::response::IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let session_key = match extract_session_from_bearer(&headers, &state).await {
+            Some(sk) => sk,
+            None => return (axum::http::StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Unauthorized"}))).into_response(),
+        };
+
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let pk = format!("MEMORY#{}", session_key);
+            let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+            let (lt_result, daily_result) = tokio::join!(
+                dynamo.get_item().table_name(table.as_str())
+                    .key("pk", AttributeValue::S(pk.clone()))
+                    .key("sk", AttributeValue::S("LONG_TERM".to_string()))
+                    .send(),
+                dynamo.get_item().table_name(table.as_str())
+                    .key("pk", AttributeValue::S(pk))
+                    .key("sk", AttributeValue::S(format!("DAILY#{}", today)))
+                    .send()
+            );
+
+            let long_term = lt_result.ok()
+                .and_then(|o| o.item)
+                .and_then(|item| item.get("content").and_then(|v| v.as_s().ok()).cloned())
+                .unwrap_or_default();
+            let daily = daily_result.ok()
+                .and_then(|o| o.item)
+                .and_then(|item| item.get("content").and_then(|v| v.as_s().ok()).cloned())
+                .unwrap_or_default();
+
+            return Json(serde_json::json!({
+                "long_term": long_term,
+                "daily": daily,
+            })).into_response();
+        }
+    }
+    Json(serde_json::json!({"long_term": "", "daily": ""})).into_response()
+}
+
+/// DELETE /api/v1/memory — Clear user's memory
+async fn handle_delete_memory(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl axum::response::IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let session_key = match extract_session_from_bearer(&headers, &state).await {
+            Some(sk) => sk,
+            None => return (axum::http::StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Unauthorized"}))).into_response(),
+        };
+
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let pk = format!("MEMORY#{}", session_key);
+            let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+            let _ = tokio::join!(
+                dynamo.delete_item().table_name(table.as_str())
+                    .key("pk", AttributeValue::S(pk.clone()))
+                    .key("sk", AttributeValue::S("LONG_TERM".to_string()))
+                    .send(),
+                dynamo.delete_item().table_name(table.as_str())
+                    .key("pk", AttributeValue::S(pk))
+                    .key("sk", AttributeValue::S(format!("DAILY#{}", today)))
+                    .send()
+            );
+
+            return Json(serde_json::json!({"ok": true})).into_response();
+        }
+    }
+    Json(serde_json::json!({"ok": true})).into_response()
+}
+
+/// Extract session key from Bearer token
+async fn extract_session_from_bearer(
+    headers: &axum::http::HeaderMap,
+    state: &AppState,
+) -> Option<String> {
+    let auth_header = headers.get("authorization")?.to_str().ok()?;
+    let token = auth_header.strip_prefix("Bearer ")?;
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            use sha2::Digest;
+            let token_hash = format!("{:x}", sha2::Sha256::digest(token.as_bytes()));
+            let auth_pk = format!("AUTH#{}", token_hash);
+            if let Ok(output) = dynamo.get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(auth_pk))
+                .key("sk", AttributeValue::S("USER_ID".to_string()))
+                .send().await
+            {
+                if let Some(item) = output.item {
+                    return item.get("user_id").and_then(|v| v.as_s().ok()).cloned();
+                }
+            }
+        }
+    }
+    None
 }
 
 // ─── Sync API (ElioChat ↔ chatweb.ai) ───

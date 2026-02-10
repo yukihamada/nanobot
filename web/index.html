@@ -1660,8 +1660,20 @@
     }
 
     /* Settings modal */
-    .settings-modal { max-width: 420px; text-align: left; }
+    .settings-modal { max-width: 480px; text-align: left; max-height: 80vh; overflow-y: auto; }
     .settings-modal h3 { text-align: center; }
+    .settings-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+    .settings-tab { flex: 1; padding: 8px 0; text-align: center; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .settings-section { display: none; }
+    .settings-section.active { display: block; }
+    .settings-select { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px; }
+    .settings-range-row { display: flex; align-items: center; gap: 10px; }
+    .settings-range-row input[type=range] { flex: 1; }
+    .settings-range-val { font-size: 12px; color: var(--muted); min-width: 36px; text-align: right; }
+    .memory-box { background: var(--surface, #f5f5f5); border-radius: 8px; padding: 10px 12px; font-size: 12px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text); margin-bottom: 8px; line-height: 1.5; }
+    .memory-box:empty::before { content: 'まだ記憶はありません'; color: var(--muted); font-style: italic; }
+    .memory-label { font-size: 12px; font-weight: 600; color: var(--muted); margin: 8px 0 4px; }
     .settings-item {
       display: flex;
       align-items: center;
@@ -2583,22 +2595,100 @@
   <div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
     <div class="modal settings-modal" onclick="event.stopPropagation()">
       <h3 id="settings-modal-title">Settings</h3>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;" id="settings-modal-desc">chatweb.aiの動作をカスタマイズ</p>
-      <div class="settings-item">
-        <div class="settings-item-info">
-          <div class="settings-item-label" id="settings-tts-label">&#128266; 自動読み上げ</div>
-          <div class="settings-item-desc" id="settings-tts-desc">AIの応答を自動で音声再生します</div>
-        </div>
-        <button class="settings-toggle active" id="settings-tts-toggle" onclick="toggleAutoTTS()"></button>
+      <div class="settings-tabs">
+        <button class="settings-tab active" onclick="switchSettingsTab('general')">General</button>
+        <button class="settings-tab" onclick="switchSettingsTab('llm')">LLM</button>
+        <button class="settings-tab" onclick="switchSettingsTab('memory')">Memory</button>
       </div>
-      <div class="settings-item">
-        <div class="settings-item-info">
-          <div class="settings-item-label" id="settings-explore-label">&#128269; Explore</div>
-          <div class="settings-item-desc" id="settings-explore-desc">複数のAIモデルに同時に質問して比較</div>
+
+      <!-- General Tab -->
+      <div class="settings-section active" id="settings-tab-general">
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label" id="settings-tts-label">&#128266; 自動読み上げ</div>
+            <div class="settings-item-desc" id="settings-tts-desc">AIの応答を自動で音声再生します</div>
+          </div>
+          <button class="settings-toggle active" id="settings-tts-toggle" onclick="toggleAutoTTS()"></button>
         </div>
-        <button class="settings-toggle" id="settings-explore-toggle" onclick="toggleExploreSetting()"></button>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label" id="settings-explore-label">&#128269; Explore</div>
+            <div class="settings-item-desc" id="settings-explore-desc">複数のAIモデルに同時に質問して比較</div>
+          </div>
+          <button class="settings-toggle" id="settings-explore-toggle" onclick="toggleExploreSetting()"></button>
+        </div>
       </div>
-      <button class="close-btn" onclick="document.getElementById('settings-modal').classList.remove('show')">Close</button>
+
+      <!-- LLM Tab -->
+      <div class="settings-section" id="settings-tab-llm">
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">Model</div>
+          <select class="settings-select" id="settings-model" onchange="saveLlmSettings()">
+            <option value="">Auto (default)</option>
+            <optgroup label="Anthropic">
+              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+            </optgroup>
+            <optgroup label="OpenAI">
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-4o-mini">GPT-4o Mini</option>
+            </optgroup>
+            <optgroup label="Google">
+              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+              <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+            </optgroup>
+            <optgroup label="Other">
+              <option value="deepseek-chat">DeepSeek Chat</option>
+              <option value="qwen/qwen3-235b-a22b">Qwen3 235B</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">Temperature <span class="settings-range-val" id="temp-val">0.7</span></div>
+          <div class="settings-range-row">
+            <span style="font-size:11px;color:var(--muted);">0</span>
+            <input type="range" id="settings-temperature" min="0" max="1.5" step="0.1" value="0.7" oninput="document.getElementById('temp-val').textContent=this.value;saveLlmSettings()">
+            <span style="font-size:11px;color:var(--muted);">1.5</span>
+          </div>
+          <div class="settings-item-desc">低い=正確・決定的、高い=創造的・多様</div>
+        </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">Max Tokens <span class="settings-range-val" id="maxtok-val">4096</span></div>
+          <div class="settings-range-row">
+            <span style="font-size:11px;color:var(--muted);">256</span>
+            <input type="range" id="settings-max-tokens" min="256" max="8192" step="256" value="4096" oninput="document.getElementById('maxtok-val').textContent=this.value;saveLlmSettings()">
+            <span style="font-size:11px;color:var(--muted);">8192</span>
+          </div>
+          <div class="settings-item-desc">応答の最大長。大きいほどクレジット消費が増加</div>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">Custom API Key</div>
+            <div class="settings-item-desc">自分のAPIキーを使用（BYOK）</div>
+          </div>
+          <button class="settings-toggle" id="settings-byok-toggle" onclick="toggleByokInput()"></button>
+        </div>
+        <div id="byok-inputs" style="display:none;margin-top:8px;">
+          <select class="settings-select" id="byok-provider" style="margin-bottom:6px;">
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="google">Google</option>
+          </select>
+          <input type="password" id="byok-key" placeholder="sk-... / key-..." style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;" onchange="saveLlmSettings()">
+        </div>
+      </div>
+
+      <!-- Memory Tab -->
+      <div class="settings-section" id="settings-tab-memory">
+        <div class="memory-label">Long-term Memory</div>
+        <div class="memory-box" id="memory-longterm"></div>
+        <div class="memory-label">Today's Log</div>
+        <div class="memory-box" id="memory-daily"></div>
+        <button style="width:100%;padding:8px;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;color:var(--muted);" onclick="loadMemoryData()">Refresh</button>
+        <button style="width:100%;padding:8px;margin-top:4px;background:none;border:1px solid #e53e3e;border-radius:8px;cursor:pointer;font-size:12px;color:#e53e3e;" onclick="clearMemory()">Clear Memory</button>
+      </div>
+
+      <button class="close-btn" onclick="document.getElementById('settings-modal').classList.remove('show')" style="margin-top:12px;">Close</button>
     </div>
   </div>
 
@@ -4982,19 +5072,76 @@
       localStorage.setItem('exploreEnabled', chk && chk.checked ? 'true' : 'false');
     }
 
+    function switchSettingsTab(tab) {
+      document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
+      document.querySelector('.settings-tab[onclick*="'+tab+'"]').classList.add('active');
+      document.getElementById('settings-tab-'+tab).classList.add('active');
+      if (tab === 'memory') loadMemoryData();
+      if (tab === 'llm') loadLlmSettings();
+    }
     function openSettingsModal() {
-      const l = document.documentElement.lang || 'ja';
-      document.getElementById('settings-modal-title').textContent = l === 'ja' ? '設定' : 'Settings';
-      document.getElementById('settings-modal-desc').textContent = l === 'ja' ? 'chatweb.aiの動作をカスタマイズ' : 'Customize chatweb.ai behavior';
-      document.getElementById('settings-tts-label').innerHTML = '&#128266; ' + (l === 'ja' ? '自動読み上げ' : 'Auto Read Aloud');
-      document.getElementById('settings-tts-desc').textContent = l === 'ja' ? 'AIの応答を自動で音声再生します' : 'Automatically play AI responses as speech';
-      document.getElementById('settings-explore-label').innerHTML = '&#128269; Explore';
-      document.getElementById('settings-explore-desc').textContent = l === 'ja' ? '複数のAIモデルに同時に質問して比較' : 'Ask multiple AI models simultaneously and compare';
       // sync toggle states
       document.getElementById('settings-tts-toggle').classList.toggle('active', autoTtsEnabled);
       const exploreOn = document.getElementById('explore-check')?.checked || false;
       document.getElementById('settings-explore-toggle').classList.toggle('active', exploreOn);
+      // reset to general tab
+      switchSettingsTab('general');
       document.getElementById('settings-modal').classList.add('show');
+    }
+    function toggleByokInput() {
+      const toggle = document.getElementById('settings-byok-toggle');
+      toggle.classList.toggle('active');
+      document.getElementById('byok-inputs').style.display = toggle.classList.contains('active') ? 'block' : 'none';
+    }
+    async function loadMemoryData() {
+      const token = localStorage.getItem('authToken');
+      if (!token) { document.getElementById('memory-longterm').textContent = 'ログインが必要です'; return; }
+      try {
+        const r = await fetch('/api/v1/memory', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!r.ok) throw new Error(r.status);
+        const data = await r.json();
+        document.getElementById('memory-longterm').textContent = data.long_term || '';
+        document.getElementById('memory-daily').textContent = data.daily || '';
+      } catch(e) {
+        document.getElementById('memory-longterm').textContent = '読み込みエラー: ' + e.message;
+      }
+    }
+    async function clearMemory() {
+      if (!confirm('記憶を全て削除しますか？この操作は取り消せません。')) return;
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+      try {
+        await fetch('/api/v1/memory', { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+        document.getElementById('memory-longterm').textContent = '';
+        document.getElementById('memory-daily').textContent = '';
+      } catch(e) { alert('削除エラー: ' + e.message); }
+    }
+    function loadLlmSettings() {
+      const saved = JSON.parse(localStorage.getItem('llmSettings') || '{}');
+      if (saved.model) document.getElementById('settings-model').value = saved.model;
+      if (saved.temperature !== undefined) {
+        document.getElementById('settings-temperature').value = saved.temperature;
+        document.getElementById('temp-val').textContent = saved.temperature;
+      }
+      if (saved.maxTokens !== undefined) {
+        document.getElementById('settings-max-tokens').value = saved.maxTokens;
+        document.getElementById('maxtok-val').textContent = saved.maxTokens;
+      }
+    }
+    function saveLlmSettings() {
+      const settings = {
+        model: document.getElementById('settings-model').value,
+        temperature: parseFloat(document.getElementById('settings-temperature').value),
+        maxTokens: parseInt(document.getElementById('settings-max-tokens').value),
+      };
+      const byokKey = document.getElementById('byok-key')?.value;
+      const byokProvider = document.getElementById('byok-provider')?.value;
+      if (byokKey && document.getElementById('settings-byok-toggle')?.classList.contains('active')) {
+        settings.byokProvider = byokProvider;
+        settings.byokKey = byokKey;
+      }
+      localStorage.setItem('llmSettings', JSON.stringify(settings));
     }
 
     // Initialize settings on load
