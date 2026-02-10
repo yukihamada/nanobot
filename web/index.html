@@ -1749,6 +1749,33 @@
     .phone-transcript .segment { margin-bottom: 4px; }
     .phone-transcript .segment .speaker { font-weight: 600; color: var(--text); }
 
+    /* Floating TTS stop button — visible during playback */
+    .tts-stop-float {
+      display: none;
+      position: fixed;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 200;
+      padding: 10px 24px;
+      border-radius: 24px;
+      background: rgba(239,68,68,0.9);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(239,68,68,0.3);
+      transition: all 0.2s;
+      align-items: center;
+      gap: 8px;
+    }
+    .tts-stop-float:hover { background: rgba(220,38,38,0.95); transform: translateX(-50%) scale(1.05); }
+    .tts-stop-float.visible { display: flex; }
+    @keyframes tts-pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+    .tts-stop-float .tts-pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: tts-pulse 1.2s infinite; }
+
     /* TTS button */
     .app-tts-btn {
       display: inline-flex;
@@ -2598,6 +2625,22 @@
       </a>
     </div>
 
+    <!-- Link command hint -->
+    <div class="fade-up fade-up-d4" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 20px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <span style="font-size:18px;">🔗</span>
+        <span style="font-size:13px;font-weight:700;" id="t-link-cmd-title">コマンドで連携</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px;" id="t-link-cmd-desc">
+        チャットで <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link</code> と入力するとリンクコードが生成されます。
+        別のチャネル（LINE・Telegram等）で <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link CODE</code> と送信すると連携完了。
+      </div>
+      <button onclick="document.getElementById('app-input').value='/link';appSend();" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span id="t-link-cmd-btn">/link コードを生成</span>
+      </button>
+    </div>
+
     <!-- CLI install -->
     <div class="fade-up fade-up-d4" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;margin-bottom:20px;text-align:center;">
       <div style="font-size:13px;font-weight:700;margin-bottom:8px;" id="t-cli-title">CLI</div>
@@ -2935,6 +2978,11 @@
       </div>
     </div>
   </div>
+
+  <!-- Floating TTS stop button -->
+  <button class="tts-stop-float" id="tts-stop-float" onclick="stopTTS()">
+    <span class="tts-pulse-dot"></span> 読み上げ停止
+  </button>
 
   <!-- Phone Panel -->
   <div class="phone-panel" id="phone-panel">
@@ -3809,6 +3857,18 @@
       if (appInput) appInput.placeholder = t.appPlaceholder;
       const appChLabel = document.getElementById('app-channels-label');
       if (appChLabel) appChLabel.textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
+      // Link command hint
+      const linkCmdTitle = document.getElementById('t-link-cmd-title');
+      if (linkCmdTitle) linkCmdTitle.textContent = l === 'ja' ? 'コマンドで連携' : 'Link via Command';
+      const linkCmdDesc = document.getElementById('t-link-cmd-desc');
+      if (linkCmdDesc) linkCmdDesc.innerHTML = l === 'ja'
+        ? 'チャットで <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link</code> と入力するとリンクコードが生成されます。別のチャネル（LINE・Telegram等）で <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link CODE</code> と送信すると連携完了。'
+        : 'Type <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link</code> in chat to generate a link code. Send <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link CODE</code> from another channel (LINE, Telegram, etc.) to connect.';
+      const linkCmdBtn = document.getElementById('t-link-cmd-btn');
+      if (linkCmdBtn) linkCmdBtn.textContent = l === 'ja' ? '/link コードを生成' : '/link Generate Code';
+      // TTS stop button
+      const ttsStopFloat = document.getElementById('tts-stop-float');
+      if (ttsStopFloat) ttsStopFloat.innerHTML = '<span class="tts-pulse-dot"></span> ' + (l === 'ja' ? '読み上げ停止' : 'Stop Speaking');
       if (document.body.classList.contains('app-mode')) appRenderSuggestions();
       renderRecipes(l);
       // Voice demo
@@ -5419,6 +5479,7 @@
 
     // Auto-play TTS on every bot response (when enabled)
     // Uses sentence-level parallel TTS for fastest playback
+    // If already playing, interrupts with a transition phrase before new content
     function autoPlayTTS(text) {
       if (!autoTtsEnabled) return;
       if (!text || text.length < 2) return;
@@ -5427,7 +5488,15 @@
         .replace(/`[^`]+`/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
         .replace(/^[-*]\s/gm, '').replace(/^\d+\.\s/gm, '').trim();
       if (clean.length < 2) return;
-      streamTTS(clean);
+
+      const wasPlaying = ttsPlaying || (currentAudio && !currentAudio.paused);
+      if (wasPlaying) {
+        // Interrupt: prepend a brief transition phrase
+        const transition = 'ちょっと待ってね。';
+        streamTTS(transition + clean);
+      } else {
+        streamTTS(clean);
+      }
     }
 
     // Initialize STT on load
@@ -5490,11 +5559,14 @@
       if (ttsAborted || ttsQueue.length === 0) {
         ttsPlaying = false;
         // Update button state if all done
-        if (ttsPendingCount <= 0 && currentTtsBtn) {
-          currentTtsBtn.classList.remove('playing');
-          currentTtsBtn.textContent = '\uD83D\uDD0A';
-          currentTtsBtn = null;
-          refreshCredits();
+        if (ttsPendingCount <= 0) {
+          if (currentTtsBtn) {
+            currentTtsBtn.classList.remove('playing');
+            currentTtsBtn.textContent = '\uD83D\uDD0A';
+            currentTtsBtn = null;
+            refreshCredits();
+          }
+          showTtsStopBtn(false);
         }
         return;
       }
@@ -5507,6 +5579,12 @@
       audio.play().catch(function() { playNextQueued(); });
     }
 
+    // Show/hide floating TTS stop button
+    function showTtsStopBtn(show) {
+      const btn = document.getElementById('tts-stop-float');
+      if (btn) btn.classList.toggle('visible', show);
+    }
+
     // Stream TTS: split into sentences, fetch in parallel, play in order
     function streamTTS(text) {
       // Abort any previous stream
@@ -5515,6 +5593,7 @@
 
       const sentences = splitSentences(text);
       if (sentences.length === 0) return;
+      showTtsStopBtn(true);
 
       // Pre-allocate slots to maintain order
       const slots = new Array(sentences.length).fill(null);
@@ -5568,6 +5647,7 @@
         currentTtsBtn.textContent = '\uD83D\uDD0A';
         currentTtsBtn = null;
       }
+      showTtsStopBtn(false);
     }
 
     // Browser built-in SpeechSynthesis fallback (works offline, zero latency)
