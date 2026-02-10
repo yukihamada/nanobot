@@ -2461,8 +2461,8 @@ async fn get_linked_channels(
                 };
                 if !types.contains(&ch_type.to_string()) {
                     types.push(ch_type.to_string());
-                    let ch_name = item.get("channel_name").and_then(|v| v.as_s().ok()).unwrap_or(ch_type);
-                    let linked_at = item.get("linked_at").and_then(|v| v.as_s().ok()).unwrap_or("");
+                    let ch_name = item.get("channel_name").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or(ch_type);
+                    let linked_at = item.get("linked_at").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or("");
                     details.push(serde_json::json!({
                         "type": ch_type,
                         "name": ch_name,
@@ -2479,8 +2479,8 @@ async fn get_linked_channels(
         for item in output.items.unwrap_or_default() {
             if let Some(uid) = item.get("user_id").and_then(|v| v.as_s().ok()) {
                 if uid != session_key {
-                    let ch_name = item.get("channel_name").and_then(|v| v.as_s().ok()).unwrap_or("");
-                    let linked_at = item.get("linked_at").and_then(|v| v.as_s().ok()).unwrap_or("");
+                    let ch_name = item.get("channel_name").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or("");
+                    let linked_at = item.get("linked_at").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or("");
                     if uid.starts_with("line:") && !types.contains(&"line".to_string()) {
                         types.push("line".to_string());
                         details.push(serde_json::json!({
