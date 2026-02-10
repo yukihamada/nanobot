@@ -235,7 +235,7 @@ async fn check_rate_limit(
 // ---------------------------------------------------------------------------
 
 /// Read user's long-term memory context from DynamoDB.
-/// Returns combined long-term + today's notes for injection into system prompt.
+/// Returns combined long-term + yesterday's notes + today's notes for injection into system prompt.
 #[cfg(feature = "dynamodb-backend")]
 async fn read_memory_context(
     dynamo: &aws_sdk_dynamodb::Client,
@@ -246,14 +246,21 @@ async fn read_memory_context(
 
     let pk = format!("MEMORY#{}", user_id);
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let yesterday = (chrono::Utc::now() - chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
 
-    // Read LONG_TERM and DAILY in parallel
-    let (long_term_result, daily_result) = tokio::join!(
+    // Read LONG_TERM, yesterday's DAILY, and today's DAILY in parallel
+    let (long_term_result, yesterday_result, daily_result) = tokio::join!(
         dynamo
             .get_item()
             .table_name(config_table)
             .key("pk", AttributeValue::S(pk.clone()))
             .key("sk", AttributeValue::S("LONG_TERM".to_string()))
+            .send(),
+        dynamo
+            .get_item()
+            .table_name(config_table)
+            .key("pk", AttributeValue::S(pk.clone()))
+            .key("sk", AttributeValue::S(format!("DAILY#{}", yesterday)))
             .send(),
         dynamo
             .get_item()
@@ -268,6 +275,16 @@ async fn read_memory_context(
             if let Some(content) = item.get("content").and_then(|v| v.as_s().ok()) {
                 if !content.is_empty() {
                     parts.push(format!("## ユーザーの長期記憶\n{}", content));
+                }
+            }
+        }
+    }
+
+    if let Ok(output) = yesterday_result {
+        if let Some(item) = output.item {
+            if let Some(content) = item.get("content").and_then(|v| v.as_s().ok()) {
+                if !content.is_empty() {
+                    parts.push(format!("## 昨日のメモ ({})\n{}", yesterday, content));
                 }
             }
         }
@@ -288,7 +305,6 @@ async fn read_memory_context(
 
 /// Save content to user's long-term memory or daily log.
 #[cfg(feature = "dynamodb-backend")]
-#[allow(dead_code)]
 async fn save_memory(
     dynamo: &aws_sdk_dynamodb::Client,
     config_table: &str,
@@ -315,14 +331,14 @@ async fn save_memory(
         .await;
 }
 
-/// Append content to user's daily memory log.
+/// Append content to user's daily memory log. Returns the number of entries in today's log.
 #[cfg(feature = "dynamodb-backend")]
 async fn append_daily_memory(
     dynamo: &aws_sdk_dynamodb::Client,
     config_table: &str,
     user_id: &str,
     content: &str,
-) {
+) -> usize {
     let pk = format!("MEMORY#{}", user_id);
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let sk = format!("DAILY#{}", today);
@@ -343,6 +359,8 @@ async fn append_daily_memory(
         String::new()
     };
 
+    let entry_count = existing.matches("\n- Q:").count() + 1;
+
     let new_content = if existing.is_empty() {
         format!("# {}\n\n{}", today, content)
     } else {
@@ -358,6 +376,74 @@ async fn append_daily_memory(
         .item("updated_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
         .send()
         .await;
+
+    entry_count
+}
+
+/// Consolidate daily memory into long-term memory using a cheap LLM call.
+/// Triggered when daily entries exceed threshold (fire-and-forget).
+#[cfg(feature = "dynamodb-backend")]
+fn spawn_consolidate_memory(
+    dynamo: aws_sdk_dynamodb::Client,
+    config_table: String,
+    user_id: String,
+    provider: Arc<dyn LlmProvider>,
+) {
+    tokio::spawn(async move {
+        let pk = format!("MEMORY#{}", user_id);
+
+        // Read current long-term memory and today's daily log
+        let (lt_result, daily_result) = tokio::join!(
+            dynamo.get_item()
+                .table_name(&config_table)
+                .key("pk", AttributeValue::S(pk.clone()))
+                .key("sk", AttributeValue::S("LONG_TERM".to_string()))
+                .send(),
+            dynamo.get_item()
+                .table_name(&config_table)
+                .key("pk", AttributeValue::S(pk.clone()))
+                .key("sk", AttributeValue::S(format!("DAILY#{}", chrono::Utc::now().format("%Y-%m-%d"))))
+                .send()
+        );
+
+        let existing_lt = lt_result.ok()
+            .and_then(|o| o.item)
+            .and_then(|item| item.get("content").and_then(|v| v.as_s().ok()).cloned())
+            .unwrap_or_default();
+        let daily = daily_result.ok()
+            .and_then(|o| o.item)
+            .and_then(|item| item.get("content").and_then(|v| v.as_s().ok()).cloned())
+            .unwrap_or_default();
+
+        if daily.is_empty() { return; }
+
+        let prompt = format!(
+            "以下はユーザーの既存の長期記憶と今日の会話ログです。\n\
+             今日のログから重要な事実・好み・決定事項を抽出し、長期記憶を更新してください。\n\
+             箇条書きで簡潔に（最大20項目）。重複は統合。古い情報は最新で上書き。\n\n\
+             ## 既存の長期記憶\n{}\n\n## 今日の会話ログ\n{}\n\n\
+             ## 更新後の長期記憶（箇条書きのみ出力）:",
+            if existing_lt.is_empty() { "（なし）".to_string() } else { existing_lt },
+            daily
+        );
+
+        let messages = vec![Message::user(&prompt)];
+        // Use cheapest model available
+        let model = "gpt-4o-mini";
+        match provider.chat(&messages, None, model, 1024, 0.3).await {
+            Ok(resp) => {
+                if let Some(content) = resp.content {
+                    if !content.trim().is_empty() {
+                        save_memory(&dynamo, &config_table, &user_id, "long_term", content.trim()).await;
+                        tracing::info!("Long-term memory consolidated for {}", user_id);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Memory consolidation failed for {}: {}", user_id, e);
+            }
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1541,10 +1627,11 @@ async fn handle_chat(
     ];
 
     // Get session history (refresh to pick up messages from other channels)
+    // Uses summarization for long conversations to preserve context
     {
         let mut sessions = state.sessions.lock().await;
         let session = sessions.refresh(&session_key);
-        let history = session.get_history(20);
+        let history = session.get_history_with_summary(16);
         for msg in &history {
             let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
             let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
@@ -1726,22 +1813,44 @@ async fn handle_chat(
     let mut total_credits_used: i64 = 0;
     let mut last_remaining_credits: Option<i64> = None;
 
-    let (response_text, tools_used) = match active_provider.chat(&messages, tools_ref, &model, max_tokens, temperature).await {
+    // Try primary model, then fallback on error
+    let fallback_models: &[&str] = &["gpt-4o-mini", "gemini-2.0-flash-lite"];
+    let first_result = active_provider.chat(&messages, tools_ref, &model, max_tokens, temperature).await;
+    let (used_model, first_completion) = match first_result {
+        Ok(c) => (model.clone(), Ok(c)),
+        Err(e) => {
+            tracing::warn!("Primary model {} failed: {}, trying fallback", model, e);
+            let mut fallback_ok = None;
+            for fb_model in fallback_models {
+                if let Ok(c) = active_provider.chat(&messages, tools_ref, fb_model, max_tokens, temperature).await {
+                    tracing::info!("Fallback to {} succeeded", fb_model);
+                    fallback_ok = Some((fb_model.to_string(), c));
+                    break;
+                }
+            }
+            match fallback_ok {
+                Some((m, c)) => (m, Ok(c)),
+                None => (model.clone(), Err(e)),
+            }
+        }
+    };
+
+    let (response_text, tools_used) = match first_completion {
         Ok(completion) => {
-            info!("LLM response: finish_reason={:?}, tool_calls={}, content_len={}",
+            info!("LLM response: finish_reason={:?}, tool_calls={}, content_len={}, model={}",
                 completion.finish_reason, completion.tool_calls.len(),
-                completion.content.as_ref().map(|c| c.len()).unwrap_or(0));
+                completion.content.as_ref().map(|c| c.len()).unwrap_or(0), used_model);
             // Deduct credits after successful LLM call
             #[cfg(feature = "dynamodb-backend")]
             {
                 if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
                     let (credits, remaining) = deduct_credits(
-                        dynamo, table, &session_key, &model,
+                        dynamo, table, &session_key, &used_model,
                         completion.usage.prompt_tokens, completion.usage.completion_tokens,
                     ).await;
                     total_credits_used += credits;
                     if remaining.is_some() { last_remaining_credits = remaining; }
-                    tracing::debug!("Deducted {} credits for user {}", credits, session_key);
+                    tracing::debug!("Deducted {} credits for user {} (model={})", credits, session_key, used_model);
                 }
             }
 
@@ -1992,7 +2101,7 @@ async fn handle_chat(
         }
     }
 
-    // Auto-save to daily memory log (fire-and-forget)
+    // Auto-save to daily memory log + trigger consolidation (fire-and-forget)
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
@@ -2001,12 +2110,19 @@ async fn handle_chat(
             let sk = session_key.clone();
             let user_msg = req.message.clone();
             let bot_msg = response_text.clone();
+            let provider_for_mem = state.lb_provider.clone().or_else(|| state.provider.clone());
             tokio::spawn(async move {
                 let summary = format!("- Q: {} → A: {}",
                     if user_msg.len() > 80 { let mut i = 80; while i > 0 && !user_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &user_msg[..i]) } else { user_msg },
                     if bot_msg.len() > 120 { let mut i = 120; while i > 0 && !bot_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &bot_msg[..i]) } else { bot_msg },
                 );
-                append_daily_memory(&dynamo, &table, &sk, &summary).await;
+                let entry_count = append_daily_memory(&dynamo, &table, &sk, &summary).await;
+                // Consolidate into long-term memory every 10 entries
+                if entry_count > 0 && entry_count % 10 == 0 {
+                    if let Some(provider) = provider_for_mem {
+                        spawn_consolidate_memory(dynamo, table, sk, provider);
+                    }
+                }
             });
         }
     }
@@ -2021,7 +2137,7 @@ async fn handle_chat(
         tools_used,
         credits_used: if total_credits_used > 0 { Some(total_credits_used) } else { None },
         credits_remaining: remaining_credits,
-        model_used: Some(model.clone()),
+        model_used: Some(used_model),
         models_consulted: None,
     })
 }
@@ -3690,7 +3806,7 @@ async fn handle_chat_stream(
     {
         let mut sessions = state.sessions.lock().await;
         let session = sessions.refresh(&session_key);
-        let history = session.get_history(20);
+        let history = session.get_history_with_summary(16);
         for msg in &history {
             let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
             let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
@@ -3755,8 +3871,27 @@ async fn handle_chat_stream(
 
         let tools_ref = if tools.is_empty() { None } else { Some(&tools[..]) };
 
-        // First LLM call (with tools for agentic mode)
-        let first_result = provider.chat(&messages, tools_ref, &model, max_tokens, temperature).await;
+        // First LLM call with automatic failover
+        let fallback_models: &[&str] = &["gpt-4o-mini", "gemini-2.0-flash-lite"];
+        let first_attempt = provider.chat(&messages, tools_ref, &model, max_tokens, temperature).await;
+        let (stream_used_model, first_result) = match first_attempt {
+            Ok(c) => (model.clone(), Ok(c)),
+            Err(e) => {
+                tracing::warn!("Stream primary model {} failed: {}, trying fallback", model, e);
+                let mut fallback_ok = None;
+                for fb_model in fallback_models {
+                    if let Ok(c) = provider.chat(&messages, tools_ref, fb_model, max_tokens, temperature).await {
+                        tracing::info!("Stream fallback to {} succeeded", fb_model);
+                        fallback_ok = Some((fb_model.to_string(), c));
+                        break;
+                    }
+                }
+                match fallback_ok {
+                    Some((m, c)) => (m, Ok(c)),
+                    None => (model.clone(), Err(e)),
+                }
+            }
+        };
 
         match first_result {
             Ok(completion) => {
@@ -3767,7 +3902,7 @@ async fn handle_chat_stream(
                 #[cfg(feature = "dynamodb-backend")]
                 {
                     if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
-                        let (credits, remaining) = deduct_credits(dynamo, table, &session_key_clone, &model,
+                        let (credits, remaining) = deduct_credits(dynamo, table, &session_key_clone, &stream_used_model,
                             completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
                         total_credits_used += credits;
                         if remaining.is_some() { last_remaining = remaining; }
@@ -3918,6 +4053,31 @@ async fn handle_chat_stream(
                                 conv_id.to_string(), req_message.clone(), msg_count,
                             );
                         }
+                    }
+                }
+
+                // Auto-save to daily memory log + trigger consolidation (fire-and-forget)
+                #[cfg(feature = "dynamodb-backend")]
+                {
+                    if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                        let dynamo = dynamo.clone();
+                        let table = table.clone();
+                        let sk = session_key_clone.clone();
+                        let user_msg = req_message.clone();
+                        let bot_msg = response_text.clone();
+                        let provider_for_mem = state_clone.lb_provider.clone().or_else(|| state_clone.provider.clone());
+                        tokio::spawn(async move {
+                            let summary = format!("- Q: {} → A: {}",
+                                if user_msg.len() > 80 { let mut i = 80; while i > 0 && !user_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &user_msg[..i]) } else { user_msg },
+                                if bot_msg.len() > 120 { let mut i = 120; while i > 0 && !bot_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &bot_msg[..i]) } else { bot_msg },
+                            );
+                            let entry_count = append_daily_memory(&dynamo, &table, &sk, &summary).await;
+                            if entry_count > 0 && entry_count % 10 == 0 {
+                                if let Some(provider) = provider_for_mem {
+                                    spawn_consolidate_memory(dynamo, table, sk, provider);
+                                }
+                            }
+                        });
                     }
                 }
 

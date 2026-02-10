@@ -88,6 +88,54 @@ impl Session {
             .collect()
     }
 
+    /// Get message history with automatic summarization of older messages.
+    /// If the session has more than `max_messages`, older messages are compressed
+    /// into a summary to preserve context without exceeding the window.
+    pub fn get_history_with_summary(&self, max_recent: usize) -> Vec<serde_json::Value> {
+        let total = self.messages.len();
+        if total <= max_recent {
+            return self.get_history(max_recent);
+        }
+
+        // Summarize older messages (everything before the recent window)
+        let older_end = total.saturating_sub(max_recent);
+        let mut summary_parts: Vec<String> = Vec::new();
+        for m in &self.messages[..older_end] {
+            let role_label = if m.role == "user" { "User" } else { "Assistant" };
+            let truncated = if m.content.len() > 100 {
+                let mut i = 100;
+                while i > 0 && !m.content.is_char_boundary(i) { i -= 1; }
+                format!("{}...", &m.content[..i])
+            } else {
+                m.content.clone()
+            };
+            summary_parts.push(format!("- {}: {}", role_label, truncated));
+        }
+
+        let summary = format!(
+            "[会話の前半まとめ ({} messages)]\n{}",
+            older_end, summary_parts.join("\n")
+        );
+
+        let mut result = vec![serde_json::json!({
+            "role": "user",
+            "content": summary,
+        })];
+        // Fake assistant ack so the conversation flow is valid
+        result.push(serde_json::json!({
+            "role": "assistant",
+            "content": "了解しました。前の会話の内容を踏まえて続けます。",
+        }));
+        // Append recent messages
+        for m in &self.messages[older_end..] {
+            result.push(serde_json::json!({
+                "role": m.role,
+                "content": m.content,
+            }));
+        }
+        result
+    }
+
     /// Get full message history including channel and timestamp (for API responses).
     pub fn get_full_history(&self, max_messages: usize) -> Vec<serde_json::Value> {
         let start = self.messages.len().saturating_sub(max_messages);
