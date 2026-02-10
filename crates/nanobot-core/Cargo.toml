@@ -9,7 +9,7 @@ license = "MIT"
 default = ["file-backend"]
 file-backend = []
 http-api = ["axum", "tower", "tower-http", "hmac", "sha2", "hex"]
-dynamodb-backend = ["aws-config", "aws-sdk-dynamodb", "aws-sdk-polly"]
+dynamodb-backend = ["aws-config", "aws-sdk-dynamodb", "aws-sdk-polly", "aws-sdk-connect"]
 stripe = ["async-stripe"]
 lambda = ["lambda_http"]
 saas = ["dynamodb-backend", "stripe", "lambda", "http-api"]
@@ -70,6 +70,7 @@ hex = { version = "0.4", optional = true }
 aws-config = { version = "1", optional = true }
 aws-sdk-dynamodb = { version = "1", optional = true }
 aws-sdk-polly = { version = "1", optional = true }
+aws-sdk-connect = { version = "1", optional = true }
 
 # Stripe (optional)
 async-stripe = { version = "0.39", features = ["runtime-tokio-hyper-rustls"], optional = true }

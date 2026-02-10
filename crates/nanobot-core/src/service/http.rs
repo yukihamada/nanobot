@@ -39,6 +39,26 @@ use crate::service::stripe::{process_webhook_event, verify_webhook_signature};
 #[cfg(feature = "dynamodb-backend")]
 use aws_sdk_dynamodb::types::AttributeValue;
 
+/// Hard deadline for LLM responses (seconds). Beyond this, return a loving fallback.
+const RESPONSE_DEADLINE_SECS: u64 = 8;
+
+/// Loving fallback messages for when LLM takes too long.
+fn timeout_fallback_message() -> String {
+    let messages = [
+        "ごめんね、ちょっと考えすぎちゃった...もう一回聞いてくれる？",
+        "うーん、今日はちょっと調子が悪いみたい。もう一度試してみて！",
+        "あっ、ちょっと複雑すぎて頭がパンクしそう...簡単に言い直してくれると嬉しいな",
+        "考えてたら迷子になっちゃった...一緒にもう一回考えよう？",
+        "ちょっと待ってね...あ、やっぱりもう一回聞いてもいい？",
+        "今ちょっと頭がいっぱいで...もう一度お願いできる？",
+    ];
+    let idx = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos() as usize) % messages.len();
+    messages[idx].to_string()
+}
+
 /// Get the base URL for this instance. Defaults to "https://chatweb.ai".
 /// Set BASE_URL env var to customize for self-hosted instances.
 pub fn get_base_url() -> String {
@@ -1290,6 +1310,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/cron/{id}", delete(handle_cron_delete))
         // Speech (TTS)
         .route("/api/v1/speech/synthesize", post(handle_speech_synthesize))
+        // Phone (Amazon Connect)
+        .route("/api/v1/connect/token", post(handle_connect_token))
+        .route("/api/v1/connect/transcript/{contact_id}", get(handle_connect_transcript))
         // Pages
         .route("/pricing", get(handle_pricing))
         .route("/welcome", get(handle_welcome))
@@ -1816,25 +1839,39 @@ async fn handle_chat(
     let mut total_credits_used: i64 = 0;
     let mut last_remaining_credits: Option<i64> = None;
 
-    // Try primary model, then fallback on error
-    let fallback_models: &[&str] = &["gpt-4o-mini", "gemini-2.0-flash-lite"];
-    let first_result = active_provider.chat(&messages, tools_ref, &model, max_tokens, temperature).await;
-    let (used_model, first_completion) = match first_result {
-        Ok(c) => (model.clone(), Ok(c)),
-        Err(e) => {
-            tracing::warn!("Primary model {} failed: {}, trying fallback", model, e);
-            let mut fallback_ok = None;
-            for fb_model in fallback_models {
-                if let Ok(c) = active_provider.chat(&messages, tools_ref, fb_model, max_tokens, temperature).await {
-                    tracing::info!("Fallback to {} succeeded", fb_model);
-                    fallback_ok = Some((fb_model.to_string(), c));
-                    break;
-                }
+    // LLM call with hard deadline (failover handled by LoadBalancedProvider)
+    let deadline = std::time::Duration::from_secs(RESPONSE_DEADLINE_SECS);
+    let llm_result = tokio::time::timeout(
+        deadline,
+        active_provider.chat(&messages, tools_ref, &model, max_tokens, temperature),
+    ).await;
+    let (used_model, first_completion) = match llm_result {
+        Ok(Ok(c)) => (model.clone(), Ok(c)),
+        Ok(Err(e)) => {
+            tracing::error!("LLM call failed: {}", e);
+            (model.clone(), Err(e))
+        }
+        Err(_) => {
+            tracing::warn!("LLM call timed out after {}s, returning fallback", RESPONSE_DEADLINE_SECS);
+            let fallback = timeout_fallback_message();
+            // Save to session and return immediately
+            {
+                let mut sessions = state.sessions.lock().await;
+                let session = sessions.get_or_create(&session_key);
+                session.add_message_from_channel("user", &req.message, "web");
+                session.add_message_from_channel("assistant", &fallback, "web");
+                sessions.save_by_key(&session_key);
             }
-            match fallback_ok {
-                Some((m, c)) => (m, Ok(c)),
-                None => (model.clone(), Err(e)),
-            }
+            return Json(ChatResponse {
+                response: fallback,
+                session_id: req.session_id,
+                agent: Some(agent.id.to_string()),
+                tools_used: None,
+                credits_used: None,
+                credits_remaining: last_remaining_credits,
+                model_used: Some("timeout".to_string()),
+                models_consulted: None,
+            });
         }
     };
 
@@ -1938,6 +1975,10 @@ async fn handle_chat(
                     // Inject sandbox directory for sandbox tools
                     if name == "code_execute" || name == "file_read" || name == "file_write" || name == "file_list" {
                         args.insert("_sandbox_dir".to_string(), serde_json::Value::String(sandbox_dir_ref.to_string()));
+                    }
+                    // Inject session key for phone_call tool (call history tracking)
+                    if name == "phone_call" {
+                        args.insert("_session_key".to_string(), serde_json::Value::String(session_key.clone()));
                     }
                     async move {
                         info!("Tool call [iter {}]: {} args={:?}", iteration, name, args);
@@ -3869,25 +3910,25 @@ async fn handle_chat_stream(
 
         let tools_ref = if tools.is_empty() { None } else { Some(&tools[..]) };
 
-        // First LLM call with automatic failover
-        let fallback_models: &[&str] = &["gpt-4o-mini", "gemini-2.0-flash-lite"];
-        let first_attempt = provider.chat(&messages, tools_ref, &model, max_tokens, temperature).await;
-        let (stream_used_model, first_result) = match first_attempt {
-            Ok(c) => (model.clone(), Ok(c)),
-            Err(e) => {
-                tracing::warn!("Stream primary model {} failed: {}, trying fallback", model, e);
-                let mut fallback_ok = None;
-                for fb_model in fallback_models {
-                    if let Ok(c) = provider.chat(&messages, tools_ref, fb_model, max_tokens, temperature).await {
-                        tracing::info!("Stream fallback to {} succeeded", fb_model);
-                        fallback_ok = Some((fb_model.to_string(), c));
-                        break;
-                    }
-                }
-                match fallback_ok {
-                    Some((m, c)) => (m, Ok(c)),
-                    None => (model.clone(), Err(e)),
-                }
+        // LLM call with hard deadline (failover handled by LoadBalancedProvider)
+        let deadline = std::time::Duration::from_secs(RESPONSE_DEADLINE_SECS);
+        let llm_result = tokio::time::timeout(
+            deadline,
+            provider.chat(&messages, tools_ref, &model, max_tokens, temperature),
+        ).await;
+        let (stream_used_model, first_result) = match llm_result {
+            Ok(Ok(c)) => (model.clone(), Ok(c)),
+            Ok(Err(e)) => {
+                tracing::error!("Stream LLM call failed: {}", e);
+                (model.clone(), Err(e))
+            }
+            Err(_) => {
+                tracing::warn!("Stream LLM call timed out after {}s, returning fallback", RESPONSE_DEADLINE_SECS);
+                let fallback = timeout_fallback_message();
+                events.push(serde_json::json!({"type":"content","content": fallback}));
+                events.push(serde_json::json!({"type":"done"}));
+                let body = serde_json::to_string(&events).unwrap_or_default();
+                return Ok::<_, Infallible>(Event::default().data(body));
             }
         };
 
@@ -3938,6 +3979,10 @@ async fn handle_chat_stream(
                         let id = tc.id.clone();
                         if name == "code_execute" || name == "file_read" || name == "file_write" || name == "file_list" {
                             args.insert("_sandbox_dir".to_string(), serde_json::Value::String(sandbox_dir.clone()));
+                        }
+                        // Inject session key for phone_call tool (call history tracking)
+                        if name == "phone_call" {
+                            args.insert("_session_key".to_string(), serde_json::Value::String(session_key_clone.clone()));
                         }
                         async move {
                             let raw_result = registry.execute(&name, &args).await;
@@ -8181,6 +8226,122 @@ async fn handle_speech_synthesize(
                 b"{ \"error\": \"TTS service unavailable\" }".to_vec(),
             )
         }
+    }
+}
+
+// ─── Amazon Connect (Phone) API ───
+
+/// POST /api/v1/connect/token — Get CCP federation token for browser softphone
+async fn handle_connect_token(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let instance_id = std::env::var("CONNECT_INSTANCE_ID").unwrap_or_default();
+    if instance_id.is_empty() {
+        return Json(serde_json::json!({ "error": "Amazon Connect not configured" })).into_response();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        // Require authentication
+        let user_id = auth_user_id(&state, &headers).await;
+        if user_id.is_none() {
+            return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Authentication required" }))).into_response();
+        }
+
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let client = aws_sdk_connect::Client::new(&config);
+
+        match client
+            .get_federation_token()
+            .instance_id(&instance_id)
+            .send()
+            .await
+        {
+            Ok(output) => {
+                if let Some(credentials) = output.credentials() {
+                    return Json(serde_json::json!({
+                        "access_token": credentials.access_token().unwrap_or(""),
+                        "access_token_expiration": credentials.access_token_expiration().map(|t| t.to_string()),
+                        "refresh_token": credentials.refresh_token().unwrap_or(""),
+                        "refresh_token_expiration": credentials.refresh_token_expiration().map(|t| t.to_string()),
+                        "sign_in_url": output.sign_in_url().unwrap_or(""),
+                        "user_arn": output.user_arn().unwrap_or(""),
+                    })).into_response();
+                }
+                Json(serde_json::json!({ "error": "No credentials in response" })).into_response()
+            }
+            Err(e) => {
+                tracing::error!("Connect GetFederationToken failed: {e}");
+                (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": format!("Connect error: {e}") }))).into_response()
+            }
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (&state, &headers);
+        Json(serde_json::json!({ "error": "Amazon Connect requires dynamodb-backend feature" })).into_response()
+    }
+}
+
+/// GET /api/v1/connect/transcript/{contact_id} — Get live transcript segments
+async fn handle_connect_transcript(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Path(contact_id): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        // Require authentication
+        let user_id = auth_user_id(&state, &headers).await;
+        if user_id.is_none() {
+            return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Authentication required" }))).into_response();
+        }
+
+        use aws_sdk_dynamodb::types::AttributeValue;
+
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let pk = format!("TRANSCRIPT#{}", contact_id);
+            match dynamo
+                .query()
+                .table_name(table.as_str())
+                .key_condition_expression("pk = :pk")
+                .expression_attribute_values(":pk", AttributeValue::S(pk))
+                .scan_index_forward(true)
+                .send()
+                .await
+            {
+                Ok(output) => {
+                    let segments: Vec<serde_json::Value> = output.items()
+                        .iter()
+                        .map(|item| {
+                            let get_s = |key: &str| item.get(key).and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            serde_json::json!({
+                                "timestamp": get_s("sk"),
+                                "speaker": get_s("speaker"),
+                                "content": get_s("content"),
+                                "language": get_s("language"),
+                            })
+                        })
+                        .collect();
+                    return Json(serde_json::json!({
+                        "contact_id": contact_id,
+                        "segments": segments,
+                    })).into_response();
+                }
+                Err(e) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": format!("Query failed: {e}") }))).into_response();
+                }
+            }
+        }
+        Json(serde_json::json!({ "error": "DynamoDB not configured" })).into_response()
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (&state, &headers, &contact_id);
+        Json(serde_json::json!({ "error": "Requires dynamodb-backend feature" })).into_response()
     }
 }
 

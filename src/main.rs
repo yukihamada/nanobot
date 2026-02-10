@@ -183,7 +183,10 @@ async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -
         get_cli_session_id()?
     };
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+        .unwrap_or_default();
 
     if message.is_empty() {
         // Interactive mode
@@ -286,14 +289,21 @@ async fn cmd_link(session_id: Option<String>) -> Result<()> {
 }
 
 async fn chat_api(client: &reqwest::Client, api_url: &str, message: &str, session_id: &str) -> Result<String> {
-    let resp = client
+    let resp = match client
         .post(api_url)
         .json(&serde_json::json!({
             "message": message,
             "session_id": session_id,
         }))
         .send()
-        .await?;
+        .await
+    {
+        Ok(r) => r,
+        Err(e) if e.is_timeout() => {
+            return Ok("ごめんね、ちょっと考えすぎちゃった...もう一回聞いてくれる？".to_string());
+        }
+        Err(e) => return Err(e.into()),
+    };
 
     let body: serde_json::Value = resp.json().await?;
     Ok(body["response"].as_str().unwrap_or("No response").to_string())

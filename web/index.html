@@ -1637,6 +1637,118 @@
     body.no-speech-api .voice-hero-btn { display: none; }
     body.no-speech-api .voice-hero-label { display: none; }
 
+    /* Phone call button */
+    .app-chat-phone-btn {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .app-chat-phone-btn:hover { background: rgba(34,197,94,0.1); color: #22c55e; border-color: #22c55e; }
+    .app-chat-phone-btn.active { background: #22c55e; border-color: #22c55e; color: #fff; }
+    body.connect-enabled .app-chat-phone-btn { display: flex; }
+
+    /* Phone panel */
+    .phone-panel {
+      display: none;
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      width: 320px;
+      max-height: 500px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      z-index: 1000;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .phone-panel.open { display: flex; }
+    .phone-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .phone-panel-header .close-btn { cursor: pointer; color: var(--muted); font-size: 18px; }
+    .phone-panel-body { padding: 16px; flex: 1; overflow-y: auto; }
+    .phone-input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .phone-input-row input {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--input-bg);
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+    }
+    .phone-input-row input:focus { border-color: var(--accent); }
+    .phone-call-btn {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: #22c55e;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    .phone-call-btn:hover { background: #16a34a; }
+    .phone-call-btn.hangup { background: #ef4444; }
+    .phone-call-btn.hangup:hover { background: #dc2626; }
+    .phone-status {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    .phone-dialpad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .phone-dialpad button {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--input-bg);
+      color: var(--text);
+      font-size: 18px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .phone-dialpad button:hover { background: rgba(99,102,241,0.1); }
+    .phone-transcript {
+      max-height: 150px;
+      overflow-y: auto;
+      border-top: 1px solid var(--border);
+      padding: 8px 16px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .phone-transcript .segment { margin-bottom: 4px; }
+    .phone-transcript .segment .speaker { font-weight: 600; color: var(--text); }
+
     /* TTS button */
     .app-tts-btn {
       display: inline-flex;
@@ -2810,6 +2922,9 @@
           <button class="app-chat-mic-btn" id="app-mic-btn" onclick="toggleSpeechRecognition()" title="Voice input">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
+          <button class="app-chat-phone-btn" id="app-phone-btn" onclick="togglePhonePanel()" title="Phone call">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
           <button class="app-chat-send-btn" id="app-send-btn" onclick="appSend()">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14l12-6L2 2v5l8 1-8 1v5z" fill="currentColor"/></svg>
           </button>
@@ -2820,6 +2935,41 @@
       </div>
     </div>
   </div>
+
+  <!-- Phone Panel -->
+  <div class="phone-panel" id="phone-panel">
+    <div class="phone-panel-header">
+      <span>&#128222; Phone</span>
+      <span class="close-btn" onclick="togglePhonePanel()">&times;</span>
+    </div>
+    <div class="phone-panel-body">
+      <div class="phone-status" id="phone-status">Ready</div>
+      <div class="phone-input-row">
+        <input type="tel" id="phone-number" placeholder="+81 90-1234-5678" />
+        <button class="phone-call-btn" id="phone-call-action" onclick="phoneAction()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="phone-dialpad" id="phone-dialpad">
+        <button onclick="dialDigit('1')">1</button>
+        <button onclick="dialDigit('2')">2</button>
+        <button onclick="dialDigit('3')">3</button>
+        <button onclick="dialDigit('4')">4</button>
+        <button onclick="dialDigit('5')">5</button>
+        <button onclick="dialDigit('6')">6</button>
+        <button onclick="dialDigit('7')">7</button>
+        <button onclick="dialDigit('8')">8</button>
+        <button onclick="dialDigit('9')">9</button>
+        <button onclick="dialDigit('*')">*</button>
+        <button onclick="dialDigit('0')">0</button>
+        <button onclick="dialDigit('#')">#</button>
+      </div>
+    </div>
+    <div class="phone-transcript" id="phone-transcript"></div>
+  </div>
+
+  <!-- CCP iframe container (hidden, used by amazon-connect-streams) -->
+  <div id="ccp-container" style="display:none;width:0;height:0;overflow:hidden;"></div>
 
   <footer>
     <a href="/pricing" id="footer-pricing">Pricing</a> &middot;
@@ -2985,19 +3135,81 @@
     // Staged thinking status messages
     const THINKING_STAGES = {
       ja: [
-        { time: 0,    icon: '\u26A1', text: '\u8003\u3048\u4E2D...' },
-        { time: 1500, icon: '\uD83D\uDD0D', text: '\u60C5\u5831\u3092\u691C\u7D22\u4E2D...' },
-        { time: 4000, icon: '\uD83D\uDCCA', text: '\u30C7\u30FC\u30BF\u3092\u5206\u6790\u4E2D...' },
-        { time: 8000, icon: '\u270D\uFE0F', text: '\u56DE\u7B54\u3092\u751F\u6210\u4E2D...' },
-        { time: 15000, icon: '\u23F3', text: '\u3082\u3046\u5C11\u3057\u304A\u5F85\u3061...' },
+        { time: 0,     icon: '\u26A1', text: '\u8003\u3048\u4E2D...' },
+        { time: 1500,  icon: '\uD83D\uDD0D', text: '\u60C5\u5831\u3092\u691C\u7D22\u4E2D...' },
+        { time: 4000,  icon: '\uD83D\uDCCA', text: '\u30C7\u30FC\u30BF\u3092\u5206\u6790\u4E2D...' },
+        { time: 5000,  icon: '\uD83E\uDD14', text: '\u3046\u30FC\u3093\u3068...\u3061\u3087\u3063\u3068\u96E3\u3057\u3044\u306A...' },
+        { time: 7000,  icon: '\uD83D\uDE05', text: '\u3054\u3081\u3093\u306D\u3001\u3082\u3046\u3061\u3087\u3063\u3068\u3060\u3051...' },
+        { time: 9000,  icon: '\uD83D\uDCAD', text: '\u3042\u3001\u308F\u304B\u3063\u305F\uFF01\u307E\u3068\u3081\u308B\u306D...' },
+        { time: 12000, icon: '\uD83D\uDE4F', text: '\u304A\u5F85\u305F\u305B\u3057\u3066\u3054\u3081\u3093\u306D...' },
       ],
       en: [
-        { time: 0,    icon: '\u26A1', text: 'Thinking...' },
-        { time: 1500, icon: '\uD83D\uDD0D', text: 'Searching...' },
-        { time: 4000, icon: '\uD83D\uDCCA', text: 'Analyzing data...' },
-        { time: 8000, icon: '\u270D\uFE0F', text: 'Generating response...' },
-        { time: 15000, icon: '\u23F3', text: 'Almost there...' },
+        { time: 0,     icon: '\u26A1', text: 'Thinking...' },
+        { time: 1500,  icon: '\uD83D\uDD0D', text: 'Searching...' },
+        { time: 4000,  icon: '\uD83D\uDCCA', text: 'Analyzing data...' },
+        { time: 5000,  icon: '\uD83E\uDD14', text: 'Hmm, this is tricky...' },
+        { time: 7000,  icon: '\uD83D\uDE05', text: 'Sorry, just a bit more...' },
+        { time: 9000,  icon: '\uD83D\uDCAD', text: 'Got it! Putting it together...' },
+        { time: 12000, icon: '\uD83D\uDE4F', text: 'Sorry for the wait...' },
       ]
+    };
+
+    // Ambient thinking BGM (Web Audio API — plays after 5s wait)
+    let _thinkingAudioCtx = null;
+    let _thinkingGain = null;
+    let _thinkingOscs = [];
+    function playThinkingAmbient() {
+      try {
+        if (_thinkingAudioCtx) return;
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 1.0);
+        gain.connect(ctx.destination);
+        // C4, E4, G4 chord — gentle sine waves
+        const freqs = [261.63, 329.63, 392.00];
+        const oscs = freqs.map(f => {
+          const osc = ctx.createOscillator();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, ctx.currentTime);
+          osc.connect(gain);
+          osc.start();
+          return osc;
+        });
+        _thinkingAudioCtx = ctx;
+        _thinkingGain = gain;
+        _thinkingOscs = oscs;
+      } catch(e) { /* ignore audio errors */ }
+    }
+    function stopThinkingAmbient() {
+      try {
+        if (!_thinkingAudioCtx) return;
+        const ctx = _thinkingAudioCtx;
+        if (_thinkingGain) {
+          _thinkingGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+        }
+        setTimeout(() => {
+          _thinkingOscs.forEach(o => { try { o.stop(); } catch(e){} });
+          try { ctx.close(); } catch(e){}
+        }, 600);
+        _thinkingAudioCtx = null;
+        _thinkingGain = null;
+        _thinkingOscs = [];
+      } catch(e) { /* ignore */ }
+    }
+
+    // Timeout fallback messages (matches server-side)
+    const TIMEOUT_FALLBACKS = {
+      ja: [
+        '\u3054\u3081\u3093\u306D\u3001\u3061\u3087\u3063\u3068\u8003\u3048\u3059\u304E\u3061\u3083\u3063\u305F...\u3082\u3046\u4E00\u56DE\u805E\u3044\u3066\u304F\u308C\u308B\uFF1F',
+        '\u3046\u30FC\u3093\u3001\u4ECA\u65E5\u306F\u3061\u3087\u3063\u3068\u8ABF\u5B50\u304C\u60AA\u3044\u307F\u305F\u3044\u3002\u3082\u3046\u4E00\u5EA6\u8A66\u3057\u3066\u307F\u3066\uFF01',
+        '\u8003\u3048\u3066\u305F\u3089\u8FF7\u5B50\u306B\u306A\u3063\u3061\u3083\u3063\u305F...\u4E00\u7DD2\u306B\u3082\u3046\u4E00\u56DE\u8003\u3048\u3088\u3046\uFF1F',
+      ],
+      en: [
+        'Sorry, I got lost in thought... could you ask again?',
+        'Hmm, having a bit of trouble today. Please try again!',
+        'Got lost thinking about that... shall we try again together?',
+      ],
     };
 
     // Tool name display mapping
@@ -3040,12 +3252,17 @@
       // Staged status transitions
       const startTime = Date.now();
       let stageIdx = 0;
+      let ambientStarted = false;
       const statusInterval = setInterval(() => {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
         const elapsedEl = typing.querySelector('.thinking-elapsed');
         if (elapsedEl) elapsedEl.textContent = '(' + elapsed + 's)';
 
         const elapsedMs = Date.now() - startTime;
+        if (!ambientStarted && elapsedMs >= 5000) {
+          ambientStarted = true;
+          playThinkingAmbient();
+        }
         const nextStage = stages[stageIdx + 1];
         if (nextStage && elapsedMs >= nextStage.time) {
           stageIdx++;
@@ -3062,6 +3279,9 @@
         }
       }, 100);
 
+      const abortCtrl = new AbortController();
+      const frontendTimeout = setTimeout(() => { abortCtrl.abort(); }, 11000);
+
       try {
         const agentSel = document.getElementById('agent-select').value;
         const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
@@ -3069,17 +3289,27 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
+          signal: abortCtrl.signal,
         });
         const d = await r.json();
+        clearTimeout(frontendTimeout);
         clearInterval(statusInterval);
+        stopThinkingAmbient();
         typing.remove();
         addMsg(d.response, 'bot', true, null, d.agent || null, d.tools_used || null);
         knownMsgCount += 2; // user + assistant messages
         startPolling();
-      } catch {
+      } catch (e) {
+        clearTimeout(frontendTimeout);
         clearInterval(statusInterval);
+        stopThinkingAmbient();
         typing.remove();
-        addMsg(lang === 'ja' ? '\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002' : 'Something went wrong. Please try again.', 'bot');
+        if (e && e.name === 'AbortError') {
+          const fallbacks = TIMEOUT_FALLBACKS[lang] || TIMEOUT_FALLBACKS.ja;
+          addMsg(fallbacks[Math.floor(Math.random() * fallbacks.length)], 'bot');
+        } else {
+          addMsg(lang === 'ja' ? '\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002' : 'Something went wrong. Please try again.', 'bot');
+        }
       }
     }
 
@@ -4550,11 +4780,17 @@
 
       const startTime = Date.now();
       let stageIdx = 0;
+      let ambientStarted = false;
       const statusInterval = setInterval(() => {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
         const elapsedEl = thinking.querySelector('.thinking-elapsed');
         if (elapsedEl) elapsedEl.textContent = '(' + elapsed + 's)';
         const elapsedMs = Date.now() - startTime;
+        // Start ambient BGM after 5 seconds of waiting
+        if (!ambientStarted && elapsedMs >= 5000) {
+          ambientStarted = true;
+          playThinkingAmbient();
+        }
         const nextStage = stages[stageIdx + 1];
         if (nextStage && elapsedMs >= nextStage.time) {
           stageIdx++;
@@ -4565,6 +4801,10 @@
         }
       }, 100);
 
+      // Frontend timeout: 11s (X+Y) hard deadline with AbortController
+      const abortCtrl = new AbortController();
+      const frontendTimeout = setTimeout(() => { abortCtrl.abort(); }, 11000);
+
       try {
         const agentSel = document.getElementById('app-agent-select').value;
         const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
@@ -4572,7 +4812,9 @@
         // Check explore mode
         const exploreMode = document.getElementById('explore-check')?.checked || false;
         if (exploreMode) {
+          clearTimeout(frontendTimeout);
           clearInterval(statusInterval);
+          stopThinkingAmbient();
           thinking.remove();
           await appExplore(msgToSend, text, 0);
           return;
@@ -4587,9 +4829,12 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: msgToSend, session_id: webSessionId, channel: 'web', multi_model: true }),
+            signal: abortCtrl.signal,
           });
           const d = await r.json();
+          clearTimeout(frontendTimeout);
           clearInterval(statusInterval);
+          stopThinkingAmbient();
           thinking.remove();
           let botMsg = d.response;
           if (d.model_used) botMsg += '\n\n<small style="color:var(--muted);">Model: ' + d.model_used + (d.models_consulted ? ' (' + d.models_consulted.length + ' raced)' : '') + '</small>';
@@ -4611,6 +4856,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(chatBody),
+          signal: abortCtrl.signal,
         });
 
         if (!r.ok || !r.body) {
@@ -4619,9 +4865,12 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
+            signal: abortCtrl.signal,
           });
           const d = await fallback.json();
+          clearTimeout(frontendTimeout);
           clearInterval(statusInterval);
+          stopThinkingAmbient();
           thinking.remove();
           appAddMsg(d.response, 'bot', d.agent || null, d.tools_used || null);
           knownMsgCount += 2;
@@ -4679,7 +4928,9 @@
               p.appendChild(thinkEl);
             } else if (evt.type === 'content' && !gotContent) {
               gotContent = true;
+              clearTimeout(frontendTimeout);
               clearInterval(statusInterval);
+              stopThinkingAmbient();
               thinking.remove();
               // Remove thinking indicators
               if (agentProgressEl) {
@@ -4691,7 +4942,9 @@
               if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
               autoPlayTTS(evt.content);
             } else if (evt.type === 'error') {
+              clearTimeout(frontendTimeout);
               clearInterval(statusInterval);
+              stopThinkingAmbient();
               thinking.remove();
               appAddMsg(evt.content || 'Error', 'bot');
             }
@@ -4726,16 +4979,26 @@
           }
 
           if (!gotContent) {
+            clearTimeout(frontendTimeout);
             clearInterval(statusInterval);
+            stopThinkingAmbient();
             thinking.remove();
             appAddMsg(lang === 'ja' ? 'レスポンスを受信できませんでした。' : 'No response received.', 'bot');
           }
           appLoadConversations();
         }
-      } catch {
+      } catch (e) {
+        clearTimeout(frontendTimeout);
         clearInterval(statusInterval);
+        stopThinkingAmbient();
         thinking.remove();
-        appAddMsg(lang === 'ja' ? 'エラーが発生しました。もう一度お試しください。' : 'Something went wrong. Please try again.', 'bot');
+        if (e && e.name === 'AbortError') {
+          // Frontend timeout — show loving fallback
+          const msgs = TIMEOUT_FALLBACKS[lang] || TIMEOUT_FALLBACKS.ja;
+          appAddMsg(msgs[Math.floor(Math.random() * msgs.length)], 'bot');
+        } else {
+          appAddMsg(lang === 'ja' ? 'エラーが発生しました。もう一度お試しください。' : 'Something went wrong. Please try again.', 'bot');
+        }
       }
     }
 
@@ -5858,6 +6121,268 @@
     })();
 
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+
+    // ─── Phone Panel (Amazon Connect CCP) ───
+    let phoneState = { active: false, contactId: null, ccpInitialized: false, transcriptPoll: null };
+
+    // Check if Connect is configured (phone button visibility)
+    (async function checkConnectEnabled() {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+        const resp = await fetch('/api/v1/connect/token', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: '{}'
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (!data.error) {
+            document.body.classList.add('connect-enabled');
+            if (data.sign_in_url) phoneState.signInUrl = data.sign_in_url;
+          }
+        }
+      } catch(e) { /* Connect not available */ }
+    })();
+
+    function togglePhonePanel() {
+      const panel = document.getElementById('phone-panel');
+      panel.classList.toggle('open');
+      const btn = document.getElementById('app-phone-btn');
+      btn.classList.toggle('active', panel.classList.contains('open'));
+      if (panel.classList.contains('open') && !phoneState.ccpInitialized) {
+        initCCP();
+      }
+    }
+
+    function initCCP() {
+      // Load amazon-connect-streams if not already loaded
+      if (typeof connect === 'undefined') {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/amazon-connect-streams@2/release/connect-streams-min.js';
+        script.onload = () => startCCP();
+        document.head.appendChild(script);
+      } else {
+        startCCP();
+      }
+    }
+
+    function startCCP() {
+      try {
+        const instanceUrl = phoneState.signInUrl || '';
+        if (!instanceUrl) {
+          document.getElementById('phone-status').textContent = 'CCP: Waiting for config...';
+          return;
+        }
+        connect.core.initCCP(document.getElementById('ccp-container'), {
+          ccpUrl: instanceUrl,
+          loginPopup: true,
+          loginPopupAutoClose: true,
+          softphone: { allowFramedSoftphone: true },
+          region: 'ap-northeast-1',
+        });
+        phoneState.ccpInitialized = true;
+        document.getElementById('phone-status').textContent = 'Connected';
+
+        // Listen for contact events
+        connect.contact(function(contact) {
+          contact.onConnecting(function() {
+            phoneState.active = true;
+            phoneState.contactId = contact.getContactId();
+            updatePhoneUI('connecting');
+          });
+          contact.onConnected(function() {
+            updatePhoneUI('connected');
+            startTranscriptPolling(phoneState.contactId);
+          });
+          contact.onEnded(function() {
+            phoneState.active = false;
+            stopTranscriptPolling();
+            updatePhoneUI('ended');
+            setTimeout(() => updatePhoneUI('ready'), 3000);
+          });
+        });
+      } catch(e) {
+        console.warn('CCP init error:', e);
+        document.getElementById('phone-status').textContent = 'CCP unavailable - using API mode';
+      }
+    }
+
+    function dialDigit(d) {
+      const input = document.getElementById('phone-number');
+      input.value += d;
+    }
+
+    async function phoneAction() {
+      if (phoneState.active) {
+        // Hangup
+        await endCall();
+      } else {
+        // Initiate call
+        await initiateCall();
+      }
+    }
+
+    function normalizePhoneNumber(raw) {
+      let num = raw.replace(/[\s\-()]/g, '');
+      // Japanese number conversion: 090xxx -> +8190xxx
+      if (num.startsWith('0') && !num.startsWith('+')) {
+        num = '+81' + num.substring(1);
+      }
+      return num;
+    }
+
+    async function initiateCall() {
+      const raw = document.getElementById('phone-number').value.trim();
+      if (!raw) return;
+      const number = normalizePhoneNumber(raw);
+      updatePhoneUI('dialing');
+
+      // Try CCP first if available
+      if (phoneState.ccpInitialized && typeof connect !== 'undefined') {
+        try {
+          const agent = new connect.Agent();
+          const ep = connect.Endpoint.byPhoneNumber(number);
+          agent.connect(ep, { success: function() {}, failure: function() { fallbackApiCall(number); }});
+          return;
+        } catch(e) { /* fallback to API */ }
+      }
+
+      // Fallback: use chat API to trigger phone_call tool
+      await fallbackApiCall(number);
+    }
+
+    async function fallbackApiCall(number) {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const sessionId = localStorage.getItem('session_id') || '';
+        const resp = await fetch('/api/v1/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) },
+          body: JSON.stringify({
+            message: `[SYSTEM] Call ${number} now. Use the phone_call tool with action "initiate" and phone_number "${number}".`,
+            session_id: sessionId,
+            agent: 'auto'
+          })
+        });
+        const data = await resp.json();
+        if (data.response && data.response.includes('contact_id')) {
+          try {
+            const match = data.response.match(/"contact_id"\s*:\s*"([^"]+)"/);
+            if (match) {
+              phoneState.contactId = match[1];
+              phoneState.active = true;
+              updatePhoneUI('connected');
+              startTranscriptPolling(phoneState.contactId);
+              return;
+            }
+          } catch(e) {}
+        }
+        updatePhoneUI('ready');
+        if (data.response) document.getElementById('phone-status').textContent = 'Call initiated via AI';
+      } catch(e) {
+        updatePhoneUI('ready');
+        document.getElementById('phone-status').textContent = 'Call failed: ' + e.message;
+      }
+    }
+
+    async function endCall() {
+      if (!phoneState.contactId) { updatePhoneUI('ready'); return; }
+
+      // Try CCP
+      if (phoneState.ccpInitialized && typeof connect !== 'undefined') {
+        try {
+          const agent = new connect.Agent();
+          const contacts = agent.getContacts();
+          contacts.forEach(c => { try { c.getAgentConnection().destroy(); } catch(e){} });
+        } catch(e) {}
+      }
+
+      // Also end via API
+      try {
+        const token = localStorage.getItem('auth_token');
+        const sessionId = localStorage.getItem('session_id') || '';
+        await fetch('/api/v1/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) },
+          body: JSON.stringify({
+            message: `[SYSTEM] End the call. Use phone_call tool with action "end" and contact_id "${phoneState.contactId}".`,
+            session_id: sessionId,
+            agent: 'auto'
+          })
+        });
+      } catch(e) {}
+
+      phoneState.active = false;
+      phoneState.contactId = null;
+      stopTranscriptPolling();
+      updatePhoneUI('ready');
+    }
+
+    function updatePhoneUI(state) {
+      const statusEl = document.getElementById('phone-status');
+      const actionBtn = document.getElementById('phone-call-action');
+      const phoneBtn = document.getElementById('app-phone-btn');
+
+      switch(state) {
+        case 'ready':
+          statusEl.textContent = 'Ready';
+          actionBtn.classList.remove('hangup');
+          actionBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+          phoneBtn.classList.remove('active');
+          break;
+        case 'dialing':
+          statusEl.textContent = 'Dialing...';
+          actionBtn.classList.add('hangup');
+          actionBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+          break;
+        case 'connecting':
+          statusEl.textContent = 'Connecting...';
+          break;
+        case 'connected':
+          statusEl.textContent = 'On Call';
+          actionBtn.classList.add('hangup');
+          actionBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+          phoneBtn.classList.add('active');
+          break;
+        case 'ended':
+          statusEl.textContent = 'Call Ended';
+          actionBtn.classList.remove('hangup');
+          break;
+      }
+    }
+
+    // ─── Live Transcript Polling ───
+    function startTranscriptPolling(contactId) {
+      stopTranscriptPolling();
+      const transcriptEl = document.getElementById('phone-transcript');
+      transcriptEl.innerHTML = '';
+
+      phoneState.transcriptPoll = setInterval(async () => {
+        try {
+          const token = localStorage.getItem('auth_token');
+          const resp = await fetch('/api/v1/connect/transcript/' + contactId, {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+          });
+          if (!resp.ok) return;
+          const data = await resp.json();
+          if (data.segments && data.segments.length > 0) {
+            transcriptEl.innerHTML = data.segments.map(s =>
+              '<div class="segment"><span class="speaker">' +
+              (s.speaker || '?') + ':</span> ' + (s.content || '') + '</div>'
+            ).join('');
+            transcriptEl.scrollTop = transcriptEl.scrollHeight;
+          }
+        } catch(e) {}
+      }, 3000);
+    }
+
+    function stopTranscriptPolling() {
+      if (phoneState.transcriptPoll) {
+        clearInterval(phoneState.transcriptPoll);
+        phoneState.transcriptPoll = null;
+      }
+    }
   </script>
 </body>
 </html>

@@ -74,6 +74,12 @@ impl ToolRegistry {
                 tools.push(Box::new(GitHubCreateOrUpdateFileTool));
                 tools.push(Box::new(GitHubCreatePrTool));
             }
+
+            // Phone call tool requires Amazon Connect configuration
+            if std::env::var("CONNECT_INSTANCE_ID").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering phone_call tool (CONNECT_INSTANCE_ID present)");
+                tools.push(Box::new(PhoneCallTool));
+            }
         }
 
         Self { tools }
@@ -2670,6 +2676,323 @@ impl Tool for SandboxFileListTool {
             Err(e) => format!("Error listing directory: {e}"),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Phone Call tool — Amazon Connect outbound voice calls
+// ---------------------------------------------------------------------------
+
+/// Phone call tool using Amazon Connect for outbound voice calls.
+pub struct PhoneCallTool;
+
+#[async_trait]
+impl Tool for PhoneCallTool {
+    fn name(&self) -> &str { "phone_call" }
+    fn description(&self) -> &str {
+        "Make and manage phone calls via Amazon Connect. Use this when the user asks to call someone. \
+         Actions: 'initiate' to start a call, 'status' to check call status, 'end' to hang up, \
+         'list_recent' to show recent calls. Phone numbers must be in E.164 format (e.g., +818012345678). \
+         For Japanese numbers, convert 090-xxxx-xxxx to +8190xxxxxxxx."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["initiate", "status", "end", "list_recent"],
+                    "description": "Action to perform: initiate (start call), status (check call), end (hang up), list_recent (show history)"
+                },
+                "phone_number": {
+                    "type": "string",
+                    "description": "Phone number in E.164 format (e.g., +818012345678). Required for 'initiate'."
+                },
+                "contact_id": {
+                    "type": "string",
+                    "description": "Amazon Connect contact ID. Required for 'status' and 'end'."
+                },
+                "purpose": {
+                    "type": "string",
+                    "description": "Purpose of the call (used for notes/greeting). Optional."
+                }
+            },
+            "required": ["action"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("");
+        let phone_number = params.get("phone_number").and_then(|v| v.as_str()).unwrap_or("");
+        let contact_id = params.get("contact_id").and_then(|v| v.as_str()).unwrap_or("");
+        let purpose = params.get("purpose").and_then(|v| v.as_str()).unwrap_or("");
+        let session_key = params.get("_session_key").and_then(|v| v.as_str()).unwrap_or("");
+        execute_phone_call(action, phone_number, contact_id, purpose, session_key).await
+    }
+}
+
+/// Execute a phone call action via Amazon Connect.
+async fn execute_phone_call(
+    action: &str,
+    phone_number: &str,
+    contact_id: &str,
+    purpose: &str,
+    session_key: &str,
+) -> String {
+    match action {
+        "initiate" => execute_phone_initiate(phone_number, purpose, session_key).await,
+        "status" => execute_phone_status(contact_id).await,
+        "end" => execute_phone_end(contact_id).await,
+        "list_recent" => execute_phone_list_recent(session_key).await,
+        _ => format!("[TOOL_ERROR] Unknown action '{}'. Use: initiate, status, end, list_recent", action),
+    }
+}
+
+/// Initiate an outbound voice call.
+async fn execute_phone_initiate(phone_number: &str, purpose: &str, session_key: &str) -> String {
+    if phone_number.is_empty() {
+        return "[TOOL_ERROR] phone_number is required for 'initiate' action".to_string();
+    }
+
+    // Validate E.164 format
+    if !phone_number.starts_with('+') || phone_number.len() < 8 || phone_number.len() > 16 {
+        return "[TOOL_ERROR] phone_number must be in E.164 format (e.g., +818012345678)".to_string();
+    }
+
+    let instance_id = std::env::var("CONNECT_INSTANCE_ID").unwrap_or_default();
+    let contact_flow_id = std::env::var("CONNECT_CONTACT_FLOW_ID").unwrap_or_default();
+    let source_phone = std::env::var("CONNECT_PHONE_NUMBER").unwrap_or_default();
+
+    if instance_id.is_empty() || contact_flow_id.is_empty() || source_phone.is_empty() {
+        return "[TOOL_ERROR] Amazon Connect is not configured. Set CONNECT_INSTANCE_ID, CONNECT_CONTACT_FLOW_ID, CONNECT_PHONE_NUMBER.".to_string();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let client = aws_sdk_connect::Client::new(&config);
+
+        let mut req = client.start_outbound_voice_contact()
+            .instance_id(&instance_id)
+            .contact_flow_id(&contact_flow_id)
+            .destination_phone_number(phone_number)
+            .source_phone_number(&source_phone);
+
+        // Add purpose as attribute for the contact flow
+        if !purpose.is_empty() {
+            req = req.attributes("purpose", purpose);
+        }
+        if !session_key.is_empty() {
+            req = req.attributes("session_key", session_key);
+        }
+
+        match req.send().await {
+            Ok(output) => {
+                let cid = output.contact_id().unwrap_or("unknown");
+
+                // Store call record in DynamoDB
+                store_call_record(session_key, cid, phone_number, purpose, "initiated").await;
+
+                serde_json::json!({
+                    "status": "initiated",
+                    "contact_id": cid,
+                    "phone_number": phone_number,
+                    "purpose": purpose,
+                    "message": format!("Call initiated to {}. Contact ID: {}", phone_number, cid)
+                }).to_string()
+            }
+            Err(e) => format!("[TOOL_ERROR] Failed to initiate call: {e}"),
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (purpose, session_key);
+        "[TOOL_ERROR] Phone calls require the dynamodb-backend feature".to_string()
+    }
+}
+
+/// Check the status of an active call.
+async fn execute_phone_status(contact_id: &str) -> String {
+    if contact_id.is_empty() {
+        return "[TOOL_ERROR] contact_id is required for 'status' action".to_string();
+    }
+
+    let instance_id = std::env::var("CONNECT_INSTANCE_ID").unwrap_or_default();
+    if instance_id.is_empty() {
+        return "[TOOL_ERROR] CONNECT_INSTANCE_ID not configured".to_string();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let client = aws_sdk_connect::Client::new(&config);
+
+        match client
+            .describe_contact()
+            .instance_id(&instance_id)
+            .contact_id(contact_id)
+            .send()
+            .await
+        {
+            Ok(output) => {
+                if let Some(contact) = output.contact() {
+                    let initiation_method = contact.initiation_method()
+                        .map(|m| format!("{:?}", m))
+                        .unwrap_or_else(|| "unknown".to_string());
+                    serde_json::json!({
+                        "contact_id": contact_id,
+                        "initiation_method": initiation_method,
+                        "channel": format!("{:?}", contact.channel().unwrap_or(&aws_sdk_connect::types::Channel::Voice)),
+                        "initiation_timestamp": contact.initiation_timestamp().map(|t| t.to_string()),
+                        "disconnect_timestamp": contact.disconnect_timestamp().map(|t| t.to_string()),
+                    }).to_string()
+                } else {
+                    format!("{{\"contact_id\": \"{}\", \"status\": \"not_found\"}}", contact_id)
+                }
+            }
+            Err(e) => format!("[TOOL_ERROR] Failed to get contact status: {e}"),
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        "[TOOL_ERROR] Phone calls require the dynamodb-backend feature".to_string()
+    }
+}
+
+/// End an active call.
+async fn execute_phone_end(contact_id: &str) -> String {
+    if contact_id.is_empty() {
+        return "[TOOL_ERROR] contact_id is required for 'end' action".to_string();
+    }
+
+    let instance_id = std::env::var("CONNECT_INSTANCE_ID").unwrap_or_default();
+    if instance_id.is_empty() {
+        return "[TOOL_ERROR] CONNECT_INSTANCE_ID not configured".to_string();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let client = aws_sdk_connect::Client::new(&config);
+
+        match client
+            .stop_contact()
+            .instance_id(&instance_id)
+            .contact_id(contact_id)
+            .send()
+            .await
+        {
+            Ok(_) => {
+                serde_json::json!({
+                    "status": "ended",
+                    "contact_id": contact_id,
+                    "message": "Call has been ended."
+                }).to_string()
+            }
+            Err(e) => format!("[TOOL_ERROR] Failed to end call: {e}"),
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        "[TOOL_ERROR] Phone calls require the dynamodb-backend feature".to_string()
+    }
+}
+
+/// List recent calls for a user from DynamoDB.
+async fn execute_phone_list_recent(session_key: &str) -> String {
+    if session_key.is_empty() {
+        return "[TOOL_ERROR] Session not available for call history lookup".to_string();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        use aws_sdk_dynamodb::types::AttributeValue;
+
+        let config_table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+        if config_table.is_empty() {
+            return "[TOOL_ERROR] DynamoDB config table not configured".to_string();
+        }
+
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let dynamo = aws_sdk_dynamodb::Client::new(&config);
+
+        let pk = format!("CALL#{}", session_key);
+        match dynamo
+            .query()
+            .table_name(&config_table)
+            .key_condition_expression("pk = :pk")
+            .expression_attribute_values(":pk", AttributeValue::S(pk))
+            .scan_index_forward(false)
+            .limit(10)
+            .send()
+            .await
+        {
+            Ok(output) => {
+                let items: Vec<serde_json::Value> = output.items()
+                    .iter()
+                    .map(|item| {
+                        let get_s = |key: &str| item.get(key).and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                        serde_json::json!({
+                            "contact_id": get_s("contact_id"),
+                            "phone_number": get_s("phone_number"),
+                            "status": get_s("status"),
+                            "purpose": get_s("purpose"),
+                            "timestamp": get_s("sk"),
+                        })
+                    })
+                    .collect();
+                if items.is_empty() {
+                    "{\"calls\": [], \"message\": \"No recent calls found.\"}".to_string()
+                } else {
+                    serde_json::json!({ "calls": items }).to_string()
+                }
+            }
+            Err(e) => format!("[TOOL_ERROR] Failed to query call history: {e}"),
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        "[TOOL_ERROR] Call history requires the dynamodb-backend feature".to_string()
+    }
+}
+
+/// Store a call record in DynamoDB.
+#[cfg(feature = "dynamodb-backend")]
+async fn store_call_record(
+    session_key: &str,
+    contact_id: &str,
+    phone_number: &str,
+    purpose: &str,
+    status: &str,
+) {
+    use aws_sdk_dynamodb::types::AttributeValue;
+
+    let config_table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+    if config_table.is_empty() || session_key.is_empty() {
+        return;
+    }
+
+    let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+    let dynamo = aws_sdk_dynamodb::Client::new(&config);
+
+    let now = chrono::Utc::now();
+    let pk = format!("CALL#{}", session_key);
+    let sk = format!("{}#{}", now.to_rfc3339(), contact_id);
+    let ttl = (now + chrono::Duration::days(365)).timestamp();
+
+    let _ = dynamo.put_item()
+        .table_name(&config_table)
+        .item("pk", AttributeValue::S(pk))
+        .item("sk", AttributeValue::S(sk))
+        .item("contact_id", AttributeValue::S(contact_id.to_string()))
+        .item("phone_number", AttributeValue::S(phone_number.to_string()))
+        .item("status", AttributeValue::S(status.to_string()))
+        .item("purpose", AttributeValue::S(purpose.to_string()))
+        .item("ttl", AttributeValue::N(ttl.to_string()))
+        .send()
+        .await;
 }
 
 #[cfg(test)]

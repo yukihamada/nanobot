@@ -116,6 +116,18 @@ Parameters:
     Type: String
     Description: URL to tokenizer.json for local LLM fallback
     Default: ''
+  ConnectInstanceId:
+    Type: String
+    Description: Amazon Connect instance ID for phone calls
+    Default: ''
+  ConnectContactFlowId:
+    Type: String
+    Description: Amazon Connect contact flow ID for outbound calls
+    Default: ''
+  ConnectPhoneNumber:
+    Type: String
+    Description: Amazon Connect source phone number (E.164 format)
+    Default: ''
 
 Globals:
   Function:
@@ -160,6 +172,9 @@ Resources:
           FACEBOOK_VERIFY_TOKEN: !Ref FacebookVerifyToken
           LOCAL_MODEL_URL: !Ref LocalModelUrl
           LOCAL_TOKENIZER_URL: !Ref LocalTokenizerUrl
+          CONNECT_INSTANCE_ID: !Ref ConnectInstanceId
+          CONNECT_CONTACT_FLOW_ID: !Ref ConnectContactFlowId
+          CONNECT_PHONE_NUMBER: !Ref ConnectPhoneNumber
           DYNAMODB_SESSIONS_TABLE: !Ref SessionsTable
       Policies:
         - DynamoDBCrudPolicy:
@@ -172,6 +187,14 @@ Resources:
             - Effect: Allow
               Action:
                 - polly:SynthesizeSpeech
+              Resource: '*'
+        - Statement:
+            - Effect: Allow
+              Action:
+                - connect:StartOutboundVoiceContact
+                - connect:StopContact
+                - connect:DescribeContact
+                - connect:GetFederationToken
               Resource: '*'
       Events:
         Api:
