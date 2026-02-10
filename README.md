@@ -17,17 +17,34 @@
 
 ## Why nanobot?
 
-Most AI chatbot frameworks are slow Python wrappers around a single model. nanobot is different: a **production-grade Rust runtime** that connects any LLM to any channel, with voice, tools, and memory built in.
+Most AI agent frameworks are Python wrappers around a single model, or developer-only tools limited to the terminal. nanobot is different: a **production-grade Rust runtime** that connects any LLM to any channel, with voice, tools, and long-term memory built in.
 
-| | nanobot | Typical framework |
-|---|---|---|
-| Language | Rust (cold start < 50ms) | Python (cold start 3-10s) |
-| Channels | Web + LINE + Telegram + Facebook | Usually one |
-| Models | GPT-4o, Claude, Gemini, Groq, Kimi (hot-swap) | Single provider |
-| Voice | STT + TTS, push-to-talk | None |
-| Memory | Cross-channel long-term memory | Session only |
-| Resilience | Parallel provider fallback, 25s timeout | Single point of failure |
-| Deploy | Lambda / Fly.io / Docker / one-click | "figure it out" |
+### Comparison with Other AI Agent Frameworks
+
+| | **ChatWeb (nanobot)** | **OpenClaw** | **Claude Code** | **AutoGPT** | **OpenHands** |
+|---|---|---|---|---|---|
+| **Language** | Rust (axum) | TypeScript | CLI (proprietary) | Python/TS | Python/TS |
+| **Deployment** | AWS Lambda (serverless) | Local/VPS | Local/SaaS | Self-hosted | Local/Cloud/K8s |
+| **Cold Start** | <50ms | ~1s (Node.js) | N/A | ~3-10s | ~3-10s |
+| **Channels** | **14+** (Web, LINE, Telegram, WhatsApp, Discord, Slack, Teams, Facebook, Zalo, Feishu, Google Chat...) | 11+ (WhatsApp, Telegram, Slack, Discord, Signal, Teams...) | 1 (Terminal/IDE) | 1 (Web UI) | 4 (Web, CLI, Slack, Jira) |
+| **Voice (STT+TTS)** | Yes (push-to-talk, auto-TTS) | Partial (Whisper + ElevenLabs) | No | No | No |
+| **Models** | Claude, GPT-4o, Gemini, Groq, DeepSeek, Qwen, Kimi (hot-swap) | Claude, GPT (via API keys) | Claude only | GPT-4o, Claude | Any (configurable) |
+| **Auto Failover** | Yes (primary → gpt-4o-mini → gemini-flash) | No | No | No | No |
+| **Memory** | 2-layer (daily log + long-term, auto-consolidation) | Session + transcript | Conversation only | Workspace storage | Project-based |
+| **Tool Count** | 16+ built-in + sandboxed code exec | 50+ (ClawHub ecosystem) | fs, git, shell, MCP | Marketplace agents | Developer tools |
+| **Agentic Loop** | 1-5 iterations (plan-based) | Continuous | 7 parallel agents | Continuous | Iterative |
+| **Pricing** | Credit-based (100 free, from $9/mo) | Free (BYOK) | $17-$100+/mo | Free (self-hosted) | Free ($10 cloud) |
+| **License** | MIT | MIT | Proprietary | Polyform + MIT | MIT |
+| **Best For** | Voice-first multi-channel AI | Privacy-first personal assistant | Developer workflows | Automation | Software engineering |
+
+### Key Differentiators
+
+- **Voice-First**: The only framework with native STT + TTS + push-to-talk UI
+- **Most Channels**: 14+ channels — LINE, Telegram, WhatsApp, Discord, Slack, Teams, Facebook, Zalo, Feishu, Google Chat, and more. Cross-channel conversation sync via `/link`
+- **Fastest Runtime**: Rust on Lambda ARM64 = sub-50ms cold start, <2s response
+- **Auto Failover**: Primary model fails → automatically retries with cheaper models
+- **Long-Term Memory**: Daily conversation logs auto-consolidated into long-term memory (DynamoDB)
+- **Serverless Scale**: Zero-to-infinite scale on AWS Lambda, no VPS to manage
 
 ---
 
@@ -35,17 +52,24 @@ Most AI chatbot frameworks are slow Python wrappers around a single model. nanob
 
 ### Core
 - **Voice-First** — Push-to-talk microphone UI with speech-to-text and auto-TTS response
-- **Multi-Model** — GPT-4o, Claude Sonnet, Gemini Flash, Groq, Kimi. Automatic model selection per channel
-- **Multi-Channel** — Web, LINE, Telegram, Facebook Messenger. One conversation synced across all channels
-- **Parallel Provider Fallback** — Primary provider fails? All remaining providers race in parallel. First success wins. No single point of failure
-- **Long-Term Memory** — OpenClaw-inspired daily logs and long-term memory stored in DynamoDB
+- **Multi-Model** — Claude, GPT-4o, Gemini Flash, Groq, DeepSeek, Qwen, Kimi. Automatic model selection per channel + LLM failover
+- **Multi-Channel** — Web, LINE, Telegram, Facebook, WhatsApp, Discord, Slack, Teams, Zalo, Feishu, Google Chat. One conversation synced across all channels
+- **Auto Failover** — Primary model fails? Automatically retries with gpt-4o-mini → gemini-flash. No error shown to user
+- **Long-Term Memory** — 2-layer memory: daily conversation logs + long-term facts. Auto-consolidated every 10 entries via cheap LLM. Yesterday's context included for continuity
 
 ### Tools & Integrations
 - **Web Search** — Real-time web search via Brave/Google
+- **Code Execution** — Sandboxed shell/Python/Node.js execution (per-session `/tmp/sandbox/`)
+- **File Operations** — Read, write, list files in sandbox (with path traversal protection)
 - **Weather** — Live weather data for any location
 - **Calculator** — Mathematical expression evaluation
 - **Web Fetch** — Extract content from any URL
-- **Page Summary** — AI-powered page summarization
+- **Google Calendar** — View and create events (OAuth linked)
+- **Gmail** — Search, read, send emails (OAuth linked)
+- **Wikipedia** — Quick encyclopedia lookup
+- **Translation** — Multi-language translation
+- **QR Code** — Generate QR codes
+- **News Search** — Latest news aggregation
 
 ### Developer Platform
 - **REST API** — Full-featured JSON API for chat, speech, sessions, and more
@@ -54,11 +78,14 @@ Most AI chatbot frameworks are slow Python wrappers around a single model. nanob
 - **API Playground** — Interactive API explorer with shareable results
 - **API Keys** — Create and manage API keys for programmatic access
 - **Slash Commands** — `/link`, `/share`, `/help`, `/status`, `/improve`
+- **Settings API** — Model, temperature, max_tokens, BYOK API keys per user
+- **Memory API** — Read and clear long-term memory via REST
 
 ### Infrastructure
 - **Serverless Rust** — Compiled to ARM64, runs on AWS Lambda with sub-50ms cold starts
 - **DynamoDB** — Single-table design for sessions, users, memory, billing, and more
 - **AI Agent Friendly** — `/robots.txt`, `/llms.txt`, `/.well-known/ai-plugin.json`
+- **Context Summarization** — Long conversations auto-summarized instead of silently truncated
 
 ---
 

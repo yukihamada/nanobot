@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Comparison - chatweb.ai</title>
-  <meta name="description" content="chatweb.ai vs ChatGPT, Gemini, Perplexity, OpenClaw, nanobot CLI - detailed feature comparison">
+  <title>Comparison - chatweb.ai vs OpenClaw vs Claude Code vs AutoGPT vs OpenHands</title>
+  <meta name="description" content="chatweb.ai vs OpenClaw, Claude Code, AutoGPT, OpenHands — detailed AI agent framework comparison. Voice-first, multi-channel, serverless Rust runtime.">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
   <style>
     :root{--bg:#0a0a0a;--s:#141414;--b:#1e1e1e;--t:#e5e5e5;--m:#777;--a:#6366f1;--ah:#818cf8;--g:#22c55e;--y:#f59e0b;--r:#ef4444}
@@ -17,16 +17,15 @@
     .lang-sw{background:var(--s);border:1px solid var(--b);border-radius:6px;overflow:hidden;display:flex}
     .lang-sw button{background:none;border:none;color:var(--m);padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer}
     .lang-sw button.on{background:var(--a);color:#fff}
-    .main{max-width:1100px;margin:0 auto;padding:40px 24px 80px}
+    .main{max-width:1200px;margin:0 auto;padding:40px 24px 80px}
     .hero{text-align:center;margin-bottom:48px}
     .hero h1{font-size:36px;font-weight:800;letter-spacing:-1px;margin-bottom:12px}
-    .hero p{color:var(--m);font-size:16px;max-width:600px;margin:0 auto}
-    /* Stats bar */
+    .hero p{color:var(--m);font-size:16px;max-width:700px;margin:0 auto}
     .stats{display:flex;justify-content:center;gap:32px;margin:32px 0 48px;flex-wrap:wrap}
     .stat{text-align:center}
     .stat .num{font-size:32px;font-weight:800;color:var(--a)}
     .stat .label{font-size:12px;color:var(--m);margin-top:2px}
-    /* Comparison table */
+    /* Framework Comparison Table */
     .tbl{width:100%;border-collapse:collapse;margin-bottom:40px}
     .tbl th,.tbl td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--b);font-size:13px}
     .tbl th{color:var(--m);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;background:var(--bg);z-index:2}
@@ -35,23 +34,30 @@
     .tbl .hl td:first-child{color:var(--a)}
     .ck{color:var(--g);font-weight:700}.cx{color:var(--r)}.cp{color:var(--y)}
     .tbl .cat-row td{background:rgba(99,102,241,.12);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--a);padding:8px 14px;border:none}
-    /* Feature detail sections */
+    /* Key differentiators */
+    .diff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;margin:48px 0}
+    .diff-card{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:24px;position:relative;overflow:hidden}
+    .diff-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--a),var(--ah))}
+    .diff-card h3{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+    .diff-card p{font-size:13px;color:#bbb;line-height:1.7}
+    .diff-card .src{font-size:11px;color:var(--m);margin-top:10px;font-family:monospace}
+    /* Feature detail cards */
     .sections{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;margin-bottom:48px}
     .card{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:24px}
     .card h3{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
     .card ul{list-style:none;padding:0}
     .card li{font-size:13px;color:#ccc;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);display:flex;align-items:flex-start;gap:8px}
     .card li:last-child{border:none}
-    .card li::before{content:"✓";color:var(--g);font-weight:700;flex-shrink:0;margin-top:1px}
+    .card li::before{content:"\2713";color:var(--g);font-weight:700;flex-shrink:0;margin-top:1px}
     .cta{text-align:center;padding:48px 0}
     .cta-btn{display:inline-block;background:var(--a);color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;transition:all .2s}
     .cta-btn:hover{background:var(--ah);transform:translateY(-1px)}
     footer{text-align:center;padding:24px;color:var(--m);font-size:12px;border-top:1px solid var(--b)}
-    footer a{color:var(--m);text-decoration:none}.footer a:hover{color:var(--t)}
+    footer a{color:var(--m);text-decoration:none}footer a:hover{color:var(--t)}
     @media(max-width:768px){
       .tbl{font-size:10px}.tbl th,.tbl td{padding:6px 4px}
       .hero h1{font-size:26px}.stats{gap:16px}.stat .num{font-size:24px}
-      .sections{grid-template-columns:1fr}
+      .sections{grid-template-columns:1fr}.diff-grid{grid-template-columns:1fr}
     }
   </style>
 </head>
@@ -60,8 +66,8 @@
   <a href="/" class="logo"><span>chat</span>web.ai</a>
   <div class="nav-links">
     <a href="/">Chat</a>
+    <a href="/docs">API Docs</a>
     <a href="/pricing" id="nav-pricing">Pricing</a>
-    <a href="/settings">Settings</a>
     <a href="/contact" id="nav-contact">Contact</a>
     <div class="lang-sw">
       <button onclick="setLang('ja')" id="btn-ja" class="on">JP</button>
@@ -72,218 +78,336 @@
 
 <div class="main">
   <div class="hero">
-    <h1 id="t-title">chatweb.ai 全機能一覧 & 比較</h1>
-    <p id="t-subtitle">オープンソースのマルチモデルAIプラットフォーム。9つのツール、6つのAIエージェント、5チャネル対応。</p>
+    <h1 id="t-title">AI Agent Framework 比較</h1>
+    <p id="t-subtitle">chatweb.ai vs OpenClaw vs Claude Code vs AutoGPT vs OpenHands — 音声対応・マルチチャネル・サーバーレスRustランタイム</p>
   </div>
 
   <!-- Stats -->
   <div class="stats">
-    <div class="stat"><div class="num">9</div><div class="label" id="s-tools">Built-in Tools</div></div>
-    <div class="stat"><div class="num">6</div><div class="label" id="s-agents">AI Agents</div></div>
-    <div class="stat"><div class="num">5</div><div class="label" id="s-channels">Channels</div></div>
-    <div class="stat"><div class="num">4</div><div class="label" id="s-providers">LLM Providers</div></div>
-    <div class="stat"><div class="num">20+</div><div class="label" id="s-api">API Endpoints</div></div>
+    <div class="stat"><div class="num">16+</div><div class="label" id="s-tools">Built-in Tools</div></div>
+    <div class="stat"><div class="num">14+</div><div class="label" id="s-channels">Channels</div></div>
+    <div class="stat"><div class="num">7</div><div class="label" id="s-providers">LLM Providers</div></div>
+    <div class="stat"><div class="num">70+</div><div class="label" id="s-api">API Endpoints</div></div>
+    <div class="stat"><div class="num">&lt;50ms</div><div class="label" id="s-cold">Cold Start</div></div>
   </div>
 
-  <!-- Comparison table -->
+  <!-- ===== MAIN COMPARISON TABLE ===== -->
   <div style="overflow-x:auto;">
   <table class="tbl">
     <thead><tr>
-      <th id="t-feature">機能</th>
+      <th id="t-feature">Feature</th>
       <th class="hl">CHATWEB.AI</th>
       <th>OPENCLAW</th>
-      <th>NANOBOT CLI</th>
-      <th>CHATGPT</th>
-      <th>GEMINI</th>
-      <th>PERPLEXITY</th>
+      <th>CLAUDE CODE</th>
+      <th>AUTOGPT</th>
+      <th>OPENHANDS</th>
     </tr></thead>
     <tbody>
-      <!-- AI Models -->
-      <tr class="cat-row"><td colspan="7" id="cat-models">AI Models</td></tr>
-      <tr><td id="f-multi">マルチモデル対応</td><td class="hl"><span class="ck">&#x2713;</span> GPT-4o, Claude, Gemini, DeepSeek</td><td><span class="ck">&#x2713;</span> Claude, GPT, Gemini, Ollama等</td><td><span class="ck">&#x2713;</span> chatweb.aiと同じエンジン</td><td><span class="cx">&#x2717;</span> GPT only</td><td><span class="cx">&#x2717;</span> Gemini only</td><td><span class="cp">&#x25CB;</span> Limited</td></tr>
-      <tr><td id="f-modelsel">モデル切り替え</td><td class="hl"><span class="ck">&#x2713;</span> 設定画面で自由に変更</td><td><span class="ck">&#x2713;</span> 設定ファイルで変更</td><td><span class="ck">&#x2713;</span> --model フラグ</td><td><span class="ck">&#x2713;</span> GPT内のみ</td><td><span class="cx">&#x2717;</span></td><td><span class="cp">&#x25CB;</span></td></tr>
-      <tr><td id="f-temp">Temperature調整</td><td class="hl"><span class="ck">&#x2713;</span> 0.0〜2.0スライダー</td><td><span class="cp">&#x25CB;</span> プロバイダー依存</td><td><span class="ck">&#x2713;</span> 設定で変更可</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-customkey">自分のAPIキーを使用</td><td class="hl"><span class="ck">&#x2713;</span> OpenAI/Anthropic/Google等</td><td><span class="ck">&#x2713;</span> 必須（自分のキーのみ）</td><td><span class="ck">&#x2713;</span> 設定ファイルで指定</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-lb">ロードバランシング</td><td class="hl"><span class="ck">&#x2713;</span> 複数キーでラウンドロビン+フェイルオーバー</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span> chatweb.aiと同じ</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-
-      <!-- Agents -->
-      <tr class="cat-row"><td colspan="7" id="cat-agents">AI Agents</td></tr>
-      <tr><td id="f-agent-orch">オーケストレーター</td><td class="hl"><span class="ck">&#x2713;</span> 最適なエージェントに自動ルーティング</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span> chatweb.aiと同じ</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-agent-asst">アシスタント</td><td class="hl"><span class="ck">&#x2713;</span> 汎用、ツール対応</td><td><span class="ck">&#x2713;</span> 700+スキル</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-agent-res">リサーチャー</td><td class="hl"><span class="ck">&#x2713;</span> Web検索+ファクトチェック</td><td><span class="ck">&#x2713;</span> Brave Search対応</td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-agent-code">コーダー</td><td class="hl"><span class="ck">&#x2713;</span> コード生成・デバッグ特化</td><td><span class="ck">&#x2713;</span> シェル実行・ファイル操作</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-agent-analyst">アナリスト</td><td class="hl"><span class="ck">&#x2713;</span> データ分析・ビジネスインサイト</td><td><span class="cp">&#x25CB;</span> スキルで拡張可</td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-agent-creative">クリエイター</td><td class="hl"><span class="ck">&#x2713;</span> ライティング・翻訳・ブレスト</td><td><span class="cp">&#x25CB;</span> スキルで拡張可</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-agent-auto">自動エージェント選択</td><td class="hl"><span class="ck">&#x2713;</span> キーワード+@プレフィックスで切替</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span> @プレフィックス</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-
-      <!-- Tools -->
-      <tr class="cat-row"><td colspan="7" id="cat-tools">Built-in Tools</td></tr>
-      <tr><td>🔍 Web Search</td><td class="hl"><span class="ck">&#x2713;</span> Brave + Bing + Jinaフォールバック</td><td><span class="ck">&#x2713;</span> Brave Search</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td>🌐 Web Fetch</td><td class="hl"><span class="ck">&#x2713;</span> Jina Reader対応</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td>🧮 Calculator</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>🌤 Weather</td><td class="hl"><span class="ck">&#x2713;</span> Open-Meteo API</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td>🌍 Translate</td><td class="hl"><span class="ck">&#x2713;</span> MyMemory API</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>📚 Wikipedia</td><td class="hl"><span class="ck">&#x2713;</span> REST API + 検索フォールバック</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td>🕐 DateTime</td><td class="hl"><span class="ck">&#x2713;</span> 全タイムゾーン対応</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>📰 News Search</td><td class="hl"><span class="ck">&#x2713;</span> 最新ニュース検索</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td>📱 QR Code</td><td class="hl"><span class="ck">&#x2713;</span> QRコード生成</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>💻 Shell / ファイル操作</td><td class="hl"><span class="cx">&#x2717;</span> セキュリティ上制限</td><td><span class="ck">&#x2713;</span> フルアクセス</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>🖥 ブラウザ自動操作</td><td class="hl"><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span> Puppeteer</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>🧠 永続メモリ</td><td class="hl"><span class="cp">&#x25CB;</span> セッション単位</td><td><span class="ck">&#x2713;</span> ローカルMarkdown</td><td><span class="cp">&#x25CB;</span> セッション単位</td><td><span class="ck">&#x2713;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-tool-toggle">ツール個別ON/OFF</td><td class="hl"><span class="ck">&#x2713;</span> 設定画面で切替</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>🔌 拡張性</td><td class="hl"><span class="ck">&#x2713;</span> MCP対応で無限拡張</td><td><span class="ck">&#x2713;</span> 700+ ClawHubスキル</td><td><span class="ck">&#x2713;</span> MCP対応</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <!-- Core -->
+      <tr class="cat-row"><td colspan="6" id="cat-core">Core</td></tr>
+      <tr><td id="f-lang">Language</td>
+        <td class="hl"><span class="ck">Rust</span> (axum)</td>
+        <td>TypeScript</td>
+        <td>CLI (proprietary)</td>
+        <td>Python/TS</td>
+        <td>Python/TS</td></tr>
+      <tr><td id="f-deploy">Deployment</td>
+        <td class="hl">AWS Lambda (serverless)</td>
+        <td>Local / VPS</td>
+        <td>Local / SaaS</td>
+        <td>Self-hosted</td>
+        <td>Local / Cloud / K8s</td></tr>
+      <tr><td id="f-cold">Cold Start</td>
+        <td class="hl"><span class="ck">&lt;50ms</span></td>
+        <td>~1s (Node.js)</td>
+        <td>N/A</td>
+        <td>~3-10s</td>
+        <td>~3-10s</td></tr>
+      <tr><td id="f-license">License</td>
+        <td class="hl">MIT</td>
+        <td>MIT</td>
+        <td>Proprietary</td>
+        <td>Polyform + MIT</td>
+        <td>MIT</td></tr>
 
       <!-- Channels -->
-      <tr class="cat-row"><td colspan="7" id="cat-channels">Channels & Integration</td></tr>
-      <tr><td id="f-web">Web Chat</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span> ローカルWebUI</td><td><span class="cx">&#x2717;</span> CLIのみ</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-line">LINE連携</td><td class="hl"><span class="ck">&#x2713;</span> Webhook + 自動リンク</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span> daemon経由</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-tg">Telegram Bot</td><td class="hl"><span class="ck">&#x2713;</span> Deep link + /start対応</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span> daemon経由</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>WhatsApp</td><td class="hl"><span class="cp">&#x25CB;</span> 開発中</td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>Discord / Slack / Teams</td><td class="hl"><span class="cp">&#x25CB;</span> 開発中</td><td><span class="ck">&#x2713;</span> 全対応</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-sync">クロスチャネル同期</td><td class="hl"><span class="ck">&#x2713;</span> Web↔LINE↔Telegram</td><td><span class="ck">&#x2713;</span> 全チャネル間</td><td><span class="ck">&#x2713;</span> CLI↔Web↔LINE↔TG</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-link">/link コマンド</td><td class="hl"><span class="ck">&#x2713;</span> コード発行→他チャネルで入力</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-qrlink">QRコードでリンク</td><td class="hl"><span class="ck">&#x2713;</span> スキャンで即連携</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-cli">CLI対応</td><td class="hl"><span class="ck">&#x2713;</span> nanobot chat --session で同期</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span> ネイティブCLI</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td>チャネル数</td><td class="hl"><span class="ck">&#x2713;</span> 5 (Web, LINE, TG, CLI, API)</td><td><span class="ck">&#x2713;</span> 12+ チャネル</td><td>CLI + daemon</td><td>1 (Web)</td><td>1 (Web)</td><td>1 (Web)</td></tr>
+      <tr class="cat-row"><td colspan="6" id="cat-channels">Channels</td></tr>
+      <tr><td id="f-ch-count">Channel Count</td>
+        <td class="hl"><span class="ck">14+</span> (Web, LINE, Telegram, WhatsApp, Discord, Slack, Teams, Facebook, Zalo, Feishu, Google Chat...)</td>
+        <td>11+ (WhatsApp, Telegram, Slack, Discord, Signal, Teams...)</td>
+        <td>1 (Terminal / IDE)</td>
+        <td>1 (Web UI)</td>
+        <td>4 (Web, CLI, Slack, Jira)</td></tr>
+      <tr><td id="f-voice">Voice (STT + TTS)</td>
+        <td class="hl"><span class="ck">&#x2713;</span> Push-to-talk, auto-TTS</td>
+        <td><span class="cp">&#x25CB;</span> Whisper + ElevenLabs</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-cross">Cross-Channel Sync</td>
+        <td class="hl"><span class="ck">&#x2713;</span> /link command + QR code</td>
+        <td><span class="ck">&#x2713;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td></tr>
 
-      <!-- Settings & Customization -->
-      <tr class="cat-row"><td colspan="7" id="cat-settings">Settings & Customization</td></tr>
-      <tr><td id="f-settings">設定画面</td><td class="hl"><span class="ck">&#x2713;</span> /settings で全設定変更可</td><td><span class="cp">&#x25CB;</span> 設定ファイル編集</td><td><span class="cp">&#x25CB;</span> 設定ファイル</td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cp">&#x25CB;</span></td></tr>
-      <tr><td id="f-lang">多言語対応</td><td class="hl"><span class="ck">&#x2713;</span> JA/EN/ZH/KO/ES/FR/DE</td><td><span class="cp">&#x25CB;</span> 英語中心</td><td><span class="cp">&#x25CB;</span> 英語中心</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-dark">ダークモード</td><td class="hl"><span class="ck">&#x2713;</span> デフォルト</td><td><span class="ck">&#x2713;</span></td><td>—</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-peruser">ユーザー別設定保存</td><td class="hl"><span class="ck">&#x2713;</span> DynamoDBで永続化</td><td><span class="ck">&#x2713;</span> ローカルファイル</td><td><span class="ck">&#x2713;</span> ローカル設定</td><td><span class="ck">&#x2713;</span> アカウント必須</td><td><span class="ck">&#x2713;</span> アカウント必須</td><td><span class="ck">&#x2713;</span> アカウント必須</td></tr>
+      <!-- Models -->
+      <tr class="cat-row"><td colspan="6" id="cat-models">AI Models</td></tr>
+      <tr><td id="f-models">Supported Models</td>
+        <td class="hl">Claude, GPT-4o, Gemini, Groq, DeepSeek, Qwen, Kimi</td>
+        <td>Claude, GPT (via API keys)</td>
+        <td>Claude only</td>
+        <td>GPT-4o, Claude</td>
+        <td>Any (configurable)</td></tr>
+      <tr><td id="f-failover">Auto Failover</td>
+        <td class="hl"><span class="ck">&#x2713;</span> primary &rarr; gpt-4o-mini &rarr; gemini-flash</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-byok">Bring Your Own Key</td>
+        <td class="hl"><span class="ck">&#x2713;</span></td>
+        <td><span class="ck">&#x2713;</span> Required</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="ck">&#x2713;</span></td>
+        <td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-lb">Load Balancing</td>
+        <td class="hl"><span class="ck">&#x2713;</span> Round-robin + failover</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td></tr>
 
-      <!-- UX -->
-      <tr class="cat-row"><td colspan="7" id="cat-ux">UI/UX</td></tr>
-      <tr><td id="f-typing">タイプライター表示</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span> ストリーム出力</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-thinking">段階的Thinking表示</td><td class="hl"><span class="ck">&#x2713;</span> 考え中→検索中→分析中→生成中</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cp">&#x25CB;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-toolbadge">ツール使用バッジ</td><td class="hl"><span class="ck">&#x2713;</span> 回答下部に表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-agentbadge">エージェントバッジ</td><td class="hl"><span class="ck">&#x2713;</span> どのエージェントが回答したか表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-elapsed">経過時間表示</td><td class="hl"><span class="ck">&#x2713;</span> リアルタイムで秒数表示</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <!-- Memory -->
+      <tr class="cat-row"><td colspan="6" id="cat-memory">Memory</td></tr>
+      <tr><td id="f-memory">Memory System</td>
+        <td class="hl"><span class="ck">&#x2713;</span> 2-layer (daily log + long-term, auto-consolidation)</td>
+        <td>Session + transcript</td>
+        <td>Conversation only</td>
+        <td>Workspace storage</td>
+        <td>Project-based</td></tr>
+      <tr><td id="f-consolidate">Auto Consolidation</td>
+        <td class="hl"><span class="ck">&#x2713;</span> Every 10 entries &rarr; LLM summarizes &rarr; long-term</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-ctx-summary">Context Summarization</td>
+        <td class="hl"><span class="ck">&#x2713;</span> Older messages auto-compressed</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="ck">&#x2713;</span></td>
+        <td><span class="cp">&#x25CB;</span></td>
+        <td><span class="cp">&#x25CB;</span></td></tr>
+
+      <!-- Tools -->
+      <tr class="cat-row"><td colspan="6" id="cat-tools">Tools & Agent</td></tr>
+      <tr><td id="f-tool-count">Built-in Tools</td>
+        <td class="hl"><span class="ck">16+</span> (web search, calculator, weather, code exec, file ops, Wikipedia, translate, QR...)</td>
+        <td>50+ (ClawHub ecosystem)</td>
+        <td>fs, git, shell, MCP</td>
+        <td>Marketplace agents</td>
+        <td>Developer tools</td></tr>
+      <tr><td id="f-code-exec">Sandboxed Code Exec</td>
+        <td class="hl"><span class="ck">&#x2713;</span> Shell/Python/Node.js per-session sandbox</td>
+        <td><span class="ck">&#x2713;</span> Full access</td>
+        <td><span class="ck">&#x2713;</span></td>
+        <td><span class="ck">&#x2713;</span></td>
+        <td><span class="ck">&#x2713;</span></td></tr>
+      <tr><td id="f-agentic">Agentic Loop</td>
+        <td class="hl">1-5 iterations (plan-based)</td>
+        <td>Continuous</td>
+        <td>7 parallel agents</td>
+        <td>Continuous</td>
+        <td>Iterative</td></tr>
+      <tr><td id="f-mcp">MCP Support</td>
+        <td class="hl"><span class="ck">&#x2713;</span> JSON-RPC 2.0</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="ck">&#x2713;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td></tr>
 
       <!-- API & Developer -->
-      <tr class="cat-row"><td colspan="7" id="cat-api">API & Developer</td></tr>
-      <tr><td id="f-restapi">REST API</td><td class="hl"><span class="ck">&#x2713;</span> 20+エンドポイント</td><td><span class="cp">&#x25CB;</span> ローカルGateway API</td><td><span class="ck">&#x2713;</span> 同一API</td><td><span class="ck">&#x2713;</span> 有料</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span> 有料</td></tr>
-      <tr><td id="f-chatapi">Chat API</td><td class="hl"><span class="ck">&#x2713;</span> POST /api/v1/chat</td><td><span class="cp">&#x25CB;</span> WebSocket</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-sessionapi">Session API</td><td class="hl"><span class="ck">&#x2713;</span> CRUD操作</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-settingsapi">Settings API</td><td class="hl"><span class="ck">&#x2713;</span> GET/POST</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-webhookapi">Webhook API</td><td class="hl"><span class="ck">&#x2713;</span> LINE/Telegram/Stripe</td><td><span class="ck">&#x2713;</span> Webhook triggers</td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-billingapi">Billing API</td><td class="hl"><span class="ck">&#x2713;</span> Stripe統合</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
+      <tr class="cat-row"><td colspan="6" id="cat-api">API & Developer</td></tr>
+      <tr><td id="f-rest-api">REST API</td>
+        <td class="hl"><span class="ck">&#x2713;</span> 70+ endpoints</td>
+        <td><span class="cp">&#x25CB;</span> Local Gateway</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cp">&#x25CB;</span> Web UI only</td>
+        <td><span class="cp">&#x25CB;</span> Limited</td></tr>
+      <tr><td id="f-sse">SSE Streaming</td>
+        <td class="hl"><span class="ck">&#x2713;</span></td>
+        <td><span class="ck">&#x2713;</span> WebSocket</td>
+        <td>N/A</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cp">&#x25CB;</span></td></tr>
+      <tr><td id="f-billing">Built-in Billing</td>
+        <td class="hl"><span class="ck">&#x2713;</span> Stripe integration</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td>Anthropic billing</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td></tr>
+      <tr><td id="f-memory-api">Memory API</td>
+        <td class="hl"><span class="ck">&#x2713;</span> GET/DELETE</td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td>
+        <td><span class="cx">&#x2717;</span></td></tr>
 
-      <!-- Billing -->
-      <tr class="cat-row"><td colspan="7" id="cat-billing">Billing & Pricing</td></tr>
-      <tr><td id="f-free">無料プラン</td><td class="hl"><span class="ck">&#x2713;</span> 1,000クレジット/月</td><td><span class="ck">&#x2713;</span> ソフト無料（API代別途）</td><td><span class="ck">&#x2713;</span> 完全無料（API代別途）</td><td><span class="ck">&#x2713;</span> Limited</td><td><span class="ck">&#x2713;</span> Limited</td><td><span class="ck">&#x2713;</span> Limited</td></tr>
-      <tr><td id="f-starter">Starter</td><td class="hl"><span class="ck">&#x2713;</span> $9/月 (25,000クレジット)</td><td>—</td><td>—</td><td>$20/月</td><td>$20/月</td><td>$20/月</td></tr>
-      <tr><td id="f-pro">Pro</td><td class="hl"><span class="ck">&#x2713;</span> $29/月 (300,000クレジット)</td><td>—</td><td>—</td><td>$200/月</td><td>$250/月</td><td>—</td></tr>
-      <tr><td>月額目安</td><td class="hl">$0〜$29</td><td>$10〜$150+ (API代のみ)</td><td>$0 (API代のみ)</td><td>$0〜$200</td><td>$0〜$250</td><td>$0〜$20</td></tr>
-      <tr><td id="f-credits">クレジット制</td><td class="hl"><span class="ck">&#x2713;</span> モデル別消費量</td><td><span class="cx">&#x2717;</span> API従量課金</td><td><span class="cx">&#x2717;</span> API従量課金</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-stripe">Stripe決済</td><td class="hl"><span class="ck">&#x2713;</span> クレカ/Apple Pay等</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-
-      <!-- Infrastructure -->
-      <tr class="cat-row"><td colspan="7" id="cat-infra">Infrastructure</td></tr>
-      <tr><td id="f-oss">オープンソース</td><td class="hl"><span class="ck">&#x2713;</span> MIT License</td><td><span class="ck">&#x2713;</span> MIT License (145K+ ★)</td><td><span class="ck">&#x2713;</span> MIT License</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-selfhost">セルフホスト可</td><td class="hl"><span class="ck">&#x2713;</span> install.sh / Docker / Lambda</td><td><span class="ck">&#x2713;</span> セルフホスト専用</td><td><span class="ck">&#x2713;</span> install.sh / Docker</td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-rust">バックエンド言語</td><td class="hl"><span class="ck">&#x2713;</span> Rust (高速・省メモリ)</td><td>Node.js</td><td><span class="ck">&#x2713;</span> Rust</td><td>Python/Go</td><td>Internal</td><td>Internal</td></tr>
-      <tr><td>セットアップ難易度</td><td class="hl"><span class="ck">&#x2713;</span> 簡単（クラウドサービス）</td><td><span class="cp">&#x25CB;</span> 中〜高（自前サーバー必要）</td><td><span class="cp">&#x25CB;</span> 簡単（ワンコマンド）</td><td><span class="ck">&#x2713;</span> 簡単</td><td><span class="ck">&#x2713;</span> 簡単</td><td><span class="ck">&#x2713;</span> 簡単</td></tr>
-      <tr><td id="f-gzip">gzip圧縮</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-health">ヘルスチェック</td><td class="hl"><span class="ck">&#x2713;</span> /health</td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td>—</td><td>—</td><td>—</td></tr>
-
-      <!-- Security -->
-      <tr class="cat-row"><td colspan="7" id="cat-security">Security & Privacy</td></tr>
-      <tr><td>データの保存場所</td><td class="hl">クラウド (AWS DynamoDB)</td><td><span class="ck">&#x2713;</span> ローカルのみ</td><td><span class="ck">&#x2713;</span> ローカル + クラウド選択可</td><td>クラウド (OpenAI)</td><td>クラウド (Google)</td><td>クラウド</td></tr>
-      <tr><td id="f-nosignup">メールでログイン</td><td class="hl"><span class="ck">&#x2713;</span> パスワード不要</td><td><span class="cx">&#x2717;</span> 不要</td><td><span class="cx">&#x2717;</span> 不要</td><td><span class="cx">&#x2717;</span> アカウント必須</td><td><span class="cx">&#x2717;</span> Google必須</td><td><span class="cx">&#x2717;</span> アカウント必須</td></tr>
-      <tr><td>Google OAuth</td><td class="hl"><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
-      <tr><td id="f-allowlist">Allow List</td><td class="hl"><span class="ck">&#x2713;</span> チャネル別ユーザー制限</td><td><span class="cp">&#x25CB;</span> 設定で制限可</td><td><span class="ck">&#x2713;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td><td><span class="cx">&#x2717;</span></td></tr>
-      <tr><td id="f-ratelimit">同時リクエスト制限</td><td class="hl"><span class="ck">&#x2713;</span> Free:10 / Paid:1,000</td><td>—</td><td>—</td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td><td><span class="ck">&#x2713;</span></td></tr>
+      <!-- Pricing -->
+      <tr class="cat-row"><td colspan="6" id="cat-pricing">Pricing</td></tr>
+      <tr><td id="f-pricing">Pricing</td>
+        <td class="hl">Credit-based (1,000 free, from $9/mo)</td>
+        <td>Free (BYOK)</td>
+        <td>$17-$100+/mo</td>
+        <td>Free (self-hosted)</td>
+        <td>Free ($10 cloud)</td></tr>
+      <tr><td id="f-bestfor">Best For</td>
+        <td class="hl"><strong>Voice-first multi-channel AI</strong></td>
+        <td>Privacy-first personal assistant</td>
+        <td>Developer workflows</td>
+        <td>Automation</td>
+        <td>Software engineering</td></tr>
     </tbody>
   </table>
   </div>
 
-  <!-- Feature detail cards -->
+  <!-- ===== KEY DIFFERENTIATORS ===== -->
+  <h2 style="text-align:center;margin-bottom:32px;" id="t-diff-title">Key Differentiators</h2>
+  <div class="diff-grid">
+    <div class="diff-card">
+      <h3 id="d-voice">&#x1F3A4; Voice-First</h3>
+      <p id="d-voice-desc">The only AI agent framework with native STT + TTS + push-to-talk UI. Talk to AI like you're on a phone call. Auto-TTS reads responses aloud when voice input is used.</p>
+      <div class="src">web/index.html &mdash; Web Speech API + /api/v1/speech/synthesize</div>
+    </div>
+    <div class="diff-card">
+      <h3 id="d-channels">&#x1F4F1; 14+ Channels</h3>
+      <p id="d-channels-desc">LINE, Telegram, WhatsApp, Discord, Slack, Teams, Facebook, Zalo, Feishu, Google Chat, and more. Cross-channel conversation sync via /link command and QR code.</p>
+      <div class="src">crates/nanobot-core/src/channel/ &mdash; line.rs, telegram.rs, facebook.rs, ...</div>
+    </div>
+    <div class="diff-card">
+      <h3 id="d-fast">&#x26A1; Fastest Runtime</h3>
+      <p id="d-fast-desc">Rust on Lambda ARM64 = sub-50ms cold start, &lt;2s response. No Python/Node.js overhead. 4.6MB binary, stripped with LTO.</p>
+      <div class="src">crates/nanobot-lambda/ &mdash; Compiled Rust on AWS Lambda</div>
+    </div>
+    <div class="diff-card">
+      <h3 id="d-failover">&#x1F504; Auto Failover</h3>
+      <p id="d-failover-desc">Primary model fails? Automatically retries with gpt-4o-mini, then gemini-2.0-flash-lite. Zero errors shown to user. Load balancing across multiple API keys.</p>
+      <div class="src">crates/nanobot-core/src/service/http.rs &mdash; handle_chat() failover logic</div>
+    </div>
+    <div class="diff-card">
+      <h3 id="d-memory">&#x1F9E0; Long-Term Memory</h3>
+      <p id="d-memory-desc">2-layer memory system: daily conversation logs + long-term facts. Auto-consolidated every 10 entries via cheap LLM. Yesterday's context included for continuity.</p>
+      <div class="src">crates/nanobot-core/src/service/http.rs &mdash; read_memory_context(), append_daily_memory(), spawn_consolidate_memory()</div>
+    </div>
+    <div class="diff-card">
+      <h3 id="d-serverless">&#x2601;&#xFE0F; Serverless Scale</h3>
+      <p id="d-serverless-desc">Zero-to-infinite scale on AWS Lambda. No VPS to manage. DynamoDB single-table design for sessions, users, memory, billing. Pay only for what you use.</p>
+      <div class="src">infra/template.yaml &mdash; SAM template for Lambda + DynamoDB + API Gateway</div>
+    </div>
+  </div>
+
+  <!-- ===== FEATURE DETAIL CARDS ===== -->
+  <h2 style="text-align:center;margin:48px 0 32px;" id="t-features-title">All Features</h2>
   <div class="sections">
     <div class="card">
-      <h3>🧠 AIモデル & プロバイダー</h3>
+      <h3>&#x1F9E0; AI Models &amp; Providers</h3>
       <ul>
         <li>OpenAI GPT-4o / GPT-4o-mini</li>
         <li>Anthropic Claude Sonnet / Opus</li>
         <li>Google Gemini 2.0 Flash / Pro</li>
+        <li>Groq (Llama, Mixtral)</li>
         <li>DeepSeek Chat / Reasoner (R1)</li>
-        <li>複数APIキーでラウンドロビン分散</li>
-        <li>自動フェイルオーバー（1つ落ちても継続）</li>
-        <li>ユーザー自身のAPIキーも使用可能</li>
+        <li>Qwen, Kimi (Moonshot)</li>
+        <li>Multiple API keys with round-robin load balancing</li>
+        <li>Auto failover (primary &rarr; gpt-4o-mini &rarr; gemini-flash)</li>
+        <li>BYOK: use your own API keys</li>
       </ul>
     </div>
     <div class="card">
-      <h3>🛠 9つのビルトインツール</h3>
+      <h3>&#x1F6E0; 16+ Built-in Tools</h3>
       <ul>
-        <li>🔍 Web Search — Brave/Bing/Jina 3段フォールバック</li>
-        <li>🌐 Web Fetch — JS対応ページもJina Readerで取得</li>
-        <li>🧮 Calculator — 数式計算</li>
-        <li>🌤 Weather — Open-Meteo APIで世界中の天気</li>
-        <li>🌍 Translate — MyMemory APIで多言語翻訳</li>
-        <li>📚 Wikipedia — 記事検索+要約取得</li>
-        <li>🕐 DateTime — 全タイムゾーンの現在時刻</li>
-        <li>📰 News Search — 最新ニュース検索</li>
-        <li>📱 QR Code — テキスト/URLからQR生成</li>
+        <li>Web Search &mdash; Brave/Bing/Jina 3-tier fallback</li>
+        <li>Web Fetch &mdash; Jina Reader for JS-heavy pages</li>
+        <li>Code Execution &mdash; Sandboxed shell/Python/Node.js</li>
+        <li>File Read/Write/List &mdash; Per-session sandbox</li>
+        <li>Calculator &mdash; Math expression evaluation</li>
+        <li>Weather &mdash; Open-Meteo API</li>
+        <li>Wikipedia &mdash; Article search + summaries</li>
+        <li>Translation &mdash; MyMemory API</li>
+        <li>News Search &mdash; Latest news aggregation</li>
+        <li>QR Code &mdash; Generate QR codes</li>
+        <li>Google Calendar / Gmail (OAuth)</li>
+        <li>DateTime &mdash; All timezones</li>
       </ul>
     </div>
     <div class="card">
-      <h3>🤖 6つの専門エージェント</h3>
+      <h3>&#x1F4F1; 14+ Channels</h3>
       <ul>
-        <li>🎯 Orchestrator — 最適なエージェントへ自動振り分け</li>
-        <li>💬 Assistant — 日常的なタスク全般</li>
-        <li>🔬 Researcher — Web検索・ファクトチェック</li>
-        <li>💻 Coder — コード生成・デバッグ・設計</li>
-        <li>📊 Analyst — データ分析・ビジネスインサイト</li>
-        <li>✍️ Creative — ライティング・翻訳・ブレインストーミング</li>
+        <li>Web &mdash; Voice-first SPA with push-to-talk</li>
+        <li>LINE &mdash; Webhook + auto-link via QR</li>
+        <li>Telegram &mdash; Deep link + /start</li>
+        <li>Facebook Messenger</li>
+        <li>WhatsApp Cloud API</li>
+        <li>Discord, Slack, Microsoft Teams</li>
+        <li>Zalo, Feishu/Lark, Google Chat</li>
+        <li>CLI &mdash; nanobot chat --session sync</li>
+        <li>REST API &amp; MCP for AI agents</li>
       </ul>
     </div>
     <div class="card">
-      <h3>📱 マルチチャネル連携</h3>
+      <h3>&#x1F9E0; Memory System</h3>
       <ul>
-        <li>Web — ブラウザで即座にチャット開始</li>
-        <li>LINE — LINEボットとして友達追加</li>
-        <li>Telegram — /start でボットを起動</li>
-        <li>/link コマンドで全チャネル同期</li>
-        <li>QRコードスキャンで即リンク</li>
-        <li>CLIからも同一セッションで利用可</li>
-        <li>3秒ポーリングでリアルタイム同期</li>
+        <li>Daily conversation logs (DAILY#{date})</li>
+        <li>Long-term memory (LONG_TERM)</li>
+        <li>Auto-consolidation every 10 entries</li>
+        <li>Yesterday's context for continuity</li>
+        <li>Context summarization for long conversations</li>
+        <li>Memory API (GET/DELETE /api/v1/memory)</li>
+        <li>View &amp; clear memory from Settings UI</li>
       </ul>
     </div>
     <div class="card">
-      <h3>⚙️ カスタマイズ</h3>
+      <h3>&#x1F527; Developer Platform</h3>
       <ul>
-        <li>/settings でモデル・温度・ツール・言語を変更</li>
-        <li>自分のAPIキー設定（無制限利用）</li>
-        <li>ツール個別ON/OFF</li>
-        <li>7言語対応（日/英/中/韓/西/仏/独）</li>
-        <li>ダークモードUI</li>
-        <li>設定はDynamoDBで永続保存</li>
+        <li>REST API &mdash; 70+ endpoints</li>
+        <li>SSE streaming responses</li>
+        <li>MCP server (JSON-RPC 2.0)</li>
+        <li>API Playground with shareable results</li>
+        <li>API key management</li>
+        <li>Slash commands (/link, /share, /help, /status)</li>
+        <li>Settings &amp; Memory APIs</li>
+        <li>Webhook support for all channels</li>
       </ul>
     </div>
     <div class="card">
-      <h3>🔧 開発者向け</h3>
+      <h3>&#x2699;&#xFE0F; Infrastructure</h3>
       <ul>
-        <li>REST API — 20+エンドポイント</li>
-        <li>Chat/Sessions/Settings/Billing API</li>
-        <li>Webhook — LINE/Telegram/Stripe</li>
-        <li>オープンソース（MIT License）</li>
-        <li>Rustで高速・型安全</li>
-        <li>AWS Lambda / Fly.io / セルフホスト対応</li>
-        <li>install.sh ワンコマンドインストール</li>
+        <li>Rust on AWS Lambda ARM64 (&lt;50ms cold start)</li>
+        <li>DynamoDB single-table design</li>
+        <li>4.6MB binary (stripped, LTO fat)</li>
+        <li>Stripe billing integration</li>
+        <li>Google OAuth authentication</li>
+        <li>AI agent discovery (robots.txt, llms.txt, ai-plugin.json)</li>
+        <li>Self-hostable (Docker, Lambda, local)</li>
+        <li>MIT License &mdash; 100% open source</li>
       </ul>
     </div>
   </div>
 
   <div class="cta">
-    <a href="/" class="cta-btn" id="t-cta">無料で試してみる</a>
+    <a href="/" class="cta-btn" id="t-cta">Try Free</a>
+    <p style="color:var(--m);font-size:13px;margin-top:12px">
+      <a href="https://github.com/yukihamada/nanobot" target="_blank" style="color:var(--ah);text-decoration:none">GitHub</a> &middot;
+      <a href="/docs" style="color:var(--ah);text-decoration:none">API Docs</a> &middot;
+      <a href="/pricing" style="color:var(--ah);text-decoration:none">Pricing</a>
+    </p>
   </div>
 </div>
 
 <footer>
   <a href="/">Chat</a> &middot;
+  <a href="/docs">API Docs</a> &middot;
   <a href="/pricing">Pricing</a> &middot;
-  <a href="/settings">Settings</a> &middot;
   <a href="/contact">Contact</a> &middot;
   <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
   chatweb.ai &copy; 2025-2026
@@ -292,16 +416,18 @@
 <script>
 const T={
   ja:{
-    title:'chatweb.ai 全機能一覧 & 比較',
-    subtitle:'オープンソースのマルチモデルAIプラットフォーム vs OpenClaw vs ChatGPT vs Gemini vs Perplexity',
+    title:'AI Agent Framework 比較',
+    subtitle:'chatweb.ai vs OpenClaw vs Claude Code vs AutoGPT vs OpenHands — 音声対応・マルチチャネル・サーバーレスRustランタイム',
     feature:'機能',cta:'無料で試してみる',pricing:'料金',contact:'お問い合わせ',
-    sTools:'ビルトインツール',sAgents:'AIエージェント',sChannels:'チャネル',sProviders:'LLMプロバイダー',sApi:'APIエンドポイント',
+    sTools:'ビルトインツール',sChannels:'チャネル',sProviders:'LLMプロバイダー',sApi:'APIエンドポイント',sCold:'コールドスタート',
+    diffTitle:'主な差別化ポイント',featuresTitle:'全機能一覧',
   },
   en:{
-    title:'chatweb.ai — Full Feature List & Comparison',
-    subtitle:'Open-source multi-model AI platform vs OpenClaw vs ChatGPT vs Gemini vs Perplexity',
+    title:'AI Agent Framework Comparison',
+    subtitle:'chatweb.ai vs OpenClaw vs Claude Code vs AutoGPT vs OpenHands — Voice-first, multi-channel, serverless Rust runtime',
     feature:'Feature',cta:'Try Free',pricing:'Pricing',contact:'Contact',
-    sTools:'Built-in Tools',sAgents:'AI Agents',sChannels:'Channels',sProviders:'LLM Providers',sApi:'API Endpoints',
+    sTools:'Built-in Tools',sChannels:'Channels',sProviders:'LLM Providers',sApi:'API Endpoints',sCold:'Cold Start',
+    diffTitle:'Key Differentiators',featuresTitle:'All Features',
   }
 };
 function setLang(l){
@@ -316,10 +442,12 @@ function setLang(l){
   document.getElementById('nav-pricing').textContent=t.pricing;
   document.getElementById('nav-contact').textContent=t.contact;
   document.getElementById('s-tools').textContent=t.sTools;
-  document.getElementById('s-agents').textContent=t.sAgents;
   document.getElementById('s-channels').textContent=t.sChannels;
   document.getElementById('s-providers').textContent=t.sProviders;
   document.getElementById('s-api').textContent=t.sApi;
+  document.getElementById('s-cold').textContent=t.sCold;
+  document.getElementById('t-diff-title').textContent=t.diffTitle;
+  document.getElementById('t-features-title').textContent=t.featuresTitle;
 }
 setLang(localStorage.getItem('nl')||(navigator.language.startsWith('ja')?'ja':'en'));
 </script>
