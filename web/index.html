@@ -6263,40 +6263,48 @@
     }
 
     async function appNewConversation() {
-      if (!authToken) return;
-      try {
-        await finalizeCurrentConversation();
+      // Reset UI immediately (works even without auth)
+      const msgsEl = document.getElementById('app-messages');
+      msgsEl.innerHTML = '';
+      const l = document.documentElement.lang || 'ja';
+      const empty = document.createElement('div');
+      empty.className = 'app-chat-empty';
+      empty.id = 'app-empty';
+      empty.innerHTML = '<div class="app-chat-empty-logo">chatweb.ai</div>'
+        + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
+        + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
+        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '何でも聞いてください' : 'Ask me anything') + '</div>'
+        + '<div class="app-chat-suggestions" id="app-suggestions"></div>'
+        + '<div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;"><a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a><a href="/pricing" style="color:var(--muted);text-decoration:none;">Pricing</a></div>';
+      msgsEl.appendChild(empty);
+      appRenderSuggestions();
+      knownMsgCount = 0;
+      syncVersion = 0;
+      _lastSyncTimestamp = null;
+      appCurrentConvId = null;
+      document.getElementById('app-sidebar').classList.remove('open');
 
-        const r = await fetch(API + '/api/v1/conversations', {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + authToken },
-        });
-        const d = await r.json();
-        if (d.ok) {
-          webSessionId = d.session_id;
-          localStorage.setItem('webSessionId', webSessionId);
-          appCurrentConvId = d.conversation_id || null;
-          const msgsEl = document.getElementById('app-messages');
-          msgsEl.innerHTML = '';
-          const empty = document.createElement('div');
-          empty.className = 'app-chat-empty';
-          empty.id = 'app-empty';
-          const l = document.documentElement.lang || 'ja';
-          empty.innerHTML = '<div class="app-chat-empty-logo">chatweb.ai</div>'
-            + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
-            + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
-            + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '何でも聞いてください' : 'Ask me anything') + '</div>'
-            + '<div class="app-chat-suggestions" id="app-suggestions"></div>'
-            + '<div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;"><a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a><a href="/pricing" style="color:var(--muted);text-decoration:none;">Pricing</a></div>';
-          msgsEl.appendChild(empty);
-          appRenderSuggestions();
-          knownMsgCount = 0;
-          syncVersion = 0;
-          _lastSyncTimestamp = null;
-          appLoadConversations();
-          document.getElementById('app-sidebar').classList.remove('open');
-        }
-      } catch(e) { /* ignore */ }
+      // Generate new session ID locally (works without auth)
+      webSessionId = 'web:' + crypto.randomUUID();
+      localStorage.setItem('webSessionId', webSessionId);
+
+      // If authenticated, also create server-side conversation
+      if (authToken) {
+        try {
+          await finalizeCurrentConversation();
+          const r = await fetch(API + '/api/v1/conversations', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + authToken },
+          });
+          const d = await r.json();
+          if (d.ok) {
+            webSessionId = d.session_id;
+            localStorage.setItem('webSessionId', webSessionId);
+            appCurrentConvId = d.conversation_id || null;
+            appLoadConversations();
+          }
+        } catch(e) { /* ignore */ }
+      }
     }
 
     function renderMediaContent(text) {
@@ -6695,6 +6703,24 @@
                 thinkSteps.forEach(el => el.remove());
               }
               appAddMsg(evt.content, 'bot', evt.agent || null, evt.tools_used || null);
+              // Show token/cost footer on last bot message
+              if (evt.model_used || evt.input_tokens) {
+                var lastMsg = document.querySelector('#app-messages .app-msg-bot:last-child .app-msg-content');
+                if (lastMsg) {
+                  var footer = document.createElement('div');
+                  footer.style.cssText = 'font-size:10px;color:var(--muted);margin-top:6px;opacity:0.7;';
+                  var parts = [];
+                  if (evt.model_used) parts.push(evt.model_used);
+                  if (evt.input_tokens) parts.push(evt.input_tokens + '+' + (evt.output_tokens||0) + ' tok');
+                  if (evt.estimated_cost_usd) parts.push('$' + evt.estimated_cost_usd.toFixed(4));
+                  if (evt.credits_used) parts.push(evt.credits_used + ' cr');
+                  footer.textContent = parts.join(' · ');
+                  lastMsg.appendChild(footer);
+                }
+                // Track cumulative session tokens
+                window._sessionTokens = (window._sessionTokens || 0) + (evt.input_tokens || 0) + (evt.output_tokens || 0);
+                window._sessionCost = (window._sessionCost || 0) + (evt.estimated_cost_usd || 0);
+              }
               knownMsgCount += 2; syncVersion++;
               if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
               touchActivity();
