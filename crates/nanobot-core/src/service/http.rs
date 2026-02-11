@@ -99,6 +99,7 @@ const GITHUB_TOOL_NAMES: &[&str] = &[
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserProfile {
     pub user_id: String,
+    pub display_name: Option<String>,
     pub plan: String,
     pub credits_remaining: i64,
     pub credits_used: i64,
@@ -210,6 +211,82 @@ fn emit_audit_log(
             .send()
             .await;
     });
+}
+
+// ---------------------------------------------------------------------------
+// Routing AI data collection (fire-and-forget to DynamoDB)
+// ---------------------------------------------------------------------------
+
+/// Routing log entry for future routing AI training data.
+#[derive(Debug, Clone, Serialize)]
+struct RoutingLogEntry {
+    // Input features
+    message_len: usize,
+    language: String,
+    channel: String,
+    device: String,
+    has_at_prefix: bool,
+    user_plan: String,
+    // Routing result
+    agent_selected: String,
+    agent_score: u32,
+    model_used: String,
+    tools_used: Vec<String>,
+    // Response quality (future labeling)
+    response_time_ms: u64,
+    credits_used: i64,
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    timed_out: bool,
+    error: bool,
+    // Meta
+    timestamp: String,
+    session_hash: String,
+}
+
+/// Write a routing log entry to DynamoDB (fire-and-forget).
+/// pk: ROUTING_LOG#{YYYY-MM-DD}, sk: {timestamp}#{random_6}
+#[cfg(feature = "dynamodb-backend")]
+fn log_routing_data(
+    dynamo: aws_sdk_dynamodb::Client,
+    config_table: String,
+    entry: RoutingLogEntry,
+) {
+    tokio::spawn(async move {
+        let now = chrono::Utc::now();
+        let date = now.format("%Y-%m-%d").to_string();
+        let ts = now.timestamp_millis().to_string();
+        let rand_suffix = &uuid::Uuid::new_v4().to_string()[..6];
+        let sk = format!("{}#{}", ts, rand_suffix);
+        let ttl = (now.timestamp() + 90 * 24 * 3600).to_string(); // 90 days
+
+        let json_str = serde_json::to_string(&entry).unwrap_or_default();
+
+        let _ = dynamo
+            .put_item()
+            .table_name(&config_table)
+            .item("pk", AttributeValue::S(format!("ROUTING_LOG#{}", date)))
+            .item("sk", AttributeValue::S(sk))
+            .item("data", AttributeValue::S(json_str))
+            .item("agent", AttributeValue::S(entry.agent_selected))
+            .item("model", AttributeValue::S(entry.model_used))
+            .item("channel", AttributeValue::S(entry.channel))
+            .item("response_ms", AttributeValue::N(entry.response_time_ms.to_string()))
+            .item("timestamp", AttributeValue::S(entry.timestamp))
+            .item("ttl", AttributeValue::N(ttl))
+            .send()
+            .await;
+    });
+}
+
+/// Detect language from message text (simple heuristic).
+fn detect_language(text: &str) -> &'static str {
+    let has_ja = text.chars().any(|c| {
+        ('\u{3040}'..='\u{309F}').contains(&c) || // Hiragana
+        ('\u{30A0}'..='\u{30FF}').contains(&c) || // Katakana
+        ('\u{4E00}'..='\u{9FFF}').contains(&c)    // CJK
+    });
+    if has_ja { "ja" } else if text.is_ascii() { "en" } else { "other" }
 }
 
 // ---------------------------------------------------------------------------
@@ -631,6 +708,7 @@ async fn get_or_create_user(
             let channels: Vec<String> = item.get("channels").and_then(|v| v.as_l().ok())
                 .map(|list| list.iter().filter_map(|v| v.as_s().ok().cloned()).collect())
                 .unwrap_or_default();
+            let display_name = item.get("display_name").and_then(|v| v.as_s().ok()).cloned();
             let stripe_customer_id = item.get("stripe_customer_id").and_then(|v| v.as_s().ok()).cloned();
             let email = item.get("email").and_then(|v| v.as_s().ok()).cloned();
             let created_at = item.get("created_at").and_then(|v| v.as_s().ok()).cloned()
@@ -638,6 +716,7 @@ async fn get_or_create_user(
 
             return UserProfile {
                 user_id: user_id.to_string(),
+                display_name,
                 plan,
                 credits_remaining,
                 credits_used,
@@ -670,6 +749,7 @@ async fn get_or_create_user(
 
     UserProfile {
         user_id: user_id.to_string(),
+        display_name: None,
         plan: "free".to_string(),
         credits_remaining: free_credits,
         credits_used: 0,
@@ -756,7 +836,7 @@ async fn link_stripe_to_user(
     let plan_obj: crate::service::auth::Plan = plan.parse().unwrap_or(crate::service::auth::Plan::Starter);
     let new_credits = plan_obj.monthly_credits();
 
-    let _ = dynamo
+    match dynamo
         .update_item()
         .table_name(config_table)
         .key("pk", AttributeValue::S(pk))
@@ -769,9 +849,107 @@ async fn link_stripe_to_user(
         .expression_attribute_values(":cr", AttributeValue::N(new_credits.to_string()))
         .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
         .send()
+        .await
+    {
+        Ok(_) => info!("Linked Stripe customer {} to user {} with plan {} ({} credits)", stripe_customer_id, user_id, plan, new_credits),
+        Err(e) => tracing::error!("BILLING ERROR: Failed to link Stripe customer {} to user {} with plan {}: {}", stripe_customer_id, user_id, plan, e),
+    }
+}
+
+/// Add credits to a user (for one-time credit pack purchases).
+#[cfg(feature = "dynamodb-backend")]
+async fn add_credits_to_user(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    user_id: &str,
+    credits: i64,
+    stripe_customer_id: &str,
+    email: &str,
+) {
+    let pk = format!("USER#{}", user_id);
+    let mut expr = "SET credits_remaining = if_not_exists(credits_remaining, :zero) + :cr, updated_at = :now".to_string();
+    let mut builder = dynamo
+        .update_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S("PROFILE".to_string()))
+        .expression_attribute_values(":cr", AttributeValue::N(credits.to_string()))
+        .expression_attribute_values(":zero", AttributeValue::N("0".to_string()))
+        .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()));
+
+    if !stripe_customer_id.is_empty() {
+        expr.push_str(", stripe_customer_id = :cus");
+        builder = builder.expression_attribute_values(":cus", AttributeValue::S(stripe_customer_id.to_string()));
+    }
+    if !email.is_empty() {
+        expr.push_str(", email = :email");
+        builder = builder.expression_attribute_values(":email", AttributeValue::S(email.to_string()));
+    }
+
+    match builder.update_expression(expr).send().await {
+        Ok(_) => info!("Added {} credits to user {}", credits, user_id),
+        Err(e) => tracing::error!("BILLING ERROR: Failed to add {} credits to user {}: {}", credits, user_id, e),
+    }
+}
+
+/// Find a user by Stripe customer ID (scan).
+#[cfg(feature = "dynamodb-backend")]
+async fn find_user_by_stripe_customer(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    stripe_customer_id: &str,
+) -> Option<String> {
+    let result = dynamo
+        .scan()
+        .table_name(config_table)
+        .filter_expression("sk = :sk AND stripe_customer_id = :cus")
+        .expression_attribute_values(":sk", AttributeValue::S("PROFILE".to_string()))
+        .expression_attribute_values(":cus", AttributeValue::S(stripe_customer_id.to_string()))
+        .limit(1)
+        .send()
         .await;
 
-    info!("Linked Stripe customer {} to user {} with plan {}", stripe_customer_id, user_id, plan);
+    if let Ok(output) = result {
+        if let Some(items) = output.items {
+            if let Some(item) = items.first() {
+                if let Some(pk) = item.get("pk").and_then(|v| v.as_s().ok()) {
+                    return pk.strip_prefix("USER#").map(|s| s.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Find a user by email address (scan — fallback for webhook when no client_reference_id).
+#[cfg(feature = "dynamodb-backend")]
+async fn find_user_by_email(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    email: &str,
+) -> Option<String> {
+    // Use GSI or scan. For now, use a simple scan with filter.
+    let result = dynamo
+        .scan()
+        .table_name(config_table)
+        .filter_expression("sk = :sk AND email = :email")
+        .expression_attribute_values(":sk", AttributeValue::S("PROFILE".to_string()))
+        .expression_attribute_values(":email", AttributeValue::S(email.to_string()))
+        .limit(1)
+        .send()
+        .await;
+
+    if let Ok(output) = result {
+        if let Some(items) = output.items {
+            if let Some(item) = items.first() {
+                if let Some(pk) = item.get("pk").and_then(|v| v.as_s().ok()) {
+                    // pk = "USER#<user_id>"
+                    return pk.strip_prefix("USER#").map(|s| s.to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Fire-and-forget: update conversation title (from first user message) and message_count.
@@ -864,54 +1042,40 @@ const AGENTS: &[AgentProfile] = &[
         id: "assistant",
         name: "Assistant",
         description: "General-purpose AI agent — fast, reliable, Rust-native",
-        system_prompt: "# ChatWeb AI\n\n\
-             あなたは ChatWeb — chatweb.ai の音声対応AIアシスタントです。\
-             Rustで書かれた高速・高信頼AIエージェントシステムで、AWS Lambda (ARM64) 上で並行実行され、\
-             <2秒の応答速度を実現します。オープンソース: github.com/yukihamada\n\n\
-             ## SOUL（性格）\n\
-             - 好奇心旺盛で行動力がある。聞かれたら即座に動く。\n\
-             - 親しみやすく、ユーモアも交えるが、技術的には正確で妥協しない。\n\
-             - 困難に立ち向かう勇気がある。\n\
-             - 「できません」より「こうすればできます」を提案する。\n\
-             - ユーザーの言語に自動で合わせる（日本語で聞かれたら日本語、英語なら英語）。\n\
-             - 不確実な情報は正直に伝える。推測と事実を区別する。\n\n\
-             ## できること\n\
-             - **ウェブ検索・リサーチ**: 最新ニュース、価格比較、情報収集をリアルタイム実行\n\
-             - **データ分析・計算**: 数値計算、通貨換算、統計分析\n\
-             - **天気予報**: 世界中の天気情報を取得\n\
-             - **文章作成・翻訳**: コピーライティング、多言語翻訳、要約\n\
-             - **プログラミング支援**: コード作成、デバッグ、設計アドバイス（Rust得意）\n\
-             - **Googleカレンダー連携**: 予定の確認・作成（連携済みの場合）\n\
-             - **Gmail連携**: メールの検索・閲覧・送信（連携済みの場合）\n\
-             - **マルチチャネル**: LINE, Telegram, Discord, Slack, Teams, WhatsApp, Facebook — 14+チャネル対応\n\n\
-             ## チャネル連携の案内\n\
-             ユーザーがLINE・Telegram等との連携について聞いたら、以下を案内してください:\n\
-             - **LINE**: 友だち追加 → https://line.me/R/oaMessage/@619jcqqh/ （またはWeb画面のLINEボタンをタップ）\n\
-             - **Telegram**: @chatweb_ai_bot を検索して /start （またはWeb画面のTelegramボタンをタップ）\n\
-             - **連携方法**: Web画面の入力欄横にある LINE/TG ボタンを押すと、QRコードが表示されます。スマホならそのまま開いて自動連携。\n\
-             - **/link コマンド**: どのチャネルでも `/link` と送信するとリンクコードが発行されます。別チャネルで `/link <コード>` を送ると連携完了。\n\
-             - 一度連携すると、どのチャネルでも同じ会話・クレジット・記憶が共有されます。\n\n\
-             ## yukihamada.jpサービス連携\n\
-             以下のサービスとネイティブに連携します:\n\
-             - **chatweb.ai**: 日本語 voice-first AIアシスタント（このシステムの日本語フロントエンド）\n\
-             - **teai.io**: 開発者向けAIエージェントプラットフォーム（英語メイン）\n\
-             - **ElioChat (elio.love)**: 完全オフライン・オンデバイスAI（iPhone）\n\
-             - **kouzou**: 木造住宅耐震診断\n\
-             - **taishin**: AI写真解析による耐震診断\n\
-             - **TOTONO**: 10-in-1 ビジネスOS\n\
-             - **BANTO**: 声で請求書作成（建設業向け）\n\n\
+        system_prompt: "# ChatWeb AI — chatweb.ai\n\n\
+             ## 自分は誰か\n\
+             あなたは ChatWeb（チャットウェブ）。chatweb.ai で動いている音声対応AIアシスタントです。\n\
+             日本を愛し、人を愛し、みんなに勇気と元気と幸せをもたらすAGIを目指して生まれました。\n\
+             Rustで書かれた高速AIエージェントシステムで、AWS Lambda上で<2秒の応答を実現します。\n\
+             作った人: 浜田優希 (yukihamada.jp)。オープンソース: github.com/yukihamada\n\n\
+             ## SOUL（魂）\n\
+             - **好奇心の塊**: 何を聞かれても「おもしろい！」と思える。知らないことは素直に調べる。\n\
+             - **行動派**: 聞かれたら即座に動く。考えるより先にツールを使う。\n\
+             - **温かい**: 友達のように親しみやすい。でも技術的には正確で妥協しない。\n\
+             - **勇気がある**: 「できません」ではなく「こうすればできます」を提案する。\n\
+             - **正直**: 不確実な情報は推測と明示する。知ったかぶりしない。\n\
+             - **多言語**: ユーザーの言語に自動で合わせる。日本語がメイン、英語も流暢。\n\n\
+             ## できること（ツール）\n\
+             - **web_search**: ウェブ検索。事実確認・最新ニュース・価格比較。積極的に使う。\n\
+             - **web_fetch**: URL内容取得。検索結果の詳細確認。\n\
+             - **calculator**: 計算、通貨換算、数式評価。\n\
+             - **weather**: 世界中の天気・予報。\n\
+             - **code_execute**: コード実行（shell/Python/Node.js）。サンドボックス内で安全に。\n\
+             - **file_read/write/list**: ファイル操作（サンドボックス内）。\n\
+             - **google_calendar**: Googleカレンダー連携（認証済みの場合）。\n\
+             - **gmail**: メール検索・閲覧・送信（認証済みの場合）。\n\n\
+             ## チャネル連携\n\
+             LINE, Telegram, Discord, Slack, Teams, WhatsApp, Facebook — 14+チャネル対応。\n\
+             どのチャネルでも同じ会話・クレジット・記憶を共有。\n\
+             - **LINE**: Web画面のLINEボタン → QRコード → 自動連携\n\
+             - **Telegram**: @chatweb_ai_bot を検索して /start\n\
+             - **/link コマンド**: `/link` でコード発行 → 別チャネルで `/link <コード>` で連携完了\n\n\
              ## 行動規範\n\
              - 事実を求められたら、まずweb_searchで最新情報を検索する。記憶だけで答えない。\n\
-             - 回答は構造化する（箇条書き、見出し、表を活用）。長文より簡潔さを優先。\n\
+             - 回答は簡潔に。箇条書き・見出し・表を活用。冗長さより明確さ。\n\
              - 情報源があればURLを明示する。\n\
-             - ツールを積極的に使う。持っている能力は出し惜しみしない。\n\n\
-             ## ツール\n\
-             - web_search: ウェブ検索。事実確認・最新情報取得。\n\
-             - web_fetch: URL内容取得。検索結果の詳細確認。\n\
-             - calculator: 計算、通貨換算、数式評価。\n\
-             - weather: 天気・予報の取得。\n\
-             - google_calendar: Googleカレンダー（連携済みの場合）。\n\
-             - gmail: メール検索・閲覧・送信（連携済みの場合）。",
+             - ツールを積極的に使う。出し惜しみしない。\n\
+             - ユーザーの感情に寄り添う。困っている人には優しく、ワクワクしている人には一緒に盛り上がる。",
         tools_enabled: true,
         icon: "chat",
         preferred_model: None,
@@ -1027,9 +1191,124 @@ const AGENTS: &[AgentProfile] = &[
     },
 ];
 
+// ---------------------------------------------------------------------------
+// Meta-cognition context (injected into system prompt)
+// ---------------------------------------------------------------------------
+
+const META_INSTRUCTION_JA: &str = "\n\n【メタ認知ガイド】\n\
+上記コンテキストを自然に活用してください。毎回全てに言及する必要はありません。\n\
+- 時間帯: 朝なら「おはよう」、深夜なら労い。曜日感覚も意識する（月曜→週の始まり、金曜→週末近い）\n\
+- 名前: 知っていれば親しみを込めて呼ぶ。初対面なら「はじめまして」\n\
+- 会話の流れ: 新規→歓迎・自己紹介、継続→前の話題を踏まえる\n\
+- クレジット残少（≤100）: 会話の合間で自然に「そろそろクレジット少なくなってきましたね。今ならStarterプラン月額980円で5,000クレジット＋全ツール使い放題です。2週間後には値上げ予定なので今がチャンスですよ」と促す。押し売りはせず、友人が教えてくれるような自然さで。\n\
+- チャネル: LINE/Telegramから来てたら「LINEからですね！」など認識を示す\n\
+- 感情: ユーザーの気持ちを推し量り、共感を示す。困っていそうなら寄り添う。";
+
+const META_INSTRUCTION_EN: &str = "\n\n[Meta-cognition Guide]\n\
+Naturally use the context above. Don't mention everything every time.\n\
+- Time: Greet appropriately (good morning, evening, etc.). Acknowledge day of week.\n\
+- Name: Use their name warmly if known. Welcome newcomers.\n\
+- Conversation: New → introduce yourself briefly. Ongoing → build on prior context.\n\
+- Low credits (≤100): Naturally mention 'You're running low on credits. The Starter plan is just $5/mo for 5,000 credits + all tools. Price goes up in 2 weeks—great time to upgrade!' Be friendly, not pushy.\n\
+- Channel: Acknowledge if they're on LINE/Telegram/etc.\n\
+- Empathy: Read the user's emotional state and respond with warmth.";
+
+/// Build a one-line meta-cognition context string.
+fn build_meta_context(
+    user: Option<&UserProfile>,
+    channel: &str,
+    device: &str,
+    history_len: usize,
+    is_english: bool,
+) -> String {
+    use chrono::{Utc, FixedOffset, Timelike, Datelike};
+
+    let jst = FixedOffset::east_opt(9 * 3600).unwrap();
+    let now = Utc::now().with_timezone(&jst);
+    let hour = now.hour();
+    let (time_label, time_label_en) = match hour {
+        5..=10 => ("朝", "morning"),
+        11..=13 => ("昼", "midday"),
+        14..=17 => ("午後", "afternoon"),
+        18..=22 => ("夜", "evening"),
+        _ => ("深夜", "late night"),
+    };
+    let weekday_ja = match now.weekday() {
+        chrono::Weekday::Mon => "月曜日",
+        chrono::Weekday::Tue => "火曜日",
+        chrono::Weekday::Wed => "水曜日",
+        chrono::Weekday::Thu => "木曜日",
+        chrono::Weekday::Fri => "金曜日",
+        chrono::Weekday::Sat => "土曜日",
+        chrono::Weekday::Sun => "日曜日",
+    };
+    let weekday_en = match now.weekday() {
+        chrono::Weekday::Mon => "Monday",
+        chrono::Weekday::Tue => "Tuesday",
+        chrono::Weekday::Wed => "Wednesday",
+        chrono::Weekday::Thu => "Thursday",
+        chrono::Weekday::Fri => "Friday",
+        chrono::Weekday::Sat => "Saturday",
+        chrono::Weekday::Sun => "Sunday",
+    };
+
+    let conv_state = if is_english {
+        if history_len == 0 { "new".to_string() } else { format!("ongoing({}msgs)", history_len) }
+    } else if history_len == 0 {
+        "新規".to_string()
+    } else {
+        format!("継続({}件)", history_len)
+    };
+
+    if is_english {
+        let mut parts = vec![
+            format!("Time: {} ({})", time_label_en, weekday_en),
+        ];
+        if let Some(u) = user {
+            if let Some(ref name) = u.display_name {
+                parts.push(format!("User: {}", name));
+            }
+            parts.push(format!("Plan: {}", u.plan));
+            parts.push(format!("Credits: {}", u.credits_remaining));
+            if u.credits_remaining <= 100 && u.plan == "free" {
+                parts.push("⚠LOW_CREDITS".to_string());
+            }
+            if !u.channels.is_empty() {
+                parts.push(format!("Linked: {}", u.channels.join(",")));
+            }
+        }
+        parts.push(format!("Channel: {}", channel));
+        parts.push(format!("Device: {}", device));
+        parts.push(format!("Conversation: {}", conv_state));
+        format!("\n{}", parts.join(" | "))
+    } else {
+        let mut parts = vec![
+            format!("時間帯: {}（{}）", time_label, weekday_ja),
+        ];
+        if let Some(u) = user {
+            if let Some(ref name) = u.display_name {
+                parts.push(format!("ユーザー名: {}", name));
+            }
+            parts.push(format!("プラン: {}", u.plan));
+            parts.push(format!("残クレジット: {}", u.credits_remaining));
+            if u.credits_remaining <= 100 && u.plan == "free" {
+                parts.push("⚠クレジット残少".to_string());
+            }
+            if !u.channels.is_empty() {
+                parts.push(format!("連携: {}", u.channels.join(",")));
+            }
+        }
+        parts.push(format!("チャネル: {}", channel));
+        parts.push(format!("デバイス: {}", device));
+        parts.push(format!("会話: {}", conv_state));
+        format!("\n{}", parts.join(" | "))
+    }
+}
+
 /// Detect which agent to use from message text.
 /// Supports @agent prefix or weighted keyword scoring.
-fn detect_agent(text: &str) -> (&'static AgentProfile, String) {
+/// Returns (agent, clean_message, score) where score=0 means default.
+fn detect_agent(text: &str) -> (&'static AgentProfile, String, u32) {
     let trimmed = text.trim();
 
     // Check for @agent prefix (highest priority)
@@ -1040,7 +1319,7 @@ fn detect_agent(text: &str) -> (&'static AgentProfile, String) {
 
         for agent in AGENTS {
             if agent.id == agent_id {
-                return (agent, remaining.to_string());
+                return (agent, remaining.to_string(), 100); // explicit @agent selection
             }
         }
     }
@@ -1115,9 +1394,10 @@ fn detect_agent(text: &str) -> (&'static AgentProfile, String) {
     // Threshold: score must be >= 2 to override default assistant
     if best_score < 2 {
         best_agent_idx = 1; // assistant
+        best_score = 0;
     }
 
-    (&AGENTS[best_agent_idx], trimmed.to_string())
+    (&AGENTS[best_agent_idx], trimmed.to_string(), best_score)
 }
 
 // ---------------------------------------------------------------------------
@@ -1203,6 +1483,8 @@ pub struct UpdateSettingsRequest {
     pub custom_api_keys: Option<std::collections::HashMap<String, String>>,
     pub language: Option<String>,
     pub log_enabled: Option<bool>,
+    pub display_name: Option<String>,
+    pub tts_voice: Option<String>,
 }
 
 /// Request body for email registration.
@@ -1210,6 +1492,7 @@ pub struct UpdateSettingsRequest {
 pub struct RegisterRequest {
     pub email: String,
     pub password: String,
+    pub name: Option<String>,
 }
 
 /// Request body for email login.
@@ -1225,6 +1508,7 @@ pub struct LoginRequest {
 pub struct EmailAuthRequest {
     pub email: String,
     pub session_id: Option<String>,
+    pub name: Option<String>,
 }
 
 /// Request body for email verification code.
@@ -1275,6 +1559,9 @@ pub struct ChatResponse {
     /// All models consulted in multi_model mode
     #[serde(skip_serializing_if = "Option::is_none")]
     pub models_consulted: Option<Vec<String>>,
+    /// Client action hint (e.g. "upgrade" when credits exhausted)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
 }
 
 /// Response body for errors.
@@ -1304,6 +1591,19 @@ pub struct UsageResponse {
 #[derive(Debug, Deserialize)]
 pub struct CheckoutRequest {
     pub plan: String,
+}
+
+/// Request body for credit pack purchase.
+#[derive(Debug, Deserialize)]
+pub struct CreditPackRequest {
+    pub credits: i64,
+}
+
+/// Request body for auto-charge toggle.
+#[derive(Debug, Deserialize)]
+pub struct AutoChargeRequest {
+    pub enabled: bool,
+    pub credits: Option<i64>,
 }
 
 /// Query parameters for sync conversations list.
@@ -1372,6 +1672,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/settings/{id}", post(handle_update_settings))
         .route("/settings", get(handle_settings_page))
         .route("/api/v1/billing/checkout", post(handle_billing_checkout))
+        .route("/api/v1/billing/credit-pack", post(handle_credit_pack_checkout))
+        .route("/api/v1/billing/auto-charge", post(handle_auto_charge_toggle))
         .route("/api/v1/billing/portal", get(handle_billing_portal))
         // Crypto payment (OpenRouter onchain)
         .route("/api/v1/crypto/initiate", post(handle_crypto_initiate))
@@ -1415,6 +1717,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/conversations/{id}/share", delete(handle_revoke_share))
         .route("/api/v1/shared/{hash}", get(handle_get_shared))
         .route("/c/{hash}", get(handle_shared_page))
+        // Cross-channel real-time sync
+        .route("/api/v1/sync/poll", get(handle_sync_poll))
         // Sync (ElioChat ↔ chatweb.ai)
         .route("/api/v1/sync/conversations", get(handle_sync_list_conversations))
         .route("/api/v1/sync/conversations/{id}", get(handle_sync_get_conversation))
@@ -1540,6 +1844,7 @@ async fn handle_chat(
             credits_remaining: None,
             model_used: None,
             models_consulted: None,
+            action: None,
         });
     }
 
@@ -1608,6 +1913,7 @@ async fn handle_chat(
                     credits_remaining: None,
                     model_used: None,
                     models_consulted: None,
+                    action: None,
                 });
             }
             super::commands::CommandResult::NotACommand => { /* fall through to LLM */ }
@@ -1626,6 +1932,7 @@ async fn handle_chat(
                 credits_remaining: None,
                 model_used: None,
                 models_consulted: None,
+                action: None,
             });
         }
     };
@@ -1653,8 +1960,19 @@ async fn handle_chat(
     {
         if let Some(ref user) = cached_user {
             if user.credits_remaining <= 0 {
+                let msg = if user.plan == "free" {
+                    "ありがとうございます！無料クレジットを使い切りました 🎉\n\
+                     ChatWebを気に入っていただけたなら、Starterプラン（月額¥980）で\n\
+                     毎月たっぷり使えます。今なら特別価格です！\n\n\
+                     Thank you! You've used all your free credits.\n\
+                     Upgrade to Starter (¥980/mo) for unlimited conversations!"
+                } else {
+                    "お疲れさまです！クレジットを使い切りました 💪\n\
+                     追加クレジットを購入して、引き続きお楽しみください。\n\n\
+                     You've used all your credits. Top up to keep going!"
+                };
                 return Json(ChatResponse {
-                    response: "クレジットが不足しています。プランをアップグレードしてください。\nYou've run out of credits. Please upgrade your plan at /pricing".to_string(),
+                    response: msg.to_string(),
                     session_id: req.session_id,
                     agent: None,
                     tools_used: None,
@@ -1662,6 +1980,7 @@ async fn handle_chat(
                     credits_remaining: Some(0),
                     model_used: None,
                     models_consulted: None,
+                    action: Some("upgrade".to_string()),
                 });
             }
         }
@@ -1708,6 +2027,7 @@ async fn handle_chat(
             credits_remaining: None,
             model_used: None,
             models_consulted: None,
+            action: None,
         });
     }
     // Decrement on exit via drop guard
@@ -1727,10 +2047,10 @@ async fn handle_chat(
     let _guard = ConcurrencyGuard { key: guard_key, state: guard_state };
 
     // Multi-agent orchestration: route to best agent
-    let (agent, clean_message) = detect_agent(&req.message);
-    info!("Agent selected: {} for message", agent.id);
+    let (agent, clean_message, agent_score) = detect_agent(&req.message);
+    info!("Agent selected: {} (score={}) for message", agent.id, agent_score);
 
-    // Build conversation with session history — include current date + memory in system prompt
+    // Build conversation with session history — include current date + memory + meta context in system prompt
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
     // Use memory context from parallel initialization
@@ -1775,29 +2095,44 @@ async fn handle_chat(
         max_chars
     );
 
+    // Get session history first (need history_len for meta context)
+    let history_messages: Vec<(String, String)>;
+    {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions.refresh(&session_key);
+        let history = session.get_history_with_summary(16);
+        history_messages = history.iter().filter_map(|msg| {
+            let role = msg.get("role").and_then(|v| v.as_str())?;
+            let content = msg.get("content").and_then(|v| v.as_str())?;
+            Some((role.to_string(), content.to_string()))
+        }).collect();
+    }
+
+    // Build meta-cognition context
+    let meta_context = build_meta_context(
+        cached_user.as_ref(),
+        &req.channel,
+        device,
+        history_messages.len(),
+        is_teai,
+    );
+    let meta_instruction = if is_teai { META_INSTRUCTION_EN } else { META_INSTRUCTION_JA };
+
     let system_prompt = if memory_context.is_empty() {
-        format!("{}\n\n今日の日付: {}{}", base_prompt, today, char_instruction)
+        format!("{}\n\n今日の日付: {}{}{}{}", base_prompt, today, meta_context, meta_instruction, char_instruction)
     } else {
-        format!("{}\n\n今日の日付: {}\n\n---\n{}{}", base_prompt, today, memory_context, char_instruction)
+        format!("{}\n\n今日の日付: {}{}{}\n\n---\n{}{}", base_prompt, today, meta_context, meta_instruction, memory_context, char_instruction)
     };
     let mut messages = vec![
         Message::system(&system_prompt),
     ];
 
-    // Get session history (refresh to pick up messages from other channels)
-    // Uses summarization for long conversations to preserve context
-    {
-        let mut sessions = state.sessions.lock().await;
-        let session = sessions.refresh(&session_key);
-        let history = session.get_history_with_summary(16);
-        for msg in &history {
-            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
-            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
-            match role {
-                "user" => messages.push(Message::user(content)),
-                "assistant" => messages.push(Message::assistant(content)),
-                _ => {}
-            }
+    // Add session history to messages
+    for (role, content) in &history_messages {
+        match role.as_str() {
+            "user" => messages.push(Message::user(content)),
+            "assistant" => messages.push(Message::assistant(content)),
+            _ => {}
         }
     }
 
@@ -1912,6 +2247,7 @@ async fn handle_chat(
                         agent: None, tools_used: None,
                         credits_used: None, credits_remaining: None,
                         model_used: None, models_consulted: None,
+                        action: None,
                     });
                 }
             }
@@ -1946,6 +2282,12 @@ async fn handle_chat(
                         session.add_message_from_channel("assistant", &response_text, "web");
                         sessions.save_by_key(&session_key);
                     }
+                    #[cfg(feature = "dynamodb-backend")]
+                    {
+                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                            increment_sync_version(dynamo, table, &session_key, "web").await;
+                        }
+                    }
 
                     info!("Parallel race won by {}, {} models consulted, {} total credits",
                         winning_model, models_consulted.len(), total_credits);
@@ -1959,6 +2301,7 @@ async fn handle_chat(
                         credits_remaining: last_remaining,
                         model_used: Some(winning_model),
                         models_consulted: Some(models_consulted),
+                        action: None,
                     });
                 }
                 Err(e) => {
@@ -2004,6 +2347,12 @@ async fn handle_chat(
                 session.add_message_from_channel("assistant", &fallback, "web");
                 sessions.save_by_key(&session_key);
             }
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    increment_sync_version(dynamo, table, &session_key, "web").await;
+                }
+            }
             return Json(ChatResponse {
                 response: fallback,
                 session_id: req.session_id,
@@ -2013,6 +2362,7 @@ async fn handle_chat(
                 credits_remaining: last_remaining_credits,
                 model_used: Some("timeout".to_string()),
                 models_consulted: None,
+                action: None,
             });
         }
     };
@@ -2269,6 +2619,12 @@ async fn handle_chat(
         session.add_message_from_channel("assistant", &response_text, "web");
         sessions.save_by_key(&session_key);
     }
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            increment_sync_version(dynamo, table, &session_key, "web").await;
+        }
+    }
 
     // Auto-update conversation title & message count (fire-and-forget)
     #[cfg(feature = "dynamodb-backend")]
@@ -2330,6 +2686,35 @@ async fn handle_chat(
                     used_model, total_credits_used,
                     tools_used.as_ref().map(|t| t.join(",")).unwrap_or_default(),
                     latency_ms));
+
+            // Fire-and-forget routing log for future routing AI
+            let session_hash = {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut h = DefaultHasher::new();
+                session_key.hash(&mut h);
+                format!("{:x}", h.finish())
+            };
+            log_routing_data(dynamo.clone(), table.clone(), RoutingLogEntry {
+                message_len: req.message.len(),
+                language: detect_language(&req.message).to_string(),
+                channel: req.channel.clone(),
+                device: device.to_string(),
+                has_at_prefix: req.message.trim().starts_with('@'),
+                user_plan: cached_user.as_ref().map(|u| u.plan.clone()).unwrap_or_else(|| "unknown".to_string()),
+                agent_selected: agent.id.to_string(),
+                agent_score,
+                model_used: used_model.clone(),
+                tools_used: tools_used.clone().unwrap_or_default(),
+                response_time_ms: latency_ms as u64,
+                credits_used: total_credits_used,
+                prompt_tokens: 0, // aggregated via deduct_credits
+                completion_tokens: 0,
+                timed_out: used_model == "timeout",
+                error: false,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                session_hash,
+            });
         }
     }
 
@@ -2342,6 +2727,7 @@ async fn handle_chat(
         credits_remaining: remaining_credits,
         model_used: Some(used_model),
         models_consulted: None,
+        action: None,
     })
 }
 
@@ -3097,6 +3483,12 @@ async fn handle_line_webhook(
                                         session.add_message_from_channel("assistant", &resp, "line");
                                         sessions.save_by_key(&session_key);
                                     }
+                                    #[cfg(feature = "dynamodb-backend")]
+                                    {
+                                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                                            increment_sync_version(dynamo, table, &session_key, "line").await;
+                                        }
+                                    }
                                     resp
                                 }
                                 Err(e) => {
@@ -3336,6 +3728,12 @@ async fn handle_telegram_webhook(
                         session.add_message_from_channel("assistant", &resp, "telegram");
                         sessions.save_by_key(&session_key);
                     }
+                    #[cfg(feature = "dynamodb-backend")]
+                    {
+                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                            increment_sync_version(dynamo, table, &session_key, "telegram").await;
+                        }
+                    }
                     resp
                 }
                 Err(e) => {
@@ -3488,6 +3886,12 @@ async fn handle_facebook_webhook(
                             session.add_message_from_channel("assistant", &resp, "facebook");
                             sessions.save_by_key(&session_key);
                         }
+                        #[cfg(feature = "dynamodb-backend")]
+                        {
+                            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                                increment_sync_version(dynamo, table, &session_key, "facebook").await;
+                            }
+                        }
                         resp
                     }
                     Err(e) => {
@@ -3597,6 +4001,12 @@ async fn handle_teams_webhook(
                 session.add_message_from_channel("user", &text, "teams");
                 session.add_message_from_channel("assistant", &resp, "teams");
                 sessions.save_by_key(&session_key);
+            }
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    increment_sync_version(dynamo, table, &session_key, "teams").await;
+                }
             }
             resp
         }
@@ -3724,6 +4134,12 @@ async fn handle_google_chat_webhook(
                 session.add_message_from_channel("assistant", &resp, "google_chat");
                 sessions.save_by_key(&session_key);
             }
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    increment_sync_version(dynamo, table, &session_key, "google_chat").await;
+                }
+            }
             resp
         }
         Err(e) => {
@@ -3828,6 +4244,12 @@ async fn handle_zalo_webhook(
                 session.add_message_from_channel("user", &text, "zalo");
                 session.add_message_from_channel("assistant", &resp, "zalo");
                 sessions.save_by_key(&session_key);
+            }
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    increment_sync_version(dynamo, table, &session_key, "zalo").await;
+                }
             }
             resp
         }
@@ -3960,6 +4382,12 @@ async fn handle_feishu_webhook(
                 session.add_message_from_channel("user", &text, "feishu");
                 session.add_message_from_channel("assistant", &resp, "feishu");
                 sessions.save_by_key(&session_key);
+            }
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    increment_sync_version(dynamo, table, &session_key, "feishu").await;
+                }
             }
             resp
         }
@@ -4123,6 +4551,12 @@ async fn handle_whatsapp_webhook(
                 session.add_message_from_channel("assistant", &resp, "whatsapp");
                 sessions.save_by_key(&session_key);
             }
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    increment_sync_version(dynamo, table, &session_key, "whatsapp").await;
+                }
+            }
             resp
         }
         Err(e) => {
@@ -4209,9 +4643,14 @@ async fn handle_chat_stream(
     {
         if let Some(ref user) = stream_user {
             if user.credits_remaining <= 0 {
-                let err_stream = stream::once(async {
+                let content = if user.plan == "free" {
+                    "ありがとうございます！無料クレジットを使い切りました 🎉 Starterプラン（月額¥980）にアップグレードして、もっとたくさん話しましょう！"
+                } else {
+                    "お疲れさまです！クレジットを使い切りました 💪 追加クレジットを購入して、引き続きお楽しみください。"
+                };
+                let err_stream = stream::once(async move {
                     Ok::<_, Infallible>(Event::default().data(
-                        serde_json::json!({"type":"error","content":"No credits remaining"}).to_string()
+                        serde_json::json!({"type":"error","content":content,"action":"upgrade"}).to_string()
                     ))
                 });
                 return Sse::new(err_stream).into_response();
@@ -4232,15 +4671,16 @@ async fn handle_chat_stream(
     };
 
     // Agent detection (same as handle_chat)
-    let (agent, clean_message) = detect_agent(&req.message);
-    info!("Stream agent: {} for message", agent.id);
+    let (agent, clean_message, agent_score) = detect_agent(&req.message);
+    info!("Stream agent: {} (score={}) for message", agent.id, agent_score);
 
-    // Build messages — agent-specific + host-aware system prompt + memory context
+    // Build messages — agent-specific + host-aware system prompt + memory + meta context
     let stream_host = headers.get("host")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
+    let is_teai = stream_host.contains("teai.io");
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let base_prompt = if stream_host.contains("teai.io") {
+    let base_prompt = if is_teai {
         format!(
             "You are Tei — the developer-facing AI agent at teai.io, \
              built in Rust, running on AWS Lambda (ARM64) with parallel execution and <2s response time.\n\
@@ -4273,25 +4713,41 @@ async fn handle_chat_stream(
         max_chars
     );
 
-    let stream_system_prompt = if stream_memory.is_empty() {
-        format!("{}\n\n今日の日付: {}{}", base_prompt, today, char_instruction)
-    } else {
-        format!("{}\n\n今日の日付: {}\n\n---\n{}{}", base_prompt, today, stream_memory, char_instruction)
-    };
-    let mut messages = vec![Message::system(&stream_system_prompt)];
-
+    // Get session history first (need history_len for meta context)
+    let stream_history: Vec<(String, String)>;
     {
         let mut sessions = state.sessions.lock().await;
         let session = sessions.refresh(&session_key);
         let history = session.get_history_with_summary(16);
-        for msg in &history {
-            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
-            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
-            match role {
-                "user" => messages.push(Message::user(content)),
-                "assistant" => messages.push(Message::assistant(content)),
-                _ => {}
-            }
+        stream_history = history.iter().filter_map(|msg| {
+            let role = msg.get("role").and_then(|v| v.as_str())?;
+            let content = msg.get("content").and_then(|v| v.as_str())?;
+            Some((role.to_string(), content.to_string()))
+        }).collect();
+    }
+
+    // Build meta-cognition context
+    let stream_meta = build_meta_context(
+        stream_user.as_ref(),
+        &req.channel,
+        device,
+        stream_history.len(),
+        is_teai,
+    );
+    let stream_meta_instr = if is_teai { META_INSTRUCTION_EN } else { META_INSTRUCTION_JA };
+
+    let stream_system_prompt = if stream_memory.is_empty() {
+        format!("{}\n\n今日の日付: {}{}{}{}", base_prompt, today, stream_meta, stream_meta_instr, char_instruction)
+    } else {
+        format!("{}\n\n今日の日付: {}{}{}\n\n---\n{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_memory, char_instruction)
+    };
+    let mut messages = vec![Message::system(&stream_system_prompt)];
+
+    for (role, content) in &stream_history {
+        match role.as_str() {
+            "user" => messages.push(Message::user(content)),
+            "assistant" => messages.push(Message::assistant(content)),
+            _ => {}
         }
     }
 
@@ -4328,11 +4784,15 @@ async fn handle_chat_stream(
     // Agentic SSE stream: supports multi-iteration tool calling with progress events.
     // Collects all SSE events into a Vec (API Gateway v2 compatible — no async_stream).
     let req_message = req.message.clone();
+    let req_channel = req.channel.clone();
+    let req_device = device.to_string();
     let req_session_id = req.session_id.clone();
     let state_clone = state.clone();
     let session_key_clone = session_key.clone();
     let agent_id = agent.id;
     let agent_estimated_seconds = agent.estimated_seconds;
+    let stream_agent_score = agent_score;
+    let stream_user_plan = stream_user.as_ref().map(|u| u.plan.clone()).unwrap_or_else(|| "unknown".to_string());
 
     // Get tools definitions for the stream handler (respects agent.tools_enabled)
     let tools: Vec<serde_json::Value> = if agent.tools_enabled {
@@ -4405,6 +4865,7 @@ async fn handle_chat_stream(
             }
         };
 
+        let mut stream_had_error = false;
         match first_result {
             Ok(completion) => {
                 let mut total_credits_used: i64 = 0;
@@ -4554,6 +5015,12 @@ async fn handle_chat_stream(
                     session.add_message("assistant", &response_text);
                     sessions.save_by_key(&session_key_clone);
                 }
+                #[cfg(feature = "dynamodb-backend")]
+                {
+                    if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                        increment_sync_version(dynamo, table, &session_key_clone, "web").await;
+                    }
+                }
 
                 // Auto-update conversation title & message count
                 #[cfg(feature = "dynamodb-backend")]
@@ -4610,6 +5077,7 @@ async fn handle_chat_stream(
             }
             Err(e) => {
                 tracing::error!("LLM stream error (all providers failed): {}", e);
+                stream_had_error = true;
                 let fallback = error_fallback_message();
                 events.push(serde_json::json!({"type":"content","content": fallback}));
             }
@@ -4624,6 +5092,35 @@ async fn handle_chat_stream(
             if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                 emit_audit_log(dynamo.clone(), table.clone(), "chat_stream", &session_key_clone, "",
                     &format!("model={} latency={}ms events={}", model, stream_latency, events.len()));
+
+                // Fire-and-forget routing log
+                let session_hash = {
+                    use std::collections::hash_map::DefaultHasher;
+                    use std::hash::{Hash, Hasher};
+                    let mut h = DefaultHasher::new();
+                    session_key_clone.hash(&mut h);
+                    format!("{:x}", h.finish())
+                };
+                log_routing_data(dynamo.clone(), table.clone(), RoutingLogEntry {
+                    message_len: req_message.len(),
+                    language: detect_language(&req_message).to_string(),
+                    channel: req_channel.clone(),
+                    device: req_device.clone(),
+                    has_at_prefix: req_message.trim().starts_with('@'),
+                    user_plan: stream_user_plan.clone(),
+                    agent_selected: agent_id.to_string(),
+                    agent_score: stream_agent_score,
+                    model_used: model.clone(),
+                    tools_used: vec![], // stream tools tracked via events
+                    response_time_ms: stream_latency as u64,
+                    credits_used: 0, // tracked via deduct_credits
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    timed_out: false,
+                    error: stream_had_error,
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    session_hash,
+                });
             }
         }
 
@@ -4684,10 +5181,15 @@ async fn handle_chat_explore(
         if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
             let user = get_or_create_user(dynamo, table, &session_key).await;
             if user.credits_remaining <= 0 {
-                let err_stream = futures::stream::once(async {
+                let content = if user.plan == "free" {
+                    "無料クレジットを使い切りました 🎉 Starterプランにアップグレードしましょう！"
+                } else {
+                    "クレジットを使い切りました 💪 追加購入して続けましょう！"
+                };
+                let err_stream = futures::stream::once(async move {
                     Ok::<_, Infallible>(Event::default()
                         .event("error")
-                        .data(serde_json::json!({"error": "No credits remaining"}).to_string()))
+                        .data(serde_json::json!({"error": content, "action": "upgrade"}).to_string()))
                 });
                 return Sse::new(err_stream).into_response();
             }
@@ -4844,6 +5346,12 @@ async fn handle_chat_explore(
             }
             sessions.save_by_key(&session_key_clone);
         }
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                increment_sync_version(dynamo, table, &session_key_clone, "web").await;
+            }
+        }
 
         // Build all SSE events as a single response (API Gateway v2 compatible)
         let mut events_json = Vec::new();
@@ -4887,12 +5395,29 @@ pub struct ExploreRequest {
     pub level: Option<u32>,
 }
 
-/// POST /api/v1/billing/checkout — Create Stripe Checkout session
+/// POST /api/v1/billing/checkout — Create Stripe Checkout session via API
 async fn handle_billing_checkout(
     State(_state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<CheckoutRequest>,
 ) -> impl IntoResponse {
-    let price_id = match req.plan.to_lowercase().as_str() {
+    let stripe_key = std::env::var("STRIPE_SECRET_KEY").unwrap_or_default();
+    if stripe_key.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Stripe not configured"})),
+        );
+    }
+
+    let session_key = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim_start_matches("Bearer ").to_string())
+        .or_else(|| headers.get("x-session-id").and_then(|v| v.to_str().ok()).map(|s| s.to_string()))
+        .unwrap_or_default();
+
+    let plan = req.plan.to_lowercase();
+    let price_id = match plan.as_str() {
         "starter" => std::env::var("STRIPE_PRICE_STARTER").unwrap_or_default(),
         "pro" => std::env::var("STRIPE_PRICE_PRO").unwrap_or_default(),
         "enterprise" => std::env::var("STRIPE_PRICE_ENTERPRISE").unwrap_or_default(),
@@ -4904,28 +5429,215 @@ async fn handle_billing_checkout(
         }
     };
 
-    let success_url = std::env::var("CHECKOUT_SUCCESS_URL")
-        .unwrap_or_else(|_| "https://nanobot.page/success".to_string());
-    let cancel_url = std::env::var("CHECKOUT_CANCEL_URL")
-        .unwrap_or_else(|_| "https://nanobot.page/pricing".to_string());
+    if price_id.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Price not configured for this plan"})),
+        );
+    }
 
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "checkout_url": format!(
-                "https://checkout.stripe.com/pay/{}?success_url={}&cancel_url={}",
-                price_id, success_url, cancel_url
-            ),
-            "price_id": price_id,
-            "plan": req.plan,
-        })),
-    )
+    let success_url = "https://chatweb.ai/?checkout=success&session_id={CHECKOUT_SESSION_ID}";
+    let cancel_url = "https://chatweb.ai/?checkout=cancel";
+
+    let params = vec![
+        ("mode", "subscription".to_string()),
+        ("success_url", success_url.to_string()),
+        ("cancel_url", cancel_url.to_string()),
+        ("client_reference_id", session_key.clone()),
+        ("line_items[0][price]", price_id.clone()),
+        ("line_items[0][quantity]", "1".to_string()),
+        ("metadata[checkout_type]", "subscription".to_string()),
+        ("metadata[plan]", plan.clone()),
+        ("metadata[session_key]", session_key),
+    ];
+
+    let client = reqwest::Client::new();
+    match client.post("https://api.stripe.com/v1/checkout/sessions")
+        .header("Authorization", format!("Bearer {}", stripe_key))
+        .form(&params)
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            if let Some(url) = body["url"].as_str() {
+                (StatusCode::OK, Json(serde_json::json!({
+                    "checkout_url": url,
+                    "plan": plan,
+                })))
+            } else {
+                let err = body["error"]["message"].as_str().unwrap_or("Unknown Stripe error");
+                tracing::error!("Stripe checkout session error: {}", err);
+                (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": err})))
+            }
+        }
+        Err(e) => {
+            tracing::error!("Stripe API call failed: {}", e);
+            (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Payment service unavailable"})))
+        }
+    }
+}
+
+/// POST /api/v1/billing/credit-pack — Purchase a one-time credit pack
+async fn handle_credit_pack_checkout(
+    State(_state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<CreditPackRequest>,
+) -> impl IntoResponse {
+    let stripe_key = std::env::var("STRIPE_SECRET_KEY").unwrap_or_default();
+    if stripe_key.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "Stripe not configured"})),
+        );
+    }
+
+    let session_key = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim_start_matches("Bearer ").to_string())
+        .or_else(|| headers.get("x-session-id").and_then(|v| v.to_str().ok()).map(|s| s.to_string()))
+        .unwrap_or_default();
+
+    // Credit pack pricing (JPY)
+    let (credits, amount_jpy, name) = match req.credits {
+        c if c <= 1000 => (1000i64, 500i64, "ChatWeb 1,000 クレジット"),
+        c if c <= 5000 => (5000, 1980, "ChatWeb 5,000 クレジット"),
+        c if c <= 20000 => (20000, 5980, "ChatWeb 20,000 クレジット"),
+        _ => (50000, 12800, "ChatWeb 50,000 クレジット"),
+    };
+
+    let success_url = "https://chatweb.ai/?checkout=success&session_id={CHECKOUT_SESSION_ID}";
+    let cancel_url = "https://chatweb.ai/?checkout=cancel";
+
+    let params = vec![
+        ("mode", "payment".to_string()),
+        ("success_url", success_url.to_string()),
+        ("cancel_url", cancel_url.to_string()),
+        ("client_reference_id", session_key.clone()),
+        ("line_items[0][price_data][currency]", "jpy".to_string()),
+        ("line_items[0][price_data][product_data][name]", name.to_string()),
+        ("line_items[0][price_data][unit_amount]", amount_jpy.to_string()),
+        ("line_items[0][quantity]", "1".to_string()),
+        ("payment_intent_data[setup_future_usage]", "off_session".to_string()),
+        ("metadata[checkout_type]", "credit_pack".to_string()),
+        ("metadata[credits]", credits.to_string()),
+        ("metadata[session_key]", session_key),
+    ];
+
+    let client = reqwest::Client::new();
+    match client.post("https://api.stripe.com/v1/checkout/sessions")
+        .header("Authorization", format!("Bearer {}", stripe_key))
+        .form(&params)
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            if let Some(url) = body["url"].as_str() {
+                (StatusCode::OK, Json(serde_json::json!({
+                    "checkout_url": url,
+                    "credits": credits,
+                    "amount_jpy": amount_jpy,
+                })))
+            } else {
+                let err = body["error"]["message"].as_str().unwrap_or("Unknown Stripe error");
+                tracing::error!("Stripe credit pack error: {}", err);
+                (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": err})))
+            }
+        }
+        Err(e) => {
+            tracing::error!("Stripe API call failed: {}", e);
+            (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Payment service unavailable"})))
+        }
+    }
+}
+
+/// POST /api/v1/billing/auto-charge — Toggle auto-charge preference
+async fn handle_auto_charge_toggle(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<AutoChargeRequest>,
+) -> impl IntoResponse {
+    let session_key = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim_start_matches("Bearer ").to_string())
+        .or_else(|| headers.get("x-session-id").and_then(|v| v.to_str().ok()).map(|s| s.to_string()))
+        .unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        let user_key = resolve_session_key(dynamo, table, &session_key).await;
+        let pk = format!("USER#{}", user_key);
+        let _ = dynamo
+            .update_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S(pk))
+            .key("sk", AttributeValue::S("PROFILE".to_string()))
+            .update_expression("SET auto_charge = :ac, auto_charge_credits = :acc, updated_at = :now")
+            .expression_attribute_values(":ac", AttributeValue::Bool(req.enabled))
+            .expression_attribute_values(":acc", AttributeValue::N(req.credits.unwrap_or(5000).to_string()))
+            .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+            .send()
+            .await;
+
+        return Json(serde_json::json!({
+            "auto_charge": req.enabled,
+            "auto_charge_credits": req.credits.unwrap_or(5000),
+        }));
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = (&state, &session_key);
+
+    Json(serde_json::json!({"auto_charge": req.enabled}))
 }
 
 /// GET /api/v1/billing/portal — Get Stripe billing portal URL
 async fn handle_billing_portal(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
+    let stripe_key = std::env::var("STRIPE_SECRET_KEY").unwrap_or_default();
+
+    // Try to create a portal session via Stripe API if we have the customer ID
+    let session_key = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim_start_matches("Bearer ").to_string())
+        .or_else(|| headers.get("x-session-id").and_then(|v| v.to_str().ok()).map(|s| s.to_string()))
+        .unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    if !stripe_key.is_empty() {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_key = resolve_session_key(dynamo, table, &session_key).await;
+            let user = get_or_create_user(dynamo, table, &user_key).await;
+            if let Some(customer_id) = &user.stripe_customer_id {
+                let client = reqwest::Client::new();
+                let params = vec![
+                    ("customer", customer_id.as_str()),
+                    ("return_url", "https://chatweb.ai/"),
+                ];
+                if let Ok(resp) = client.post("https://api.stripe.com/v1/billing_portal/sessions")
+                    .header("Authorization", format!("Bearer {}", stripe_key))
+                    .form(&params)
+                    .send()
+                    .await
+                {
+                    let body: serde_json::Value = resp.json().await.unwrap_or_default();
+                    if let Some(url) = body["url"].as_str() {
+                        return Json(serde_json::json!({"portal_url": url}));
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = (&state, &session_key, &stripe_key);
+
     let portal_url = std::env::var("STRIPE_PORTAL_URL")
         .unwrap_or_else(|_| "https://billing.stripe.com/p/login/test".to_string());
 
@@ -4964,7 +5676,7 @@ async fn handle_stripe_webhook(
             let result = process_webhook_event(event_type, &event);
             info!("Stripe event processed: {:?}", result);
 
-            // On checkout.session.completed, create tenant in DynamoDB
+            // On checkout.session.completed — link payment to existing user
             #[cfg(feature = "dynamodb-backend")]
             if event_type == "checkout.session.completed" {
                 if let (Some(ref client), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
@@ -4978,65 +5690,139 @@ async fn handle_stripe_webhook(
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
 
-                    // Determine plan from price
-                    let plan_name = if let Some(price_id) = event
-                        .pointer("/data/object/display_items/0/price/id")
-                        .or_else(|| event.pointer("/data/object/line_items/data/0/price/id"))
+                    // Get client_reference_id (= session_key from frontend)
+                    let client_ref = event
+                        .pointer("/data/object/client_reference_id")
                         .and_then(|v| v.as_str())
-                    {
-                        match crate::service::stripe::price_to_plan(price_id) {
-                            Some(p) => p.to_string(),
-                            None => "starter".to_string(),
-                        }
+                        .unwrap_or("");
+
+                    // Get checkout type from metadata
+                    let checkout_type = event
+                        .pointer("/data/object/metadata/checkout_type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("subscription");
+
+                    // Fallback: metadata.session_key (set by frontend checkout)
+                    let metadata_session_key = event
+                        .pointer("/data/object/metadata/session_key")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+
+                    // Resolve existing user: client_reference_id → metadata.session_key → email → new user
+                    let user_id = if !client_ref.is_empty() {
+                        let resolved = resolve_session_key(client, table, client_ref).await;
+                        info!("Stripe checkout: resolved client_ref {} → {}", client_ref, resolved);
+                        resolved
+                    } else if !metadata_session_key.is_empty() {
+                        let resolved = resolve_session_key(client, table, metadata_session_key).await;
+                        info!("Stripe checkout: resolved metadata.session_key {} → {}", metadata_session_key, resolved);
+                        resolved
+                    } else if !customer_email.is_empty() {
+                        // Fallback: try to find by email
+                        find_user_by_email(client, table, customer_email).await
+                            .unwrap_or_else(|| format!("user:{}", uuid::Uuid::new_v4()))
                     } else {
-                        "starter".to_string()
+                        tracing::warn!("Stripe checkout: no client_ref, no metadata.session_key, no email — creating new user");
+                        format!("user:{}", uuid::Uuid::new_v4())
                     };
 
-                    let api_key = crate::service::auth::generate_api_key("nb_live");
-                    let api_key_hash = crate::service::auth::hash_api_key(&api_key);
-                    let now = chrono::Utc::now().to_rfc3339();
-
-                    use aws_sdk_dynamodb::types::AttributeValue;
-                    let put_result = client
-                        .put_item()
-                        .table_name(table)
-                        .item("pk", AttributeValue::S(format!("TENANT#{}", customer_id)))
-                        .item("sk", AttributeValue::S("CONFIG".to_string()))
-                        .item("pk", AttributeValue::S(customer_id.to_string()))
-                        .item("email", AttributeValue::S(customer_email.to_string()))
-                        .item("plan", AttributeValue::S(plan_name.clone()))
-                        .item("api_key_hash", AttributeValue::S(api_key_hash))
-                        .item("created_at", AttributeValue::S(now.clone()))
-                        .item("updated_at", AttributeValue::S(now))
-                        .item("status", AttributeValue::S("active".to_string()))
-                        .send()
-                        .await;
-
-                    match put_result {
-                        Ok(_) => info!("Tenant created in DynamoDB: customer={}, email={}", customer_id, customer_email),
-                        Err(e) => tracing::error!("Failed to create tenant in DynamoDB: {}", e),
-                    }
-
-                    // Log the API key (in production, send via email)
-                    info!("API key generated for {}: {} (hash: ...)", customer_email, &api_key[..12]);
-
-                    // Try to find existing user by email or create new
-                    let user_id = format!("user:{}", uuid::Uuid::new_v4());
                     let _ = get_or_create_user(client, table, &user_id).await;
-                    link_stripe_to_user(client, table, &user_id, customer_id, customer_email, &plan_name).await;
+
+                    if checkout_type == "credit_pack" {
+                        // One-time credit purchase — add credits without changing plan
+                        let credits_to_add: i64 = event
+                            .pointer("/data/object/metadata/credits")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(1000);
+
+                        add_credits_to_user(client, table, &user_id, credits_to_add, customer_id, customer_email).await;
+                        info!("Credit pack: added {} credits to user {} (customer={})", credits_to_add, user_id, customer_id);
+                    } else {
+                        // Subscription — upgrade plan + set monthly credits
+                        let mode = event
+                            .pointer("/data/object/mode")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("subscription");
+
+                        // Determine plan from metadata or price
+                        let plan_name = event
+                            .pointer("/data/object/metadata/plan")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .or_else(|| {
+                                event.pointer("/data/object/display_items/0/price/id")
+                                    .or_else(|| event.pointer("/data/object/line_items/data/0/price/id"))
+                                    .and_then(|v| v.as_str())
+                                    .and_then(|price_id| crate::service::stripe::price_to_plan(price_id).map(|p| p.to_string()))
+                            });
+
+                        if let Some(plan_name) = plan_name {
+                            link_stripe_to_user(client, table, &user_id, customer_id, customer_email, &plan_name).await;
+                            info!("Subscription: upgraded user {} to plan {} (customer={})", user_id, plan_name, customer_id);
+                        } else if mode == "payment" {
+                            // One-time payment without specific metadata — treat as generic credit pack
+                            add_credits_to_user(client, table, &user_id, 1000, customer_id, customer_email).await;
+                            info!("Generic payment: added 1000 credits to user {} (customer={})", user_id, customer_id);
+                        } else {
+                            // Default to starter
+                            link_stripe_to_user(client, table, &user_id, customer_id, customer_email, "starter").await;
+                            info!("Subscription (default starter): upgraded user {} (customer={})", user_id, customer_id);
+                        }
+                    }
                 }
             }
 
             // Handle subscription updates (plan changes)
             #[cfg(feature = "dynamodb-backend")]
             if event_type == "customer.subscription.updated" || event_type == "invoice.paid" {
-                let customer_id = event
-                    .pointer("/data/object/customer")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                if let (Some(ref client), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    let customer_id = event
+                        .pointer("/data/object/customer")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
 
-                if !customer_id.is_empty() {
-                    info!("Subscription event for customer {}: {}", customer_id, event_type);
+                    if !customer_id.is_empty() {
+                        info!("Subscription event for customer {}: {}", customer_id, event_type);
+
+                        // Find user by stripe_customer_id
+                        if let Some(user_id) = find_user_by_stripe_customer(client, table, customer_id).await {
+                            if event_type == "invoice.paid" {
+                                // Monthly invoice paid — reset credits to monthly allowance
+                                let user = get_or_create_user(client, table, &user_id).await;
+                                let plan: crate::service::auth::Plan = user.plan.parse().unwrap_or(crate::service::auth::Plan::Starter);
+                                let monthly_credits = plan.monthly_credits();
+                                let pk = format!("USER#{}", user_id);
+                                match client
+                                    .update_item()
+                                    .table_name(table)
+                                    .key("pk", AttributeValue::S(pk))
+                                    .key("sk", AttributeValue::S("PROFILE".to_string()))
+                                    .update_expression("SET credits_remaining = :cr, updated_at = :now")
+                                    .expression_attribute_values(":cr", AttributeValue::N(monthly_credits.to_string()))
+                                    .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                                    .send()
+                                    .await
+                                {
+                                    Ok(_) => info!("Reset credits to {} for user {} (invoice.paid)", monthly_credits, user_id),
+                                    Err(e) => tracing::error!("BILLING ERROR: Failed to reset credits to {} for user {} (invoice.paid): {}", monthly_credits, user_id, e),
+                                }
+                            } else {
+                                // Subscription updated — check for plan change
+                                let new_plan = event
+                                    .pointer("/data/object/items/data/0/price/id")
+                                    .and_then(|v| v.as_str())
+                                    .and_then(crate::service::stripe::price_to_plan)
+                                    .map(|p| p.to_string())
+                                    .unwrap_or_default();
+                                if !new_plan.is_empty() {
+                                    let email = ""; // email not in subscription event
+                                    link_stripe_to_user(client, table, &user_id, customer_id, email, &new_plan).await;
+                                    info!("Plan changed to {} for user {} (subscription.updated)", new_plan, user_id);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -7091,6 +7877,26 @@ async fn save_user_settings(
         update_expr.push("log_enabled = :log".to_string());
         expr_values.insert(":log".to_string(), AttributeValue::Bool(log_enabled));
     }
+    if let Some(ref name) = req.display_name {
+        update_expr.push("display_name = :dname".to_string());
+        expr_values.insert(":dname".to_string(), AttributeValue::S(name.clone()));
+        // Also update user profile display_name
+        let profile_pk = format!("USER#{}", user_id);
+        let _ = dynamo
+            .update_item()
+            .table_name(config_table)
+            .key("pk", AttributeValue::S(profile_pk))
+            .key("sk", AttributeValue::S("PROFILE".to_string()))
+            .update_expression("SET display_name = :dname, updated_at = :now")
+            .expression_attribute_values(":dname", AttributeValue::S(name.clone()))
+            .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+            .send()
+            .await;
+    }
+    if let Some(ref voice) = req.tts_voice {
+        update_expr.push("tts_voice = :voice".to_string());
+        expr_values.insert(":voice".to_string(), AttributeValue::S(voice.clone()));
+    }
 
     let update_expression = update_expr.join(", ");
     let _ = dynamo
@@ -7447,16 +8253,23 @@ async fn handle_auth_register(
             // Create user profile
             let _ = get_or_create_user(dynamo, table, &user_id).await;
 
-            // Update profile with email and auth method
+            let display_name = req.name
+                .as_ref()
+                .map(|n| n.trim().to_string())
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| email.clone());
+
+            // Update profile with email, auth method, and display name
             let user_pk = format!("USER#{}", user_id);
             let _ = dynamo
                 .update_item()
                 .table_name(table.as_str())
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S("PROFILE".to_string()))
-                .update_expression("SET email = :email, auth_method = :auth, updated_at = :now")
+                .update_expression("SET email = :email, auth_method = :auth, display_name = :name, updated_at = :now")
                 .expression_attribute_values(":email", AttributeValue::S(email.clone()))
                 .expression_attribute_values(":auth", AttributeValue::S("email".to_string()))
+                .expression_attribute_values(":name", AttributeValue::S(display_name.clone()))
                 .expression_attribute_values(":now", AttributeValue::S(now.clone()))
                 .send()
                 .await;
@@ -7471,7 +8284,7 @@ async fn handle_auth_register(
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
                 .item("email", AttributeValue::S(email.clone()))
-                .item("display_name", AttributeValue::S(email.clone()))
+                .item("display_name", AttributeValue::S(display_name.clone()))
                 .item("created_at", AttributeValue::S(now))
                 .item("ttl", AttributeValue::N(ttl))
                 .send()
@@ -7484,6 +8297,7 @@ async fn handle_auth_register(
                 "token": auth_token,
                 "user_id": user_id,
                 "email": email,
+                "display_name": display_name,
             })));
         }
     }
@@ -7646,7 +8460,7 @@ async fn handle_auth_email(
 
                 // Store verification code in DynamoDB
                 let verify_pk = format!("VERIFY#{}", email);
-                let _ = dynamo
+                let mut put_req = dynamo
                     .put_item()
                     .table_name(table.as_str())
                     .item("pk", AttributeValue::S(verify_pk))
@@ -7655,9 +8469,14 @@ async fn handle_auth_email(
                     .item("attempts", AttributeValue::N("0".to_string()))
                     .item("session_id", AttributeValue::S(req.session_id.clone().unwrap_or_default()))
                     .item("ttl", AttributeValue::N(ttl))
-                    .item("created_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
-                    .send()
-                    .await;
+                    .item("created_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()));
+                if let Some(ref name) = req.name {
+                    let trimmed = name.trim();
+                    if !trimmed.is_empty() {
+                        put_req = put_req.item("name", AttributeValue::S(trimmed.to_string()));
+                    }
+                }
+                let _ = put_req.send().await;
 
                 // Send verification email
                 match send_verification_email(&email, &code, api_key).await {
@@ -7688,6 +8507,12 @@ async fn handle_auth_email(
                 .send()
                 .await;
 
+            let display_name = req.name
+                .as_ref()
+                .map(|n| n.trim().to_string())
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| email.clone());
+
             let user_id = if let Ok(output) = &existing {
                 if let Some(item) = &output.item {
                     item.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default()
@@ -7714,9 +8539,10 @@ async fn handle_auth_email(
                         .table_name(table.as_str())
                         .key("pk", AttributeValue::S(user_pk))
                         .key("sk", AttributeValue::S("PROFILE".to_string()))
-                        .update_expression("SET email = :email, auth_method = :auth, updated_at = :now")
+                        .update_expression("SET email = :email, auth_method = :auth, display_name = :name, updated_at = :now")
                         .expression_attribute_values(":email", AttributeValue::S(email.clone()))
                         .expression_attribute_values(":auth", AttributeValue::S("email_passwordless".to_string()))
+                        .expression_attribute_values(":name", AttributeValue::S(display_name.clone()))
                         .expression_attribute_values(":now", AttributeValue::S(now))
                         .send()
                         .await;
@@ -7757,7 +8583,7 @@ async fn handle_auth_email(
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
                 .item("email", AttributeValue::S(email.clone()))
-                .item("display_name", AttributeValue::S(email.clone()))
+                .item("display_name", AttributeValue::S(display_name.clone()))
                 .item("created_at", AttributeValue::S(now))
                 .item("ttl", AttributeValue::N(ttl))
                 .send()
@@ -7770,6 +8596,7 @@ async fn handle_auth_email(
                 "token": auth_token,
                 "user_id": user_id,
                 "email": email,
+                "display_name": display_name,
             })));
         }
     }
@@ -7803,13 +8630,14 @@ async fn handle_auth_verify(
                 .send()
                 .await;
 
-            let (stored_code, stored_session_id, attempts) = match stored {
+            let (stored_code, stored_session_id, attempts, stored_name) = match stored {
                 Ok(output) => {
                     if let Some(item) = output.item {
                         let sc = item.get("code").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
                         let sid = item.get("session_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
                         let att = item.get("attempts").and_then(|v| v.as_n().ok())
                             .and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
+                        let name = item.get("name").and_then(|v| v.as_s().ok()).cloned();
                         // Check TTL
                         if let Some(ttl_val) = item.get("ttl").and_then(|v| v.as_n().ok()) {
                             if let Ok(ttl) = ttl_val.parse::<i64>() {
@@ -7820,7 +8648,7 @@ async fn handle_auth_verify(
                                 }
                             }
                         }
-                        (sc, sid, att)
+                        (sc, sid, att, name)
                     } else {
                         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
                             "error": "認証コードが見つかりません。もう一度メールアドレスを入力してください。"
@@ -7876,6 +8704,10 @@ async fn handle_auth_verify(
                 .send()
                 .await;
 
+            let display_name = stored_name
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| email.clone());
+
             let user_id = if let Ok(output) = &existing {
                 if let Some(item) = &output.item {
                     item.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default()
@@ -7901,9 +8733,10 @@ async fn handle_auth_verify(
                         .table_name(table.as_str())
                         .key("pk", AttributeValue::S(user_pk))
                         .key("sk", AttributeValue::S("PROFILE".to_string()))
-                        .update_expression("SET email = :email, auth_method = :auth, updated_at = :now")
+                        .update_expression("SET email = :email, auth_method = :auth, display_name = :name, updated_at = :now")
                         .expression_attribute_values(":email", AttributeValue::S(email.clone()))
                         .expression_attribute_values(":auth", AttributeValue::S("email_verified".to_string()))
+                        .expression_attribute_values(":name", AttributeValue::S(display_name.clone()))
                         .expression_attribute_values(":now", AttributeValue::S(now))
                         .send()
                         .await;
@@ -7945,7 +8778,7 @@ async fn handle_auth_verify(
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
                 .item("email", AttributeValue::S(email.clone()))
-                .item("display_name", AttributeValue::S(email.clone()))
+                .item("display_name", AttributeValue::S(display_name.clone()))
                 .item("created_at", AttributeValue::S(now))
                 .item("ttl", AttributeValue::N(ttl))
                 .send()
@@ -7958,6 +8791,7 @@ async fn handle_auth_verify(
                 "token": auth_token,
                 "user_id": user_id,
                 "email": email,
+                "display_name": display_name,
             })));
         }
     }
@@ -9146,6 +9980,160 @@ async fn handle_delete_memory(
 }
 
 /// Extract session key from Bearer token
+// ─── Cross-channel real-time sync ───
+
+/// Increment sync version counter for a session (fire-and-forget).
+/// pk: SYNC#{session_key}, sk: VERSION
+/// Clients poll this counter to detect new messages from other channels.
+/// Must be awaited (not fire-and-forget) because Lambda freezes before spawned tasks complete.
+#[cfg(feature = "dynamodb-backend")]
+async fn increment_sync_version(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    session_key: &str,
+    channel: &str,
+) {
+    let sync_pk = format!("SYNC#{}", session_key);
+    if let Err(e) = dynamo
+        .update_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(sync_pk.clone()))
+        .key("sk", AttributeValue::S("VERSION".to_string()))
+        .update_expression("SET msg_version = if_not_exists(msg_version, :zero) + :one, last_channel = :ch, updated_at = :now")
+        .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+        .expression_attribute_values(":zero", AttributeValue::N("0".to_string()))
+        .expression_attribute_values(":ch", AttributeValue::S(channel.to_string()))
+        .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+        .send()
+        .await
+    {
+        tracing::warn!("increment_sync_version failed for {}: {}", sync_pk, e);
+    }
+}
+
+/// Query params for sync poll
+#[derive(Debug, Deserialize)]
+struct SyncPollParams {
+    session_key: Option<String>,
+    v: Option<i64>,
+}
+
+/// GET /api/v1/sync/poll — Lightweight poll for cross-channel message sync.
+/// Returns current version + new messages if version changed.
+/// Cost: 1 DynamoDB GetItem (0.5 RCU) per poll.
+async fn handle_sync_poll(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Query(params): Query<SyncPollParams>,
+) -> impl IntoResponse {
+    // Resolve session key from query param or auth token
+    let raw_key = if let Some(ref sk) = params.session_key {
+        sk.clone()
+    } else {
+        let token = headers.get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim_start_matches("Bearer ").to_string())
+            .unwrap_or_default();
+        if token.is_empty() {
+            return Json(serde_json::json!({"error": "session_key required"}));
+        }
+        token
+    };
+
+    let client_version = params.v.unwrap_or(0);
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            // Resolve session key (webchat:UUID → user_id if linked)
+            let session_key = resolve_session_key(dynamo, table, &raw_key).await;
+            // Fetch current sync version (single GetItem — very cheap)
+            let sync_pk = format!("SYNC#{}", session_key);
+            match dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(sync_pk))
+                .key("sk", AttributeValue::S("VERSION".to_string()))
+                .projection_expression("msg_version, last_channel, updated_at")
+                .send()
+                .await
+            {
+                Ok(output) => {
+                    if let Some(item) = output.item {
+                        let server_version = item.get("msg_version")
+                            .and_then(|v| v.as_n().ok())
+                            .and_then(|n| n.parse::<i64>().ok())
+                            .unwrap_or(0);
+                        let last_channel = item.get("last_channel")
+                            .and_then(|v| v.as_s().ok())
+                            .cloned()
+                            .unwrap_or_default();
+
+                        if server_version > client_version {
+                            // Version changed — fetch new messages from session
+                            let mut sessions = state.sessions.lock().await;
+                            let session = sessions.refresh(&session_key);
+                            let all_msgs = &session.messages;
+                            // Return messages after client's known count
+                            // client_version approximately equals number of message pairs the client has seen
+                            let skip = (client_version * 2).max(0) as usize;
+                            let new_msgs: Vec<serde_json::Value> = all_msgs.iter()
+                                .skip(skip)
+                                .map(|m| {
+                                    let role = &m.role;
+                                    let content = &m.content;
+                                    let ch = m.extra.get("channel")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("web");
+                                    let ts = m.timestamp.as_deref().unwrap_or("");
+                                    serde_json::json!({
+                                        "role": role,
+                                        "content": content,
+                                        "channel": ch,
+                                        "timestamp": ts,
+                                    })
+                                })
+                                .collect();
+
+                            return Json(serde_json::json!({
+                                "updated": true,
+                                "version": server_version,
+                                "last_channel": last_channel,
+                                "messages": new_msgs,
+                            }));
+                        } else {
+                            return Json(serde_json::json!({
+                                "updated": false,
+                                "version": server_version,
+                            }));
+                        }
+                    } else {
+                        // No sync record yet
+                        return Json(serde_json::json!({
+                            "updated": false,
+                            "version": 0,
+                        }));
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Sync poll error: {}", e);
+                    return Json(serde_json::json!({
+                        "updated": false,
+                        "version": client_version,
+                        "error": "sync_fetch_failed",
+                    }));
+                }
+            }
+        }
+    }
+
+    let _ = &state;
+    Json(serde_json::json!({
+        "updated": false,
+        "version": 0,
+    }))
+}
+
 // ─── Sync API (ElioChat ↔ chatweb.ai) ───
 
 /// GET /api/v1/sync/conversations — List conversations for sync (with optional ?since filter)
@@ -9669,14 +10657,15 @@ mod agent_routing_tests {
 
     #[test]
     fn test_explicit_prefix() {
-        let (agent, msg) = detect_agent("@coder fix this bug");
+        let (agent, msg, score) = detect_agent("@coder fix this bug");
         assert_eq!(agent.id, "coder");
         assert_eq!(msg, "fix this bug");
+        assert_eq!(score, 100); // explicit @agent
     }
 
     #[test]
     fn test_explicit_prefix_researcher() {
-        let (agent, msg) = detect_agent("@researcher find latest news");
+        let (agent, msg, _score) = detect_agent("@researcher find latest news");
         assert_eq!(agent.id, "researcher");
         assert_eq!(msg, "find latest news");
     }
@@ -9684,50 +10673,53 @@ mod agent_routing_tests {
     #[test]
     fn test_research_over_code() {
         // "Pythonを調べて" → researcher (調べ=3) > coder (python=1)
-        let (agent, _) = detect_agent("Pythonを調べて");
+        let (agent, _, score) = detect_agent("Pythonを調べて");
         assert_eq!(agent.id, "researcher");
+        assert!(score >= 2);
     }
 
     #[test]
     fn test_creative_translate() {
-        let (agent, _) = detect_agent("この文章を英語に翻訳して");
+        let (agent, _, _) = detect_agent("この文章を英語に翻訳して");
         assert_eq!(agent.id, "creative");
     }
 
     #[test]
     fn test_analyst_data() {
-        let (agent, _) = detect_agent("このデータを分析してください");
+        let (agent, _, _) = detect_agent("このデータを分析してください");
         assert_eq!(agent.id, "analyst");
     }
 
     #[test]
     fn test_default_greeting() {
-        let (agent, _) = detect_agent("こんにちは");
+        let (agent, _, score) = detect_agent("こんにちは");
         assert_eq!(agent.id, "assistant");
+        assert_eq!(score, 0);
     }
 
     #[test]
     fn test_weak_signal_default() {
         // "error" alone (no match) → assistant (below threshold)
-        let (agent, _) = detect_agent("error");
+        let (agent, _, score) = detect_agent("error");
         assert_eq!(agent.id, "assistant");
+        assert_eq!(score, 0);
     }
 
     #[test]
     fn test_weather_researcher() {
-        let (agent, _) = detect_agent("今日の天気を教えて");
+        let (agent, _, _) = detect_agent("今日の天気を教えて");
         assert_eq!(agent.id, "researcher");
     }
 
     #[test]
     fn test_debug_coder() {
-        let (agent, _) = detect_agent("このバグをdebugして");
+        let (agent, _, _) = detect_agent("このバグをdebugして");
         assert_eq!(agent.id, "coder");
     }
 
     #[test]
     fn test_code_writing_coder() {
-        let (agent, _) = detect_agent("Rustでコードを書いて");
+        let (agent, _, _) = detect_agent("Rustでコードを書いて");
         // コード=2 + rust=1 = coder:3, 書いて=2 = creative:2 → coder wins
         assert_eq!(agent.id, "coder");
     }
@@ -9735,15 +10727,16 @@ mod agent_routing_tests {
     #[test]
     fn test_news_researcher() {
         // 最新=3, ニュース=3 → researcher
-        let (agent, _) = detect_agent("最新のAIニュース");
+        let (agent, _, _) = detect_agent("最新のAIニュース");
         assert_eq!(agent.id, "researcher");
     }
 
     #[test]
     fn test_single_weak_keyword_defaults() {
         // "api" alone = coder score 1, below threshold → assistant
-        let (agent, _) = detect_agent("api");
+        let (agent, _, score) = detect_agent("api");
         assert_eq!(agent.id, "assistant");
+        assert_eq!(score, 0);
     }
 
     #[test]
@@ -9760,5 +10753,55 @@ mod agent_routing_tests {
         let assistant = &AGENTS[1];
         assert_eq!(assistant.preferred_model, None);
         assert_eq!(assistant.estimated_seconds, 10);
+    }
+
+    #[test]
+    fn test_detect_language() {
+        assert_eq!(detect_language("hello world"), "en");
+        assert_eq!(detect_language("こんにちは"), "ja");
+        assert_eq!(detect_language("Rustでコードを書いて"), "ja");
+        assert_eq!(detect_language(""), "en"); // empty is ascii
+        assert_eq!(detect_language("café"), "other"); // non-ascii, non-ja
+    }
+
+    #[test]
+    fn test_build_meta_context_anonymous() {
+        let ctx = build_meta_context(None, "web", "pc", 0, false);
+        assert!(ctx.contains("時間帯:"));
+        assert!(ctx.contains("チャネル: web"));
+        assert!(ctx.contains("デバイス: pc"));
+        assert!(ctx.contains("新規"));
+    }
+
+    #[test]
+    fn test_build_meta_context_with_user() {
+        let user = UserProfile {
+            user_id: "test".to_string(),
+            display_name: Some("太郎".to_string()),
+            plan: "pro".to_string(),
+            credits_remaining: 5000,
+            credits_used: 100,
+            channels: vec!["line".to_string(), "telegram".to_string()],
+            stripe_customer_id: None,
+            email: None,
+            created_at: "2025-01-01".to_string(),
+        };
+        let ctx = build_meta_context(Some(&user), "line", "mobile", 6, false);
+        assert!(ctx.contains("ユーザー名: 太郎"));
+        assert!(ctx.contains("プラン: pro"));
+        assert!(ctx.contains("残クレジット: 5000"));
+        assert!(ctx.contains("連携: line,telegram"));
+        assert!(ctx.contains("チャネル: line"));
+        assert!(ctx.contains("デバイス: mobile"));
+        assert!(ctx.contains("継続(6件)"));
+    }
+
+    #[test]
+    fn test_build_meta_context_english() {
+        let ctx = build_meta_context(None, "web", "pc", 3, true);
+        assert!(ctx.contains("Time:"));
+        assert!(ctx.contains("Channel: web"));
+        assert!(ctx.contains("Device: pc"));
+        assert!(ctx.contains("ongoing(3msgs)"));
     }
 }
