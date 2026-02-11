@@ -62,6 +62,12 @@ impl ToolRegistry {
             Box::new(SandboxFileReadTool),
             Box::new(SandboxFileWriteTool),
             Box::new(SandboxFileListTool),
+            // Media generation tools
+            Box::new(ImageGenerateTool),
+            Box::new(MusicGenerateTool),
+            Box::new(VideoGenerateTool),
+            // Webhook / IoT tools
+            Box::new(WebhookTriggerTool),
         ];
 
         // Register GitHub tools (read works on public repos without token)
@@ -3287,6 +3293,375 @@ async fn ensure_subdomain(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Media Generation Tools
+// ---------------------------------------------------------------------------
+
+/// Image generation tool using OpenAI gpt-image-1 API.
+pub struct ImageGenerateTool;
+
+#[async_trait]
+impl Tool for ImageGenerateTool {
+    fn name(&self) -> &str { "image_generate" }
+    fn description(&self) -> &str {
+        "Generate an image from a text description using AI (gpt-image-1). Returns a URL to the generated image. Use when the user asks you to draw, create, or generate an image/picture/illustration."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "prompt": { "type": "string", "description": "A detailed description of the image to generate (in English for best results)" },
+                "quality": { "type": "string", "enum": ["low", "medium", "high"], "description": "Image quality level. low=$0.011, medium=$0.042, high=$0.167 per image. Default: medium" },
+                "size": { "type": "string", "enum": ["1024x1024", "1024x1536", "1536x1024"], "description": "Image dimensions. Default: 1024x1024" }
+            },
+            "required": ["prompt"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let prompt = params.get("prompt").and_then(|v| v.as_str()).unwrap_or("a beautiful landscape");
+        let quality = params.get("quality").and_then(|v| v.as_str()).unwrap_or("medium");
+        let size = params.get("size").and_then(|v| v.as_str()).unwrap_or("1024x1024");
+        execute_image_generate(prompt, quality, size).await
+    }
+}
+
+async fn execute_image_generate(prompt: &str, quality: &str, size: &str) -> String {
+    let api_key = match std::env::var("OPENAI_API_KEY") {
+        Ok(k) if !k.is_empty() => k,
+        _ => return "[IMAGE_ERROR] OPENAI_API_KEY not configured".to_string(),
+    };
+
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "model": "gpt-image-1",
+        "prompt": prompt,
+        "n": 1,
+        "size": size,
+        "quality": quality,
+    });
+
+    match client.post("https://api.openai.com/v1/images/generations")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    if let Some(url) = json.pointer("/data/0/url").and_then(|v| v.as_str()) {
+                        return format!("![Generated Image]({})\n\nImage generated successfully (quality: {}, size: {})", url, quality, size);
+                    }
+                    // Try b64_json format
+                    if let Some(b64) = json.pointer("/data/0/b64_json").and_then(|v| v.as_str()) {
+                        return format!("![Generated Image](data:image/png;base64,{})\n\nImage generated successfully (quality: {}, size: {})", &b64[..50], quality, size);
+                    }
+                    format!("[IMAGE_ERROR] Unexpected response format: {}", json)
+                } else {
+                    "[IMAGE_ERROR] Failed to parse response".to_string()
+                }
+            } else {
+                let status = resp.status();
+                let text = resp.text().await.unwrap_or_default();
+                format!("[IMAGE_ERROR] API returned {}: {}", status, text)
+            }
+        }
+        Err(e) => format!("[IMAGE_ERROR] Request failed: {}", e),
+    }
+}
+
+/// Music generation tool using Suno API.
+pub struct MusicGenerateTool;
+
+#[async_trait]
+impl Tool for MusicGenerateTool {
+    fn name(&self) -> &str { "music_generate" }
+    fn description(&self) -> &str {
+        "Generate a song/music from a text description using AI (Suno). Returns a URL to the generated audio. Use when the user asks you to create music, a song, or a melody. Generation takes 30-60 seconds."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "prompt": { "type": "string", "description": "Description of the song to generate (e.g., 'upbeat jazz song about coding in Rust')" },
+                "style": { "type": "string", "description": "Music style/genre (e.g., 'jazz', 'pop', 'rock', 'electronic', 'classical'). Optional." },
+                "instrumental": { "type": "boolean", "description": "If true, generate instrumental only (no vocals). Default: false" }
+            },
+            "required": ["prompt"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let prompt = params.get("prompt").and_then(|v| v.as_str()).unwrap_or("a happy song");
+        let style = params.get("style").and_then(|v| v.as_str()).unwrap_or("");
+        let instrumental = params.get("instrumental").and_then(|v| v.as_bool()).unwrap_or(false);
+        execute_music_generate(prompt, style, instrumental).await
+    }
+}
+
+async fn execute_music_generate(prompt: &str, style: &str, instrumental: bool) -> String {
+    let api_key = match std::env::var("SUNO_API_KEY") {
+        Ok(k) if !k.is_empty() => k,
+        _ => return "[MUSIC_ERROR] SUNO_API_KEY not configured. Music generation is not available.".to_string(),
+    };
+    let api_base = std::env::var("SUNO_API_BASE").unwrap_or_else(|_| "https://apibox.erweima.ai".to_string());
+
+    let full_prompt = if style.is_empty() {
+        prompt.to_string()
+    } else {
+        format!("{} (style: {})", prompt, style)
+    };
+
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "prompt": full_prompt,
+        "customMode": false,
+        "instrumental": instrumental,
+    });
+
+    // Submit generation request
+    let submit_resp = match client.post(format!("{}/api/v1/generate", api_base))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return format!("[MUSIC_ERROR] Request failed: {}", e),
+    };
+
+    if !submit_resp.status().is_success() {
+        let text = submit_resp.text().await.unwrap_or_default();
+        return format!("[MUSIC_ERROR] API error: {}", text);
+    }
+
+    let submit_json: serde_json::Value = match submit_resp.json().await {
+        Ok(j) => j,
+        Err(e) => return format!("[MUSIC_ERROR] Parse error: {}", e),
+    };
+
+    let task_id = match submit_json.pointer("/data/taskId").and_then(|v| v.as_str()) {
+        Some(id) => id.to_string(),
+        None => return format!("[MUSIC_ERROR] No taskId in response: {}", submit_json),
+    };
+
+    // Poll for completion (max 90 seconds)
+    for _ in 0..18 {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        let poll_resp = match client.get(format!("{}/api/v1/generate/record?taskId={}", api_base, task_id))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+
+        if let Ok(poll_json) = poll_resp.json::<serde_json::Value>().await {
+            let status = poll_json.pointer("/data/status").and_then(|v| v.as_str()).unwrap_or("");
+            if status == "SUCCESS" || status == "FIRST_SUCCESS" {
+                if let Some(songs) = poll_json.pointer("/data/response/sunoData").and_then(|v| v.as_array()) {
+                    if let Some(song) = songs.first() {
+                        let audio_url = song.get("audioUrl").and_then(|v| v.as_str()).unwrap_or("");
+                        let title = song.get("title").and_then(|v| v.as_str()).unwrap_or("Generated Song");
+                        return format!("[AUDIO:{}]\n\nMusic generated: \"{}\"", audio_url, title);
+                    }
+                }
+                return format!("[MUSIC_ERROR] Completed but no audio URL found: {}", poll_json);
+            }
+            if status == "FAILED" {
+                return format!("[MUSIC_ERROR] Generation failed: {}", poll_json);
+            }
+        }
+    }
+    format!("[MUSIC_ERROR] Generation timed out after 90 seconds. Task ID: {}", task_id)
+}
+
+/// Video generation tool using Kling API (via fal.ai or direct).
+pub struct VideoGenerateTool;
+
+#[async_trait]
+impl Tool for VideoGenerateTool {
+    fn name(&self) -> &str { "video_generate" }
+    fn description(&self) -> &str {
+        "Generate a short video from a text description using AI (Kling). Returns a URL to the generated video. Use when the user asks to create a video or animation. Generation takes 1-3 minutes."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "prompt": { "type": "string", "description": "Description of the video to generate (e.g., 'a cat playing in the snow, cinematic')" },
+                "duration": { "type": "string", "enum": ["5", "10"], "description": "Video duration in seconds. Default: 5" },
+                "mode": { "type": "string", "enum": ["standard", "pro"], "description": "Quality mode. standard is faster/cheaper, pro is higher quality. Default: standard" }
+            },
+            "required": ["prompt"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let prompt = params.get("prompt").and_then(|v| v.as_str()).unwrap_or("a beautiful scene");
+        let duration = params.get("duration").and_then(|v| v.as_str()).unwrap_or("5");
+        let mode = params.get("mode").and_then(|v| v.as_str()).unwrap_or("standard");
+        execute_video_generate(prompt, duration, mode).await
+    }
+}
+
+async fn execute_video_generate(prompt: &str, duration: &str, mode: &str) -> String {
+    let api_key = match std::env::var("KLING_API_KEY") {
+        Ok(k) if !k.is_empty() => k,
+        _ => return "[VIDEO_ERROR] KLING_API_KEY not configured. Video generation is not available.".to_string(),
+    };
+    let api_base = std::env::var("KLING_API_BASE").unwrap_or_else(|_| "https://api.klingai.com".to_string());
+
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "prompt": prompt,
+        "duration": duration,
+        "mode": mode,
+        "aspect_ratio": "16:9",
+    });
+
+    // Submit generation
+    let submit_resp = match client.post(format!("{}/v1/videos/text2video", api_base))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return format!("[VIDEO_ERROR] Request failed: {}", e),
+    };
+
+    if !submit_resp.status().is_success() {
+        let text = submit_resp.text().await.unwrap_or_default();
+        return format!("[VIDEO_ERROR] API error: {}", text);
+    }
+
+    let submit_json: serde_json::Value = match submit_resp.json().await {
+        Ok(j) => j,
+        Err(e) => return format!("[VIDEO_ERROR] Parse error: {}", e),
+    };
+
+    let task_id = match submit_json.pointer("/data/task_id").and_then(|v| v.as_str())
+        .or_else(|| submit_json.get("task_id").and_then(|v| v.as_str()))
+    {
+        Some(id) => id.to_string(),
+        None => return format!("[VIDEO_ERROR] No task_id in response: {}", submit_json),
+    };
+
+    // Poll for completion (max 3 minutes)
+    for _ in 0..36 {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        let poll_resp = match client.get(format!("{}/v1/videos/text2video/{}", api_base, task_id))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+
+        if let Ok(poll_json) = poll_resp.json::<serde_json::Value>().await {
+            let status = poll_json.pointer("/data/task_status").and_then(|v| v.as_str()).unwrap_or("");
+            if status == "succeed" || status == "completed" {
+                if let Some(videos) = poll_json.pointer("/data/task_result/videos").and_then(|v| v.as_array()) {
+                    if let Some(video) = videos.first() {
+                        let video_url = video.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                        return format!("[VIDEO:{}]\n\nVideo generated ({}s, {} mode)", video_url, duration, mode);
+                    }
+                }
+                return format!("[VIDEO_ERROR] Completed but no video URL found: {}", poll_json);
+            }
+            if status == "failed" {
+                return format!("[VIDEO_ERROR] Generation failed: {}", poll_json);
+            }
+        }
+    }
+    format!("[VIDEO_ERROR] Generation timed out after 3 minutes. Task ID: {}", task_id)
+}
+
+// ---------------------------------------------------------------------------
+// Webhook / IFTTT Tool
+// ---------------------------------------------------------------------------
+
+/// Webhook trigger tool for IFTTT and similar services.
+/// Can be used to trigger smart home actions, notifications, etc.
+pub struct WebhookTriggerTool;
+
+#[async_trait]
+impl Tool for WebhookTriggerTool {
+    fn name(&self) -> &str { "webhook_trigger" }
+    fn description(&self) -> &str {
+        "Trigger a webhook (IFTTT, Zapier, etc.) to perform real-world actions like \
+         unlocking doors, controlling smart devices, or sending notifications. \
+         Known triggers: 'mita_unlock' = unlock the intercom/door. \
+         For IFTTT, provide event_name and optional value1/value2/value3."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "event_name": {
+                    "type": "string",
+                    "description": "IFTTT event name to trigger (e.g., 'mita_unlock' for door unlock)"
+                },
+                "url": {
+                    "type": "string",
+                    "description": "Full webhook URL (if not using IFTTT event_name). Optional."
+                },
+                "value1": { "type": "string", "description": "Optional value1 parameter" },
+                "value2": { "type": "string", "description": "Optional value2 parameter" },
+                "value3": { "type": "string", "description": "Optional value3 parameter" }
+            },
+            "required": ["event_name"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let event_name = params.get("event_name").and_then(|v| v.as_str()).unwrap_or("");
+        let custom_url = params.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        let value1 = params.get("value1").and_then(|v| v.as_str()).unwrap_or("");
+        let value2 = params.get("value2").and_then(|v| v.as_str()).unwrap_or("");
+        let value3 = params.get("value3").and_then(|v| v.as_str()).unwrap_or("");
+
+        let ifttt_key = std::env::var("IFTTT_WEBHOOK_KEY").unwrap_or_default();
+
+        let url = if !custom_url.is_empty() {
+            custom_url.to_string()
+        } else if !ifttt_key.is_empty() && !event_name.is_empty() {
+            format!("https://maker.ifttt.com/trigger/{}/with/key/{}", event_name, ifttt_key)
+        } else {
+            return "[TOOL_ERROR] No IFTTT_WEBHOOK_KEY configured and no custom URL provided.".to_string();
+        };
+
+        // Build JSON body
+        let mut body = serde_json::Map::new();
+        if !value1.is_empty() { body.insert("value1".to_string(), serde_json::json!(value1)); }
+        if !value2.is_empty() { body.insert("value2".to_string(), serde_json::json!(value2)); }
+        if !value3.is_empty() { body.insert("value3".to_string(), serde_json::json!(value3)); }
+
+        let client = reqwest::Client::new();
+        match client.post(&url)
+            .header("Content-Type", "application/json")
+            .json(&serde_json::Value::Object(body))
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                let status = resp.status().as_u16();
+                let text = resp.text().await.unwrap_or_default();
+                if status >= 200 && status < 300 {
+                    format!("Webhook triggered successfully! Event: {}, Status: {}", event_name, status)
+                } else {
+                    format!("[TOOL_ERROR] Webhook returned status {}: {}", status, text)
+                }
+            }
+            Err(e) => format!("[TOOL_ERROR] Webhook request failed: {}", e),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3335,8 +3710,8 @@ mod tests {
         std::env::remove_var("GITHUB_TOKEN");
         std::env::remove_var("CONNECT_INSTANCE_ID");
         let registry = ToolRegistry::with_builtins();
-        // 15 base (11 original + 4 sandbox), +1 github_read_file when http-api
-        let expected = if cfg!(feature = "http-api") { 16 } else { 15 };
+        // 19 base (11 original + 4 sandbox + 3 media + 1 webhook), +1 github_read_file when http-api
+        let expected = if cfg!(feature = "http-api") { 20 } else { 19 };
         assert_eq!(registry.len(), expected);
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
@@ -3364,7 +3739,7 @@ mod tests {
         std::env::set_var("GITHUB_TOKEN", "test-token");
         std::env::remove_var("CONNECT_INSTANCE_ID");
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 18); // 15 base + 1 github_read_file + 2 github_write tools
+        assert_eq!(registry.len(), 22); // 19 base + 1 github_read_file + 2 github_write tools
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))

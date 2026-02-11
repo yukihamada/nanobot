@@ -1,6 +1,7 @@
 pub mod openai_compat;
 pub mod anthropic;
 pub mod gemini;
+pub mod pricing;
 #[cfg(feature = "local-fallback")]
 pub mod local;
 

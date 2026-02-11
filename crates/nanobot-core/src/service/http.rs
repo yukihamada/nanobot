@@ -10876,6 +10876,270 @@ pub async fn serve(addr: &str, state: Arc<AppState>) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ─── A/B Test Engine (Thompson Sampling Multi-Armed Bandit) ───
+
+/// A/B test experiment variants.
+/// Each variant has a conversation style that the AI and UI adopt.
+const AB_VARIANTS: &[AbVariant] = &[
+    AbVariant {
+        id: "warm_casual",
+        name: "温かカジュアル",
+        greeting_ja: "やっほー！何か手伝えることある？",
+        greeting_en: "Hey there! What can I help you with?",
+        style_hint: "casual, warm, emoji-friendly, use first-person 僕/私",
+        personality: "enthusiastic_friend",
+    },
+    AbVariant {
+        id: "polite_pro",
+        name: "丁寧プロ",
+        greeting_ja: "こんにちは。どのようなことでもお手伝いいたします。",
+        greeting_en: "Hello. I'm here to assist you with anything you need.",
+        style_hint: "polite, professional, keigo, clear structure",
+        personality: "professional_butler",
+    },
+    AbVariant {
+        id: "playful_curious",
+        name: "わくわく好奇心",
+        greeting_ja: "わくわく！今日はどんな冒険する？何でも聞いてみて！",
+        greeting_en: "Exciting! What adventure shall we go on today? Ask me anything!",
+        style_hint: "playful, curious, uses exclamation, asks follow-up questions",
+        personality: "curious_explorer",
+    },
+    AbVariant {
+        id: "calm_wise",
+        name: "落ち着き知恵者",
+        greeting_ja: "ゆっくりでいいよ。何でも相談してね。",
+        greeting_en: "Take your time. I'm here whenever you're ready.",
+        style_hint: "calm, wise, thoughtful, minimal emoji, deeper answers",
+        personality: "wise_mentor",
+    },
+    AbVariant {
+        id: "energetic_doer",
+        name: "爆速アクション",
+        greeting_ja: "OK！すぐやるよ！何する？",
+        greeting_en: "OK! Let's do this! What's the task?",
+        style_hint: "action-oriented, fast, short sentences, tool-heavy",
+        personality: "action_hero",
+    },
+];
+
+struct AbVariant {
+    id: &'static str,
+    name: &'static str,
+    greeting_ja: &'static str,
+    greeting_en: &'static str,
+    style_hint: &'static str,
+    personality: &'static str,
+}
+
+/// GET /api/v1/ab/variant — Get assigned A/B test variant for this session.
+/// Uses Thompson Sampling: samples from Beta(successes+1, failures+1) for each variant.
+async fn handle_ab_variant(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Check if session already has a variant assigned
+    let existing = headers.get("x-ab-variant")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    if !existing.is_empty() {
+        if let Some(v) = AB_VARIANTS.iter().find(|v| v.id == existing) {
+            return Json(serde_json::json!({
+                "variant_id": v.id,
+                "name": v.name,
+                "greeting_ja": v.greeting_ja,
+                "greeting_en": v.greeting_en,
+                "style_hint": v.style_hint,
+                "personality": v.personality,
+            }));
+        }
+    }
+
+    // Thompson Sampling: pick best variant
+    let variant = pick_variant_thompson(&state).await;
+
+    Json(serde_json::json!({
+        "variant_id": variant.id,
+        "name": variant.name,
+        "greeting_ja": variant.greeting_ja,
+        "greeting_en": variant.greeting_en,
+        "style_hint": variant.style_hint,
+        "personality": variant.personality,
+    }))
+}
+
+/// Thompson Sampling: for each variant, sample from Beta(wins+1, losses+1),
+/// pick the variant with the highest sample.
+async fn pick_variant_thompson(state: &Arc<AppState>) -> &'static AbVariant {
+    use rand::Rng;
+
+    let stats = load_ab_stats(state).await;
+    let mut rng = rand::thread_rng();
+    let mut best_sample = -1.0f64;
+    let mut best_idx = 0;
+
+    for (i, variant) in AB_VARIANTS.iter().enumerate() {
+        let (wins, losses) = stats.get(variant.id).copied().unwrap_or((0, 0));
+        let alpha = (wins + 1) as f64;
+        let beta_param = (losses + 1) as f64;
+        let sample = sample_beta(&mut rng, alpha, beta_param);
+        if sample > best_sample {
+            best_sample = sample;
+            best_idx = i;
+        }
+    }
+
+    &AB_VARIANTS[best_idx]
+}
+
+/// Simple Beta distribution sampling using ratio of Gamma samples.
+fn sample_beta(rng: &mut impl rand::Rng, alpha: f64, beta: f64) -> f64 {
+    let x = sample_gamma(rng, alpha);
+    let y = sample_gamma(rng, beta);
+    if x + y == 0.0 { 0.5 } else { x / (x + y) }
+}
+
+/// Gamma sampling via Marsaglia and Tsang's method.
+fn sample_gamma(rng: &mut impl rand::Rng, shape: f64) -> f64 {
+    if shape < 1.0 {
+        let u: f64 = rng.gen();
+        return sample_gamma(rng, shape + 1.0) * u.powf(1.0 / shape);
+    }
+    let d = shape - 1.0 / 3.0;
+    let c = 1.0 / (9.0 * d).sqrt();
+    loop {
+        let x: f64 = rng.gen::<f64>() * 2.0 - 1.0;
+        let v = (1.0 + c * x).powi(3);
+        if v <= 0.0 { continue; }
+        let u: f64 = rng.gen();
+        if u < 1.0 - 0.0331 * x.powi(4) {
+            return d * v;
+        }
+        if u.ln() < 0.5 * x.powi(2) + d * (1.0 - v + v.ln()) {
+            return d * v;
+        }
+    }
+}
+
+/// Load A/B test stats from DynamoDB.
+async fn load_ab_stats(state: &Arc<AppState>) -> std::collections::HashMap<&'static str, (u32, u32)> {
+    let mut stats: std::collections::HashMap<&'static str, (u32, u32)> = std::collections::HashMap::new();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let Ok(result) = dynamo.get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S("AB_STATS#global".to_string()))
+                .key("sk", AttributeValue::S("CURRENT".to_string()))
+                .send()
+                .await
+            {
+                if let Some(item) = result.item() {
+                    for variant in AB_VARIANTS {
+                        let wins_key = format!("{}_wins", variant.id);
+                        let losses_key = format!("{}_losses", variant.id);
+                        let wins = item.get(&wins_key)
+                            .and_then(|v| v.as_n().ok())
+                            .and_then(|n| n.parse::<u32>().ok())
+                            .unwrap_or(0);
+                        let losses = item.get(&losses_key)
+                            .and_then(|v| v.as_n().ok())
+                            .and_then(|n| n.parse::<u32>().ok())
+                            .unwrap_or(0);
+                        stats.insert(variant.id, (wins, losses));
+                    }
+                }
+            }
+        }
+    }
+
+    stats
+}
+
+/// POST /api/v1/ab/event — Record an A/B test engagement event.
+async fn handle_ab_event(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let variant_id = req.get("variant_id").and_then(|v| v.as_str()).unwrap_or("");
+    let event = req.get("event").and_then(|v| v.as_str()).unwrap_or("");
+    let messages_sent = req.get("messages_sent").and_then(|v| v.as_u64()).unwrap_or(0);
+
+    if variant_id.is_empty() || event.is_empty() {
+        return Json(serde_json::json!({ "error": "variant_id and event required" }));
+    }
+
+    if !AB_VARIANTS.iter().any(|v| v.id == variant_id) {
+        return Json(serde_json::json!({ "error": "unknown variant" }));
+    }
+
+    // "engaged" = 3+ messages = success. "bounced" = failure.
+    let is_win = event == "engaged" || messages_sent >= 3;
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let field = if is_win {
+                format!("{}_wins", variant_id)
+            } else {
+                format!("{}_losses", variant_id)
+            };
+
+            let _ = dynamo.update_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S("AB_STATS#global".to_string()))
+                .key("sk", AttributeValue::S("CURRENT".to_string()))
+                .update_expression(format!("ADD {} :one", field))
+                .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+                .send()
+                .await;
+
+            let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+            let _ = dynamo.update_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S("AB_STATS#global".to_string()))
+                .key("sk", AttributeValue::S(format!("DAY#{}", today)))
+                .update_expression(format!("ADD {} :one", field))
+                .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+                .send()
+                .await;
+        }
+    }
+
+    Json(serde_json::json!({ "ok": true, "recorded": event, "variant": variant_id }))
+}
+
+/// GET /api/v1/ab/stats — View A/B test statistics.
+async fn handle_ab_stats(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let stats = load_ab_stats(&state).await;
+
+    let variants: Vec<serde_json::Value> = AB_VARIANTS.iter().map(|v| {
+        let (wins, losses) = stats.get(v.id).copied().unwrap_or((0, 0));
+        let total = wins + losses;
+        let rate = if total > 0 { wins as f64 / total as f64 } else { 0.0 };
+        serde_json::json!({
+            "id": v.id,
+            "name": v.name,
+            "wins": wins,
+            "losses": losses,
+            "total": total,
+            "engagement_rate": format!("{:.1}%", rate * 100.0),
+            "greeting_ja": v.greeting_ja,
+            "style_hint": v.style_hint,
+        })
+    }).collect();
+
+    Json(serde_json::json!({
+        "variants": variants,
+        "algorithm": "thompson_sampling",
+    }))
+}
+
 #[cfg(test)]
 mod agent_routing_tests {
     use super::*;

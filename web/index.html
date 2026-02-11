@@ -5995,6 +5995,8 @@
       textarea.value = '';
       textarea.style.height = 'auto';
       appAddMsg(text, 'user');
+      // Track A/B test engagement
+      trackAbMessage();
 
       // Immediately update conversation title client-side (avoid race with backend)
       if (appCurrentConvId && appConversations) {
@@ -6979,6 +6981,84 @@
       localStorage.setItem('llmSettings', JSON.stringify(settings));
     }
 
+    // -----------------------------------------------------------------------
+    // A/B Test Client — Auto-optimizing conversation style
+    // -----------------------------------------------------------------------
+    let _abVariant = null;
+    let _abSessionStart = Date.now();
+    let _abMessageCount = 0;
+    let _abEventSent = false;
+
+    async function initAbTest() {
+      try {
+        const existing = localStorage.getItem('abVariant');
+        const hdrs = { 'x-session-id': webSessionId };
+        if (existing) hdrs['x-ab-variant'] = existing;
+
+        const r = await fetch(API + '/api/v1/ab/variant', { headers: hdrs });
+        if (!r.ok) return;
+        _abVariant = await r.json();
+        localStorage.setItem('abVariant', _abVariant.variant_id);
+
+        // Apply variant greeting to empty state
+        applyAbVariant();
+      } catch(e) {
+        console.warn('A/B test init failed:', e);
+      }
+    }
+
+    function applyAbVariant() {
+      if (!_abVariant) return;
+      const l = document.documentElement.lang || 'ja';
+      // Update the empty state greeting
+      const emptyLogo = document.querySelector('.app-chat-empty-logo');
+      if (emptyLogo) {
+        const greeting = l === 'ja' ? _abVariant.greeting_ja : _abVariant.greeting_en;
+        // Add greeting below logo
+        let greetEl = document.getElementById('ab-greeting');
+        if (!greetEl) {
+          greetEl = document.createElement('div');
+          greetEl.id = 'ab-greeting';
+          greetEl.style.cssText = 'font-size:15px;color:var(--fg);margin-top:12px;font-weight:400;max-width:300px;text-align:center;';
+          emptyLogo.parentElement.insertBefore(greetEl, emptyLogo.nextSibling);
+        }
+        greetEl.textContent = greeting;
+      }
+    }
+
+    function trackAbMessage() {
+      _abMessageCount++;
+      // Report engagement when user sends 3+ messages
+      if (_abMessageCount === 3 && !_abEventSent && _abVariant) {
+        _abEventSent = true;
+        const duration = Math.floor((Date.now() - _abSessionStart) / 1000);
+        fetch(API + '/api/v1/ab/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-session-id': webSessionId },
+          body: JSON.stringify({
+            variant_id: _abVariant.variant_id,
+            event: 'engaged',
+            messages_sent: _abMessageCount,
+            session_duration_s: duration,
+          }),
+        }).catch(() => {});
+      }
+    }
+
+    // Report bounce on page unload if user didn't engage
+    window.addEventListener('beforeunload', function() {
+      if (!_abEventSent && _abVariant && _abMessageCount < 3) {
+        const duration = Math.floor((Date.now() - _abSessionStart) / 1000);
+        // Use sendBeacon for reliable delivery on page close
+        navigator.sendBeacon(API + '/api/v1/ab/event', JSON.stringify({
+          variant_id: _abVariant.variant_id,
+          event: 'bounced',
+          messages_sent: _abMessageCount,
+          session_duration_s: duration,
+        }));
+      }
+    });
+
     // Initialize settings on load
     (function initSettings() {
       const btn = document.getElementById('settings-tts-toggle');
@@ -6989,6 +7069,8 @@
       if (chk) chk.checked = exploreStored;
       // Restore adult mode badge
       initAdultModeUI();
+      // Initialize A/B test
+      initAbTest();
     })();
 
     // Auto-play TTS on every bot response (when enabled)
