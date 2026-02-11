@@ -116,6 +116,11 @@ Parameters:
     Type: String
     Description: URL to tokenizer.json for local LLM fallback
     Default: ''
+  StripeWebhookSecret:
+    Type: String
+    NoEcho: true
+    Description: Stripe webhook signing secret (whsec_...)
+    Default: ''
   ConnectInstanceId:
     Type: String
     Description: Amazon Connect instance ID for phone calls
@@ -172,6 +177,7 @@ Resources:
           FACEBOOK_VERIFY_TOKEN: !Ref FacebookVerifyToken
           LOCAL_MODEL_URL: !Ref LocalModelUrl
           LOCAL_TOKENIZER_URL: !Ref LocalTokenizerUrl
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
           CONNECT_INSTANCE_ID: !Ref ConnectInstanceId
           CONNECT_CONTACT_FLOW_ID: !Ref ConnectContactFlowId
           CONNECT_PHONE_NUMBER: !Ref ConnectPhoneNumber
