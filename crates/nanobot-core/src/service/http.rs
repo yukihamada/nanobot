@@ -2083,6 +2083,9 @@ async fn handle_chat(
                     model_used: None,
                     models_consulted: None,
                     action: Some("upgrade".to_string()),
+                    input_tokens: None,
+                    output_tokens: None,
+                    estimated_cost_usd: None,
                 });
             }
         }
