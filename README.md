@@ -1,15 +1,22 @@
 <div align="center">
 
+<img src="https://raw.githubusercontent.com/yukihamada/nanobot/main/web/og-teai.svg" alt="nanobot" width="400" />
+
 # nanobot
 
-[![Build](https://github.com/yukihamada/nanobot/actions/workflows/ci.yml/badge.svg)](https://github.com/yukihamada/nanobot/actions)
+### The AI Agent Platform Built for Production
+
+[![CI](https://github.com/yukihamada/nanobot/actions/workflows/ci.yml/badge.svg)](https://github.com/yukihamada/nanobot/actions/workflows/ci.yml)
+[![Deploy](https://github.com/yukihamada/nanobot/actions/workflows/deploy.yml/badge.svg)](https://github.com/yukihamada/nanobot/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Built_with-Rust-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Release](https://img.shields.io/github/v/release/yukihamada/nanobot?color=green)](https://github.com/yukihamada/nanobot/releases)
 [![GitHub stars](https://img.shields.io/github/stars/yukihamada/nanobot?style=social)](https://github.com/yukihamada/nanobot/stargazers)
-[![Rust](https://img.shields.io/badge/Built_with-Rust-dea584?logo=rust)](https://www.rust-lang.org/)
 
-**Voice-First AI Agent Platform** — Deploy intelligent AI agents to LINE, Telegram, Web in minutes.
+**Multi-model LLM runtime** with MCP tools, voice I/O, and **14+ channel integrations** --
+all in a single Rust binary that cold-starts in under 50 ms on AWS Lambda.
 
-[Try it now](https://chatweb.ai) | [API Docs](https://chatweb.ai/docs) | [Status](https://chatweb.ai/status) | [Playground](https://chatweb.ai/playground)
+[Homepage](https://teai.io) &bull; [Live Demo](https://chatweb.ai) &bull; [API Docs](https://chatweb.ai/docs) &bull; [Playground](https://chatweb.ai/playground) &bull; [Status](https://chatweb.ai/status)
 
 </div>
 
@@ -17,106 +24,212 @@
 
 ## Why nanobot?
 
-Most AI agent frameworks are Python wrappers around a single model, or developer-only tools limited to the terminal. nanobot is different: a **production-grade Rust runtime** that connects any LLM to any channel, with voice, tools, and long-term memory built in.
+Most AI agent frameworks are Python scripts wrapping a single model, limited to terminal use and impossible to scale. **nanobot** is different: a **production-grade Rust runtime** that connects any LLM to any channel, with voice, agentic tool loops, and long-term memory built in.
 
-### Comparison with Other AI Agent Frameworks
-
-| | **ChatWeb (nanobot)** | **OpenClaw** | **Claude Code** | **AutoGPT** | **OpenHands** |
-|---|---|---|---|---|---|
-| **Language** | Rust (axum) | TypeScript | CLI (proprietary) | Python/TS | Python/TS |
-| **Deployment** | AWS Lambda (serverless) | Local/VPS | Local/SaaS | Self-hosted | Local/Cloud/K8s |
-| **Cold Start** | <50ms | ~1s (Node.js) | N/A | ~3-10s | ~3-10s |
-| **Channels** | **14+** (Web, LINE, Telegram, WhatsApp, Discord, Slack, Teams, Facebook, Zalo, Feishu, Google Chat...) | 11+ (WhatsApp, Telegram, Slack, Discord, Signal, Teams...) | 1 (Terminal/IDE) | 1 (Web UI) | 4 (Web, CLI, Slack, Jira) |
-| **Voice (STT+TTS)** | Yes (push-to-talk, auto-TTS) | Partial (Whisper + ElevenLabs) | No | No | No |
-| **Models** | Claude, GPT-4o, Gemini, Groq, DeepSeek, Qwen, Kimi (hot-swap) | Claude, GPT (via API keys) | Claude only | GPT-4o, Claude | Any (configurable) |
-| **Auto Failover** | Yes (primary → gpt-4o-mini → gemini-flash) | No | No | No | No |
-| **Memory** | 2-layer (daily log + long-term, auto-consolidation) | Session + transcript | Conversation only | Workspace storage | Project-based |
-| **Tool Count** | 16+ built-in + sandboxed code exec | 50+ (ClawHub ecosystem) | fs, git, shell, MCP | Marketplace agents | Developer tools |
-| **Agentic Loop** | 1-5 iterations (plan-based) | Continuous | 7 parallel agents | Continuous | Iterative |
-| **Pricing** | Credit-based (100 free, from $9/mo) | Free (BYOK) | $17-$100+/mo | Free (self-hosted) | Free ($10 cloud) |
-| **License** | MIT | MIT | Proprietary | Polyform + MIT | MIT |
-| **Best For** | Voice-first multi-channel AI | Privacy-first personal assistant | Developer workflows | Automation | Software engineering |
-
-### Key Differentiators
-
-- **Voice-First**: The only framework with native STT + TTS + push-to-talk UI
-- **Most Channels**: 14+ channels — LINE, Telegram, WhatsApp, Discord, Slack, Teams, Facebook, Zalo, Feishu, Google Chat, and more. Cross-channel conversation sync via `/link`
-- **Fastest Runtime**: Rust on Lambda ARM64 = sub-50ms cold start, <2s response
-- **Auto Failover**: Primary model fails → automatically retries with cheaper models
-- **Long-Term Memory**: Daily conversation logs auto-consolidated into long-term memory (DynamoDB)
-- **Serverless Scale**: Zero-to-infinite scale on AWS Lambda, no VPS to manage
+| Problem | nanobot Solution |
+|---------|-----------------|
+| Slow cold starts (3-10 s) | **< 50 ms** on Lambda ARM64 |
+| Single-model lock-in | **7+ providers** with automatic failover |
+| Terminal-only agents | **14+ channels** -- Web, LINE, Telegram, Slack, Discord, Teams, WhatsApp, and more |
+| No voice support | **Native STT + TTS** with push-to-talk UI |
+| Fragile infra | **Serverless** -- zero VMs, zero Kubernetes, infinite scale |
 
 ---
 
-## Features
+## Feature Highlights
 
-### Core
-- **Voice-First** — Push-to-talk microphone UI with speech-to-text and auto-TTS response
-- **Multi-Model** — Claude, GPT-4o, Gemini Flash, Groq, DeepSeek, Qwen, Kimi. Automatic model selection per channel + LLM failover
-- **Multi-Channel** — Web, LINE, Telegram, Facebook, WhatsApp, Discord, Slack, Teams, Zalo, Feishu, Google Chat. One conversation synced across all channels
-- **Auto Failover** — Primary model fails? Automatically retries with gpt-4o-mini → gemini-flash. No error shown to user
-- **Long-Term Memory** — 2-layer memory: daily conversation logs + long-term facts. Auto-consolidated every 10 entries via cheap LLM. Yesterday's context included for continuity
+<table>
+<tr>
+<td width="50%">
 
-### Tools & Integrations
-- **Web Search** — Real-time web search via Brave/Google
-- **Code Execution** — Sandboxed shell/Python/Node.js execution (per-session `/tmp/sandbox/`)
-- **File Operations** — Read, write, list files in sandbox (with path traversal protection)
-- **Weather** — Live weather data for any location
-- **Calculator** — Mathematical expression evaluation
-- **Web Fetch** — Extract content from any URL
-- **Google Calendar** — View and create events (OAuth linked)
-- **Gmail** — Search, read, send emails (OAuth linked)
-- **Wikipedia** — Quick encyclopedia lookup
-- **Translation** — Multi-language translation
-- **QR Code** — Generate QR codes
-- **News Search** — Latest news aggregation
+### Multi-Model Runtime
+Hot-swap between Claude, GPT-4o, Gemini, Groq, DeepSeek, Qwen, and Kimi. Automatic failover ensures zero downtime: if the primary model fails, nanobot retries across all remaining providers in parallel.
 
-### Developer Platform
-- **REST API** — Full-featured JSON API for chat, speech, sessions, and more
-- **SSE Streaming** — Real-time streaming responses via Server-Sent Events
-- **MCP Server** — Model Context Protocol endpoint for AI agent tool use
-- **API Playground** — Interactive API explorer with shareable results
-- **API Keys** — Create and manage API keys for programmatic access
-- **Slash Commands** — `/link`, `/share`, `/help`, `/status`, `/improve`
-- **Settings API** — Model, temperature, max_tokens, BYOK API keys per user
-- **Memory API** — Read and clear long-term memory via REST
+</td>
+<td width="50%">
 
-### Infrastructure
-- **Serverless Rust** — Compiled to ARM64, runs on AWS Lambda with sub-50ms cold starts
-- **DynamoDB** — Single-table design for sessions, users, memory, billing, and more
-- **AI Agent Friendly** — `/robots.txt`, `/llms.txt`, `/.well-known/ai-plugin.json`
-- **Context Summarization** — Long conversations auto-summarized instead of silently truncated
+### 14+ Channel Integrations
+Web, LINE, Telegram, Facebook Messenger, WhatsApp, Discord, Slack, Microsoft Teams, Zalo, Feishu, Google Chat, and more. One conversation can be synced across every channel via the `/link` command.
+
+</td>
+</tr>
+<tr>
+<td>
+
+### Voice-First Design
+Push-to-talk microphone UI with browser-native speech-to-text (Web Speech API) and server-side text-to-speech (OpenAI TTS). The only agent framework with end-to-end voice built in.
+
+</td>
+<td>
+
+### Agentic Tool Loop
+16+ built-in tools including web search, sandboxed code execution, file I/O, weather, calculator, and web fetch. Multi-iteration agentic loops with plan-based reasoning (up to 5 iterations on Pro).
+
+</td>
+</tr>
+<tr>
+<td>
+
+### MCP Server
+Expose your agent as a Model Context Protocol (MCP) endpoint at `POST /mcp`. Any MCP-compatible client can discover and call your agent's tools via standard JSON-RPC 2.0.
+
+</td>
+<td>
+
+### Long-Term Memory
+Two-layer memory system: daily conversation logs auto-consolidated into long-term facts via a cheap LLM. Yesterday's context is always included. Memory persists across sessions and channels.
+
+</td>
+</tr>
+</table>
+
+---
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph Channels["Channels (14+)"]
+        WEB["Web SPA"]
+        LINE["LINE"]
+        TG["Telegram"]
+        FB["Facebook"]
+        SLACK["Slack"]
+        DISC["Discord"]
+        TEAMS["Teams"]
+        MORE["WhatsApp / Zalo / Feishu / ..."]
+    end
+
+    subgraph Gateway["API Gateway"]
+        APIGW["AWS API Gateway v2<br/>chatweb.ai / api.chatweb.ai"]
+    end
+
+    subgraph Runtime["nanobot Runtime (Rust, ARM64)"]
+        ROUTER["HTTP Router<br/>70+ routes"]
+        AUTH["Auth & Credits"]
+        AGENT["Agentic Loop"]
+        MCP["MCP Server"]
+        VOICE["STT / TTS"]
+        MEMORY["Memory Engine"]
+    end
+
+    subgraph Providers["LLM Providers"]
+        ANTHROPIC["Anthropic<br/>Claude"]
+        OPENAI["OpenAI<br/>GPT-4o"]
+        GEMINI["Google<br/>Gemini"]
+        GROQ["Groq"]
+        DEEPSEEK["DeepSeek"]
+        OPENROUTER["OpenRouter"]
+    end
+
+    subgraph Storage["Storage"]
+        DDB["DynamoDB<br/>Single-table design"]
+    end
+
+    subgraph Tools["Built-in Tools"]
+        SEARCH["web_search"]
+        CODE["code_execute"]
+        FETCH["web_fetch"]
+        FILE["file_read/write"]
+        CALC["calculator"]
+        WEATHER["weather"]
+    end
+
+    Channels --> APIGW
+    APIGW --> ROUTER
+    ROUTER --> AUTH
+    ROUTER --> AGENT
+    ROUTER --> MCP
+    ROUTER --> VOICE
+    AGENT --> Providers
+    AGENT --> Tools
+    AGENT --> MEMORY
+    MEMORY --> DDB
+    AUTH --> DDB
+```
+
+### Provider Failover Strategy
+
+```mermaid
+flowchart LR
+    REQ["Request"] --> PRIMARY["Primary Provider<br/>(25s timeout)"]
+    PRIMARY -->|Success| RES["Response"]
+    PRIMARY -->|Fail / Timeout| PARALLEL["All Remaining Providers<br/>(parallel, 25s each)"]
+    PARALLEL -->|First Success| RES
+    PARALLEL -->|All Fail| ERR["Error Response"]
+```
 
 ---
 
 ## Quick Start
 
-### Chat via API (no auth required)
+### Try the API (no signup required)
 
 ```bash
+# Simple chat
 curl -X POST https://chatweb.ai/api/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "京都の旅行プランを立てて", "session_id": "my-session"}'
-```
+  -d '{"message": "Explain quantum computing in 3 sentences", "session_id": "demo"}'
 
-### Stream responses (SSE)
-
-```bash
+# SSE streaming
 curl -N https://chatweb.ai/api/v1/chat/stream \
   -H "Content-Type: application/json" \
-  -d '{"message": "Write me a haiku about Rust", "session_id": "my-session"}'
-```
+  -d '{"message": "Write a haiku about Rust", "session_id": "demo"}'
 
-### Text-to-Speech
-
-```bash
+# Text-to-speech
 curl -X POST https://chatweb.ai/api/v1/speech/synthesize \
   -H "Content-Type: application/json" \
-  -d '{"text": "こんにちは！", "voice": "nova"}' \
+  -d '{"text": "Hello from nanobot!", "voice": "nova"}' \
   --output speech.mp3
 ```
 
-### Try it on every channel
+### Run Locally
+
+```bash
+git clone https://github.com/yukihamada/nanobot.git
+cd nanobot
+
+# Set at least one LLM provider key
+export ANTHROPIC_API_KEY=sk-ant-...
+# or
+export OPENAI_API_KEY=sk-...
+
+cargo run -- gateway --http --http-port 3000
+# Open http://localhost:3000
+```
+
+### Docker
+
+```bash
+docker run -p 3000:3000 \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e OPENAI_API_KEY=sk-... \
+  ghcr.io/yukihamada/nanobot
+```
+
+### Deploy to AWS Lambda (ARM64)
+
+```bash
+# Install cross-compilation tools
+brew install zig && cargo install cargo-zigbuild
+rustup target add aarch64-unknown-linux-gnu
+
+# Build
+RUSTUP_TOOLCHAIN=stable \
+RUSTC=~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc \
+cargo zigbuild \
+  --manifest-path crates/nanobot-lambda/Cargo.toml \
+  --release --target aarch64-unknown-linux-gnu
+
+# Package and deploy
+cp target/aarch64-unknown-linux-gnu/release/bootstrap ./bootstrap
+zip -j lambda.zip bootstrap
+aws lambda update-function-code --function-name nanobot --zip-file fileb://lambda.zip
+```
+
+---
+
+## Try It on Every Channel
 
 | Channel | Link |
 |---------|------|
@@ -126,43 +239,12 @@ curl -X POST https://chatweb.ai/api/v1/speech/synthesize \
 
 ---
 
-## Architecture
-
-```
- Web  LINE  Telegram  Facebook
-  |     |      |         |
-  +-----+------+---------+
-         |
-   API Gateway (chatweb.ai)
-         |
-   AWS Lambda (Rust, ARM64)
-         |
-   +-----+-----+-----+
-   |           |           |
-DynamoDB    LLM APIs    Tools
-sessions    Anthropic   web_search
-users       OpenAI      calculator
-memory      Gemini      web_fetch
-billing     Groq/Kimi   weather
-```
-
-### Provider Fallback Strategy
-
-```
-Request → Primary (25s timeout)
-            ├── Success → Return
-            └── Fail/Timeout
-                  ↓
-          All Remaining Providers (parallel, 25s each)
-            ├── First Success → Return
-            └── All Fail → Error
-```
-
----
-
 ## API Reference
 
-### Chat
+nanobot exposes a comprehensive REST API. Full interactive documentation is available at [chatweb.ai/docs](https://chatweb.ai/docs).
+
+<details>
+<summary><strong>Chat</strong></summary>
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
@@ -170,18 +252,24 @@ Request → Primary (25s timeout)
 | `POST` | `/api/v1/chat/stream` | Optional | SSE streaming response |
 | `POST` | `/api/v1/chat/explore` | Optional | Parallel multi-model comparison |
 
-### Authentication
+</details>
+
+<details>
+<summary><strong>Authentication</strong></summary>
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/api/v1/auth/register` | - | Create account (email + password) |
-| `POST` | `/api/v1/auth/login` | - | Login, get bearer token |
-| `POST` | `/api/v1/auth/email` | - | Send email verification code |
-| `POST` | `/api/v1/auth/verify` | - | Verify email code |
-| `GET` | `/api/v1/auth/me` | Bearer | Current user + credits |
-| `GET` | `/auth/google` | - | Google OAuth flow |
+| `POST` | `/api/v1/auth/register` | -- | Create account |
+| `POST` | `/api/v1/auth/login` | -- | Login, get bearer token |
+| `POST` | `/api/v1/auth/email` | -- | Send email verification code |
+| `POST` | `/api/v1/auth/verify` | -- | Verify email code |
+| `GET`  | `/api/v1/auth/me` | Bearer | Current user + credits |
+| `GET`  | `/auth/google` | -- | Google OAuth flow |
 
-### Conversations
+</details>
+
+<details>
+<summary><strong>Conversations</strong></summary>
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
@@ -191,25 +279,34 @@ Request → Primary (25s timeout)
 | `DELETE` | `/api/v1/conversations/{id}` | Bearer | Delete conversation |
 | `POST` | `/api/v1/conversations/{id}/share` | Bearer | Generate share link |
 | `DELETE` | `/api/v1/conversations/{id}/share` | Bearer | Revoke share link |
-| `GET` | `/api/v1/shared/{hash}` | - | Read shared conversation |
+| `GET` | `/api/v1/shared/{hash}` | -- | Read shared conversation |
 
-### Sessions & Accounts
+</details>
+
+<details>
+<summary><strong>Sessions & Accounts</strong></summary>
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `GET` | `/api/v1/sessions` | x-session-id | List sessions |
 | `GET` | `/api/v1/sessions/{id}` | x-session-id | Get session with history |
 | `DELETE` | `/api/v1/sessions/{id}` | x-session-id | Delete a session |
-| `GET` | `/api/v1/account/{id}` | - | User profile, plan, credits |
+| `GET` | `/api/v1/account/{id}` | -- | User profile, plan, credits |
 | `GET` | `/api/v1/usage` | x-session-id | Credit usage stats |
 
-### Speech
+</details>
+
+<details>
+<summary><strong>Speech</strong></summary>
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `POST` | `/api/v1/speech/synthesize` | Optional | Text-to-speech (MP3, OpenAI TTS) |
 
-### API Keys
+</details>
+
+<details>
+<summary><strong>API Keys</strong></summary>
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
@@ -217,81 +314,106 @@ Request → Primary (25s timeout)
 | `POST` | `/api/v1/apikeys` | Bearer | Create API key |
 | `DELETE` | `/api/v1/apikeys/{id}` | Bearer | Delete API key |
 
-### Channel Linking
+</details>
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `POST` | `/api/v1/link/generate` | x-session-id | Generate 6-char link code for QR flow |
-
-### Billing
+<details>
+<summary><strong>Billing</strong></summary>
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `POST` | `/api/v1/billing/checkout` | Bearer | Create Stripe checkout session |
 | `GET` | `/api/v1/billing/portal` | Bearer | Stripe customer portal URL |
-| `POST` | `/api/v1/coupon/validate` | - | Validate coupon code |
+| `POST` | `/api/v1/coupon/validate` | -- | Validate coupon code |
 | `POST` | `/api/v1/coupon/redeem` | Bearer | Redeem coupon code |
 
-### Sync (Cross-device)
+</details>
+
+<details>
+<summary><strong>Sync & Devices</strong></summary>
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `GET` | `/api/v1/sync/conversations` | Bearer | List sync-enabled conversations |
 | `GET` | `/api/v1/sync/conversations/{id}` | Bearer | Get synced conversation |
 | `POST` | `/api/v1/sync/push` | Bearer | Push conversation update |
-
-### Devices
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
 | `GET` | `/api/v1/devices` | x-session-id | List registered devices |
 | `POST` | `/api/v1/devices/heartbeat` | x-session-id | Device heartbeat |
 
-### System
+</details>
+
+<details>
+<summary><strong>System & Discovery</strong></summary>
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `GET` | `/api/v1/providers` | - | Available AI providers |
-| `GET` | `/api/v1/integrations` | - | Available tools |
-| `GET` | `/api/v1/agents` | - | Available agent types |
-| `GET` | `/api/v1/settings/{id}` | - | User settings |
-| `POST` | `/api/v1/settings/{id}` | - | Update settings |
-| `GET` | `/api/v1/status/ping` | - | Provider health check |
-| `GET` | `/health` | - | Service health |
-| `POST` | `/mcp` | - | MCP JSON-RPC 2.0 endpoint |
+| `GET` | `/api/v1/providers` | -- | Available AI providers |
+| `GET` | `/api/v1/integrations` | -- | Available tools |
+| `GET` | `/api/v1/agents` | -- | Available agent types |
+| `GET` | `/api/v1/settings/{id}` | -- | User settings |
+| `POST` | `/api/v1/settings/{id}` | -- | Update settings |
+| `GET` | `/api/v1/status/ping` | -- | Provider health check |
+| `GET` | `/health` | -- | Service health |
+| `POST` | `/mcp` | -- | MCP JSON-RPC 2.0 endpoint |
+| `GET` | `/robots.txt` | -- | Crawler directives |
+| `GET` | `/llms.txt` | -- | LLM-friendly API summary |
+| `GET` | `/.well-known/ai-plugin.json` | -- | OpenAI plugin manifest |
 
-### Webhooks
+</details>
+
+<details>
+<summary><strong>Webhooks</strong></summary>
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/webhooks/line` | LINE Messaging API webhook |
-| `POST` | `/webhooks/telegram` | Telegram Bot API webhook |
-| `GET/POST` | `/webhooks/facebook` | Facebook Messenger webhook |
+| `POST` | `/webhooks/line` | LINE Messaging API |
+| `POST` | `/webhooks/telegram` | Telegram Bot API |
+| `GET/POST` | `/webhooks/facebook` | Facebook Messenger |
 | `POST` | `/webhooks/stripe` | Stripe payment events |
 
-### AI Agent Discovery
+</details>
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/robots.txt` | Crawler directives |
-| `GET` | `/llms.txt` | LLM-friendly API summary |
-| `GET` | `/llms-full.txt` | Detailed API spec for LLMs |
-| `GET` | `/.well-known/ai-plugin.json` | OpenAI plugin manifest |
+---
 
-### Pages
+## MCP Server
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/` | Main web application (SPA) |
-| `GET` | `/pricing` | Pricing page |
-| `GET` | `/docs` | API documentation |
-| `GET` | `/status` | Service status dashboard |
-| `GET` | `/playground` | Interactive API playground |
-| `GET` | `/contact` | Contact form |
-| `GET` | `/comparison` | AI model comparison |
-| `GET` | `/welcome` | Onboarding page |
-| `GET` | `/admin` | Admin dashboard |
-| `GET` | `/c/{hash}` | Shared conversation view |
+nanobot exposes an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) endpoint for AI-to-AI integration.
+
+```jsonc
+// 1. Initialize session
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}
+
+// 2. Discover tools
+{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+
+// 3. Call a tool
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
+  "name":"chatweb_chat",
+  "arguments":{"message":"Summarize today's AI news"}
+}}
+```
+
+**Available MCP tools:** `chatweb_chat`, `chatweb_tts`, `chatweb_providers`, `chatweb_status`
+
+---
+
+## Built-in Tools
+
+| Tool | Description |
+|------|-------------|
+| `web_search` | Real-time web search via Brave / Google |
+| `code_execute` | Sandboxed shell / Python / Node.js execution |
+| `file_read` | Read files from session sandbox |
+| `file_write` | Write files to session sandbox |
+| `file_list` | List files in session sandbox |
+| `web_fetch` | Extract content from any URL (via Jina Reader) |
+| `calculator` | Mathematical expression evaluation |
+| `weather` | Live weather data for any location |
+| `wikipedia` | Encyclopedia lookup |
+| `translation` | Multi-language translation |
+| `qr_code` | Generate QR codes |
+| `news_search` | Latest news aggregation |
+| `google_calendar` | View and create events (OAuth) |
+| `gmail` | Search, read, send emails (OAuth) |
 
 ---
 
@@ -304,27 +426,7 @@ Request → Primary (25s timeout)
 | `/share` | Generate a shareable conversation link | Authenticated |
 | `/help` | Show available commands | Everyone |
 | `/status` | Show provider status inline | Everyone |
-| `/improve <desc>` | Request a self-improvement PR | Admin only |
-
----
-
-## MCP Server
-
-nanobot exposes an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) endpoint at `POST /mcp` for AI agent integration.
-
-**Available tools:**
-- `chatweb_chat` — Send a message and get an AI response
-- `chatweb_tts` — Convert text to speech (MP3)
-- `chatweb_providers` — List available AI providers
-- `chatweb_status` — Check service health
-
-```json
-// Example: Initialize MCP session
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}
-
-// Example: Call chat tool
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"chatweb_chat","arguments":{"message":"Hello!"}}}
-```
+| `/improve <desc>` | Request a self-improvement PR | Admin |
 
 ---
 
@@ -332,9 +434,25 @@ nanobot exposes an [MCP (Model Context Protocol)](https://modelcontextprotocol.i
 
 Conversations stay in sync across all channels:
 
-1. **QR Code** — Click LINE/Telegram button on web → scan QR → send pre-filled message → linked
-2. **Link Code** — Send `/link` in any channel → get 6-digit code → send `/link CODE` in another channel
-3. **Session ID** — Copy your `webchat:xxxx-...` ID from the web UI and send it in LINE/Telegram
+1. **QR Code** -- Click a channel button on the web UI, scan the QR code, and send the pre-filled message to link.
+2. **Link Code** -- Send `/link` in any channel to get a 6-digit code. Send `/link CODE` in another channel to connect.
+3. **Session ID** -- Copy your `webchat:xxxx-...` ID from the web UI and send it in LINE / Telegram.
+
+---
+
+## Pricing
+
+| | **Free** | **Starter** | **Pro** |
+|---|:---:|:---:|:---:|
+| **Price** | $0/mo | **$9/mo** | **$29/mo** |
+| **Credits** | 1,000 | 25,000 | 300,000 |
+| **Models** | GPT-4o-mini, Gemini Flash | + GPT-4o, Claude Sonnet | + Claude Opus, all models |
+| **Agentic Iterations** | 1 | 3 | 5 |
+| **Voice (TTS)** | -- | Included | Included |
+| **API Keys** | -- | Included | Included |
+| **Support** | Community | Email | Priority |
+
+[View Pricing](https://chatweb.ai/pricing) &bull; [Start Free](https://chatweb.ai)
 
 ---
 
@@ -342,13 +460,16 @@ Conversations stay in sync across all channels:
 
 ### Environment Variables
 
+<details>
+<summary>Click to expand full variable list</summary>
+
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | At least one LLM key | Anthropic API key |
 | `OPENAI_API_KEY` | At least one LLM key | OpenAI API key |
 | `GEMINI_API_KEY` | Optional | Google Gemini API key |
 | `GROQ_API_KEY` | Optional | Groq inference API key |
-| `KIMI_API_KEY` | Optional | Kimi/Moonshot API key |
+| `KIMI_API_KEY` | Optional | Kimi / Moonshot API key |
 | `OPENROUTER_API_KEY` | Optional | OpenRouter (multi-model fallback) |
 | `DYNAMODB_TABLE` | For Lambda | DynamoDB table name |
 | `BASE_URL` | Optional | Custom base URL (default: `https://chatweb.ai`) |
@@ -363,38 +484,7 @@ Conversations stay in sync across all channels:
 | `PASSWORD_HMAC_KEY` | Recommended | HMAC key for password hashing |
 | `ADMIN_SESSION_KEYS` | Optional | Comma-separated admin session keys |
 
-### Docker
-
-```bash
-docker run -p 3000:3000 \
-  -e ANTHROPIC_API_KEY=sk-... \
-  -e OPENAI_API_KEY=sk-... \
-  ghcr.io/yukihamada/nanobot
-```
-
-### AWS Lambda (ARM64)
-
-```bash
-brew install zig && cargo install cargo-zigbuild
-rustup target add aarch64-unknown-linux-gnu
-
-RUSTUP_TOOLCHAIN=stable \
-RUSTC=~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc \
-cargo zigbuild \
-  --manifest-path crates/nanobot-lambda/Cargo.toml \
-  --release --target aarch64-unknown-linux-gnu
-
-cp target/aarch64-unknown-linux-gnu/release/bootstrap ./bootstrap
-zip -j lambda.zip bootstrap
-aws lambda update-function-code --function-name nanobot --zip-file fileb://lambda.zip
-```
-
-### Local Development
-
-```bash
-cargo run -- gateway --http --http-port 3000
-# Open http://localhost:3000
-```
+</details>
 
 ---
 
@@ -404,34 +494,29 @@ cargo run -- gateway --http --http-port 3000
 crates/
   nanobot-core/src/
     service/
-      http.rs           Main HTTP handler (70+ routes)
-      commands.rs        Slash command framework (/link, /share, /help, /status, /improve)
-      auth.rs            Authentication & credit calculation
-      integrations.rs    Tool integrations (web_search, calculator, etc.)
+      http.rs             HTTP router (70+ routes)
+      commands.rs          Slash commands (/link, /share, /help, /status, /improve)
+      auth.rs              Authentication & credit system
+      integrations.rs      Tool registry (16+ built-in tools)
     provider/
-      mod.rs             LoadBalancedProvider with parallel fallback
-      anthropic.rs       Anthropic Claude provider
-      openai_compat.rs   OpenAI-compatible provider (GPT, Groq, Kimi, OpenRouter)
-      gemini.rs          Google Gemini provider
+      mod.rs               LoadBalancedProvider with parallel failover
+      anthropic.rs         Anthropic Claude
+      openai_compat.rs     OpenAI-compatible (GPT, Groq, Kimi, OpenRouter)
+      gemini.rs            Google Gemini
     channel/
-      line.rs            LINE Messaging API
-      telegram.rs        Telegram Bot API
-      facebook.rs        Facebook Messenger
-    memory/              Long-term memory (DynamoDB / file-based)
-    session/             Session management
-  nanobot-lambda/        AWS Lambda handler wrapper
+      line.rs              LINE Messaging API
+      telegram.rs          Telegram Bot API
+      facebook.rs          Facebook Messenger
+    memory/                Long-term memory (DynamoDB / file-based)
+    session/               Session management
+  nanobot-lambda/          AWS Lambda handler
 infra/
-  template.yaml          SAM template
-  deploy.sh              Deploy script
-web/
-  index.html             Main SPA (voice-first chat UI)
-  docs.html              API documentation
-  status.html            Service status dashboard
-  playground.html        Interactive API playground
-  pricing.html           Pricing page with coupon UI
+  template.yaml            SAM template
+  deploy.sh                Deploy script
+web/                       SPA frontend (chat UI, docs, playground, pricing)
 src/
-  main.rs                Local server CLI
-tests/                   Integration tests
+  main.rs                  Local server CLI
+tests/                     Integration tests
 ```
 
 ---
@@ -448,21 +533,27 @@ Single-table design with composite keys (`pk` + `sk`):
 | `MEMORY#{id}` | `LONG_TERM` / `DAILY#{date}` | Long-term memory |
 | `CONV#{user}#{id}` | `META` / `MSG#{ts}` | Conversations and messages |
 | `LINK#{channel_key}` | `CHANNEL_MAP` | Channel linking map |
-| `LINKCODE#{code}` | `PENDING` | Pending link codes (30min TTL) |
+| `LINKCODE#{code}` | `PENDING` | Pending link codes (30 min TTL) |
 | `SHARE#{hash}` | `INFO` | Shared conversation links |
-| `RESULT#{id}` | `DATA` | Playground shared results (30d TTL) |
-| `AUDIT#{date}` | `{timestamp}` | Audit log (90d TTL) |
+| `RESULT#{id}` | `DATA` | Playground shared results (30 d TTL) |
+| `AUDIT#{date}` | `{timestamp}` | Audit log (90 d TTL) |
 | `APIKEY#{user}#{id}` | `KEY` | API keys |
 
 ---
 
-## Pricing
+## Comparison with Other Frameworks
 
-| Plan | Price | Credits | Models |
-|------|-------|---------|--------|
-| **Free** | $0/mo | 1,000 | GPT-4o-mini, Gemini Flash |
-| **Starter** | $9/mo | 25,000 | + GPT-4o, Claude Sonnet |
-| **Pro** | $29/mo | 300,000 | + Claude Opus, all models |
+| | **nanobot** | OpenClaw | Claude Code | AutoGPT | OpenHands |
+|---|---|---|---|---|---|
+| **Language** | Rust (axum) | TypeScript | Proprietary | Python/TS | Python/TS |
+| **Cold Start** | < 50 ms | ~1 s | N/A | ~3-10 s | ~3-10 s |
+| **Channels** | **14+** | 11+ | 1 (Terminal) | 1 (Web UI) | 4 |
+| **Voice (STT+TTS)** | Native | Partial | No | No | No |
+| **Models** | 7+ providers | 2 | Claude only | 2 | Any |
+| **Auto Failover** | Yes | No | No | No | No |
+| **Memory** | 2-layer auto-consolidation | Session | Conversation | Workspace | Project |
+| **Agentic Loop** | 1-5 iterations | Continuous | 7 agents | Continuous | Iterative |
+| **License** | MIT | MIT | Proprietary | Polyform | MIT |
 
 ---
 
@@ -470,25 +561,31 @@ Single-table design with composite keys (`pk` + `sk`):
 
 | Product | Description | Link |
 |---------|-------------|------|
-| **chatweb.ai** | Consumer AI assistant (Web, LINE, Telegram) | [chatweb.ai](https://chatweb.ai) |
 | **teai.io** | Developer platform and API | [teai.io](https://teai.io) |
+| **chatweb.ai** | Consumer AI assistant (Web, LINE, Telegram) | [chatweb.ai](https://chatweb.ai) |
 | **ElioChat** | Offline-capable iOS AI companion | [App Store](https://apps.apple.com/app/eliochat/id6742071881) |
 
 ---
 
 ## Contributing
 
+We welcome contributions of all kinds. Here is how to get started:
+
 ```bash
 git clone https://github.com/yukihamada/nanobot.git
 cd nanobot
 cargo test --all
 cargo run -- gateway --http --http-port 3000
+# Open http://localhost:3000
 ```
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feat/my-feature`)
-3. Write tests for your changes
-4. Submit a pull request
+1. Fork the repository.
+2. Create a feature branch: `git checkout -b feat/my-feature`
+3. Write tests for your changes.
+4. Run `cargo test --all` and `cargo clippy` before submitting.
+5. Open a pull request with a clear description.
+
+Please see the [MIT License](LICENSE) for terms.
 
 ---
 
@@ -500,7 +597,11 @@ cargo run -- gateway --http --http-port 3000
 
 <div align="center">
 
-**If nanobot helps you, consider giving it a star!**
+**Built with Rust. Deployed on Lambda. Scales to millions.**
+
+[Get Started](https://chatweb.ai) &bull; [Read the Docs](https://chatweb.ai/docs) &bull; [Star on GitHub](https://github.com/yukihamada/nanobot)
+
+<br/>
 
 [![Star History Chart](https://api.star-history.com/svg?repos=yukihamada/nanobot&type=Date)](https://star-history.com/#yukihamada/nanobot&Date)
 
