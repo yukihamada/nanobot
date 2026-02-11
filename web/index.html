@@ -4113,12 +4113,87 @@
       updateSidebarChannelBadges(channels, details);
     }
 
+    // --- 30-minute idle → show fresh question screen ---
+    let lastActivityTime = Date.now();
+    function touchActivity() { lastActivityTime = Date.now(); }
+    const IDLE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+
+    function showIdleNewScreen() {
+      const msgsEl = document.getElementById('app-messages');
+      if (!msgsEl) return;
+      // Don't reset if already on empty screen
+      if (document.getElementById('app-empty')) return;
+
+      const l = document.documentElement.lang || 'ja';
+      // Insert a time divider
+      insertConversationDivider();
+
+      // Create empty state with predicted questions
+      const empty = document.createElement('div');
+      empty.className = 'app-chat-empty';
+      empty.id = 'app-empty';
+      empty.innerHTML = '<div class="app-chat-empty-logo">chatweb.ai</div>'
+        + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
+        + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
+        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? 'おかえりなさい。次は何をしましょう？' : 'Welcome back. What shall we do next?') + '</div>'
+        + '<div class="app-chat-suggestions" id="app-suggestions"></div>';
+      msgsEl.appendChild(empty);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+
+      // Render predicted questions based on time of day and context
+      const hour = new Date().getHours();
+      const predictedJa = hour < 12
+        ? ['今日のニュースをまとめて', '午前中のタスクを整理して', 'メールの下書きを手伝って', '今週の天気を教えて']
+        : hour < 18
+        ? ['午後のミーティング準備を手伝って', 'この資料を要約して', 'コードのバグを見つけて', '競合の最新情報を調べて']
+        : ['今日の振り返りをまとめて', '明日の予定を整理して', '晩ごはんのレシピを提案して', 'リラックスできる音楽を教えて'];
+      const predictedEn = hour < 12
+        ? ['Summarize today\'s news', 'Organize my morning tasks', 'Help draft an email', 'What\'s the weather this week?']
+        : hour < 18
+        ? ['Help prepare for my meeting', 'Summarize this document', 'Find a bug in my code', 'Research competitor updates']
+        : ['Summarize my day', 'Plan tomorrow\'s schedule', 'Suggest a dinner recipe', 'Recommend relaxing music'];
+      const predicted = l === 'ja' ? predictedJa : predictedEn;
+      const container = document.getElementById('app-suggestions');
+      if (container) {
+        container.innerHTML = '';
+        predicted.forEach(s => {
+          const btn = document.createElement('div');
+          btn.className = 'app-chat-suggestion';
+          btn.textContent = s;
+          btn.onclick = () => { document.getElementById('app-input').value = s; appSend(); };
+          container.appendChild(btn);
+        });
+      }
+
+      // Start a new session silently
+      if (authToken) {
+        finalizeCurrentConversation();
+        fetch(API + '/api/v1/conversations', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        }).then(r => r.json()).then(d => {
+          if (d.ok) {
+            webSessionId = d.session_id;
+            localStorage.setItem('webSessionId', webSessionId);
+            appCurrentConvId = d.conversation_id || null;
+            knownMsgCount = 0; syncVersion = 0; _lastSyncTimestamp = null;
+            appLoadConversations();
+          }
+        }).catch(() => {});
+      }
+    }
+
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         stopPolling();
         if (statusPollInterval) { clearInterval(statusPollInterval); statusPollInterval = null; }
         if (typeof stopDevicePolling === 'function') stopDevicePolling();
       } else {
+        // Check idle on tab return
+        if (Date.now() - lastActivityTime >= IDLE_THRESHOLD_MS) {
+          showIdleNewScreen();
+        }
+        touchActivity();
         startPolling(); startStatusPolling();
         if (typeof startDevicePolling === 'function' && document.body.classList.contains('app-mode')) startDevicePolling();
       }
@@ -6058,6 +6133,7 @@
       if (!text) return;
       textarea.value = '';
       textarea.style.height = 'auto';
+      touchActivity();
       appAddMsg(text, 'user');
       trackAbMessage();
 
@@ -6255,6 +6331,7 @@
               appAddMsg(evt.content, 'bot', evt.agent || null, evt.tools_used || null);
               knownMsgCount += 2; syncVersion++;
               if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
+              touchActivity();
               autoPlayTTS(evt.content);
             } else if (evt.type === 'error') {
               clearTimeout(frontendTimeout);
