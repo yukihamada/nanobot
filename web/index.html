@@ -3,22 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
-  <title>chatweb.ai - AIチャット</title>
-  <meta name="description" content="AIとすぐに話せる。LINE・Telegramでも使える。無料。">
+  <title>chatweb.ai - お願いしたら、本当にやってくれるAI</title>
+  <meta name="description" content="声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料で始められます。">
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
   <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%236366f1'/%3E%3Ctext x='90' y='115' text-anchor='middle' font-size='80' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
   <!-- OGP -->
-  <meta property="og:title" content="chatweb.ai - AI Agent Platform">
-  <meta property="og:description" content="AI assistant with web search, tools, and multi-channel support. Use on Web, LINE, and Telegram.">
+  <meta property="og:title" content="chatweb.ai - お願いしたら、本当にやってくれるAI">
+  <meta property="og:description" content="声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料。">
   <meta property="og:image" content="https://chatweb.ai/og.svg">
   <meta property="og:url" content="https://chatweb.ai">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="chatweb.ai">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:locale:alternate" content="en_US">
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="chatweb.ai - AI Agent Platform">
-  <meta name="twitter:description" content="AI assistant with web search, tools, and multi-channel support.">
+  <meta name="twitter:site" content="@chatweb_ai">
+  <meta name="twitter:title" content="chatweb.ai - お願いしたら、本当にやってくれるAI">
+  <meta name="twitter:description" content="声で頼むだけ。検索・コード実行・定期監視まで全自動。Web・LINE・Telegram対応。">
   <meta name="twitter:image" content="https://chatweb.ai/og.svg">
   <!-- Canonical & PWA -->
   <link rel="canonical" href="https://chatweb.ai/">
@@ -341,11 +344,11 @@
     .ch-bar-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
     .ch-bar-btn .ch-check { display: none; margin-left: 2px; }
     .ch-bar-btn.connected .ch-check { display: inline; }
-    .ch-bar-btn.connected { opacity: 0.85; }
+    .ch-bar-btn.connected { opacity: 0.5; pointer-events: none; }
     .ch-bar-btn svg { width: 14px; height: 14px; }
 
     /* Channel cards (larger CTA) */
-    .channel-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 28px; }
+    .channel-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 28px; transition: all 0.3s ease; }
     .channel-card {
       background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
       padding: 20px; cursor: pointer; transition: all 0.25s; text-decoration: none; color: var(--text);
@@ -372,11 +375,23 @@
     .channel-card.line-card .cc-action { background: var(--line); }
     .channel-card.tg-card .cc-action { background: var(--tg); }
     .channel-card .cc-connected {
-      display: none; font-size: 11px; color: var(--green); font-weight: 600;
+      display: none; font-size: 12px; color: var(--green); font-weight: 600;
       margin-top: 6px;
     }
-    .channel-card.connected .cc-connected { display: block; }
-    .channel-card.connected .cc-action { opacity: 0.6; }
+    .channel-card.connected .cc-connected { display: flex; align-items: center; gap: 4px; }
+    .channel-card.connected .cc-action { display: none; }
+    .channel-card.connected { pointer-events: none; opacity: 0.7; border-color: var(--green) !important; }
+    .channel-card.connected:hover { transform: none; box-shadow: none; }
+    /* Compact mode: when at least 1 channel is linked */
+    .channel-cards.has-linked { grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+    .channel-cards.has-linked .channel-card { padding: 10px; border-radius: 10px; }
+    .channel-cards.has-linked .channel-card .cc-header { margin-bottom: 0; }
+    .channel-cards.has-linked .channel-card .cc-icon { width: 24px; height: 24px; border-radius: 6px; }
+    .channel-cards.has-linked .channel-card .cc-icon svg { width: 14px; height: 14px; }
+    .channel-cards.has-linked .channel-card .cc-name { font-size: 11px; }
+    .channel-cards.has-linked .channel-card .cc-desc { display: none; }
+    .channel-cards.has-linked .channel-card .cc-action { font-size: 10px; padding: 4px 8px; border-radius: 6px; }
+    .channel-cards.has-linked .channel-card .cc-connected { font-size: 10px; margin-top: 4px; }
 
     /* Tools badge */
     .tools-count { font-size: 11px; color: var(--muted); text-align: center; margin-top: -20px; margin-bottom: 20px; }
@@ -1314,6 +1329,7 @@
     .app-ch-btn:hover { background: var(--surface); border-color: var(--accent); transform: translateY(-1px); }
     .app-ch-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
     .app-ch-btn .app-ch-name { font-size: 9px; color: var(--muted); font-weight: 600; }
+    .app-ch-btn.connected { opacity: 0.5; pointer-events: none; border-color: var(--green); }
     .app-ch-btn.connected .app-ch-name { color: var(--green); }
     .app-ch-btn .app-ch-check {
       position: absolute;
@@ -1328,6 +1344,78 @@
       color: #fff;
     }
     .app-ch-btn.connected .app-ch-check { display: flex; }
+
+    /* Link success overlay */
+    .link-success-overlay {
+      position: fixed; inset: 0; z-index: 400;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .link-success-overlay.show { opacity: 1; pointer-events: auto; }
+    .lso-icon {
+      width: 80px; height: 80px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+      animation: linkSuccessPop 0.4s ease-out;
+    }
+    .lso-icon svg { width: 44px; height: 44px; }
+    .lso-check {
+      position: absolute; bottom: -2px; right: -2px;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--green); border: 3px solid var(--bg);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .lso-check svg { width: 14px; height: 14px; color: #fff; }
+    .lso-text {
+      margin-top: 16px; font-size: 20px; font-weight: 700; color: #fff;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      animation: linkSuccessPop 0.4s ease-out 0.1s both;
+    }
+    @keyframes linkSuccessPop {
+      0% { transform: scale(0.5); opacity: 0; }
+      70% { transform: scale(1.08); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Sidebar channel badges */
+    .sidebar-channel-badges {
+      display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px;
+    }
+    .sidebar-ch-badge {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 9px; font-weight: 600; padding: 1px 6px 1px 4px;
+      border-radius: 8px; line-height: 1;
+    }
+    .sidebar-ch-badge svg { width: 10px; height: 10px; flex-shrink: 0; }
+    .sidebar-ch-badge.line-badge { background: rgba(6,199,85,0.15); color: #06c755; }
+    .sidebar-ch-badge.tg-badge { background: rgba(36,161,222,0.15); color: #24a1de; }
+
+    .app-sidebar-cli {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+    }
+    .cli-cmd-box {
+      background: #0d0d0d;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-family: 'SF Mono','Fira Code',monospace;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      margin-bottom: 6px;
+      transition: all 0.2s;
+      color: #e2e8f0;
+      overflow: hidden;
+    }
+    .cli-cmd-box:hover { border-color: var(--accent); }
+    .cli-cmd-box .cli-dollar { color: var(--muted); flex-shrink: 0; }
+    .cli-cmd-box .cli-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cli-cmd-box .cli-copy { color: var(--muted); font-size: 10px; background: var(--surface); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
     .app-sidebar-sync {
       padding: 8px 12px;
       border-top: 1px solid var(--border);
@@ -2307,6 +2395,17 @@
       /* Simplify footer on mobile */
       footer { padding: 20px 16px; font-size: 11px; line-height: 2; }
     }
+
+    /* Landing page: Less is more — Hero + Chat only */
+    .voice-demo, .cap-section, #recipe-section, #sync-section,
+    .channel-cards, #link-cmd-hint, #cli-install-section,
+    #use-cases, .stats-bar, .trust-bar, .social-proof, .bottom-cta { display: none !important; }
+
+    /* Hide agent-select on landing page */
+    #agent-select { display: none; }
+
+    /* Demo messages fade when user logs in */
+    body.app-mode .demo-msg { display: none; }
   </style>
   <!-- PostHog Analytics (enable by replacing YOUR_PROJECT_KEY) -->
   <!--
@@ -2345,7 +2444,7 @@
       <button class="nav-hamburger" onclick="toggleMobileMenu()" aria-label="Menu">&#x2630;</button>
       <div class="nav-mobile-menu" id="mobile-menu">
         <a href="/pricing" id="mob-pricing">Pricing</a>
-        <a href="/settings">Settings</a>
+        <a href="/settings" id="mob-settings">Settings</a>
         <a href="/status" id="mob-status">Status</a>
         <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
         <button onclick="setLang('ja');closeMobileMenu()">🇯🇵 日本語</button>
@@ -2367,11 +2466,59 @@
 
   <main class="main" role="main">
     <div class="hero fade-up">
-      <h1 id="t-title">AIに何でも聞ける。声でも、テキストでも。</h1>
-      <p id="t-subtitle">話しかけるだけで、検索・分析・自動化。LINE・Telegramでも使える無料AIアシスタント。</p>
+      <h1 id="t-title">お願いしたら、本当にやってくれるAI。</h1>
+      <p id="t-subtitle">チャットで頼むだけ。検索、コード実行、ファイル操作、定期監視まで — 声でもテキストでも。</p>
       <div class="hero-cta" id="t-hero-cta">
         <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="document.getElementById('input').focus();return false;">今すぐ無料で試す</a>
         <a href="/pricing" class="cta-secondary" id="t-hero-plans">プランを見る</a>
+      </div>
+    </div>
+
+    <!-- Use cases section -->
+    <div class="fade-up fade-up-d1" id="use-cases" style="max-width:640px;margin:0 auto 32px;padding:0 16px;">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:20px;">📁</span>
+            <span style="font-size:14px;font-weight:700;" id="uc-1-title">ファイルの整理</span>
+          </div>
+          <p style="font-size:12px;color:var(--muted);line-height:1.6;" id="uc-1-desc">「ダウンロードフォルダを種類別に整理して」— フォルダ作成からファイル移動まで自動で完了。</p>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:20px;">🔧</span>
+            <span style="font-size:14px;font-weight:700;" id="uc-2-title">環境構築・バグ修正</span>
+          </div>
+          <p style="font-size:12px;color:var(--muted);line-height:1.6;" id="uc-2-desc">「このリポジトリを動くようにして」— エラーを自力で解決し、起動まで自律的に試行錯誤。</p>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:20px;">💓</span>
+            <span style="font-size:14px;font-weight:700;" id="uc-3-title">定期監視（ハートビート）</span>
+          </div>
+          <p style="font-size:12px;color:var(--muted);line-height:1.6;" id="uc-3-desc">「サーバーが落ちてないか見ておいて」— 寝ている間にダウンを検知し、復旧して事後報告。</p>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:20px;">🌐</span>
+            <span style="font-size:14px;font-weight:700;" id="uc-4-title">Web操作の代行</span>
+          </div>
+          <p style="font-size:12px;color:var(--muted);line-height:1.6;" id="uc-4-desc">「最安値フライトを探してカレンダーに入れて」— 複数サイトを巡回し、予定登録まで全自動。</p>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:20px;">🧠</span>
+            <span style="font-size:14px;font-weight:700;" id="uc-5-title">ずっと覚えている（永続メモリ）</span>
+          </div>
+          <p style="font-size:12px;color:var(--muted);line-height:1.6;" id="uc-5-desc">「いつもの感じでメール返信して」— 過去の会話や好みをずっと覚えているから、毎回の説明が不要。</p>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:20px;">🎙️</span>
+            <span style="font-size:14px;font-weight:700;" id="uc-6-title">声で操作、どこからでも</span>
+          </div>
+          <p style="font-size:12px;color:var(--muted);line-height:1.6;" id="uc-6-desc">「声で指示するだけ」— Web・LINE・Telegramどこからでも同じAIが応答。マルチチャネル対応。</p>
+        </div>
       </div>
     </div>
 
@@ -2419,6 +2566,10 @@
       </div>
     </div>
 
+    <div class="social-proof fade-up fade-up-d2" style="text-align:center;margin-bottom:20px;font-size:12px;color:var(--muted);">
+      <span id="social-proof-text">🇯🇵 日本発 &middot; オープンソース &middot; Web・LINE・Telegram対応</span>
+    </div>
+
     <div class="chat-box fade-up fade-up-d2" id="chat-area">
       <div class="chat-header">
         <div class="dot"></div>
@@ -2444,6 +2595,8 @@
       </div>
       <div class="chat-messages" id="messages">
         <div class="msg bot" id="t-welcome"></div>
+        <div class="msg user demo-msg" id="demo-q1">東京の天気を調べて</div>
+        <div class="msg bot demo-msg" id="demo-a1"><span style="font-size:11px;color:var(--accent);display:block;margin-bottom:4px;" id="demo-tool">🔍 web_search("東京 天気")</span>東京は晴れ、気温18°Cです。午後から曇りの予報なので、折りたたみ傘があると安心です。</div>
       </div>
       <div class="chat-input" style="position:relative;">
         <input type="text" id="input" placeholder="何でも聞いてください..." autocomplete="off">
@@ -2563,7 +2716,7 @@
       <p class="sync-desc" id="t-device-desc">CLI daemon running on your machines.</p>
       <div id="device-list" style="margin-top:12px;"></div>
       <div style="margin-top:12px;font-size:11px;color:var(--muted);" id="t-device-hint">
-        Install CLI and run <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> to connect your devices.
+        Install CLI and run <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">chatweb daemon</code> to connect your devices.
       </div>
     </div>
 
@@ -2626,7 +2779,7 @@
     </div>
 
     <!-- Link command hint -->
-    <div class="fade-up fade-up-d4" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 20px;margin-bottom:20px;">
+    <div id="link-cmd-hint" class="fade-up fade-up-d4" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 20px;margin-bottom:20px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
         <span style="font-size:18px;">🔗</span>
         <span style="font-size:13px;font-weight:700;" id="t-link-cmd-title">コマンドで連携</span>
@@ -2642,7 +2795,7 @@
     </div>
 
     <!-- CLI install -->
-    <div class="fade-up fade-up-d4" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;margin-bottom:20px;text-align:center;">
+    <div id="cli-install-section" class="fade-up fade-up-d4" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;margin-bottom:20px;text-align:center;">
       <div style="font-size:13px;font-weight:700;margin-bottom:8px;" id="t-cli-title">CLI</div>
       <div style="background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:'SF Mono','Fira Code',monospace;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="navigator.clipboard.writeText('curl -fsSL https://chatweb.ai/install.sh | sh');this.querySelector('.cp').textContent='Copied!';setTimeout(()=>this.querySelector('.cp').textContent='Copy',1500)">
         <span style="color:var(--muted);">$</span> <span style="flex:1;text-align:left;">curl -fsSL https://chatweb.ai/install.sh | sh</span>
@@ -2693,6 +2846,12 @@
   </div>
 
   </main>
+
+  <!-- Link success overlay -->
+  <div class="link-success-overlay" id="link-success-overlay">
+    <div class="lso-icon" id="lso-icon"></div>
+    <div class="lso-text" id="lso-text"></div>
+  </div>
 
   <!-- Channel QR Modal (outside main so it's visible in app-mode) -->
   <div class="modal-overlay" id="modal" onclick="closeModal(event)" style="z-index:300;">
@@ -2754,6 +2913,7 @@
         <button class="settings-tab active" onclick="switchSettingsTab('general')">General</button>
         <button class="settings-tab" onclick="switchSettingsTab('llm')">LLM</button>
         <button class="settings-tab" onclick="switchSettingsTab('memory')">Memory</button>
+        <button class="settings-tab" onclick="switchSettingsTab('activity')">Activity</button>
       </div>
 
       <!-- General Tab -->
@@ -2843,6 +3003,31 @@
         <button style="width:100%;padding:8px;margin-top:4px;background:none;border:1px solid #e53e3e;border-radius:8px;cursor:pointer;font-size:12px;color:#e53e3e;" onclick="clearMemory()">Clear Memory</button>
       </div>
 
+      <!-- Activity Tab -->
+      <div class="settings-section" id="settings-tab-activity">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;" id="activity-credits-remaining">-</div>
+            <div style="font-size:11px;color:var(--muted);">Credits Left</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;" id="activity-credits-used">-</div>
+            <div style="font-size:11px;color:var(--muted);">Credits Used</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;" id="activity-today-requests">-</div>
+            <div style="font-size:11px;color:var(--muted);">Today's Requests</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;" id="activity-plan">-</div>
+            <div style="font-size:11px;color:var(--muted);">Plan</div>
+          </div>
+        </div>
+        <div class="memory-label">Recent Activity</div>
+        <div id="activity-log-list" style="max-height:240px;overflow-y:auto;font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);"></div>
+        <button style="width:100%;padding:8px;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;color:var(--muted);" onclick="loadActivityData()">Refresh</button>
+      </div>
+
       <button class="close-btn" onclick="document.getElementById('settings-modal').classList.remove('show')" style="margin-top:12px;">Close</button>
     </div>
   </div>
@@ -2869,14 +3054,6 @@
           </div>
           <span style="font-size:12px;color:var(--accent);">Stripe ›</span>
         </button>
-        <button onclick="startStripeCheckout('enterprise')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
-          <span style="font-size:24px;">🏢</span>
-          <div style="flex:1;">
-            <div style="font-size:14px;font-weight:600;color:var(--text);">Enterprise — $100/mo</div>
-            <div style="font-size:12px;color:var(--muted);">Unlimited credits + SLA</div>
-          </div>
-          <span style="font-size:12px;color:var(--accent);">Stripe ›</span>
-        </button>
         <div style="display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--muted);font-size:11px;"><hr style="flex:1;border:none;border-top:1px solid var(--border);"><span>or</span><hr style="flex:1;border:none;border-top:1px solid var(--border);"></div>
         <button onclick="document.getElementById('topup-modal').classList.remove('show');showCryptoTopup()" style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
           <span style="font-size:24px;">◆</span>
@@ -2885,6 +3062,15 @@
             <div style="font-size:12px;color:var(--muted);">ETH / MATIC / Base</div>
           </div>
           <span style="font-size:12px;color:#8b5cf6;">MetaMask ›</span>
+        </button>
+        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--muted);font-size:11px;"><hr style="flex:1;border:none;border-top:1px solid var(--border);"><span>or</span><hr style="flex:1;border:none;border-top:1px solid var(--border);"></div>
+        <button onclick="document.getElementById('topup-modal').classList.remove('show');showEarnOption()" style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:linear-gradient(135deg,rgba(34,197,94,0.08),rgba(16,185,129,0.08));border:1px solid rgba(34,197,94,0.3);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:24px;">🖥️</span>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);" id="earn-btn-title">Earn with your PC</div>
+            <div style="font-size:12px;color:var(--muted);" id="earn-btn-desc">Run local LLM to earn credits</div>
+          </div>
+          <span style="font-size:12px;color:#22c55e;">chatweb earn →</span>
         </button>
       </div>
       <button class="close-btn" onclick="document.getElementById('topup-modal').classList.remove('show')">Close</button>
@@ -2908,6 +3094,22 @@
           <!-- Populated by JS based on region -->
         </div>
       </div>
+      <div class="app-sidebar-cli" id="app-sidebar-cli">
+        <div class="app-sidebar-channels-label" id="app-cli-label">CLI</div>
+        <div class="cli-cmd-box" onclick="copyCli(this,'curl -fsSL https://chatweb.ai/install.sh | sh')">
+          <span class="cli-dollar">$</span>
+          <span class="cli-text">curl -fsSL https://chatweb.ai/install.sh | sh</span>
+          <span class="cli-copy">Copy</span>
+        </div>
+        <div class="cli-cmd-box" id="cli-sidebar-sync" onclick="copyCli(this)">
+          <span class="cli-dollar">$</span>
+          <span class="cli-text" id="cli-sidebar-sync-text">chatweb chat --sync ... "Hello"</span>
+          <span class="cli-copy">Copy</span>
+        </div>
+        <div id="worker-status-bar" style="display:none;margin-top:6px;padding:6px 10px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;font-size:11px;color:#22c55e;display:none;">
+          <span id="worker-status-text"></span>
+        </div>
+      </div>
       <div class="app-sidebar-sync" id="app-sync-bar">
         <button class="sync-btn" id="sync-btn" onclick="syncNow()">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M14 2v4h-4M2 14v-4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.5 6A6 6 0 003.3 3.3L2 6M2.5 10a6 6 0 0010.2 2.7L14 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2926,11 +3128,11 @@
         <div class="cron-list" id="cron-list"></div>
         <div id="cron-form-container" style="display:none;"></div>
       </div>
-      <div class="app-sidebar-links">
-        <a class="app-sidebar-link" href="https://elio.love" target="_blank" rel="noopener">ElioChat</a>
-        <button class="app-sidebar-link" onclick="openApiKeysModal()" id="app-link-apikeys">API Keys</button>
-        <a class="app-sidebar-link" href="/docs" id="app-link-docs">API Docs</a>
-        <button class="app-sidebar-link" onclick="openSettingsModal()" id="app-link-settings">Settings</button>
+      <div class="app-sidebar-links" style="display:flex;flex-direction:row;gap:4px;padding:8px 12px;justify-content:center;">
+        <a class="app-sidebar-link" href="https://elio.love" target="_blank" rel="noopener" title="ElioChat" style="font-size:18px;padding:6px 10px;">💬</a>
+        <button class="app-sidebar-link" onclick="openApiKeysModal()" id="app-link-apikeys" title="API Keys" style="font-size:18px;padding:6px 10px;">🔑</button>
+        <a class="app-sidebar-link" href="/docs" id="app-link-docs" title="API Docs" style="font-size:18px;padding:6px 10px;">📄</a>
+        <button class="app-sidebar-link" onclick="openSettingsModal()" id="app-link-settings" title="Settings" style="font-size:18px;padding:6px 10px;">⚙️</button>
       </div>
       <div class="app-sidebar-footer">
         <div class="credit-display" id="credit-display" style="display:none;">
@@ -2942,6 +3144,7 @@
           <div style="flex:1;min-width:0;">
             <div class="app-sidebar-user-name" id="app-user-name"></div>
             <div id="app-user-email" style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+            <div class="sidebar-channel-badges" id="sidebar-channel-badges"></div>
           </div>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;color:var(--muted);"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
@@ -3020,12 +3223,9 @@
   <div id="ccp-container" style="display:none;width:0;height:0;overflow:hidden;"></div>
 
   <footer>
-    <a href="/pricing" id="footer-pricing">Pricing</a> &middot;
-    <a href="/settings">Settings</a> &middot;
-    <a href="/status">Status</a> &middot;
-    <a href="/comparison" id="footer-comparison">Comparison</a> &middot;
+    <a href="/pricing" id="footer-pricing">料金</a> &middot;
     <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
-    <a href="/contact">Contact</a> &middot;
+    <a href="/docs">API</a> &middot;
     chatweb.ai &copy; 2025-2026
   </footer>
 
@@ -3413,6 +3613,11 @@
         tgBar && tgBar.classList.add('connected');
         tgCard && tgCard.classList.add('connected');
       }
+      // Compact the channel cards grid when at least one non-web channel is linked
+      const nonWeb = channels.filter(c => c !== 'web');
+      if (nonWeb.length > 0) {
+        document.querySelectorAll('.channel-cards').forEach(g => g.classList.add('has-linked'));
+      }
       // Also update app-mode sidebar channel buttons with linked info
       const chMap = { line: 'app-ch-line', telegram: 'app-ch-tg', whatsapp: 'app-ch-whatsapp', discord: 'app-ch-discord', slack: 'app-ch-slack', teams: 'app-ch-teams' };
       channels.forEach(ch => {
@@ -3435,6 +3640,8 @@
           }
         }
       });
+      // Update sidebar user area badges
+      updateSidebarChannelBadges(channels, details);
     }
 
     // Pause polling when tab is hidden
@@ -3443,38 +3650,46 @@
       else if (knownMsgCount > 0) startPolling();
     });
 
-    // Recipes data — organized by use case persona
+    // Recipes data — organized by use case persona (OpenClaw: your tireless AI assistant)
     const R = {
       ja: {
         categories: [
           {
+            icon: '\uD83C\uDFA8', title: 'クリエイティブ・編集',
+            items: [
+              { name: '動画の粗編集をお任せ', desc: '無音カット＆結合を自動化', prompt: '素材フォルダにある動画ファイルを全部読み込んで、無音部分を全部カットして、一本のタイムラインにつなげるスクリプトを書いて。ffmpegを使って。' },
+              { name: '画像100枚に透かし入れ', desc: 'リサイズ＆ロゴ挿入を一括', prompt: 'フォルダにある画像ファイル全てに右下にロゴ画像を入れて、Web用に幅1200pxにリサイズして書き出すシェルスクリプトを作って。ImageMagickを使って。' },
+              { name: 'ポートフォリオサイト作成', desc: 'HTML/CSS/JSでサイト構築', prompt: 'モダンなポートフォリオサイトを作って。自己紹介、スキルセット、制作実績3つ、お問い合わせフォームを含むレスポンシブデザインで。' },
+            ]
+          },
+          {
+            icon: '\uD83D\uDCBC', title: '経理・総務・バックオフィス',
+            items: [
+              { name: '領収書の仕分け＆入力', desc: '画像から日付・金額を読み取り', prompt: '領収書の写真から日付、店名、金額、税区分を読み取って、経費精算用のCSVファイルを作って。勘定科目も自動分類して。' },
+              { name: 'SaaSアカウント棚卸し', desc: '未使用ユーザーを洗い出し', prompt: '社員50人分のSaaS利用状況を整理するためのチェックリストを作って。3ヶ月以上ログインしていないアカウントを洗い出す手順も含めて。' },
+              { name: '問い合わせ対応テンプレ', desc: 'クレーム・質問・営業を分類', prompt: '顧客からの問い合わせを「クレーム」「質問」「営業メール」「パートナーシップ提案」に分類するルールと、それぞれの返信テンプレートを作って。' },
+            ]
+          },
+          {
             icon: '\uD83D\uDD0D', title: 'リサーチ・情報収集',
             items: [
-              { name: '競合の価格を比較', desc: '複数サイトの価格を一発比較', prompt: 'Amazon、楽天、ヨドバシカメラで「iPhone 16 Pro」の価格を比較して。最安値のURLと価格を教えて。' },
+              { name: '競合の定点観測', desc: '採用・価格・新着情報を自動チェック', prompt: '競合A社とB社の採用ページと製品ページを調べて、最新の求人内容と新製品情報をスプレッドシート形式でまとめて。' },
               { name: '会議の事前リサーチ', desc: '相手企業の情報を自動収集', prompt: '明日「株式会社サンプル」と会議があります。この会社の最新ニュース3件と事業概要、競合他社をまとめた事前準備レポートを作って。' },
               { name: '旅行の格安プラン探し', desc: '予算内で最適プランを提案', prompt: '3月に2泊3日で京都旅行を計画中。予算は1人5万円。桜の名所を中心に、モデルコースを作って。おすすめの宿も教えて。' },
             ]
           },
           {
-            icon: '\u26A1', title: '業務効率化・自動化',
+            icon: '\uD83C\uDFE0', title: '生活・プライベート',
             items: [
-              { name: '議事録を3行に要約', desc: '決定事項・TODO・宿題に分類', prompt: '以下の会議議事録を「決定事項」「TODO」「次回までの宿題」の3つに分けて要約して。\n\n（ここに議事録を貼り付けてください）' },
-              { name: '上司への報告メール', desc: 'プロっぽい進捗報告を作成', prompt: 'プロジェクトの進捗報告メールを書いて。状況：開発フェーズ完了、テスト中に2件のバグ発見、来週修正予定。相手は部長。丁寧だけど簡潔に。' },
-              { name: '問い合わせ対応テンプレ', desc: 'クレーム・質問・営業を分類', prompt: '顧客からの問い合わせを「クレーム」「質問」「営業メール」「パートナーシップ提案」に分類するルールと、それぞれの返信テンプレートを作って。' },
-            ]
-          },
-          {
-            icon: '\uD83C\uDFE0', title: '生活・子育て・趣味',
-            items: [
+              { name: 'サブスク解約の代行', desc: '複雑な解約手順をナビゲート', prompt: '使っていないサブスクリプションを整理したい。解約手順が分かりにくいサービスの一般的な解約方法と、解約前に確認すべきポイントをまとめて。' },
               { name: '今晩の献立を考えて', desc: '冷蔵庫の中身からレシピ提案', prompt: '冷蔵庫に鶏もも肉、玉ねぎ、じゃがいも、卵、牛乳があります。30分以内で作れる夕食のレシピを2つ提案して。' },
-              { name: '子供にわかるように説明', desc: '難しいことを簡単な言葉で', prompt: '小学3年生にもわかるように「円安」を説明して。身近な例を使って。' },
               { name: '確定申告の経費相談', desc: 'フリーランスの節税アドバイス', prompt: 'フリーランスのWebデザイナーです。自宅で仕事をしています。家賃・光熱費・通信費は経費にできますか？按分の目安を教えて。' },
             ]
           },
           {
-            icon: '\uD83D\uDEE0\uFE0F', title: '開発・エンジニア',
+            icon: '\uD83D\uDEE0\uFE0F', title: '開発・レガシーシステム',
             items: [
-              { name: 'コードレビューを依頼', desc: 'バグ・性能・セキュリティをチェック', prompt: 'Rustのコードレビューチェックリストを作って。パフォーマンス、安全性、可読性の観点で。clippyのよくある警告と修正方法も含めて。' },
+              { name: 'APIがないシステムを自動化', desc: 'RPA不要、自然言語で操作', prompt: '古い在庫管理システムからExcelで出力したデータを、新しいシステムに移行するためのスクリプトを書いて。CSVの列マッピングも自動判定して。' },
               { name: '障害対応手順書を作成', desc: 'エラー発生時のフロー設計', prompt: 'AWSでLambdaのエラー率が急上昇した時の障害対応手順書を作って。CloudWatchアラーム→ログ分析→原因特定→復旧→報告の流れで。' },
               { name: 'API仕様書を自動生成', desc: 'OpenAPI形式でドキュメント作成', prompt: 'REST APIの設計をして。ユーザー管理（CRUD）、認証（JWT）、ファイルアップロードのエンドポイントをOpenAPI 3.0形式で書いて。' },
             ]
@@ -3484,33 +3699,41 @@
       en: {
         categories: [
           {
+            icon: '\uD83C\uDFA8', title: 'Creative & Editing',
+            items: [
+              { name: 'Auto-edit video rough cuts', desc: 'Remove silence & join clips', prompt: 'Write a script using ffmpeg that reads all video files in a folder, removes silent sections, and concatenates them into a single timeline.' },
+              { name: 'Batch watermark 100 images', desc: 'Resize & add logo in bulk', prompt: 'Write a shell script using ImageMagick to add a logo watermark to the bottom-right of all images in a folder, resize to 1200px width, and export for web.' },
+              { name: 'Build a portfolio site', desc: 'Full HTML/CSS/JS website', prompt: 'Create a modern portfolio website with an about section, skills, 3 project showcases, and a contact form. Make it responsive and visually appealing.' },
+            ]
+          },
+          {
+            icon: '\uD83D\uDCBC', title: 'Admin & Back Office',
+            items: [
+              { name: 'Sort & enter receipts', desc: 'Extract dates & amounts from images', prompt: 'Read the receipt photo and extract date, store name, amount, and tax category. Create a CSV file for expense reporting with auto-classified account categories.' },
+              { name: 'SaaS account audit', desc: 'Find unused subscriptions', prompt: 'Create a checklist for auditing SaaS usage across 50 employees. Include steps to identify accounts with no login for 3+ months and estimate cost savings.' },
+              { name: 'Customer inquiry templates', desc: 'Auto-classify and respond', prompt: 'Create rules to classify customer inquiries into: complaint, question, sales email, partnership. Include a response template for each category.' },
+            ]
+          },
+          {
             icon: '\uD83D\uDD0D', title: 'Research & Intelligence',
             items: [
-              { name: 'Compare competitor prices', desc: 'Instant multi-site price check', prompt: 'Compare prices for "iPhone 16 Pro" across Amazon, Best Buy, and Walmart. Show me the best deals with links.' },
+              { name: 'Competitor monitoring', desc: 'Track hiring, pricing & news', prompt: 'Research Company A and Company B. Check their careers page and product updates. Summarize new job postings and product changes in a spreadsheet format.' },
               { name: 'Meeting prep research', desc: 'Auto-gather company intel', prompt: 'I have a meeting with "Sample Corp" tomorrow. Create a prep report with their latest 3 news items, business overview, and competitors.' },
               { name: 'Find travel deals', desc: 'Best plans within your budget', prompt: "I'm planning a 3-day trip to Kyoto in March. Budget is $500 per person. Focus on cherry blossom spots, create a day-by-day itinerary with hotel recommendations." },
             ]
           },
           {
-            icon: '\u26A1', title: 'Work & Automation',
+            icon: '\uD83C\uDFE0', title: 'Life & Personal',
             items: [
-              { name: 'Summarize meeting notes', desc: 'Decisions, TODOs, follow-ups', prompt: 'Summarize these meeting notes into "Decisions made", "Action items", and "Follow-ups for next meeting".\n\n(Paste your meeting notes here)' },
-              { name: 'Write a status update', desc: 'Professional report email', prompt: 'Write a project status update email. Situation: development phase complete, found 2 bugs during testing, fix planned for next week. Recipient is my director. Professional but concise.' },
-              { name: 'Customer inquiry templates', desc: 'Auto-classify and respond', prompt: 'Create rules to classify customer inquiries into: complaint, question, sales email, partnership. Include a response template for each category.' },
-            ]
-          },
-          {
-            icon: '\uD83C\uDFE0', title: 'Life & Family',
-            items: [
+              { name: 'Cancel unused subscriptions', desc: 'Navigate confusing cancellation flows', prompt: 'I want to clean up unused subscriptions. Summarize the typical cancellation steps for hard-to-cancel services and what to check before cancelling.' },
               { name: 'Dinner ideas from fridge', desc: 'Recipes from what you have', prompt: 'I have chicken thighs, onions, potatoes, eggs, and milk in my fridge. Suggest 2 dinner recipes I can make in under 30 minutes.' },
-              { name: 'Explain it to a kid', desc: 'Complex topics made simple', prompt: 'Explain inflation to a 10-year-old using everyday examples they can relate to.' },
               { name: 'Tax deduction advice', desc: 'Freelancer expense guidance', prompt: "I'm a freelance web designer working from home. Can I deduct rent, utilities, and internet costs? What's the typical home office deduction percentage?" },
             ]
           },
           {
-            icon: '\uD83D\uDEE0\uFE0F', title: 'Dev & Engineering',
+            icon: '\uD83D\uDEE0\uFE0F', title: 'Dev & Legacy Systems',
             items: [
-              { name: 'Code review checklist', desc: 'Bugs, performance, security', prompt: 'Create a Rust code review checklist covering performance, safety, and readability. Include common clippy warnings and fixes.' },
+              { name: 'Automate systems without APIs', desc: 'No RPA needed, just natural language', prompt: 'Write a script to migrate data exported as Excel from a legacy inventory system to a new system. Auto-detect CSV column mappings between the two formats.' },
               { name: 'Incident response playbook', desc: 'Error handling workflow', prompt: 'Create an incident response playbook for AWS Lambda error rate spikes. Cover: CloudWatch alarm \u2192 log analysis \u2192 root cause \u2192 recovery \u2192 report.' },
               { name: 'API spec generator', desc: 'OpenAPI docs from requirements', prompt: 'Design a REST API with user management (CRUD), auth (JWT), and file upload endpoints in OpenAPI 3.0 format.' },
             ]
@@ -3521,24 +3744,25 @@
 
     const T = {
       ja: {
-        title: 'AIに何でも聞ける。声でも、テキストでも。',
-        sub: '話しかけるだけで、検索・分析・自動化。LINE・Telegramでも使える無料AIアシスタント。',
+        title: 'お願いしたら、本当にやってくれるAI。',
+        sub: 'チャットで頼むだけ。検索、コード実行、ファイル操作、定期監視まで — 声でもテキストでも。',
         welcome: 'こんにちは！何でもお任せください。下のカードから選ぶか、自由に入力してください。',
         line: 'LINEで使う', tg: 'Telegramで使う',
         lineDesc: '1タップで友だち追加 → 自動連携', tgDesc: 'ボタンを押すだけ → 今すぐ開始',
-        lineConnected: '&#x2713; 連携済み', tgConnected: '&#x2713; 連携済み',
+        lineConnected: '&#x2713; 連携済み', tgConnected: '&#x2713; 連携済み', chConnected: '&#x2713; 連携済み',
         ph: '何でも聞いてください...', send: '送信',
-        heroTry: '今すぐ無料で試す', heroPlans: 'プランを見る', pricing: '料金', status: 'ステータス',
+        heroTry: '今すぐ無料で試す', heroPlans: 'プランを見る', pricing: '料金', settings: '設定', status: 'ステータス', comparison: '比較',
         chatStatus: 'オンライン',
         statsUptime: '稼働率', statsSpeed: '平均応答', statsModels: 'AIモデル', statsChannels: 'チャネル', statsTools: 'ツール',
         trustSsl: 'SSL暗号化', trustStripe: 'Stripe決済', trustNocard: 'カード不要で開始',
+        socialProof: '🇯🇵 日本発 · オープンソース · Web・LINE・Telegram対応',
         syncTitle: 'どのチャネルでも同じ会話',
         syncDesc: 'Web・LINE・Telegramの会話をリンクして、どこからでも続きを。',
         step1Title: '友だち追加', step1Desc: '上のボタンからLINE/Telegramで友だち追加',
         step2Title: 'IDで自動連携', step2Desc: 'ボタンを押すだけで自動連携されます',
         step3Title: '同期完了', step3Desc: '全チャネルの会話が統合されます',
         sessionLabel: 'あなたのセッションID:', sessionHint: 'クリックでコピー。LINE/Telegramに貼り付けで連携',
-        cliTitle: 'コマンドラインでも使える', cliSub: 'nanobot chat "こんにちは!" | macOS, Linux',
+        cliTitle: 'コマンドラインでも使える', cliSub: 'chatweb chat "こんにちは!" | macOS, Linux',
         cliSyncHint: 'Webの会話と同期してCLIを使う',
         bottomTitle: 'もっとパワフルに使いたい？',
         bottomSub: 'GPT-4o、Claude Sonnet、Claude Opusなど最先端モデルを月額$9から。',
@@ -3547,7 +3771,7 @@
         agentAuto: 'Auto (自動振り分け)',
         deviceTitle: '接続デバイス',
         deviceDesc: 'CLIデーモンで接続されたマシン一覧',
-        deviceHint: 'CLIをインストールして <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> で接続',
+        deviceHint: 'CLIをインストールして <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">chatweb daemon</code> で接続',
         capTitle: 'AI + ツールで、なんでも自動化',
         capSub: '内蔵ツール + MCP拡張で無限の可能性',
         capSearch: 'Web検索', capSearchD: 'リアルタイムの情報を検索・収集',
@@ -3569,26 +3793,35 @@
         appNewChat: '新しいチャット',
         appEmptyText: '何でも聞いてください',
         appPlaceholder: 'メッセージを入力...',
+        uc1Title: 'ファイルの整理', uc1Desc: '「ダウンロードフォルダを種類別に整理して」— フォルダ作成からファイル移動まで自動で完了。',
+        uc2Title: '環境構築・バグ修正', uc2Desc: '「このリポジトリを動くようにして」— エラーを自力で解決し、起動まで自律的に試行錯誤。',
+        uc3Title: '定期監視（ハートビート）', uc3Desc: '「サーバーが落ちてないか見ておいて」— 寝ている間にダウンを検知し、復旧して事後報告。',
+        uc4Title: 'Web操作の代行', uc4Desc: '「最安値フライトを探してカレンダーに入れて」— 複数サイトを巡回し、予定登録まで全自動。',
+        uc5Title: 'ずっと覚えている（永続メモリ）', uc5Desc: '「いつもの感じでメール返信して」— 過去の会話や好みをずっと覚えているから、毎回の説明が不要。',
+        uc6Title: '声で操作、どこからでも', uc6Desc: '「声で指示するだけ」— Web・LINE・Telegramどこからでも同じAIが応答。マルチチャネル対応。',
+        demoQ1: '東京の天気を調べて', demoTool: '🔍 web_search("東京 天気")', demoA1: '東京は晴れ、気温18°Cです。午後から曇りの予報なので、折りたたみ傘があると安心です。',
+        demoQ2: 'ありがとう！声で読み上げて', demoA2Tool: '🔊 speech_synthesize', demoA2: '読み上げました。他にも何でも聞いてください。',
       },
       en: {
-        title: 'Ask AI anything. By voice or text.',
-        sub: 'Just talk and get search, analysis, and automation. Free AI assistant on Web, LINE, and Telegram.',
+        title: 'AI that actually does the work.',
+        sub: 'Just ask. Search, code execution, file operations, scheduled monitoring — by voice or text.',
         welcome: 'Hi! Pick a task below or type anything you need.',
         line: 'Use on LINE', tg: 'Use on Telegram',
         lineDesc: '1 tap to add friend → auto-link', tgDesc: 'Just tap → start now',
-        lineConnected: '&#x2713; Connected', tgConnected: '&#x2713; Connected',
+        lineConnected: '&#x2713; Connected', tgConnected: '&#x2713; Connected', chConnected: '&#x2713; Connected',
         ph: 'Ask me anything...', send: 'Send',
-        heroTry: 'Try Free Now', heroPlans: 'View Plans', pricing: 'Pricing', status: 'Status',
+        heroTry: 'Try Free Now', heroPlans: 'View Plans', pricing: 'Pricing', settings: 'Settings', status: 'Status', comparison: 'Comparison',
         chatStatus: 'Online',
         statsUptime: 'Uptime', statsSpeed: 'Avg Response', statsModels: 'AI Models', statsChannels: 'Channels', statsTools: 'Tools',
         trustSsl: 'SSL Encrypted', trustStripe: 'Stripe Payments', trustNocard: 'No card required',
+        socialProof: '🇯🇵 Made in Japan · Open Source · Web, LINE & Telegram',
         syncTitle: 'Same conversation, any channel',
         syncDesc: 'Link your Web, LINE, and Telegram chats. Continue from anywhere.',
         step1Title: 'Add friend', step1Desc: 'Tap LINE/Telegram buttons above',
         step2Title: 'Auto-link', step2Desc: 'Just tap the button to auto-link',
         step3Title: 'Synced!', step3Desc: 'All conversations are unified',
         sessionLabel: 'Your session ID:', sessionHint: 'Click to copy. Paste in LINE/Telegram to link',
-        cliTitle: 'Use from command line', cliSub: 'nanobot chat "Hello!" | macOS, Linux',
+        cliTitle: 'Use from command line', cliSub: 'chatweb chat "Hello!" | macOS, Linux',
         cliSyncHint: 'Sync with your Web conversation from CLI',
         bottomTitle: 'Need more power?',
         bottomSub: 'Access GPT-4o, Claude Sonnet, Claude Opus and more from $9/month.',
@@ -3597,7 +3830,7 @@
         agentAuto: 'Auto (smart routing)',
         deviceTitle: 'Connected Devices',
         deviceDesc: 'Machines connected via CLI daemon',
-        deviceHint: 'Install CLI and run <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">nanobot daemon</code> to connect',
+        deviceHint: 'Install CLI and run <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">chatweb daemon</code> to connect',
         capTitle: 'AI + Tools = Automate Anything',
         capSub: 'Built-in tools + unlimited MCP extensions',
         capSearch: 'Web Search', capSearchD: 'Search & gather real-time information',
@@ -3619,6 +3852,14 @@
         appNewChat: 'New chat',
         appEmptyText: 'Ask me anything',
         appPlaceholder: 'Message chatweb.ai...',
+        uc1Title: 'File Organization', uc1Desc: '"Organize my downloads by type" — Creates folders and moves files automatically.',
+        uc2Title: 'Setup & Bug Fixes', uc2Desc: '"Get this repo running on my machine" — Resolves errors autonomously until it works.',
+        uc3Title: 'Scheduled Monitoring', uc3Desc: '"Watch if my server goes down" — Detects downtime overnight, restarts and reports.',
+        uc4Title: 'Web Task Automation', uc4Desc: '"Find cheapest flights and add to my calendar" — Browses sites and books automatically.',
+        uc5Title: 'Persistent Memory', uc5Desc: '"Reply to Bob in my usual tone" — Remembers past conversations and preferences.',
+        uc6Title: 'Voice Control, Anywhere', uc6Desc: '"Just tell it by voice" — Same AI responds from Web, LINE, or Telegram. Multi-channel ready.',
+        demoQ1: 'Check the weather in Tokyo', demoTool: '🔍 web_search("Tokyo weather")', demoA1: 'Tokyo is sunny, 18°C. Clouds expected in the afternoon — bring a folding umbrella just in case.',
+        demoQ2: 'Thanks! Read it aloud', demoA2Tool: '🔊 speech_synthesize', demoA2: 'Done reading. Feel free to ask anything else.',
       }
     };
 
@@ -3713,7 +3954,7 @@
 
       // Fetch TTS audio
       try {
-        const headers = { 'Content-Type': 'application/json' };
+        const headers = { 'Content-Type': 'application/json', 'x-session-id': typeof webSessionId !== 'undefined' ? webSessionId : '' };
         if (typeof authToken !== 'undefined' && authToken) headers['Authorization'] = 'Bearer ' + authToken;
 
         const r = await fetch(API + '/api/v1/speech/synthesize', {
@@ -3793,13 +4034,23 @@
       document.getElementById('t-tg-desc').textContent = t.tgDesc;
       document.getElementById('t-line-connected').innerHTML = t.lineConnected;
       document.getElementById('t-tg-connected').innerHTML = t.tgConnected;
+      ['whatsapp', 'discord', 'slack', 'teams'].forEach(ch => {
+        const el = document.getElementById('t-' + ch + '-connected');
+        if (el) el.innerHTML = t.chConnected;
+      });
       input.placeholder = t.ph;
       document.getElementById('send-btn').textContent = t.send;
       document.getElementById('t-hero-try').textContent = t.heroTry;
       document.getElementById('t-hero-plans').textContent = t.heroPlans;
       document.getElementById('nav-pricing').textContent = t.pricing;
+      document.getElementById('nav-settings').textContent = t.settings;
       document.getElementById('nav-status').textContent = t.status;
       document.getElementById('footer-pricing').textContent = t.pricing;
+      var fs = document.getElementById('footer-settings'); if (fs) fs.textContent = t.settings;
+      var fc = document.getElementById('footer-comparison'); if (fc) fc.textContent = t.comparison;
+      var ms = document.getElementById('mob-settings'); if (ms) ms.textContent = t.settings;
+      var mp = document.getElementById('mob-pricing'); if (mp) mp.textContent = t.pricing;
+      var mst = document.getElementById('mob-status'); if (mst) mst.textContent = t.status;
       document.getElementById('t-chat-status').textContent = t.chatStatus;
       document.getElementById('stat-uptime-label').textContent = t.statsUptime;
       document.getElementById('stat-speed-label').textContent = t.statsSpeed;
@@ -3809,6 +4060,7 @@
       document.getElementById('trust-ssl').textContent = t.trustSsl;
       document.getElementById('trust-stripe').textContent = t.trustStripe;
       document.getElementById('trust-nocard').textContent = t.trustNocard;
+      var sp = document.getElementById('social-proof-text'); if (sp) sp.textContent = t.socialProof;
       document.getElementById('t-sync-title').textContent = t.syncTitle;
       document.getElementById('t-sync-desc').textContent = t.syncDesc;
       document.getElementById('t-step1-title').textContent = t.step1Title;
@@ -3821,7 +4073,7 @@
       document.getElementById('t-session-hint').textContent = t.sessionHint;
       document.getElementById('t-cli-title').textContent = t.cliTitle;
       document.getElementById('t-cli-sub').innerHTML = t.cliSub;
-      document.getElementById('cli-sync-text').textContent = 'nanobot chat --session ' + webSessionId + ' "Hello"';
+      document.getElementById('cli-sync-text').textContent = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
       document.getElementById('t-cli-sync-hint').textContent = t.cliSyncHint;
       document.getElementById('t-bottom-title').textContent = t.bottomTitle;
       document.getElementById('t-bottom-sub').textContent = t.bottomSub;
@@ -3854,6 +4106,25 @@
       document.getElementById('cap-memory-d').textContent = t.capMemoryD;
       document.getElementById('cap-note-text').textContent = t.capNote;
       document.getElementById('cap-note-link').textContent = t.capNoteLink;
+      // Use cases section
+      var uc1t = document.getElementById('uc-1-title'); if (uc1t) uc1t.textContent = t.uc1Title;
+      var uc1d = document.getElementById('uc-1-desc'); if (uc1d) uc1d.textContent = t.uc1Desc;
+      var uc2t = document.getElementById('uc-2-title'); if (uc2t) uc2t.textContent = t.uc2Title;
+      var uc2d = document.getElementById('uc-2-desc'); if (uc2d) uc2d.textContent = t.uc2Desc;
+      var uc3t = document.getElementById('uc-3-title'); if (uc3t) uc3t.textContent = t.uc3Title;
+      var uc3d = document.getElementById('uc-3-desc'); if (uc3d) uc3d.textContent = t.uc3Desc;
+      var uc4t = document.getElementById('uc-4-title'); if (uc4t) uc4t.textContent = t.uc4Title;
+      var uc4d = document.getElementById('uc-4-desc'); if (uc4d) uc4d.textContent = t.uc4Desc;
+      var uc5t = document.getElementById('uc-5-title'); if (uc5t) uc5t.textContent = t.uc5Title;
+      var uc5d = document.getElementById('uc-5-desc'); if (uc5d) uc5d.textContent = t.uc5Desc;
+      var uc6t = document.getElementById('uc-6-title'); if (uc6t) uc6t.textContent = t.uc6Title;
+      var uc6d = document.getElementById('uc-6-desc'); if (uc6d) uc6d.textContent = t.uc6Desc;
+      // Demo messages
+      var dq1 = document.getElementById('demo-q1'); if (dq1) dq1.textContent = t.demoQ1;
+      var dt = document.getElementById('demo-tool'); if (dt) dt.textContent = t.demoTool;
+      var da1 = document.getElementById('demo-a1'); if (da1) { da1.innerHTML = '<span style="font-size:11px;color:var(--accent);display:block;margin-bottom:4px;">' + t.demoTool + '</span>' + t.demoA1; }
+      var dq2 = document.getElementById('demo-q2'); if (dq2) dq2.textContent = t.demoQ2;
+      var da2 = document.getElementById('demo-a2'); if (da2) { da2.innerHTML = '<span style="font-size:11px;color:var(--accent);display:block;margin-bottom:4px;">' + t.demoA2Tool + '</span>' + t.demoA2; }
       // Auth UI translations
       if (!currentUser) document.getElementById('login-btn').textContent = t.loginBtn;
       document.getElementById('chat-login-text').textContent = t.chatLoginPrompt;
@@ -3894,10 +4165,40 @@
 
     // CLI sync command copy helper
     function copyCliSync(el) {
-      const cmd = 'nanobot chat --session ' + webSessionId + ' "Hello"';
+      const cmd = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
       navigator.clipboard.writeText(cmd);
       const cp = el.querySelector('.cp2');
       if (cp) { cp.textContent = 'Copied!'; setTimeout(() => cp.textContent = 'Copy', 1500); }
+    }
+
+    // Sidebar CLI copy helper
+    function copyCli(el, cmd) {
+      if (!cmd) {
+        cmd = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
+      }
+      navigator.clipboard.writeText(cmd);
+      const cp = el.querySelector('.cli-copy');
+      if (cp) { cp.textContent = 'Copied!'; setTimeout(() => cp.textContent = 'Copy', 1500); }
+    }
+
+    // Load worker status for sidebar
+    async function loadWorkerStatus() {
+      try {
+        const hdrs = {};
+        if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
+        const r = await fetch(API + '/api/v1/workers/status', { headers: hdrs });
+        const d = await r.json();
+        const bar = document.getElementById('worker-status-bar');
+        const txt = document.getElementById('worker-status-text');
+        if (bar && d.workers && d.workers.length > 0) {
+          const active = d.workers.filter(function(w) { return w.status === 'active'; });
+          if (active.length > 0) {
+            const w = active[0];
+            txt.textContent = '🟢 Worker: ' + (w.model || 'unknown') + ' (' + w.hostname + ')';
+            bar.style.display = 'block';
+          }
+        }
+      } catch(e) { /* ignore */ }
     }
 
     // Show session ID (masked for display, full ID on click to copy)
@@ -4089,6 +4390,7 @@
       });
     }
 
+    const CH_NAMES = { line: 'LINE', tg: 'Telegram', whatsapp: 'WhatsApp', discord: 'Discord', slack: 'Slack', teams: 'Teams' };
     function showLinkSuccess(ch) {
       stopLinkPoll();
       setModalStep(2);
@@ -4100,35 +4402,87 @@
       document.getElementById('modal-desc').style.display = 'none';
       const succ = document.getElementById('modal-success');
       succ.style.display = '';
-      const chName = ch === 'line' ? 'LINE' : ch === 'tg' ? 'Telegram' : ch;
+      const chName = CH_NAMES[ch] || ch;
       document.getElementById('modal-success-text').textContent = l === 'ja'
         ? chName + ' 連携完了！' : chName + ' linked!';
       document.getElementById('modal-close-btn').textContent = l === 'ja' ? '閉じる' : 'Close';
-      // Update channel status
-      if (ch === 'line') { document.getElementById('ch-bar-line')?.classList.add('connected'); document.getElementById('line-card')?.classList.add('connected'); }
-      if (ch === 'tg') { document.getElementById('ch-bar-tg')?.classList.add('connected'); document.getElementById('tg-card')?.classList.add('connected'); }
-      // Auto close after 2s
+      // Update channel status for all channel types
+      const barId = 'ch-bar-' + ch;
+      const cardId = ch + '-card';
+      const appId = 'app-ch-' + ch;
+      document.getElementById(barId)?.classList.add('connected');
+      document.getElementById(cardId)?.classList.add('connected');
+      document.getElementById(appId)?.classList.add('connected');
+      // Compact the channel cards grid
+      document.querySelectorAll('.channel-cards').forEach(g => g.classList.add('has-linked'));
+      // Auto close after 1.5s, then show fullscreen overlay
       setTimeout(() => {
         document.getElementById('modal').classList.remove('show');
-        showToast(l === 'ja' ? chName + ' 連携完了' : chName + ' linked');
-      }, 2000);
+        showLinkOverlay(ch);
+      }, 1500);
     }
 
-    function startLinkPoll(ch) {
+    function startLinkPoll(ch, code) {
       stopLinkPoll();
+      if (!code) return;
       linkPollTimer = setInterval(async () => {
         try {
-          const r = await fetch(API + '/api/v1/sessions/' + encodeURIComponent(webSessionId));
+          const r = await fetch(API + '/api/v1/link/status/' + encodeURIComponent(code));
           const data = await r.json();
-          if (data.linked_channels) {
-            const target = ch === 'tg' ? 'telegram' : ch;
-            if (data.linked_channels.includes(target)) {
-              updateChannelStatus(data.linked_channels, data.linked_channel_details);
-              showLinkSuccess(ch);
-            }
+          if (data.status === 'linked') {
+            showLinkSuccess(ch);
           }
         } catch(e) {}
       }, 2000);
+    }
+
+    const CH_COLORS = { line: '#06c755', tg: '#24a1de', whatsapp: '#25D366', discord: '#5865F2', slack: '#E01E5A', teams: '#6264A7' };
+    const CH_SVG = {
+      line: 'M12 2C6.48 2 2 5.81 2 10.4c0 4.16 3.69 7.65 8.67 8.3.34.07.8.22.91.5.1.26.07.66.03.92l-.15.87c-.04.25-.2.97.85.53s6.82-4.01 9.31-6.87C23.42 12.68 22 10.4 22 10.4 22 5.81 17.52 2 12 2z',
+      tg: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z',
+      whatsapp: 'M12 0C5.37 0 0 5.37 0 12c0 2.12.55 4.13 1.6 5.93L0 24l6.26-1.64C8.01 23.44 9.97 24 12 24c6.63 0 12-5.37 12-12S18.63 0 12 0z',
+      discord: 'M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52c-.21.38-.45.87-.61 1.26a18.27 18.27 0 0 0-5.49 0c-.17-.39-.41-.88-.62-1.26a19.74 19.74 0 0 0-4.89 1.52C1.11 8.39.33 12.27.74 16.1a19.9 19.9 0 0 0 5.99 3.03c.46-.63.87-1.3 1.22-2a13.1 13.1 0 0 1-1.87-.9c.13-.09.25-.19.37-.29 3.93 1.8 8.18 1.8 12.07 0 .12.1.25.2.37.29c-.6.35-1.22.65-1.88.9c.36.7.77 1.37 1.22 2a19.83 19.83 0 0 0 6-3.03c.5-5.18-.84-9.68-3.55-13.67z',
+      slack: 'M5.04 15.24a2.52 2.52 0 1 1-2.52-2.52h2.52v2.52zm1.27 0a2.52 2.52 0 1 1 5.04 0v6.3a2.52 2.52 0 1 1-5.04 0v-6.3z',
+      teams: 'M20.5 7h-3V5.5a2.5 2.5 0 0 0-5 0V7h-1a1.5 1.5 0 0 0-1.5 1.5v8a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 20.5 7z',
+    };
+    function showLinkOverlay(ch) {
+      const l = document.documentElement.lang || 'ja';
+      const chName = CH_NAMES[ch] || ch;
+      const color = CH_COLORS[ch] || '#24a1de';
+      const svgPath = CH_SVG[ch] || CH_SVG.tg;
+      const icon = document.getElementById('lso-icon');
+      icon.style.background = color;
+      icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="' + svgPath + '" fill="#fff"/></svg>'
+        + '<div class="lso-check"><svg viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3.5 3.5 6.5-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>';
+      document.getElementById('lso-text').textContent = l === 'ja'
+        ? chName + ' 連携完了！' : chName + ' linked!';
+      const overlay = document.getElementById('link-success-overlay');
+      overlay.classList.add('show');
+      setTimeout(() => {
+        overlay.classList.remove('show');
+        showToast(l === 'ja' ? chName + ' 連携完了' : chName + ' linked');
+      }, 1800);
+    }
+
+    function updateSidebarChannelBadges(channels, details) {
+      const container = document.getElementById('sidebar-channel-badges');
+      if (!container) return;
+      container.innerHTML = '';
+      const lineSvg = '<svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.4c0 4.16 3.69 7.65 8.67 8.3.34.07.8.22.91.5.1.26.07.66.03.92l-.15.87c-.04.25-.2.97.85.53s6.82-4.01 9.31-6.87C23.42 12.68 22 10.4 22 10.4 22 5.81 17.52 2 12 2z" fill="currentColor"/></svg>';
+      const tgSvg = '<svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" fill="currentColor"/></svg>';
+      const l = document.documentElement.lang || 'ja';
+      if (channels.includes('line')) {
+        const badge = document.createElement('span');
+        badge.className = 'sidebar-ch-badge line-badge';
+        badge.innerHTML = lineSvg + (l === 'ja' ? 'LINE' : 'LINE');
+        container.appendChild(badge);
+      }
+      if (channels.includes('telegram')) {
+        const badge = document.createElement('span');
+        badge.className = 'sidebar-ch-badge tg-badge';
+        badge.innerHTML = tgSvg + (l === 'ja' ? 'TG' : 'TG');
+        container.appendChild(badge);
+      }
     }
 
     async function showModal(ch) {
@@ -4169,11 +4523,9 @@
       document.getElementById('modal').classList.add('show');
 
       let deepLink;
-      let code = null;
-
-      if (ch === 'line' || ch === 'tg') {
-        code = await generateLinkCode();
-        deepLink = code ? buildDeepLinkWithCode(ch, code) : getDeepLink(ch);
+      let code = await generateLinkCode();
+      if (code && (ch === 'line' || ch === 'tg')) {
+        deepLink = buildDeepLinkWithCode(ch, code);
       } else {
         deepLink = getDeepLink(ch);
       }
@@ -4205,9 +4557,9 @@
         document.getElementById('modal-code-val').textContent = code;
       }
 
-      // Start polling for link completion
-      if (ch === 'line' || ch === 'tg') {
-        startLinkPoll(ch);
+      // Start polling for link completion (all channels)
+      if (code) {
+        startLinkPoll(ch, code);
       }
 
       document.getElementById('modal-close-btn').textContent = l === 'ja' ? '閉じる' : 'Close';
@@ -4587,6 +4939,11 @@
       document.getElementById('app-empty-text').textContent = l === 'ja' ? '何でも聞いてください' : 'Ask me anything';
       document.getElementById('app-input').placeholder = l === 'ja' ? 'メッセージを入力...' : 'Message chatweb.ai...';
       document.getElementById('app-channels-label').textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
+      // Set CLI sidebar sync command
+      const cliSyncEl = document.getElementById('cli-sidebar-sync-text');
+      if (cliSyncEl) cliSyncEl.textContent = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
+      // Load worker status
+      loadWorkerStatus();
       // Init sync + cron
       startAutoSync();
       loadCronJobs();
@@ -4602,16 +4959,15 @@
     function appRenderSuggestions() {
       const l = document.documentElement.lang || 'ja';
       const suggestions = l === 'ja' ? [
-        '今日の天気を教えて',
-        '今日の天気を教えて',
-        '元気が出る言葉をください',
-        '旅行プランを立てて',
-        '仕事を手伝って',
+        'ポートフォリオサイトを作って',
+        '領収書を整理してCSVにして',
+        '競合の最新情報を調べて',
+        '今晩の献立を考えて',
       ] : [
-        "What's the weather today?",
-        'Give me an inspiring quote',
-        'Plan a trip for me',
-        'Help me with work',
+        'Build me a portfolio site',
+        'Organize receipts into a CSV',
+        'Research competitor updates',
+        'Plan dinner from my fridge',
       ];
       const container = document.getElementById('app-suggestions');
       container.innerHTML = '';
@@ -4935,8 +5291,12 @@
           return;
         }
 
+        // Detect device type for response length optimization
+        const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
+        const deviceType = voiceInitiated ? 'voice' : (isMobile ? 'mobile' : 'pc');
+
         // Use forced model for summary, then clear
-        const chatBody = { message: msgToSend, session_id: webSessionId, channel: 'web' };
+        const chatBody = { message: msgToSend, session_id: webSessionId, channel: 'web', device: deviceType };
         if (window._forceSummaryModel) {
           chatBody.model = window._forceSummaryModel;
           delete window._forceSummaryModel;
@@ -4986,7 +5346,21 @@
           }
 
           function processEvent(evt) {
-            if (evt.type === 'tool_start') {
+            if (evt.type === 'start' && evt.agent) {
+              // Update thinking indicator with agent estimate
+              const agentLabels = {
+                assistant: { ja: 'すぐ回答', en: 'Responding' },
+                researcher: { ja: 'リサーチ中', en: 'Researching' },
+                coder: { ja: 'コード生成中', en: 'Coding' },
+                analyst: { ja: '分析中', en: 'Analyzing' },
+                creative: { ja: '作成中', en: 'Creating' },
+              };
+              const info = agentLabels[evt.agent] || agentLabels.assistant;
+              const label = lang === 'ja' ? info.ja : info.en;
+              const est = evt.estimated_seconds ? ('~' + evt.estimated_seconds + 's') : '';
+              const textEl = thinking.querySelector('.thinking-text');
+              if (textEl) textEl.textContent = label + (est ? ' (' + est + ')' : '');
+            } else if (evt.type === 'tool_start') {
               const p = ensureAgentProgress();
               const toolEl = document.createElement('div');
               toolEl.className = 'tool-step';
@@ -5026,7 +5400,7 @@
                 const thinkSteps = agentProgressEl.querySelectorAll('.thinking-step');
                 thinkSteps.forEach(el => el.remove());
               }
-              appAddMsg(evt.content, 'bot', null, evt.tools_used || null);
+              appAddMsg(evt.content, 'bot', evt.agent || null, evt.tools_used || null);
               knownMsgCount += 2;
               if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
               autoPlayTTS(evt.content);
@@ -5431,6 +5805,7 @@
       document.getElementById('settings-tab-'+tab).classList.add('active');
       if (tab === 'memory') loadMemoryData();
       if (tab === 'llm') loadLlmSettings();
+      if (tab === 'activity') loadActivityData();
     }
     function openSettingsModal() {
       // sync toggle states
@@ -5448,26 +5823,64 @@
     }
     async function loadMemoryData() {
       const token = localStorage.getItem('authToken');
-      if (!token) { document.getElementById('memory-longterm').textContent = 'ログインが必要です'; return; }
+      const hdrs = { 'x-session-id': webSessionId };
+      if (token) hdrs['Authorization'] = 'Bearer ' + token;
       try {
-        const r = await fetch('/api/v1/memory', { headers: { 'Authorization': 'Bearer ' + token } });
+        const r = await fetch(API + '/api/v1/memory', { headers: hdrs });
         if (!r.ok) throw new Error(r.status);
         const data = await r.json();
-        document.getElementById('memory-longterm').textContent = data.long_term || '';
-        document.getElementById('memory-daily').textContent = data.daily || '';
+        const l = document.documentElement.lang || 'ja';
+        document.getElementById('memory-longterm').textContent = data.long_term || (l === 'ja' ? '（まだ記憶がありません）' : '(No memory yet)');
+        document.getElementById('memory-daily').textContent = data.daily || (l === 'ja' ? '（今日のログはまだありません）' : '(No log today)');
       } catch(e) {
         document.getElementById('memory-longterm').textContent = '読み込みエラー: ' + e.message;
       }
     }
     async function clearMemory() {
-      if (!confirm('記憶を全て削除しますか？この操作は取り消せません。')) return;
+      const l = document.documentElement.lang || 'ja';
+      if (!confirm(l === 'ja' ? '記憶を全て削除しますか？この操作は取り消せません。' : 'Delete all memory? This cannot be undone.')) return;
+      const hdrs = { 'x-session-id': webSessionId };
       const token = localStorage.getItem('authToken');
-      if (!token) return;
+      if (token) hdrs['Authorization'] = 'Bearer ' + token;
       try {
-        await fetch('/api/v1/memory', { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+        await fetch(API + '/api/v1/memory', { method: 'DELETE', headers: hdrs });
         document.getElementById('memory-longterm').textContent = '';
         document.getElementById('memory-daily').textContent = '';
       } catch(e) { alert('削除エラー: ' + e.message); }
+    }
+    async function loadActivityData() {
+      const hdrs = { 'x-session-id': webSessionId };
+      const token = localStorage.getItem('authToken');
+      if (token) hdrs['Authorization'] = 'Bearer ' + token;
+      try {
+        const r = await fetch(API + '/api/v1/activity', { headers: hdrs });
+        if (!r.ok) throw new Error(r.status);
+        const data = await r.json();
+        document.getElementById('activity-credits-remaining').textContent = data.credits_remaining ?? '-';
+        document.getElementById('activity-credits-used').textContent = data.credits_used ?? '-';
+        document.getElementById('activity-today-requests').textContent = data.today_requests ?? '-';
+        document.getElementById('activity-plan').textContent = (data.plan || 'free').charAt(0).toUpperCase() + (data.plan || 'free').slice(1);
+        const list = document.getElementById('activity-log-list');
+        if (!data.today_logs || data.today_logs.length === 0) {
+          list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);">No activity today</div>';
+        } else {
+          const EVENT_ICONS = { chat: '\u{1F4AC}', chat_stream: '\u{1F4AC}', tts: '\u{1F50A}', login_success: '\u{1F513}', register: '\u{1F4DD}', coupon_redeemed: '\u{1F381}', apikey_created: '\u{1F511}' };
+          list.innerHTML = data.today_logs.map(log => {
+            const icon = EVENT_ICONS[log.event_type] || '\u{1F4CB}';
+            const time = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : '';
+            const type = log.event_type || 'unknown';
+            const det = log.details || '';
+            return '<div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:flex-start;">'
+              + '<span style="flex-shrink:0;">' + icon + '</span>'
+              + '<div style="flex:1;min-width:0;">'
+              + '<div style="font-weight:600;font-size:12px;">' + type + ' <span style="color:var(--muted);font-weight:400;">' + time + '</span></div>'
+              + '<div style="color:var(--muted);font-size:11px;word-break:break-all;">' + det + '</div>'
+              + '</div></div>';
+          }).join('');
+        }
+      } catch(e) {
+        document.getElementById('activity-log-list').innerHTML = '<div style="padding:16px;text-align:center;color:#e53e3e;">Error: ' + e.message + '</div>';
+      }
     }
     function loadLlmSettings() {
       const saved = JSON.parse(localStorage.getItem('llmSettings') || '{}');
@@ -5566,7 +5979,7 @@
       let blobUrl = ttsCache.get(cacheKey);
       if (blobUrl) return blobUrl;
 
-      const hdrs = { 'Content-Type': 'application/json' };
+      const hdrs = { 'Content-Type': 'application/json', 'x-session-id': webSessionId };
       if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
 
       const r = await fetch(API + '/api/v1/speech/synthesize', {
@@ -5757,26 +6170,24 @@
       const l = document.documentElement.lang || 'ja';
       document.getElementById('topup-modal-title').textContent = l === 'ja' ? 'クレジットをチャージ' : 'Top Up Credits';
       document.getElementById('topup-modal-desc').textContent = l === 'ja' ? 'お好きな方法でクレジットを追加できます' : 'Add credits using your preferred payment method';
+      const earnTitle = document.getElementById('earn-btn-title');
+      const earnDesc = document.getElementById('earn-btn-desc');
+      if (earnTitle) earnTitle.textContent = l === 'ja' ? 'PCで稼ぐ' : 'Earn with your PC';
+      if (earnDesc) earnDesc.textContent = l === 'ja' ? 'ローカルLLMを動かしてクレジット獲得' : 'Run local LLM to earn credits';
       document.getElementById('topup-modal').classList.add('show');
     }
 
-    async function startStripeCheckout(plan) {
-      try {
-        const r = await fetch(API + '/api/v1/billing/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (authToken || '') },
-          body: JSON.stringify({ plan }),
-        });
-        const d = await r.json();
-        if (d.checkout_url) {
-          window.open(d.checkout_url, '_blank');
-          document.getElementById('topup-modal').classList.remove('show');
-        } else if (d.error) {
-          alert(d.error);
-        }
-      } catch(e) {
-        alert('Error: ' + e.message);
-      }
+    function startStripeCheckout(plan) {
+      const links = {
+        starter: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o',
+        pro: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p',
+        enterprise: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p',
+      };
+      const url = links[plan];
+      if (!url) { alert('Invalid plan'); return; }
+      const ref = encodeURIComponent(webSessionId || '');
+      window.open(url + '?client_reference_id=' + ref, '_blank');
+      document.getElementById('topup-modal').classList.remove('show');
     }
 
     // ---------------------------------------------------------------------------
@@ -5846,11 +6257,15 @@
       const lang = document.documentElement.lang || 'ja';
 
       if (!window.ethereum) {
-        statusEl.textContent = lang === 'ja' ? 'MetaMaskが見つかりません。ブラウザ拡張をインストールしてください。' : 'MetaMask not found. Please install the browser extension.';
+        statusEl.innerHTML = lang === 'ja'
+          ? 'MetaMaskが見つかりません。<a href="https://metamask.io/download/" target="_blank" style="color:var(--accent);text-decoration:underline;">インストールはこちら</a>'
+          : 'MetaMask not found. <a href="https://metamask.io/download/" target="_blank" style="color:var(--accent);text-decoration:underline;">Install here</a>';
         statusEl.style.color = '#ef4444';
         return;
       }
 
+      const payBtn = document.getElementById('crypto-pay-btn');
+      if (payBtn) { payBtn.disabled = true; payBtn.style.opacity = '0.6'; }
       statusEl.textContent = lang === 'ja' ? 'ウォレット接続中...' : 'Connecting wallet...';
       statusEl.style.color = 'var(--accent)';
 
@@ -5937,7 +6352,37 @@
         console.error('Crypto payment error:', e);
         statusEl.textContent = e.message || (lang === 'ja' ? 'エラーが発生しました' : 'An error occurred');
         statusEl.style.color = '#ef4444';
+      } finally {
+        if (payBtn) { payBtn.disabled = false; payBtn.style.opacity = '1'; }
       }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Earn with PC — show CLI instructions
+    // ---------------------------------------------------------------------------
+    function showEarnOption() {
+      const modal = document.getElementById('modal');
+      const content = document.getElementById('modal-content');
+      const lang = document.documentElement.lang || 'ja';
+      content.innerHTML = '<h3 style="margin:0 0 12px;">' + (lang === 'ja' ? '🖥️ PCで稼ぐ' : '🖥️ Earn with your PC') + '</h3>'
+        + '<p style="color:var(--muted);font-size:13px;margin-bottom:16px;">'
+        + (lang === 'ja' ? 'あなたのPCでローカルLLMを動かして、他のユーザーの推論リクエストを処理。クレジットが稼げます。' : 'Run a local LLM on your PC to process inference requests from other users and earn credits.')
+        + '</p>'
+        + '<div style="background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:\'SF Mono\',\'Fira Code\',monospace;font-size:13px;margin-bottom:12px;cursor:pointer;" onclick="navigator.clipboard.writeText(\'curl -fsSL https://chatweb.ai/install.sh | sh\');this.querySelector(\'.ep\').textContent=\'Copied!\';setTimeout(()=>this.querySelector(\'.ep\').textContent=\'Copy\',1500)">'
+        + '<div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--muted);">$</span> <span style="flex:1;color:#e2e8f0;">curl -fsSL https://chatweb.ai/install.sh | sh</span> <span class="ep" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span></div>'
+        + '</div>'
+        + '<div style="background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:\'SF Mono\',\'Fira Code\',monospace;font-size:13px;margin-bottom:16px;cursor:pointer;" onclick="navigator.clipboard.writeText(\'chatweb earn\');this.querySelector(\'.ep2\').textContent=\'Copied!\';setTimeout(()=>this.querySelector(\'.ep2\').textContent=\'Copy\',1500)">'
+        + '<div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--muted);">$</span> <span style="flex:1;color:#e2e8f0;">chatweb earn</span> <span class="ep2" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span></div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">'
+        + '<div style="text-align:center;padding:10px;border:1px solid var(--border);border-radius:10px;"><div style="font-weight:600;">qwen3-0.6b</div><div style="font-size:11px;color:var(--muted);">~512MB RAM</div><div style="font-size:12px;color:#22c55e;font-weight:600;">1 cr/req</div></div>'
+        + '<div style="text-align:center;padding:10px;border:2px solid var(--accent);border-radius:10px;background:rgba(99,102,241,0.05);"><div style="font-weight:600;">qwen3-1.7b</div><div style="font-size:11px;color:var(--muted);">~1.5GB RAM</div><div style="font-size:12px;color:#22c55e;font-weight:600;">2 cr/req</div></div>'
+        + '<div style="text-align:center;padding:10px;border:1px solid var(--border);border-radius:10px;"><div style="font-weight:600;">qwen3-4b</div><div style="font-size:11px;color:var(--muted);">~3GB RAM</div><div style="font-size:12px;color:#22c55e;font-weight:600;">5 cr/req</div></div>'
+        + '</div>'
+        + '<p style="text-align:center;font-size:11px;color:var(--muted);">'
+        + (lang === 'ja' ? 'モデルは初回起動時に自動ダウンロードされます' : 'Model is automatically downloaded on first run')
+        + '</p>';
+      modal.classList.add('show');
     }
 
     // ---------------------------------------------------------------------------
@@ -6099,20 +6544,22 @@
         return;
       }
       list.innerHTML = '';
-      cronJobs.forEach(job => {
+      cronJobs.forEach((job, idx) => {
         const item = document.createElement('div');
         item.className = 'cron-item';
         item.innerHTML = `
           <button class="cron-item-toggle ${job.enabled ? 'on' : ''}" onclick="toggleCronJob('${job.id}',${!job.enabled})"></button>
           <span class="cron-item-name" title="${job.message || ''}">${job.name}</span>
           <span class="cron-item-schedule">${job.schedule_display || job.schedule || ''}</span>
+          <button style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px 4px;opacity:0.6;" onclick="editCronJobByIndex(${idx})" title="Edit">&#x270F;</button>
           <button class="cron-item-del" onclick="deleteCronJob('${job.id}')">&#x2715;</button>
         `;
         list.appendChild(item);
       });
     }
 
-    function toggleCronForm() {
+    var cronEditId = null;
+    function toggleCronForm(prefill) {
       const c = document.getElementById('cron-form-container');
       if (c.style.display === 'none') {
         const l = document.documentElement.lang || 'ja';
@@ -6120,6 +6567,11 @@
         c.innerHTML = `<div class="cron-form">
           <input id="cron-name" placeholder="${l === 'ja' ? 'タスク名' : 'Task name'}" maxlength="50">
           <input id="cron-message" placeholder="${l === 'ja' ? 'AIへのメッセージ' : 'Message to AI'}" maxlength="200">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">
+            <button type="button" onclick="applyCronPreset('60')" style="font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;">${l === 'ja' ? '毎時間' : 'Hourly'}</button>
+            <button type="button" onclick="applyCronPreset('0 9 * * *')" style="font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;">${l === 'ja' ? '毎日9時' : 'Daily 9am'}</button>
+            <button type="button" onclick="applyCronPreset('0 9 * * 1')" style="font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;">${l === 'ja' ? '毎週月曜' : 'Weekly Mon'}</button>
+          </div>
           <div class="cron-form-row">
             <select id="cron-schedule-type" onchange="updateCronScheduleUI()" style="flex:1;">
               <option value="every">${l === 'ja' ? '定期実行' : 'Interval'}</option>
@@ -6136,14 +6588,63 @@
             </select>
           </div>
           <div class="cron-form-actions">
-            <button class="cron-cancel-btn" onclick="toggleCronForm()">${l === 'ja' ? 'キャンセル' : 'Cancel'}</button>
+            <button class="cron-cancel-btn" onclick="cronEditId=null;toggleCronForm()">${l === 'ja' ? 'キャンセル' : 'Cancel'}</button>
             <button class="cron-save-btn" onclick="saveCronJob()">${l === 'ja' ? '保存' : 'Save'}</button>
           </div>
         </div>`;
+        if (prefill) {
+          if (prefill.name) document.getElementById('cron-name').value = prefill.name;
+          if (prefill.message) document.getElementById('cron-message').value = prefill.message;
+          if (prefill.schedule) {
+            const val = prefill.schedule;
+            if (val.every_minutes) {
+              document.getElementById('cron-schedule-type').value = 'every';
+              document.getElementById('cron-schedule-val').value = val.every_minutes;
+            } else if (val.cron) {
+              document.getElementById('cron-schedule-type').value = 'cron';
+              document.getElementById('cron-schedule-val').value = val.cron;
+            } else if (val.at) {
+              document.getElementById('cron-schedule-type').value = 'at';
+              document.getElementById('cron-schedule-val').value = val.at;
+            }
+            updateCronScheduleUI();
+          }
+        }
       } else {
         c.style.display = 'none';
         c.innerHTML = '';
+        cronEditId = null;
       }
+    }
+
+    function applyCronPreset(val) {
+      const typeEl = document.getElementById('cron-schedule-type');
+      const valEl = document.getElementById('cron-schedule-val');
+      if (/^\d+$/.test(val)) {
+        typeEl.value = 'every';
+        valEl.value = val;
+      } else {
+        typeEl.value = 'cron';
+        valEl.value = val;
+      }
+      updateCronScheduleUI();
+    }
+
+    function editCronJobByIndex(idx) {
+      const job = cronJobs[idx];
+      if (!job) return;
+      cronEditId = job.id;
+      const c = document.getElementById('cron-form-container');
+      if (c.style.display !== 'none') { c.style.display = 'none'; c.innerHTML = ''; }
+      let schedObj = {};
+      if (typeof job.schedule === 'object') {
+        schedObj = job.schedule;
+      } else if (typeof job.schedule === 'string') {
+        if (/^\d+$/.test(job.schedule)) schedObj = { every_minutes: parseInt(job.schedule) };
+        else if (job.schedule.includes('*')) schedObj = { cron: job.schedule };
+        else schedObj = { every_minutes: 30 };
+      }
+      toggleCronForm({ name: job.name, message: job.message, schedule: schedObj });
     }
 
     function updateCronScheduleUI() {
@@ -6167,16 +6668,20 @@
       else if (scheduleType === 'cron') schedule = { cron: scheduleVal };
       else schedule = { at: scheduleVal };
       try {
-        const r = await fetch(API + '/api/v1/cron', {
-          method: 'POST',
+        const url = cronEditId ? API + '/api/v1/cron/' + cronEditId : API + '/api/v1/cron';
+        const method = cronEditId ? 'PUT' : 'POST';
+        const r = await fetch(url, {
+          method,
           headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, message, schedule, channel: channel || undefined }),
         });
         if (r.ok) {
+          const wasEdit = !!cronEditId;
+          cronEditId = null;
           toggleCronForm();
           loadCronJobs();
           const l = document.documentElement.lang || 'ja';
-          showToast(l === 'ja' ? '定期タスクを作成しました' : 'Scheduled task created');
+          showToast(wasEdit ? (l === 'ja' ? '定期タスクを更新しました' : 'Scheduled task updated') : (l === 'ja' ? '定期タスクを作成しました' : 'Scheduled task created'));
         }
       } catch(e) { /* ignore */ }
     }
