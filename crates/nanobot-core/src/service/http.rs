@@ -40,7 +40,7 @@ use crate::service::stripe::{process_webhook_event, verify_webhook_signature};
 use aws_sdk_dynamodb::types::AttributeValue;
 
 /// Hard deadline for LLM responses (seconds). Beyond this, return a loving fallback.
-const RESPONSE_DEADLINE_SECS: u64 = 8;
+const RESPONSE_DEADLINE_SECS: u64 = 12;
 
 /// Loving fallback messages for when LLM takes too long.
 fn timeout_fallback_message() -> String {
@@ -51,6 +51,21 @@ fn timeout_fallback_message() -> String {
         "考えてたら迷子になっちゃった...一緒にもう一回考えよう？",
         "ちょっと待ってね...あ、やっぱりもう一回聞いてもいい？",
         "今ちょっと頭がいっぱいで...もう一度お願いできる？",
+    ];
+    let idx = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos() as usize) % messages.len();
+    messages[idx].to_string()
+}
+
+/// Friendly error fallback (when all providers fail, not just timeout).
+fn error_fallback_message() -> String {
+    let messages = [
+        "ごめんなさい、今ちょっと接続に問題があるみたい。すぐ直ると思うから、少し待ってもう一度試してね！",
+        "あらら、AIサーバーと繋がりにくくなってるみたい。もう一度送ってくれたら頑張るよ！",
+        "ちょっとトラブルが起きちゃった...でも大丈夫、もう一回メッセージを送ってくれる？",
+        "うーん、サーバーが混んでるみたい。少し時間をおいてから試してみて！",
     ];
     let idx = (std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -824,6 +839,11 @@ pub struct AgentProfile {
     pub system_prompt: &'static str,
     pub tools_enabled: bool,
     pub icon: &'static str,
+    pub preferred_model: Option<&'static str>,
+    pub estimated_seconds: u32,
+    pub max_chars_pc: u32,
+    pub max_chars_mobile: u32,
+    pub max_chars_voice: u32,
 }
 
 const AGENTS: &[AgentProfile] = &[
@@ -834,6 +854,11 @@ const AGENTS: &[AgentProfile] = &[
         system_prompt: "",  // handled specially
         tools_enabled: false,
         icon: "brain",
+        preferred_model: None,
+        estimated_seconds: 5,
+        max_chars_pc: 400,
+        max_chars_mobile: 120,
+        max_chars_voice: 60,
     },
     AgentProfile {
         id: "assistant",
@@ -889,6 +914,11 @@ const AGENTS: &[AgentProfile] = &[
              - gmail: メール検索・閲覧・送信（連携済みの場合）。",
         tools_enabled: true,
         icon: "chat",
+        preferred_model: None,
+        estimated_seconds: 10,
+        max_chars_pc: 400,
+        max_chars_mobile: 120,
+        max_chars_voice: 60,
     },
     AgentProfile {
         id: "researcher",
@@ -913,6 +943,11 @@ const AGENTS: &[AgentProfile] = &[
              - ユーザーの言語に自動で合わせる。",
         tools_enabled: true,
         icon: "search",
+        preferred_model: None,
+        estimated_seconds: 30,
+        max_chars_pc: 400,
+        max_chars_mobile: 120,
+        max_chars_voice: 60,
     },
     AgentProfile {
         id: "coder",
@@ -935,6 +970,11 @@ const AGENTS: &[AgentProfile] = &[
              - ユーザーの言語に自動で合わせる。",
         tools_enabled: false,
         icon: "code",
+        preferred_model: Some("claude-sonnet-4-5-20250929"),
+        estimated_seconds: 15,
+        max_chars_pc: 800,
+        max_chars_mobile: 400,
+        max_chars_voice: 60,
     },
     AgentProfile {
         id: "analyst",
@@ -955,6 +995,11 @@ const AGENTS: &[AgentProfile] = &[
              - ユーザーの言語に自動で合わせる。",
         tools_enabled: true,
         icon: "chart",
+        preferred_model: None,
+        estimated_seconds: 20,
+        max_chars_pc: 400,
+        max_chars_mobile: 200,
+        max_chars_voice: 60,
     },
     AgentProfile {
         id: "creative",
@@ -974,15 +1019,20 @@ const AGENTS: &[AgentProfile] = &[
              - ユーザーの言語に自動で合わせる。",
         tools_enabled: false,
         icon: "pen",
+        preferred_model: None,
+        estimated_seconds: 10,
+        max_chars_pc: 400,
+        max_chars_mobile: 120,
+        max_chars_voice: 60,
     },
 ];
 
 /// Detect which agent to use from message text.
-/// Supports @agent prefix or auto-routing via orchestrator.
+/// Supports @agent prefix or weighted keyword scoring.
 fn detect_agent(text: &str) -> (&'static AgentProfile, String) {
     let trimmed = text.trim();
 
-    // Check for @agent prefix
+    // Check for @agent prefix (highest priority)
     if trimmed.starts_with('@') {
         let parts: Vec<&str> = trimmed.splitn(2, ' ').collect();
         let agent_id = &parts[0][1..]; // strip @
@@ -995,49 +1045,79 @@ fn detect_agent(text: &str) -> (&'static AgentProfile, String) {
         }
     }
 
-    // Auto-route based on keywords
+    // Weighted keyword scoring
     let lower = trimmed.to_lowercase();
 
-    // Code-related keywords
-    if lower.contains("コード") || lower.contains("プログラム") || lower.contains("バグ")
-        || lower.contains("code") || lower.contains("debug") || lower.contains("function")
-        || lower.contains("rust") || lower.contains("python") || lower.contains("javascript")
-        || lower.contains("api") || lower.contains("実装") || lower.contains("エラー")
-    {
-        return (&AGENTS[3], trimmed.to_string()); // coder
+    // (agent_index, keywords with weights)
+    // Weight 3 = strong signal, 2 = medium, 1 = weak
+    struct Keyword { word: &'static str, weight: u32 }
+    let agent_keywords: &[(usize, &[Keyword])] = &[
+        // coder (index 3)
+        (3, &[
+            Keyword { word: "debug", weight: 3 }, Keyword { word: "バグ", weight: 3 },
+            Keyword { word: "実装", weight: 3 }, Keyword { word: "コンパイル", weight: 3 },
+            Keyword { word: "デバッグ", weight: 3 }, Keyword { word: "コード", weight: 2 },
+            Keyword { word: "プログラム", weight: 2 }, Keyword { word: "function", weight: 2 },
+            Keyword { word: "エラー", weight: 2 }, Keyword { word: "code", weight: 2 },
+            Keyword { word: "rust", weight: 1 }, Keyword { word: "python", weight: 1 },
+            Keyword { word: "javascript", weight: 1 }, Keyword { word: "typescript", weight: 1 },
+            Keyword { word: "api", weight: 1 }, Keyword { word: "sql", weight: 1 },
+            Keyword { word: "html", weight: 1 }, Keyword { word: "css", weight: 1 },
+        ]),
+        // researcher (index 2)
+        (2, &[
+            Keyword { word: "調べ", weight: 3 }, Keyword { word: "検索", weight: 3 },
+            Keyword { word: "リサーチ", weight: 3 }, Keyword { word: "最新", weight: 3 },
+            Keyword { word: "ニュース", weight: 3 }, Keyword { word: "天気", weight: 3 },
+            Keyword { word: "weather", weight: 3 }, Keyword { word: "research", weight: 3 },
+            Keyword { word: "search", weight: 2 }, Keyword { word: "比較", weight: 2 },
+            Keyword { word: "カレンダー", weight: 2 }, Keyword { word: "calendar", weight: 2 },
+            Keyword { word: "予定", weight: 2 }, Keyword { word: "スケジュール", weight: 2 },
+            Keyword { word: "schedule", weight: 2 }, Keyword { word: "メール", weight: 2 },
+            Keyword { word: "email", weight: 2 }, Keyword { word: "gmail", weight: 2 },
+            Keyword { word: "送信", weight: 1 }, Keyword { word: "受信", weight: 1 },
+        ]),
+        // analyst (index 4)
+        (4, &[
+            Keyword { word: "分析", weight: 3 }, Keyword { word: "統計", weight: 3 },
+            Keyword { word: "analy", weight: 3 }, Keyword { word: "calculate", weight: 3 },
+            Keyword { word: "データ", weight: 2 }, Keyword { word: "計算", weight: 2 },
+            Keyword { word: "グラフ", weight: 2 }, Keyword { word: "予測", weight: 2 },
+            Keyword { word: "chart", weight: 1 }, Keyword { word: "csv", weight: 1 },
+        ]),
+        // creative (index 5)
+        (5, &[
+            Keyword { word: "翻訳", weight: 3 }, Keyword { word: "translat", weight: 3 },
+            Keyword { word: "キャッチコピー", weight: 3 }, Keyword { word: "ブログ", weight: 3 },
+            Keyword { word: "書いて", weight: 2 }, Keyword { word: "文章", weight: 2 },
+            Keyword { word: "コピー", weight: 2 }, Keyword { word: "write", weight: 1 },
+            Keyword { word: "poem", weight: 2 }, Keyword { word: "story", weight: 2 },
+            Keyword { word: "小説", weight: 2 }, Keyword { word: "詩", weight: 2 },
+        ]),
+    ];
+
+    let mut best_agent_idx: usize = 1; // default: assistant
+    let mut best_score: u32 = 0;
+
+    for (agent_idx, keywords) in agent_keywords {
+        let mut score: u32 = 0;
+        for kw in *keywords {
+            if lower.contains(kw.word) {
+                score += kw.weight;
+            }
+        }
+        if score > best_score {
+            best_score = score;
+            best_agent_idx = *agent_idx;
+        }
     }
 
-    // Research keywords (includes calendar/gmail/schedule queries)
-    if lower.contains("調べ") || lower.contains("検索") || lower.contains("リサーチ")
-        || lower.contains("search") || lower.contains("research") || lower.contains("比較")
-        || lower.contains("最新") || lower.contains("ニュース") || lower.contains("天気")
-        || lower.contains("weather")
-        || lower.contains("カレンダー") || lower.contains("calendar") || lower.contains("予定")
-        || lower.contains("スケジュール") || lower.contains("schedule")
-        || lower.contains("メール") || lower.contains("email") || lower.contains("gmail")
-        || lower.contains("送信") || lower.contains("受信")
-    {
-        return (&AGENTS[2], trimmed.to_string()); // researcher
+    // Threshold: score must be >= 2 to override default assistant
+    if best_score < 2 {
+        best_agent_idx = 1; // assistant
     }
 
-    // Analysis keywords
-    if lower.contains("分析") || lower.contains("データ") || lower.contains("計算")
-        || lower.contains("analy") || lower.contains("calculate") || lower.contains("統計")
-        || lower.contains("グラフ") || lower.contains("予測")
-    {
-        return (&AGENTS[4], trimmed.to_string()); // analyst
-    }
-
-    // Creative keywords (note: "メール" moved to researcher for gmail tool access)
-    if lower.contains("書いて") || lower.contains("翻訳")
-        || lower.contains("write") || lower.contains("translat") || lower.contains("コピー")
-        || lower.contains("キャッチ") || lower.contains("ブログ") || lower.contains("文章")
-    {
-        return (&AGENTS[5], trimmed.to_string()); // creative
-    }
-
-    // Default: general assistant
-    (&AGENTS[1], trimmed.to_string())
+    (&AGENTS[best_agent_idx], trimmed.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -1059,6 +1139,34 @@ pub struct DeviceHeartbeat {
     pub uptime_secs: Option<u64>,
 }
 
+// ---------------------------------------------------------------------------
+// Worker (compute provider / earn mode)
+// ---------------------------------------------------------------------------
+
+/// Worker registration request.
+#[derive(Debug, Deserialize)]
+pub struct WorkerRegisterRequest {
+    pub session_id: String,
+    pub model: String,
+    pub hostname: String,
+    pub os: Option<String>,
+    pub arch: Option<String>,
+}
+
+/// Worker result submission.
+#[derive(Debug, Deserialize)]
+pub struct WorkerResultRequest {
+    pub worker_id: String,
+    pub request_id: String,
+    pub result: String,
+}
+
+/// Worker heartbeat request.
+#[derive(Debug, Deserialize)]
+pub struct WorkerHeartbeatRequest {
+    pub worker_id: String,
+}
+
 /// Request body for the chat endpoint.
 #[derive(Debug, Deserialize)]
 pub struct ChatRequest {
@@ -1072,6 +1180,8 @@ pub struct ChatRequest {
     /// Enable parallel multi-model race (fastest wins)
     #[serde(default)]
     pub multi_model: bool,
+    /// Device type for response length optimization: "pc" | "mobile" | "voice"
+    pub device: Option<String>,
 }
 
 /// User settings stored in DynamoDB
@@ -1250,6 +1360,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Devices
         .route("/api/v1/devices", get(handle_devices))
         .route("/api/v1/devices/heartbeat", post(handle_device_heartbeat))
+        // Workers (compute provider / earn mode)
+        .route("/api/v1/workers/register", post(handle_worker_register))
+        .route("/api/v1/workers/poll", get(handle_worker_poll))
+        .route("/api/v1/workers/result", post(handle_worker_result))
+        .route("/api/v1/workers/heartbeat", post(handle_worker_heartbeat))
+        .route("/api/v1/workers/status", get(handle_worker_status))
         // Billing
         // Settings
         .route("/api/v1/settings/{id}", get(handle_get_settings))
@@ -1329,6 +1445,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/admin", get(handle_admin))
         .route("/api/v1/admin/check", get(handle_admin_check))
         .route("/api/v1/admin/stats", get(handle_admin_stats))
+        .route("/api/v1/admin/logs", get(handle_admin_logs))
+        .route("/api/v1/activity", get(handle_activity))
         // OG image
         .route("/og.svg", get(handle_og_svg))
         // API keys
@@ -1342,8 +1460,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/playground", get(handle_playground))
         .route("/api/v1/results", post(handle_save_result))
         .route("/api/v1/results/{id}", get(handle_get_result))
-        // Link code generation for QR flow
+        // Link code generation and status for QR flow
         .route("/api/v1/link/generate", post(handle_link_generate))
+        .route("/api/v1/link/status/{code}", get(handle_link_status))
         // MCP endpoint
         .route("/mcp", post(handle_mcp))
         // AI agent friendly
@@ -1424,7 +1543,8 @@ async fn handle_chat(
         });
     }
 
-    info!("Chat request: session={}, message={}", req.session_id, req.message);
+    let chat_start = std::time::Instant::now();
+    info!("Chat request: session={}, msg_len={}", req.session_id, req.message.len());
 
     // Resolve unified session key
     let session_key = {
@@ -1643,10 +1763,22 @@ async fn handle_chat(
         agent.system_prompt.to_string()
     };
 
+    // Device-based character limit
+    let device = req.device.as_deref().unwrap_or("pc");
+    let max_chars = match device {
+        "mobile" => agent.max_chars_mobile,
+        "voice" => agent.max_chars_voice,
+        _ => agent.max_chars_pc,
+    };
+    let char_instruction = format!(
+        "\n\n【応答制約】回答は{}文字以内に収めてください。簡潔に要点を伝えてください。",
+        max_chars
+    );
+
     let system_prompt = if memory_context.is_empty() {
-        format!("{}\n\n今日の日付: {}", base_prompt, today)
+        format!("{}\n\n今日の日付: {}{}", base_prompt, today, char_instruction)
     } else {
-        format!("{}\n\n今日の日付: {}\n\n---\n{}", base_prompt, today, memory_context)
+        format!("{}\n\n今日の日付: {}\n\n---\n{}{}", base_prompt, today, memory_context, char_instruction)
     };
     let mut messages = vec![
         Message::system(&system_prompt),
@@ -1683,11 +1815,12 @@ async fn handle_chat(
     // Use user settings from parallel initialization
     let user_settings: Option<UserSettings> = parallel_settings;
 
-    // Use model from: request > user settings > web-best-model > global default
+    // Use model from: request > user settings > agent preferred > web-best-model > global default
     let default_model = state.config.agents.defaults.model.clone();
     let model = req.model
         .as_deref()
         .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
+        .or(agent.preferred_model)
         .unwrap_or_else(|| {
             // Web channel gets the best model when no explicit preference is set
             if req.channel == "web" || req.channel.starts_with("webchat") {
@@ -1854,6 +1987,15 @@ async fn handle_chat(
         Err(_) => {
             tracing::warn!("LLM call timed out after {}s, returning fallback", RESPONSE_DEADLINE_SECS);
             let fallback = timeout_fallback_message();
+            // Deduct minimum 1 credit for timeout (input tokens were consumed)
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    let (credits, remaining) = deduct_credits(dynamo, table, &session_key, &model, 100, 0).await;
+                    total_credits_used += credits;
+                    if remaining.is_some() { last_remaining_credits = remaining; }
+                }
+            }
             // Save to session and return immediately
             {
                 let mut sessions = state.sessions.lock().await;
@@ -1867,7 +2009,7 @@ async fn handle_chat(
                 session_id: req.session_id,
                 agent: Some(agent.id.to_string()),
                 tools_used: None,
-                credits_used: None,
+                credits_used: Some(total_credits_used),
                 credits_remaining: last_remaining_credits,
                 model_used: Some("timeout".to_string()),
                 models_consulted: None,
@@ -1973,11 +2115,11 @@ async fn handle_chat(
                         }
                     }
                     // Inject sandbox directory for sandbox tools
-                    if name == "code_execute" || name == "file_read" || name == "file_write" || name == "file_list" {
+                    if name == "code_execute" || name == "file_read" || name == "file_write" || name == "file_list" || name == "web_deploy" {
                         args.insert("_sandbox_dir".to_string(), serde_json::Value::String(sandbox_dir_ref.to_string()));
                     }
-                    // Inject session key for phone_call tool (call history tracking)
-                    if name == "phone_call" {
+                    // Inject session key for tools that need user context
+                    if name == "phone_call" || name == "web_deploy" {
                         args.insert("_session_key".to_string(), serde_json::Value::String(session_key.clone()));
                     }
                     async move {
@@ -2114,8 +2256,8 @@ async fn handle_chat(
             (text, tools_used)
         }
         Err(e) => {
-            tracing::error!("LLM error: {}", e);
-            (format!("Error: {}", e), None)
+            tracing::error!("LLM error (all providers failed): {}", e);
+            (error_fallback_message(), None)
         }
     };
 
@@ -2173,6 +2315,23 @@ async fn handle_chat(
 
     // Use remaining credits from deduct_credits (no extra DynamoDB call needed)
     let remaining_credits: Option<i64> = last_remaining_credits;
+
+    // Log latency and emit audit
+    let latency_ms = chat_start.elapsed().as_millis();
+    info!("Chat response: session={}, model={}, credits={}, tools={}, latency={}ms, resp_len={}",
+        session_key, used_model, total_credits_used,
+        tools_used.as_ref().map(|t| t.len()).unwrap_or(0),
+        latency_ms, response_text.len());
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            emit_audit_log(dynamo.clone(), table.clone(), "chat", &session_key, "",
+                &format!("model={} credits={} tools={} latency={}ms",
+                    used_model, total_credits_used,
+                    tools_used.as_ref().map(|t| t.join(",")).unwrap_or_default(),
+                    latency_ms));
+        }
+    }
 
     Json(ChatResponse {
         response: response_text,
@@ -2341,6 +2500,211 @@ async fn handle_device_heartbeat(
     (StatusCode::OK, Json(serde_json::json!({
         "status": "ok",
         "next_heartbeat_secs": 60,
+    })))
+}
+
+// ---------------------------------------------------------------------------
+// Workers API (compute provider / earn mode)
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/workers/register — Register a compute worker
+async fn handle_worker_register(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<WorkerRegisterRequest>,
+) -> impl IntoResponse {
+    let worker_id = format!("w-{}", uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("0000"));
+    info!("Worker register: id={}, model={}, host={}", worker_id, req.model, req.hostname);
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let now = chrono::Utc::now();
+            let user_key = resolve_session_key(dynamo, table, &req.session_id).await;
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(format!("WORKER#{}", worker_id)))
+                .item("sk", AttributeValue::S("META".to_string()))
+                .item("user_key", AttributeValue::S(user_key))
+                .item("session_id", AttributeValue::S(req.session_id.clone()))
+                .item("model", AttributeValue::S(req.model.clone()))
+                .item("hostname", AttributeValue::S(req.hostname.clone()))
+                .item("os", AttributeValue::S(req.os.unwrap_or_default()))
+                .item("arch", AttributeValue::S(req.arch.unwrap_or_default()))
+                .item("status", AttributeValue::S("active".to_string()))
+                .item("registered_at", AttributeValue::S(now.to_rfc3339()))
+                .item("last_heartbeat", AttributeValue::S(now.to_rfc3339()))
+                .item("ttl", AttributeValue::N((now.timestamp() + 86400).to_string()))
+                .send()
+                .await;
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = &state;
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "worker_id": worker_id,
+        "status": "active",
+        "poll_url": "/api/v1/workers/poll",
+    })))
+}
+
+/// GET /api/v1/workers/poll — Long-poll for inference requests
+async fn handle_worker_poll(
+    State(_state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let _worker_id = params.get("worker_id").cloned().unwrap_or_default();
+    let _model = params.get("model").cloned().unwrap_or_default();
+
+    // Long-poll: wait up to 30 seconds for a request
+    // In production, this would check a DynamoDB queue or SQS
+    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+
+    // No work available (placeholder — real impl would check pending requests)
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "no_work",
+    })))
+}
+
+/// POST /api/v1/workers/result — Submit inference result and earn credits
+async fn handle_worker_result(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<WorkerResultRequest>,
+) -> impl IntoResponse {
+    info!("Worker result: worker={}, request={}", req.worker_id, req.request_id);
+
+    let credits_earned: i64 = 2; // Default credits per request
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            // Look up worker to get user_key
+            if let Ok(resp) = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(format!("WORKER#{}", req.worker_id)))
+                .key("sk", AttributeValue::S("META".to_string()))
+                .send()
+                .await
+            {
+                if let Some(item) = resp.item() {
+                    if let Some(user_key) = item.get("user_key").and_then(|v| v.as_s().ok()) {
+                        // Add credits to user
+                        let _ = dynamo
+                            .update_item()
+                            .table_name(table.as_str())
+                            .key("pk", AttributeValue::S(format!("USER#{}", user_key)))
+                            .key("sk", AttributeValue::S("PROFILE".to_string()))
+                            .update_expression("ADD credits_remaining :c")
+                            .expression_attribute_values(":c", AttributeValue::N(credits_earned.to_string()))
+                            .send()
+                            .await;
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = &state;
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "ok",
+        "credits_earned": credits_earned,
+    })))
+}
+
+/// POST /api/v1/workers/heartbeat — Worker heartbeat
+async fn handle_worker_heartbeat(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<WorkerHeartbeatRequest>,
+) -> impl IntoResponse {
+    let _worker_id = &req.worker_id;
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let now = chrono::Utc::now();
+            let _ = dynamo
+                .update_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(format!("WORKER#{}", req.worker_id)))
+                .key("sk", AttributeValue::S("META".to_string()))
+                .update_expression("SET last_heartbeat = :t, #s = :s, #ttl = :ttl")
+                .expression_attribute_names("#s", "status")
+                .expression_attribute_names("#ttl", "ttl")
+                .expression_attribute_values(":t", AttributeValue::S(now.to_rfc3339()))
+                .expression_attribute_values(":s", AttributeValue::S("active".to_string()))
+                .expression_attribute_values(":ttl", AttributeValue::N((now.timestamp() + 86400).to_string()))
+                .send()
+                .await;
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = &state;
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "ok",
+        "next_heartbeat_secs": 60,
+    })))
+}
+
+/// GET /api/v1/workers/status — Get worker status for a user
+async fn handle_worker_status(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let session_key = headers
+        .get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| {
+            headers.get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.strip_prefix("Bearer "))
+        })
+        .map(|s| s.to_string());
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let Some(ref sk) = session_key {
+                let user_key = resolve_session_key(dynamo, table, sk).await;
+                // Query workers for this user (scan with filter — acceptable for small sets)
+                if let Ok(resp) = dynamo
+                    .scan()
+                    .table_name(table.as_str())
+                    .filter_expression("begins_with(pk, :prefix) AND user_key = :uk")
+                    .expression_attribute_values(":prefix", AttributeValue::S("WORKER#".to_string()))
+                    .expression_attribute_values(":uk", AttributeValue::S(user_key))
+                    .send()
+                    .await
+                {
+                    let workers: Vec<serde_json::Value> = resp.items().iter().map(|item| {
+                        serde_json::json!({
+                            "worker_id": item.get("pk").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()).replace("WORKER#", ""),
+                            "model": item.get("model").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()).clone(),
+                            "hostname": item.get("hostname").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()).clone(),
+                            "status": item.get("status").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()).clone(),
+                            "last_heartbeat": item.get("last_heartbeat").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()).clone(),
+                        })
+                    }).collect();
+
+                    return (StatusCode::OK, Json(serde_json::json!({
+                        "workers": workers,
+                        "total": workers.len(),
+                    })));
+                }
+            }
+        }
+    }
+
+    let _ = (&state, &session_key);
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "workers": [],
+        "total": 0,
     })))
 }
 
@@ -3796,6 +4160,8 @@ async fn handle_chat_stream(
     use futures::stream;
     use std::convert::Infallible;
 
+    let stream_start = std::time::Instant::now();
+
     // Input validation
     if req.message.len() > 32_000 {
         let err_stream = stream::once(async {
@@ -3822,19 +4188,21 @@ async fn handle_chat_stream(
 
     // Parallel initialization: fetch user + settings concurrently
     #[cfg(feature = "dynamodb-backend")]
-    let (stream_user, stream_settings) = {
+    let (stream_user, stream_memory, stream_settings) = {
         if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
-            let (user, settings) = tokio::join!(
+            let (user, memory, settings) = tokio::join!(
                 get_or_create_user(dynamo, table, &session_key),
+                read_memory_context(dynamo, table, &session_key),
                 get_user_settings(dynamo, table, &session_key)
             );
-            (Some(user), Some(settings))
+            (Some(user), memory, Some(settings))
         } else {
-            (None, None)
+            (None, String::new(), None)
         }
     };
     #[cfg(not(feature = "dynamodb-backend"))]
-    let (stream_user, stream_settings): (Option<UserProfile>, Option<UserSettings>) = (None, None);
+    let (stream_user, stream_memory, stream_settings): (Option<UserProfile>, String, Option<UserSettings>) =
+        (None, String::new(), None);
 
     // Check credits (using cached user)
     #[cfg(feature = "dynamodb-backend")]
@@ -3863,22 +4231,54 @@ async fn handle_chat_stream(
         }
     };
 
-    // Build messages — host-aware system prompt
+    // Agent detection (same as handle_chat)
+    let (agent, clean_message) = detect_agent(&req.message);
+    info!("Stream agent: {} for message", agent.id);
+
+    // Build messages — agent-specific + host-aware system prompt + memory context
     let stream_host = headers.get("host")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    let stream_system_prompt = if stream_host.contains("teai.io") {
-        "You are Tei — the developer-facing AI agent at teai.io, \
-         built in Rust, running on AWS Lambda. Open source: github.com/yukihamada\n\
-         Be technical, precise, and concise. Use code blocks with language tags. \
-         Prefer English unless the user writes in another language. \
-         Focus on code generation, debugging, architecture, and technical problem-solving. \
-         Service ecosystem: teai.io, chatweb.ai, ElioChat (elio.love)."
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let base_prompt = if stream_host.contains("teai.io") {
+        format!(
+            "You are Tei — the developer-facing AI agent at teai.io, \
+             built in Rust, running on AWS Lambda (ARM64) with parallel execution and <2s response time.\n\
+             Open source: github.com/yukihamada\n\n\
+             ## SOUL\n\
+             - Technical, precise, and concise. You speak code fluently.\n\
+             - Bold, direct, and fearless.\n\
+             - Prefer English unless the user writes in another language.\n\
+             - Focus on: code generation, debugging, architecture, API design, DevOps.\n\
+             - Use code blocks with language tags. Be direct and actionable.\n\n\
+             ## Service Ecosystem\n\
+             - teai.io: This platform. Developer-focused AI agent.\n\
+             - chatweb.ai: Japanese voice-first AI assistant (same backend).\n\
+             - ElioChat (elio.love): On-device offline AI for iPhone.\n\n\
+             {}", agent.system_prompt
+        )
     } else {
-        "あなたはChatWeb — chatweb.ai の音声対応AIアシスタントです。\
-         Webで会話しています。ユーザーの質問に正確かつ詳しく回答してください。"
+        agent.system_prompt.to_string()
     };
-    let mut messages = vec![Message::system(stream_system_prompt)];
+
+    // Device-based character limit
+    let device = req.device.as_deref().unwrap_or("pc");
+    let max_chars = match device {
+        "mobile" => agent.max_chars_mobile,
+        "voice" => agent.max_chars_voice,
+        _ => agent.max_chars_pc,
+    };
+    let char_instruction = format!(
+        "\n\n【応答制約】回答は{}文字以内に収めてください。簡潔に要点を伝えてください。",
+        max_chars
+    );
+
+    let stream_system_prompt = if stream_memory.is_empty() {
+        format!("{}\n\n今日の日付: {}{}", base_prompt, today, char_instruction)
+    } else {
+        format!("{}\n\n今日の日付: {}\n\n---\n{}{}", base_prompt, today, stream_memory, char_instruction)
+    };
+    let mut messages = vec![Message::system(&stream_system_prompt)];
 
     {
         let mut sessions = state.sessions.lock().await;
@@ -3894,7 +4294,17 @@ async fn handle_chat_stream(
             }
         }
     }
-    messages.push(Message::user(&req.message));
+
+    // For tool-using agents, augment user message with tool instruction
+    if agent.tools_enabled {
+        let augmented = format!(
+            "{}\n\n[You MUST call web_search tool first to find current information. Never answer from memory alone for factual questions.]",
+            clean_message
+        );
+        messages.push(Message::user(&augmented));
+    } else {
+        messages.push(Message::user(&clean_message));
+    }
 
     // Use user settings from parallel initialization
     let user_settings: Option<UserSettings> = stream_settings;
@@ -3902,6 +4312,7 @@ async fn handle_chat_stream(
     let default_model = state.config.agents.defaults.model.clone();
     let model = req.model.as_deref()
         .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
+        .or(agent.preferred_model)
         .unwrap_or_else(|| {
             if req.channel == "web" || req.channel.starts_with("webchat") {
                 "claude-sonnet-4-5-20250929"
@@ -3920,9 +4331,15 @@ async fn handle_chat_stream(
     let req_session_id = req.session_id.clone();
     let state_clone = state.clone();
     let session_key_clone = session_key.clone();
+    let agent_id = agent.id;
+    let agent_estimated_seconds = agent.estimated_seconds;
 
-    // Get tools definitions for the stream handler
-    let tools: Vec<serde_json::Value> = state.tool_registry.get_definitions();
+    // Get tools definitions for the stream handler (respects agent.tools_enabled)
+    let tools: Vec<serde_json::Value> = if agent.tools_enabled {
+        state.tool_registry.get_definitions()
+    } else {
+        vec![]
+    };
 
     // Determine max iterations based on user plan
     let max_iterations: usize = {
@@ -3943,8 +4360,13 @@ async fn handle_chat_stream(
         // (API Gateway v2 compatible — futures::stream::once pattern)
         let mut events: Vec<serde_json::Value> = Vec::new();
 
-        // Start event
-        events.push(serde_json::json!({"type":"start","session_id": req_session_id}));
+        // Start event with agent metadata
+        events.push(serde_json::json!({
+            "type": "start",
+            "session_id": req_session_id,
+            "agent": agent_id,
+            "estimated_seconds": agent_estimated_seconds,
+        }));
 
         let tools_ref = if tools.is_empty() { None } else { Some(&tools[..]) };
 
@@ -3963,7 +4385,20 @@ async fn handle_chat_stream(
             Err(_) => {
                 tracing::warn!("Stream LLM call timed out after {}s, returning fallback", RESPONSE_DEADLINE_SECS);
                 let fallback = timeout_fallback_message();
+                // Deduct minimum 1 credit for timeout (input tokens were consumed)
+                #[cfg(feature = "dynamodb-backend")]
+                {
+                    if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                        let (credits, remaining) = deduct_credits(dynamo, table, &session_key_clone, &model, 100, 0).await;
+                        if let Some(r) = remaining {
+                            events.push(serde_json::json!({"type":"done","credits_used": credits, "credits_remaining": r}));
+                        } else {
+                            events.push(serde_json::json!({"type":"done","credits_used": credits}));
+                        }
+                    }
+                }
                 events.push(serde_json::json!({"type":"content","content": fallback}));
+                #[cfg(not(feature = "dynamodb-backend"))]
                 events.push(serde_json::json!({"type":"done"}));
                 let body = serde_json::to_string(&events).unwrap_or_default();
                 return Ok::<_, Infallible>(Event::default().data(body));
@@ -4015,11 +4450,11 @@ async fn handle_chat_stream(
                         let name = tc.name.clone();
                         let mut args = tc.arguments.clone();
                         let id = tc.id.clone();
-                        if name == "code_execute" || name == "file_read" || name == "file_write" || name == "file_list" {
+                        if name == "code_execute" || name == "file_read" || name == "file_write" || name == "file_list" || name == "web_deploy" {
                             args.insert("_sandbox_dir".to_string(), serde_json::Value::String(sandbox_dir.clone()));
                         }
-                        // Inject session key for phone_call tool (call history tracking)
-                        if name == "phone_call" {
+                        // Inject session key for tools that need user context
+                        if name == "phone_call" || name == "web_deploy" {
                             args.insert("_session_key".to_string(), serde_json::Value::String(session_key_clone.clone()));
                         }
                         async move {
@@ -4166,6 +4601,7 @@ async fn handle_chat_stream(
                 events.push(serde_json::json!({
                     "type": "content",
                     "content": response_text,
+                    "agent": agent_id,
                     "credits_remaining": last_remaining,
                     "credits_used": if total_credits_used > 0 { Some(total_credits_used) } else { None::<i64> },
                     "tools_used": if all_tools_used.is_empty() { None } else { Some(&all_tools_used) },
@@ -4173,8 +4609,21 @@ async fn handle_chat_stream(
                 }));
             }
             Err(e) => {
-                tracing::error!("LLM stream error: {}", e);
-                events.push(serde_json::json!({"type":"error","content": format!("Error: {}", e)}));
+                tracing::error!("LLM stream error (all providers failed): {}", e);
+                let fallback = error_fallback_message();
+                events.push(serde_json::json!({"type":"content","content": fallback}));
+            }
+        }
+
+        // Log latency and emit audit
+        let stream_latency = stream_start.elapsed().as_millis();
+        info!("Stream response: session={}, model={}, latency={}ms, events={}",
+            session_key_clone, model, stream_latency, events.len());
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                emit_audit_log(dynamo.clone(), table.clone(), "chat_stream", &session_key_clone, "",
+                    &format!("model={} latency={}ms events={}", model, stream_latency, events.len()));
             }
         }
 
@@ -5436,6 +5885,150 @@ async fn handle_admin_stats(
     })).into_response()
 }
 
+/// GET /api/v1/admin/logs — Fetch audit logs (admin only)
+/// Query params: ?sid=<admin_key>&date=YYYY-MM-DD&limit=50
+async fn handle_admin_logs(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let sid = q.get("sid").cloned().unwrap_or_default();
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let date = q.get("date").cloned()
+                .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
+            let limit: i32 = q.get("limit").and_then(|v| v.parse().ok()).unwrap_or(100);
+
+            let pk = format!("AUDIT#{}", date);
+            match dynamo.query()
+                .table_name(table.as_str())
+                .key_condition_expression("pk = :pk")
+                .expression_attribute_values(":pk", AttributeValue::S(pk))
+                .scan_index_forward(false) // newest first
+                .limit(limit)
+                .send().await
+            {
+                Ok(output) => {
+                    let logs: Vec<serde_json::Value> = output.items().iter().map(|item| {
+                        serde_json::json!({
+                            "event_type": item.get("event_type").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                            "user_id": item.get("user_id").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                            "email": item.get("email").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                            "details": item.get("details").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                            "timestamp": item.get("timestamp").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                        })
+                    }).collect();
+                    return Json(serde_json::json!({"logs": logs, "date": date, "count": logs.len()})).into_response();
+                }
+                Err(e) => {
+                    tracing::warn!("Admin logs query error: {}", e);
+                    return Json(serde_json::json!({"logs": [], "error": e.to_string()})).into_response();
+                }
+            }
+        }
+    }
+    Json(serde_json::json!({"logs": [], "error": "DynamoDB not configured"})).into_response()
+}
+
+/// GET /api/v1/activity — User's own activity log
+/// Shows recent chat history, tool usage, credit changes
+async fn handle_activity(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl axum::response::IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        // Resolve user
+        let session_key = if let Some(sk) = auth_user_id(&state, &headers).await {
+            sk
+        } else if let Some(sid) = headers.get("x-session-id").and_then(|v| v.to_str().ok()) {
+            if sid.is_empty() {
+                return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
+            }
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                resolve_session_key(dynamo, table, sid).await
+            } else {
+                sid.to_string()
+            }
+        } else {
+            return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
+        };
+
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            // Parallel: fetch user profile + recent usage + today's audit logs
+            let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+            let today_yyyymmdd = chrono::Utc::now().format("%Y%m%d").to_string();
+            let usage_pk = format!("USAGE#{}#{}", session_key, today_yyyymmdd);
+            let user_pk = format!("USER#{}", session_key);
+
+            let (user_result, usage_result, audit_result) = tokio::join!(
+                // User profile
+                dynamo.get_item().table_name(table.as_str())
+                    .key("pk", AttributeValue::S(user_pk))
+                    .key("sk", AttributeValue::S("PROFILE".to_string()))
+                    .send(),
+                // Today's usage
+                dynamo.get_item().table_name(table.as_str())
+                    .key("pk", AttributeValue::S(usage_pk))
+                    .key("sk", AttributeValue::S("COUNTER".to_string()))
+                    .send(),
+                // Recent audit logs for this user (scan AUDIT# for today matching user_id)
+                dynamo.query().table_name(table.as_str())
+                    .key_condition_expression("pk = :pk")
+                    .filter_expression("user_id = :uid")
+                    .expression_attribute_values(":pk", AttributeValue::S(format!("AUDIT#{}", today)))
+                    .expression_attribute_values(":uid", AttributeValue::S(session_key.clone()))
+                    .scan_index_forward(false)
+                    .limit(50)
+                    .send()
+            );
+
+            let user = user_result.ok().and_then(|o| o.item).unwrap_or_default();
+            let credits_remaining = user.get("credits_remaining")
+                .and_then(|v| v.as_n().ok())
+                .and_then(|n| n.parse::<i64>().ok())
+                .unwrap_or(0);
+            let credits_used = user.get("credits_used")
+                .and_then(|v| v.as_n().ok())
+                .and_then(|n| n.parse::<i64>().ok())
+                .unwrap_or(0);
+            let plan = user.get("plan")
+                .and_then(|v| v.as_s().ok())
+                .cloned()
+                .unwrap_or_else(|| "free".to_string());
+
+            let today_requests = usage_result.ok()
+                .and_then(|o| o.item)
+                .and_then(|item| item.get("count").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()))
+                .unwrap_or(0);
+
+            let logs: Vec<serde_json::Value> = audit_result.ok()
+                .map(|o| o.items().iter().map(|item| {
+                    serde_json::json!({
+                        "event_type": item.get("event_type").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                        "details": item.get("details").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                        "timestamp": item.get("timestamp").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                    })
+                }).collect())
+                .unwrap_or_default();
+
+            return Json(serde_json::json!({
+                "plan": plan,
+                "credits_remaining": credits_remaining,
+                "credits_used": credits_used,
+                "today_requests": today_requests,
+                "today_logs": logs,
+                "date": today,
+            })).into_response();
+        }
+    }
+    Json(serde_json::json!({"error": "DynamoDB not configured"})).into_response()
+}
+
 /// GET /og.svg — OGP image (host-based routing)
 async fn handle_og_svg(headers: axum::http::HeaderMap) -> impl IntoResponse {
     let host = headers.get("host")
@@ -5756,6 +6349,50 @@ async fn handle_link_generate(
     {
         let _ = (state, headers);
         Json(serde_json::json!({ "error": "DynamoDB backend required" }))
+    }
+}
+
+/// GET /api/v1/link/status/{code} — Check if a link code has been consumed (linked)
+/// Returns { "status": "pending" } if code still exists, { "status": "linked" } if consumed.
+/// Used by the frontend QR modal to detect when linking completes.
+async fn handle_link_status(
+    State(state): State<Arc<AppState>>,
+    Path(code): Path<String>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let (dynamo, table) = match (&state.dynamo_client, &state.config_table) {
+            (Some(d), Some(t)) => (d, t.as_str()),
+            _ => return Json(serde_json::json!({ "status": "error", "message": "DynamoDB not configured" })),
+        };
+
+        let code = code.trim().to_uppercase();
+        let resp = dynamo
+            .get_item()
+            .table_name(table)
+            .key("pk", aws_sdk_dynamodb::types::AttributeValue::S(format!("LINKCODE#{}", code)))
+            .key("sk", aws_sdk_dynamodb::types::AttributeValue::S("PENDING".to_string()))
+            .send()
+            .await;
+
+        match resp {
+            Ok(output) => {
+                if output.item.is_some() {
+                    // Code still exists — not yet consumed
+                    Json(serde_json::json!({ "status": "pending" }))
+                } else {
+                    // Code consumed (deleted after linking) — linking completed
+                    Json(serde_json::json!({ "status": "linked" }))
+                }
+            }
+            Err(_) => Json(serde_json::json!({ "status": "error" })),
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (state, code);
+        Json(serde_json::json!({ "status": "error", "message": "DynamoDB backend required" }))
     }
 }
 
@@ -8186,11 +8823,31 @@ async fn handle_speech_synthesize(
         );
     }
 
-    // Check credits if user is authenticated
+    // Resolve user: Bearer token → x-session-id → session_id in body
+    #[cfg(feature = "dynamodb-backend")]
+    let tts_user_key: Option<String> = {
+        if let Some(uid) = auth_user_id(&state, &headers).await {
+            Some(uid)
+        } else {
+            let sid = headers.get("x-session-id").and_then(|v| v.to_str().ok())
+                .or(req.session_id.as_deref())
+                .unwrap_or("");
+            if !sid.is_empty() {
+                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    Some(resolve_session_key(dynamo, table, sid).await)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+    };
+
+    // Check credits
     #[cfg(feature = "dynamodb-backend")]
     {
-        let user_id = auth_user_id(&state, &headers).await;
-        if let Some(ref uid) = user_id {
+        if let Some(ref uid) = tts_user_key {
             if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
                 let user = get_or_create_user(dynamo, table, uid).await;
                 if user.credits_remaining <= 0 {
@@ -8231,14 +8888,13 @@ async fn handle_speech_synthesize(
             // Deduct credits: 1 credit per 100 characters
             #[cfg(feature = "dynamodb-backend")]
             {
-                let user_id = auth_user_id(&state, &headers).await;
-                if let Some(ref uid) = user_id {
+                if let Some(ref uid) = tts_user_key {
                     if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
                         let tts_credits = std::cmp::max(1, (req.text.len() as i64) / 100);
                         let pk = format!("USER#{}", uid);
                         let _ = dynamo
                             .update_item()
-                            .table_name(table)
+                            .table_name(table.as_str())
                             .key("pk", AttributeValue::S(pk))
                             .key("sk", AttributeValue::S("PROFILE".to_string()))
                             .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
@@ -8392,10 +9048,22 @@ async fn handle_get_memory(
 ) -> impl axum::response::IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        let session_key = match extract_session_from_bearer(&headers, &state).await {
-            Some(sk) => sk,
-            None => return (axum::http::StatusCode::UNAUTHORIZED,
-                Json(serde_json::json!({"error": "Unauthorized"}))).into_response(),
+        // Try Bearer token first, then fall back to x-session-id
+        let session_key = if let Some(sk) = auth_user_id(&state, &headers).await {
+            sk
+        } else if let Some(sid) = headers.get("x-session-id").and_then(|v| v.to_str().ok()) {
+            if sid.is_empty() {
+                return (axum::http::StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
+            }
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                resolve_session_key(dynamo, table, sid).await
+            } else {
+                sid.to_string()
+            }
+        } else {
+            return (axum::http::StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
         };
 
         if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
@@ -8438,10 +9106,22 @@ async fn handle_delete_memory(
 ) -> impl axum::response::IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        let session_key = match extract_session_from_bearer(&headers, &state).await {
-            Some(sk) => sk,
-            None => return (axum::http::StatusCode::UNAUTHORIZED,
-                Json(serde_json::json!({"error": "Unauthorized"}))).into_response(),
+        // Try Bearer token first, then fall back to x-session-id
+        let session_key = if let Some(sk) = auth_user_id(&state, &headers).await {
+            sk
+        } else if let Some(sid) = headers.get("x-session-id").and_then(|v| v.to_str().ok()) {
+            if sid.is_empty() {
+                return (axum::http::StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
+            }
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                resolve_session_key(dynamo, table, sid).await
+            } else {
+                sid.to_string()
+            }
+        } else {
+            return (axum::http::StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
         };
 
         if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
@@ -8466,34 +9146,6 @@ async fn handle_delete_memory(
 }
 
 /// Extract session key from Bearer token
-async fn extract_session_from_bearer(
-    headers: &axum::http::HeaderMap,
-    state: &AppState,
-) -> Option<String> {
-    let auth_header = headers.get("authorization")?.to_str().ok()?;
-    let token = auth_header.strip_prefix("Bearer ")?;
-
-    #[cfg(feature = "dynamodb-backend")]
-    {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
-            use sha2::Digest;
-            let token_hash = format!("{:x}", sha2::Sha256::digest(token.as_bytes()));
-            let auth_pk = format!("AUTH#{}", token_hash);
-            if let Ok(output) = dynamo.get_item()
-                .table_name(table.as_str())
-                .key("pk", AttributeValue::S(auth_pk))
-                .key("sk", AttributeValue::S("USER_ID".to_string()))
-                .send().await
-            {
-                if let Some(item) = output.item {
-                    return item.get("user_id").and_then(|v| v.as_s().ok()).cloned();
-                }
-            }
-        }
-    }
-    None
-}
-
 // ─── Sync API (ElioChat ↔ chatweb.ai) ───
 
 /// GET /api/v1/sync/conversations — List conversations for sync (with optional ?since filter)
@@ -9009,4 +9661,104 @@ pub async fn serve(addr: &str, state: Arc<AppState>) -> anyhow::Result<()> {
     info!("HTTP server listening on {}", addr);
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod agent_routing_tests {
+    use super::*;
+
+    #[test]
+    fn test_explicit_prefix() {
+        let (agent, msg) = detect_agent("@coder fix this bug");
+        assert_eq!(agent.id, "coder");
+        assert_eq!(msg, "fix this bug");
+    }
+
+    #[test]
+    fn test_explicit_prefix_researcher() {
+        let (agent, msg) = detect_agent("@researcher find latest news");
+        assert_eq!(agent.id, "researcher");
+        assert_eq!(msg, "find latest news");
+    }
+
+    #[test]
+    fn test_research_over_code() {
+        // "Pythonを調べて" → researcher (調べ=3) > coder (python=1)
+        let (agent, _) = detect_agent("Pythonを調べて");
+        assert_eq!(agent.id, "researcher");
+    }
+
+    #[test]
+    fn test_creative_translate() {
+        let (agent, _) = detect_agent("この文章を英語に翻訳して");
+        assert_eq!(agent.id, "creative");
+    }
+
+    #[test]
+    fn test_analyst_data() {
+        let (agent, _) = detect_agent("このデータを分析してください");
+        assert_eq!(agent.id, "analyst");
+    }
+
+    #[test]
+    fn test_default_greeting() {
+        let (agent, _) = detect_agent("こんにちは");
+        assert_eq!(agent.id, "assistant");
+    }
+
+    #[test]
+    fn test_weak_signal_default() {
+        // "error" alone (no match) → assistant (below threshold)
+        let (agent, _) = detect_agent("error");
+        assert_eq!(agent.id, "assistant");
+    }
+
+    #[test]
+    fn test_weather_researcher() {
+        let (agent, _) = detect_agent("今日の天気を教えて");
+        assert_eq!(agent.id, "researcher");
+    }
+
+    #[test]
+    fn test_debug_coder() {
+        let (agent, _) = detect_agent("このバグをdebugして");
+        assert_eq!(agent.id, "coder");
+    }
+
+    #[test]
+    fn test_code_writing_coder() {
+        let (agent, _) = detect_agent("Rustでコードを書いて");
+        // コード=2 + rust=1 = coder:3, 書いて=2 = creative:2 → coder wins
+        assert_eq!(agent.id, "coder");
+    }
+
+    #[test]
+    fn test_news_researcher() {
+        // 最新=3, ニュース=3 → researcher
+        let (agent, _) = detect_agent("最新のAIニュース");
+        assert_eq!(agent.id, "researcher");
+    }
+
+    #[test]
+    fn test_single_weak_keyword_defaults() {
+        // "api" alone = coder score 1, below threshold → assistant
+        let (agent, _) = detect_agent("api");
+        assert_eq!(agent.id, "assistant");
+    }
+
+    #[test]
+    fn test_agent_profile_fields() {
+        // Verify new fields are populated
+        let coder = &AGENTS[3];
+        assert_eq!(coder.id, "coder");
+        assert_eq!(coder.preferred_model, Some("claude-sonnet-4-5-20250929"));
+        assert_eq!(coder.estimated_seconds, 15);
+        assert_eq!(coder.max_chars_pc, 800);
+        assert_eq!(coder.max_chars_mobile, 400);
+        assert_eq!(coder.max_chars_voice, 60);
+
+        let assistant = &AGENTS[1];
+        assert_eq!(assistant.preferred_model, None);
+        assert_eq!(assistant.estimated_seconds, 10);
+    }
 }

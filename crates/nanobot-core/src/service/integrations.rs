@@ -80,6 +80,12 @@ impl ToolRegistry {
                 tracing::info!("Registering phone_call tool (CONNECT_INSTANCE_ID present)");
                 tools.push(Box::new(PhoneCallTool));
             }
+
+            // Web deploy tool requires S3 bucket configuration
+            if std::env::var("SITES_S3_BUCKET").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering web_deploy tool (SITES_S3_BUCKET present)");
+                tools.push(Box::new(WebDeployTool));
+            }
         }
 
         Self { tools }
@@ -2993,6 +2999,292 @@ async fn store_call_record(
         .item("ttl", AttributeValue::N(ttl.to_string()))
         .send()
         .await;
+}
+
+// ---------------------------------------------------------------------------
+// Web Deploy Tool — deploy sandbox files to S3 + CloudFront subdomain
+// ---------------------------------------------------------------------------
+
+pub struct WebDeployTool;
+
+#[async_trait]
+impl Tool for WebDeployTool {
+    fn name(&self) -> &str { "web_deploy" }
+    fn description(&self) -> &str {
+        "Deploy a website from the sandbox to the internet. Uploads files to S3, serves via CloudFront, \
+         and assigns a {project}.chatweb.ai subdomain. Use after creating HTML/CSS/JS files with file_write."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "project_name": {
+                    "type": "string",
+                    "description": "Project name (becomes subdomain: {name}.chatweb.ai). Lowercase alphanumeric + hyphens, 3-30 chars."
+                },
+                "directory": {
+                    "type": "string",
+                    "description": "Directory within sandbox to deploy. Use '.' for all files in sandbox root."
+                }
+            },
+            "required": ["project_name", "directory"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let project_name = params.get("project_name").and_then(|v| v.as_str()).unwrap_or("");
+        let directory = params.get("directory").and_then(|v| v.as_str()).unwrap_or(".");
+        let sandbox_dir = params.get("_sandbox_dir").and_then(|v| v.as_str()).unwrap_or("");
+        let session_key = params.get("_session_key").and_then(|v| v.as_str()).unwrap_or("");
+        execute_web_deploy(project_name, directory, sandbox_dir, session_key).await
+    }
+}
+
+/// Validate project name: lowercase alphanumeric + hyphens, 3-30 chars, no leading/trailing hyphen.
+fn validate_project_name(name: &str) -> Result<(), String> {
+    if name.len() < 3 || name.len() > 30 {
+        return Err("[TOOL_ERROR] project_name must be 3-30 characters".to_string());
+    }
+    if !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+        return Err("[TOOL_ERROR] project_name must contain only lowercase letters, digits, and hyphens".to_string());
+    }
+    if name.starts_with('-') || name.ends_with('-') {
+        return Err("[TOOL_ERROR] project_name must not start or end with a hyphen".to_string());
+    }
+    // Reserved names
+    let reserved = ["www", "api", "app", "admin", "mail", "ftp", "cdn", "dev", "staging"];
+    if reserved.contains(&name) {
+        return Err(format!("[TOOL_ERROR] '{}' is a reserved subdomain name", name));
+    }
+    Ok(())
+}
+
+/// Guess MIME content type from file extension.
+#[cfg(feature = "dynamodb-backend")]
+fn guess_content_type(path: &str) -> &'static str {
+    match path.rsplit('.').next() {
+        Some("html") | Some("htm") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") | Some("mjs") => "application/javascript; charset=utf-8",
+        Some("json") => "application/json",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("woff2") => "font/woff2",
+        Some("woff") => "font/woff",
+        Some("ico") => "image/x-icon",
+        Some("xml") => "application/xml",
+        Some("txt") => "text/plain; charset=utf-8",
+        Some("md") => "text/markdown; charset=utf-8",
+        Some("pdf") => "application/pdf",
+        Some("wasm") => "application/wasm",
+        _ => "application/octet-stream",
+    }
+}
+
+async fn execute_web_deploy(
+    project_name: &str,
+    directory: &str,
+    sandbox_dir: &str,
+    session_key: &str,
+) -> String {
+    // Validate inputs
+    if sandbox_dir.is_empty() {
+        return "[TOOL_ERROR] No sandbox directory. This tool must be used within a chat session.".to_string();
+    }
+    if let Err(e) = validate_project_name(project_name) {
+        return e;
+    }
+
+    let base_path = std::path::Path::new(sandbox_dir);
+    let deploy_dir = if directory == "." { base_path.to_path_buf() } else { base_path.join(directory) };
+
+    if !deploy_dir.exists() || !deploy_dir.is_dir() {
+        return format!("[TOOL_ERROR] Directory '{}' does not exist in sandbox. Create files with file_write first.", directory);
+    }
+
+    // Collect files (max 50 files, 10MB total)
+    let max_files: usize = 50;
+    let max_total_bytes: u64 = 10 * 1024 * 1024;
+    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut total_bytes: u64 = 0;
+
+    for entry in walkdir::WalkDir::new(&deploy_dir)
+        .follow_links(false)
+        .max_depth(5)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        // Security: skip hidden files and common unwanted patterns
+        let name = entry.file_name().to_string_lossy();
+        if name.starts_with('.') || name.ends_with('~') {
+            continue;
+        }
+
+        if files.len() >= max_files {
+            return format!("[TOOL_ERROR] Too many files (max {}). Reduce file count or deploy a subdirectory.", max_files);
+        }
+
+        let relative = entry.path().strip_prefix(&deploy_dir)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        match tokio::fs::read(entry.path()).await {
+            Ok(content) => {
+                total_bytes += content.len() as u64;
+                if total_bytes > max_total_bytes {
+                    return format!("[TOOL_ERROR] Total size exceeds {}MB limit.", max_total_bytes / 1024 / 1024);
+                }
+                files.push((relative, content));
+            }
+            Err(e) => {
+                return format!("[TOOL_ERROR] Failed to read file '{}': {}", relative, e);
+            }
+        }
+    }
+
+    if files.is_empty() {
+        return "[TOOL_ERROR] No files found to deploy. Create files with file_write first.".to_string();
+    }
+
+    // Check for index.html
+    let has_index = files.iter().any(|(name, _)| name == "index.html");
+    if !has_index {
+        return "[TOOL_ERROR] No index.html found. A website needs an index.html entry point.".to_string();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let bucket = std::env::var("SITES_S3_BUCKET").unwrap_or_default();
+        if bucket.is_empty() {
+            return "[TOOL_ERROR] SITES_S3_BUCKET not configured".to_string();
+        }
+
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let s3 = aws_sdk_s3::Client::new(&config);
+
+        // Upload files to S3
+        let mut uploaded: Vec<String> = Vec::new();
+        for (relative_path, content) in &files {
+            let key = format!("{}/{}", project_name, relative_path);
+            let content_type = guess_content_type(relative_path);
+
+            match s3.put_object()
+                .bucket(&bucket)
+                .key(&key)
+                .body(content.clone().into())
+                .content_type(content_type)
+                .cache_control("public, max-age=3600")
+                .send()
+                .await
+            {
+                Ok(_) => uploaded.push(relative_path.clone()),
+                Err(e) => return format!("[TOOL_ERROR] S3 upload failed for '{}': {}", relative_path, e),
+            }
+        }
+
+        // Save site record to DynamoDB
+        let config_table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+        if !config_table.is_empty() {
+            use aws_sdk_dynamodb::types::AttributeValue;
+            let dynamo = aws_sdk_dynamodb::Client::new(&config);
+            let now = chrono::Utc::now();
+
+            let file_list: Vec<AttributeValue> = uploaded.iter()
+                .map(|f| AttributeValue::S(f.clone()))
+                .collect();
+
+            let _ = dynamo.put_item()
+                .table_name(&config_table)
+                .item("pk", AttributeValue::S(format!("SITE#{}", project_name)))
+                .item("sk", AttributeValue::S("META".to_string()))
+                .item("session_key", AttributeValue::S(session_key.to_string()))
+                .item("files", AttributeValue::L(file_list))
+                .item("file_count", AttributeValue::N(uploaded.len().to_string()))
+                .item("total_bytes", AttributeValue::N(total_bytes.to_string()))
+                .item("created_at", AttributeValue::S(now.to_rfc3339()))
+                .item("updated_at", AttributeValue::S(now.to_rfc3339()))
+                .send()
+                .await;
+        }
+
+        // Ensure Route53 subdomain (if configured)
+        let hosted_zone_id = std::env::var("CHATWEB_HOSTED_ZONE_ID").unwrap_or_default();
+        let cf_domain = std::env::var("SITES_CF_DOMAIN").unwrap_or_default();
+        if !hosted_zone_id.is_empty() && !cf_domain.is_empty() {
+            let route53 = aws_sdk_route53::Client::new(&config);
+            if let Err(e) = ensure_subdomain(&route53, &hosted_zone_id, project_name, &cf_domain).await {
+                tracing::warn!("Route53 subdomain setup failed (site still accessible via CloudFront): {}", e);
+            }
+        }
+
+        let url = format!("https://{}.chatweb.ai/", project_name);
+        let file_list_str = uploaded.iter()
+            .map(|f| format!("  - {}", f))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        format!(
+            "✅ Deployed successfully!\n\n🌐 URL: {}\n📁 Files ({}):\n{}\n\nThe site is now live. DNS propagation may take a few minutes for first-time deployments.",
+            url, uploaded.len(), file_list_str
+        )
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (session_key, files, total_bytes);
+        "[TOOL_ERROR] Web deploy requires the dynamodb-backend feature (AWS access)".to_string()
+    }
+}
+
+/// Create or update a Route53 CNAME record for {subdomain}.chatweb.ai.
+#[cfg(feature = "dynamodb-backend")]
+async fn ensure_subdomain(
+    route53: &aws_sdk_route53::Client,
+    hosted_zone_id: &str,
+    subdomain: &str,
+    cloudfront_domain: &str,
+) -> Result<(), String> {
+    use aws_sdk_route53::types::{
+        ChangeBatch, Change, ChangeAction, ResourceRecordSet, RrType, ResourceRecord,
+    };
+
+    let record = ResourceRecord::builder()
+        .value(cloudfront_domain.to_string())
+        .build()
+        .map_err(|e| format!("Route53 ResourceRecord build error: {}", e))?;
+
+    let record_set = ResourceRecordSet::builder()
+        .name(format!("{}.chatweb.ai", subdomain))
+        .set_type(Some(RrType::Cname))
+        .ttl(300)
+        .resource_records(record)
+        .build()
+        .map_err(|e| format!("Route53 ResourceRecordSet build error: {}", e))?;
+
+    let change = Change::builder()
+        .action(ChangeAction::Upsert)
+        .resource_record_set(record_set)
+        .build()
+        .map_err(|e| format!("Route53 Change build error: {}", e))?;
+
+    let batch = ChangeBatch::builder()
+        .changes(change)
+        .build()
+        .map_err(|e| format!("Route53 ChangeBatch build error: {}", e))?;
+
+    route53.change_resource_record_sets()
+        .hosted_zone_id(hosted_zone_id)
+        .change_batch(batch)
+        .send()
+        .await
+        .map_err(|e| format!("Route53 error: {}", e))?;
+
+    Ok(())
 }
 
 #[cfg(test)]

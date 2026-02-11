@@ -432,14 +432,14 @@ impl LlmProvider for LoadBalancedProvider {
             return Err(ProviderError::Other("No providers configured".to_string()));
         }
 
-        // Tight timeouts to guarantee sub-8s response (primary 6s + parallel 5s)
-        let primary_timeout = std::time::Duration::from_secs(6);
-        let fallback_timeout = std::time::Duration::from_secs(5);
+        // Fast failover: primary gets a head start (3s), then all providers race in parallel
+        let primary_head_start = std::time::Duration::from_secs(3);
+        let parallel_timeout = std::time::Duration::from_secs(7);
 
-        // Phase 1: Try primary provider with timeout
+        // Phase 1: Try primary provider with short timeout
         let primary = self.select_provider(model);
         let primary_result = tokio::time::timeout(
-            primary_timeout,
+            primary_head_start,
             primary.chat(messages, tools, model, max_tokens, temperature),
         ).await;
 
@@ -449,11 +449,11 @@ impl LlmProvider for LoadBalancedProvider {
                 tracing::warn!("Primary provider failed for model {}: {}, trying parallel fallback", model, e);
             }
             Err(_) => {
-                tracing::warn!("Primary provider timed out for model {} ({}s), trying parallel fallback", model, primary_timeout.as_secs());
+                tracing::warn!("Primary provider slow for model {} (>{}s), racing all fallbacks", model, primary_head_start.as_secs());
             }
         }
 
-        // Phase 2: Try ALL remaining providers in PARALLEL, return first success
+        // Phase 2: Race ALL remaining providers in parallel, return first success
         if total > 1 {
             let start = self.counter.load(Ordering::Relaxed);
             let msgs = messages.to_vec();
@@ -468,12 +468,11 @@ impl LlmProvider for LoadBalancedProvider {
                 let msgs = msgs.clone();
                 let tools = tools_owned.clone();
                 let tx = tx.clone();
-                let fallback_timeout = fallback_timeout;
 
                 tokio::spawn(async move {
                     let tools_ref = tools.as_deref();
                     match tokio::time::timeout(
-                        fallback_timeout,
+                        parallel_timeout,
                         provider.chat(&msgs, tools_ref, &converted_model, max_tokens, temperature),
                     ).await {
                         Ok(Ok(resp)) => {
@@ -484,7 +483,7 @@ impl LlmProvider for LoadBalancedProvider {
                             tracing::warn!("Parallel fallback {} failed: {}", converted_model, e);
                         }
                         Err(_) => {
-                            tracing::warn!("Parallel fallback {} timed out", converted_model);
+                            tracing::warn!("Parallel fallback {} timed out ({}s)", converted_model, parallel_timeout.as_secs());
                         }
                     }
                 });
