@@ -1612,6 +1612,17 @@
     }
     .app-chat-empty-text { font-size: 15px; color: var(--muted); }
 
+    /* AI Avatar container — polygon orb */
+    .ai-avatar-container {
+      width: 200px; height: 200px;
+      cursor: pointer;
+      position: relative;
+      border-radius: 50%;
+      transition: transform 0.3s;
+    }
+    .ai-avatar-container:hover { transform: scale(1.05); }
+    .ai-avatar-container canvas { display: block; width: 100%; height: 100%; }
+
     /* Voice hero button - the primary CTA */
     .voice-hero-btn {
       width: 100px; height: 100px;
@@ -3510,7 +3521,10 @@
       <div class="app-chat-messages" id="app-messages">
         <div class="app-chat-empty" id="app-empty">
           <div class="app-chat-empty-logo">chatweb.ai</div>
-          <button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()">
+          <div class="ai-avatar-container" id="ai-avatar-container" onclick="toggleVoiceHero()">
+            <canvas id="ai-avatar-canvas" width="200" height="200"></canvas>
+          </div>
+          <button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()" style="display:none;">
             <svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
           <div class="voice-hero-label" id="voice-hero-label">タップして、話しかけてみて</div>
@@ -4053,6 +4067,8 @@
     }
 
     function updateChannelStatus(channels, details) {
+      // Mark all server-known linked channels as notified so overlays don't re-fire
+      channels.forEach(ch => { if (ch !== 'web') markChannelNotified(ch === 'telegram' ? 'tg' : ch); });
       const lineBar = document.getElementById('ch-bar-line');
       const tgBar = document.getElementById('ch-bar-tg');
       const lineCard = document.getElementById('line-card');
@@ -4759,9 +4775,24 @@
     function getTeamsDeepLink() {
       return 'https://teams.microsoft.com/l/app/chatweb-ai';
     }
+    // Track channels that have already been notified (persisted across page loads)
+    const notifiedChannels = new Set(JSON.parse(localStorage.getItem('notifiedChannels') || '[]'));
+    function markChannelNotified(ch) {
+      notifiedChannels.add(ch);
+      localStorage.setItem('notifiedChannels', JSON.stringify([...notifiedChannels]));
+    }
+
     function openChannelLink(ch) {
       const c = CHANNELS[ch];
       if (!c) return;
+      // If already connected, just show a toast instead of re-opening the modal
+      const el = document.getElementById('app-ch-' + ch);
+      if (el && el.classList.contains('connected')) {
+        const l = document.documentElement.lang || 'ja';
+        const chName = CH_NAMES[ch] || ch;
+        showToast(l === 'ja' ? chName + ' は連携済みです' : chName + ' is already linked');
+        return;
+      }
       showModal(ch);
     }
 
@@ -4911,6 +4942,8 @@
 
     const CH_NAMES = { line: 'LINE', tg: 'Telegram', whatsapp: 'WhatsApp', discord: 'Discord', slack: 'Slack', teams: 'Teams' };
     function showLinkSuccess(ch) {
+      if (notifiedChannels.has(ch)) { stopLinkPoll(); return; }
+      markChannelNotified(ch);
       stopLinkPoll();
       setModalStep(2);
       const l = document.documentElement.lang || 'ja';
@@ -4962,6 +4995,8 @@
       teams: 'M20.5 7h-3V5.5a2.5 2.5 0 0 0-5 0V7h-1a1.5 1.5 0 0 0-1.5 1.5v8a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 20.5 7z',
     };
     function showLinkOverlay(ch) {
+      if (notifiedChannels.has(ch)) return;
+      markChannelNotified(ch);
       const l = document.documentElement.lang || 'ja';
       const chName = CH_NAMES[ch] || ch;
       const color = CH_COLORS[ch] || '#24a1de';
@@ -6504,6 +6539,8 @@
 
     function setVoiceState(state) {
       _voiceState = state;
+      // Sync polygon AI avatar
+      if (window.setAvatarState) window.setAvatarState(state);
       const bar = document.getElementById('voice-state-bar');
       const icon = document.getElementById('voice-state-icon');
       const text = document.getElementById('voice-state-text');
@@ -7115,6 +7152,179 @@
     }
 
     initSpeechRecognition();
+
+    // ---------------------------------------------------------------------------
+    // AI Avatar — Polygon Orb (Icosahedron wireframe with face-like features)
+    // ---------------------------------------------------------------------------
+    (function initAiAvatar() {
+      const canvas = document.getElementById('ai-avatar-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const W = 200, H = 200;
+      canvas.width = W * 2; canvas.height = H * 2;
+      ctx.scale(2, 2); // retina
+
+      // Icosahedron vertices
+      const phi = (1 + Math.sqrt(5)) / 2;
+      const rawVerts = [
+        [-1, phi, 0], [1, phi, 0], [-1, -phi, 0], [1, -phi, 0],
+        [0, -1, phi], [0, 1, phi], [0, -1, -phi], [0, 1, -phi],
+        [phi, 0, -1], [phi, 0, 1], [-phi, 0, -1], [-phi, 0, 1]
+      ];
+      const faces = [
+        [0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],
+        [1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],
+        [3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],
+        [4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]
+      ];
+      const edges = new Set();
+      faces.forEach(f => {
+        for (let i = 0; i < 3; i++) {
+          const a = Math.min(f[i], f[(i+1)%3]), b = Math.max(f[i], f[(i+1)%3]);
+          edges.add(a + ',' + b);
+        }
+      });
+      const edgeList = [...edges].map(e => e.split(',').map(Number));
+
+      // Normalize vertices to unit sphere
+      const verts = rawVerts.map(v => {
+        const len = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+        return [v[0]/len, v[1]/len, v[2]/len];
+      });
+
+      let _avatarState = 'idle'; // idle, listening, thinking, speaking
+      let _avatarIntensity = 0; // 0-1 for animation
+      let _avatarTargetIntensity = 0;
+      let _avatarTime = 0;
+
+      // Expose avatar state control
+      window.setAvatarState = function(state) {
+        _avatarState = state;
+        _avatarTargetIntensity = state === 'idle' ? 0 :
+                                  state === 'listening' ? 0.4 :
+                                  state === 'thinking' ? 0.6 :
+                                  state === 'speaking' ? 1.0 : 0;
+      };
+
+      function rotateY(v, a) {
+        const c = Math.cos(a), s = Math.sin(a);
+        return [v[0]*c + v[2]*s, v[1], -v[0]*s + v[2]*c];
+      }
+      function rotateX(v, a) {
+        const c = Math.cos(a), s = Math.sin(a);
+        return [v[0], v[1]*c - v[2]*s, v[1]*s + v[2]*c];
+      }
+
+      function project(v, scale) {
+        const perspective = 3;
+        const f = perspective / (perspective + v[2]);
+        return [W/2 + v[0] * scale * f, H/2 + v[1] * scale * f, f];
+      }
+
+      function draw() {
+        _avatarTime += 0.016;
+        _avatarIntensity += (_avatarTargetIntensity - _avatarIntensity) * 0.08;
+
+        ctx.clearRect(0, 0, W, H);
+
+        // Slow idle rotation + intensity-based wobble
+        const baseRotY = _avatarTime * 0.3;
+        const baseRotX = Math.sin(_avatarTime * 0.2) * 0.15;
+
+        // Deform vertices based on state
+        const deformed = verts.map((v, i) => {
+          let dv = [...v];
+          if (_avatarIntensity > 0.01) {
+            // Organic breathing/speaking deformation
+            const noise = Math.sin(_avatarTime * 4 + i * 1.7) *
+                          Math.cos(_avatarTime * 3.3 + i * 2.1) *
+                          _avatarIntensity * 0.15;
+            const breathe = Math.sin(_avatarTime * 2) * _avatarIntensity * 0.05;
+            const scale = 1 + noise + breathe;
+            dv = [v[0] * scale, v[1] * scale, v[2] * scale];
+          }
+          // Rotate
+          dv = rotateX(rotateY(dv, baseRotY), baseRotX);
+          return dv;
+        });
+
+        const scale = 55 + _avatarIntensity * 8;
+
+        // Draw edges
+        const baseAlpha = 0.25 + _avatarIntensity * 0.3;
+        edgeList.forEach(([a, b]) => {
+          const pa = project(deformed[a], scale);
+          const pb = project(deformed[b], scale);
+          const avgDepth = (pa[2] + pb[2]) / 2;
+          const alpha = baseAlpha * avgDepth;
+          ctx.beginPath();
+          ctx.moveTo(pa[0], pa[1]);
+          ctx.lineTo(pb[0], pb[1]);
+          ctx.strokeStyle = `rgba(99,102,241,${alpha.toFixed(2)})`;
+          ctx.lineWidth = 1 + _avatarIntensity * 0.5;
+          ctx.stroke();
+        });
+
+        // Draw face faces (semi-transparent fills for front-facing)
+        faces.forEach(f => {
+          const pts = f.map(i => project(deformed[i], scale));
+          // Backface culling
+          const ax = pts[1][0]-pts[0][0], ay = pts[1][1]-pts[0][1];
+          const bx = pts[2][0]-pts[0][0], by = pts[2][1]-pts[0][1];
+          if (ax*by - ay*bx < 0) return; // backface
+          const avgD = (pts[0][2]+pts[1][2]+pts[2][2])/3;
+          ctx.beginPath();
+          ctx.moveTo(pts[0][0], pts[0][1]);
+          ctx.lineTo(pts[1][0], pts[1][1]);
+          ctx.lineTo(pts[2][0], pts[2][1]);
+          ctx.closePath();
+          const fillAlpha = (0.03 + _avatarIntensity * 0.06) * avgD;
+          ctx.fillStyle = `rgba(99,102,241,${fillAlpha.toFixed(3)})`;
+          ctx.fill();
+        });
+
+        // Draw vertices (nodes)
+        deformed.forEach((v, i) => {
+          const p = project(v, scale);
+          const r = (1.5 + _avatarIntensity * 1.5) * p[2];
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(139,92,246,${(0.4 + _avatarIntensity * 0.4) * p[2]})`;
+          ctx.fill();
+        });
+
+        // Subtle "eye" illusion — two slightly brighter nodes near face center
+        if (_avatarIntensity > 0.01) {
+          const eyeGlow = 0.15 + Math.sin(_avatarTime * 1.5) * 0.05;
+          const cx = W/2, cy = H/2;
+          // Left eye
+          ctx.beginPath();
+          ctx.arc(cx - 12, cy - 8, 3 + _avatarIntensity * 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(167,139,250,${eyeGlow * _avatarIntensity})`;
+          ctx.fill();
+          // Right eye
+          ctx.beginPath();
+          ctx.arc(cx + 12, cy - 8, 3 + _avatarIntensity * 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(167,139,250,${eyeGlow * _avatarIntensity})`;
+          ctx.fill();
+        }
+
+        // Glow ring when speaking
+        if (_avatarIntensity > 0.3) {
+          const glowR = 65 + Math.sin(_avatarTime * 3) * 5 * _avatarIntensity;
+          const gradient = ctx.createRadialGradient(W/2, H/2, glowR - 10, W/2, H/2, glowR + 15);
+          gradient.addColorStop(0, `rgba(99,102,241,${_avatarIntensity * 0.08})`);
+          gradient.addColorStop(1, 'rgba(99,102,241,0)');
+          ctx.beginPath();
+          ctx.arc(W/2, H/2, glowR + 15, 0, Math.PI * 2);
+          ctx.fillStyle = gradient;
+          ctx.fill();
+        }
+
+        requestAnimationFrame(draw);
+      }
+      draw();
+    })();
 
     // ---------------------------------------------------------------------------
     // ---------------------------------------------------------------------------
