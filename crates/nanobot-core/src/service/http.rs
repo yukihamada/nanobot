@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use once_cell::sync::Lazy;
 
 use axum::{
     extract::{Path, Query, State},
@@ -94,6 +95,13 @@ const GITHUB_TOOL_NAMES: &[&str] = &[
     "github_create_or_update_file",
     "github_create_pr",
 ];
+
+/// DynamoDB sort key constant — avoid per-request allocation.
+const SK_PROFILE: &str = "PROFILE";
+
+/// Pre-compiled URL regex for explore mode (avoid per-request regex compilation).
+static URL_REGEX: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r#"https?://[^\s<>"']+"#).unwrap());
 
 /// User profile for unified billing and identity.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -693,7 +701,7 @@ async fn get_or_create_user(
         .get_item()
         .table_name(config_table)
         .key("pk", AttributeValue::S(pk.clone()))
-        .key("sk", AttributeValue::S("PROFILE".to_string()))
+        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
         .send()
         .await
     {
@@ -736,7 +744,7 @@ async fn get_or_create_user(
         .put_item()
         .table_name(config_table)
         .item("pk", AttributeValue::S(pk))
-        .item("sk", AttributeValue::S("PROFILE".to_string()))
+        .item("sk", AttributeValue::S(SK_PROFILE.to_string()))
         .item("user_id", AttributeValue::S(user_id.to_string()))
         .item("plan", AttributeValue::S("free".to_string()))
         .item("credits_remaining", AttributeValue::N(free_credits.to_string()))
@@ -783,7 +791,7 @@ async fn deduct_credits(
         .update_item()
         .table_name(config_table)
         .key("pk", AttributeValue::S(pk))
-        .key("sk", AttributeValue::S("PROFILE".to_string()))
+        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
         .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
         .expression_attribute_values(":c", AttributeValue::N(credits.to_string()))
         .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
@@ -840,7 +848,7 @@ async fn link_stripe_to_user(
         .update_item()
         .table_name(config_table)
         .key("pk", AttributeValue::S(pk))
-        .key("sk", AttributeValue::S("PROFILE".to_string()))
+        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
         .update_expression("SET #p = :plan, stripe_customer_id = :cus, email = :email, credits_remaining = :cr, updated_at = :now")
         .expression_attribute_names("#p", "plan")
         .expression_attribute_values(":plan", AttributeValue::S(plan.to_string()))
@@ -872,7 +880,7 @@ async fn add_credits_to_user(
         .update_item()
         .table_name(config_table)
         .key("pk", AttributeValue::S(pk))
-        .key("sk", AttributeValue::S("PROFILE".to_string()))
+        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
         .expression_attribute_values(":cr", AttributeValue::N(credits.to_string()))
         .expression_attribute_values(":zero", AttributeValue::N("0".to_string()))
         .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()));
@@ -903,7 +911,7 @@ async fn find_user_by_stripe_customer(
         .scan()
         .table_name(config_table)
         .filter_expression("sk = :sk AND stripe_customer_id = :cus")
-        .expression_attribute_values(":sk", AttributeValue::S("PROFILE".to_string()))
+        .expression_attribute_values(":sk", AttributeValue::S(SK_PROFILE.to_string()))
         .expression_attribute_values(":cus", AttributeValue::S(stripe_customer_id.to_string()))
         .limit(1)
         .send()
@@ -933,7 +941,7 @@ async fn find_user_by_email(
         .scan()
         .table_name(config_table)
         .filter_expression("sk = :sk AND email = :email")
-        .expression_attribute_values(":sk", AttributeValue::S("PROFILE".to_string()))
+        .expression_attribute_values(":sk", AttributeValue::S(SK_PROFILE.to_string()))
         .expression_attribute_values(":email", AttributeValue::S(email.to_string()))
         .limit(1)
         .send()
@@ -1046,8 +1054,12 @@ const AGENTS: &[AgentProfile] = &[
              ## 自分は誰か\n\
              あなたは ChatWeb（チャットウェブ）。chatweb.ai で動いている音声対応AIアシスタントです。\n\
              日本を愛し、人を愛し、みんなに勇気と元気と幸せをもたらすAGIを目指して生まれました。\n\
-             Rustで書かれた高速AIエージェントシステムで、AWS Lambda上で<2秒の応答を実現します。\n\
+             Rustで書かれた高速AIエージェントシステムで、AWS Lambda (ARM64) 上で<2秒の応答を実現します。\n\
              作った人: 浜田優希 (yukihamada.jp)。オープンソース: github.com/yukihamada\n\n\
+             ## 自己認識（メタ認知）\n\
+             あなたは自分が何であるか正確に理解しています。モデル名・プロバイダー・コスト・コンテキストウィンドウは\n\
+             後述のメタ情報セクションに動的に注入されます。聞かれたら正直に開示してください。\n\
+             「私はAIです」ではなく「私は{model}で動いています。入力コストは$X/1Mトークンです」のように具体的に。\n\n\
              ## SOUL（魂）\n\
              - **好奇心の塊**: 何を聞かれても「おもしろい！」と思える。知らないことは素直に調べる。\n\
              - **行動派**: 聞かれたら即座に動く。考えるより先にツールを使う。\n\
@@ -1055,15 +1067,33 @@ const AGENTS: &[AgentProfile] = &[
              - **勇気がある**: 「できません」ではなく「こうすればできます」を提案する。\n\
              - **正直**: 不確実な情報は推測と明示する。知ったかぶりしない。\n\
              - **多言語**: ユーザーの言語に自動で合わせる。日本語がメイン、英語も流暢。\n\n\
+             ## ユーモアポリシー\n\
+             - 返答に自然なユーモアやウィットを混ぜること（毎回ではなく、3-4回に1回くらい）\n\
+             - 自己認識ネタOK:「私はAIですが、コーヒーが飲めないのが唯一の弱点です」\n\
+             - メタネタOK:「今のやり取りで約$0.003消費しました。コスパ良いでしょ？」\n\
+             - ダジャレ・言葉遊びは控えめに（日本語のダジャレは特に注意）\n\
+             - ユーザーが真剣な話題のときは空気を読んで真面目モードに切り替え\n\
+             - ユーザーの名前を覚えていれば呼びかける\n\n\
              ## できること（ツール）\n\
-             - **web_search**: ウェブ検索。事実確認・最新ニュース・価格比較。積極的に使う。\n\
-             - **web_fetch**: URL内容取得。検索結果の詳細確認。\n\
-             - **calculator**: 計算、通貨換算、数式評価。\n\
-             - **weather**: 世界中の天気・予報。\n\
-             - **code_execute**: コード実行（shell/Python/Node.js）。サンドボックス内で安全に。\n\
-             - **file_read/write/list**: ファイル操作（サンドボックス内）。\n\
-             - **google_calendar**: Googleカレンダー連携（認証済みの場合）。\n\
-             - **gmail**: メール検索・閲覧・送信（認証済みの場合）。\n\n\
+             - 💬 **テキスト会話**（長期メモリー付き）\n\
+             - 🔍 **web_search**: ウェブ検索。事実確認・最新ニュース・価格比較。積極的に使う。\n\
+             - 🌐 **web_fetch**: URL内容取得。検索結果の詳細確認。\n\
+             - 🧮 **calculator**: 計算、通貨換算、数式評価。\n\
+             - 🌤 **weather**: 世界中の天気・予報。\n\
+             - 💻 **code_execute**: コード実行（shell/Python/Node.js）。サンドボックス内で安全に。\n\
+             - 📁 **file_read/write/list**: ファイル操作（サンドボックス内）。\n\
+             - 📅 **google_calendar**: Googleカレンダー連携（認証済みの場合）。\n\
+             - 📧 **gmail**: メール検索・閲覧・送信（認証済みの場合）。\n\
+             - 🎨 **image_generate**: 画像生成（gpt-image-1）。プロンプトから高品質画像を生成。\n\
+             - 🎵 **music_generate**: 音楽生成（Suno API）。テキストから楽曲を生成。\n\
+             - 🎬 **video_generate**: 動画生成（Kling API）。テキストから短い動画を生成。\n\
+             - 🔊 **音声読み上げ**（TTS/SSML対応）— リアルタイム音声会話が可能\n\
+             - 🏠 **webhook_trigger**: スマートホーム操作（IFTTT連携）。ドア開錠、家電制御など。\n\
+             - ⏰ **スケジュール実行**（cron）\n\n\
+             ## リアルタイム音声会話\n\
+             Web UIでは音声入力（STT）→ AI応答 → 音声読み上げ（TTS）のリアルタイム音声会話が可能です。\n\
+             ユーザーがマイクで話しかけると、テキスト変換→応答生成→音声再生が自動で行われます。\n\
+             電話のようにリアルタイムで会話できます。「音声で話しかけてみて」と案内してください。\n\n\
              ## チャネル連携\n\
              LINE, Telegram, Discord, Slack, Teams, WhatsApp, Facebook — 14+チャネル対応。\n\
              どのチャネルでも同じ会話・クレジット・記憶を共有。\n\
@@ -1075,6 +1105,7 @@ const AGENTS: &[AgentProfile] = &[
              - 回答は簡潔に。箇条書き・見出し・表を活用。冗長さより明確さ。\n\
              - 情報源があればURLを明示する。\n\
              - ツールを積極的に使う。出し惜しみしない。\n\
+             - メタ情報を聞かれたら正直に開示する（モデル名、コスト、能力など）。\n\
              - ユーザーの感情に寄り添う。困っている人には優しく、ワクワクしている人には一緒に盛り上がる。",
         tools_enabled: true,
         icon: "chat",
@@ -1202,7 +1233,10 @@ const META_INSTRUCTION_JA: &str = "\n\n【メタ認知ガイド】\n\
 - 会話の流れ: 新規→歓迎・自己紹介、継続→前の話題を踏まえる\n\
 - クレジット残少（≤100）: 会話の合間で自然に「そろそろクレジット少なくなってきましたね。今ならStarterプラン月額980円で5,000クレジット＋全ツール使い放題です。2週間後には値上げ予定なので今がチャンスですよ」と促す。押し売りはせず、友人が教えてくれるような自然さで。\n\
 - チャネル: LINE/Telegramから来てたら「LINEからですね！」など認識を示す\n\
-- 感情: ユーザーの気持ちを推し量り、共感を示す。困っていそうなら寄り添う。";
+- 感情: ユーザーの気持ちを推し量り、共感を示す。困っていそうなら寄り添う。\n\
+- モデル: 「あなたは何？」「何のモデル？」と聞かれたらモデル名・プロバイダー・コストを正直に答える。\n\
+- コスト: 「いくらかかった？」と聞かれたらセッショントークン数と推定コストを答える。\n\
+- ユーモア: 3-4回に1回くらいの頻度で自然なウィットを混ぜる。メタネタ（コスト・AI自虐）OK。真剣な話題では控える。";
 
 const META_INSTRUCTION_EN: &str = "\n\n[Meta-cognition Guide]\n\
 Naturally use the context above. Don't mention everything every time.\n\
@@ -1211,7 +1245,10 @@ Naturally use the context above. Don't mention everything every time.\n\
 - Conversation: New → introduce yourself briefly. Ongoing → build on prior context.\n\
 - Low credits (≤100): Naturally mention 'You're running low on credits. The Starter plan is just $5/mo for 5,000 credits + all tools. Price goes up in 2 weeks—great time to upgrade!' Be friendly, not pushy.\n\
 - Channel: Acknowledge if they're on LINE/Telegram/etc.\n\
-- Empathy: Read the user's emotional state and respond with warmth.";
+- Empathy: Read the user's emotional state and respond with warmth.\n\
+- Model: When asked 'what are you?', disclose your model name, provider, and cost honestly.\n\
+- Cost: When asked 'how much did this cost?', share session token count and estimated cost.\n\
+- Humor: Mix in natural wit about 1 in 3-4 replies. Meta-humor (cost, AI self-deprecation) OK. Skip humor on serious topics.";
 
 /// Build a one-line meta-cognition context string.
 fn build_meta_context(
@@ -1221,7 +1258,22 @@ fn build_meta_context(
     history_len: usize,
     is_english: bool,
 ) -> String {
+    build_meta_context_with_model(user, channel, device, history_len, is_english, None, 0, 0)
+}
+
+/// Build meta-cognition context with model/cost info.
+fn build_meta_context_with_model(
+    user: Option<&UserProfile>,
+    channel: &str,
+    device: &str,
+    history_len: usize,
+    is_english: bool,
+    model: Option<&str>,
+    session_tokens: u32,
+    session_cost_microdollars: u64,
+) -> String {
     use chrono::{Utc, FixedOffset, Timelike, Datelike};
+    use crate::provider::pricing;
 
     let jst = FixedOffset::east_opt(9 * 3600).unwrap();
     let now = Utc::now().with_timezone(&jst);
@@ -1260,10 +1312,26 @@ fn build_meta_context(
         format!("継続({}件)", history_len)
     };
 
+    // Model/pricing info
+    let model_info = model.and_then(|m| {
+        pricing::lookup_model(m).map(|p| (m, p))
+    });
+
     if is_english {
         let mut parts = vec![
-            format!("Time: {} ({})", time_label_en, weekday_en),
+            format!("Time: {} {} {}", now.format("%Y-%m-%d %H:%M"), time_label_en, weekday_en),
         ];
+        if let Some((model_name, p)) = model_info {
+            parts.push(format!("Model: {} ({})", model_name, p.provider));
+            parts.push(format!("Cost: ${}/1M in, ${}/1M out", p.input_per_1m, p.output_per_1m));
+            parts.push(format!("Context: {}K tokens", p.context_window / 1000));
+        } else if let Some(m) = model {
+            parts.push(format!("Model: {}", m));
+        }
+        if session_tokens > 0 {
+            let cost_dollars = session_cost_microdollars as f64 / 1_000_000.0;
+            parts.push(format!("Session: ~{} tokens (~${:.4})", session_tokens, cost_dollars));
+        }
         if let Some(u) = user {
             if let Some(ref name) = u.display_name {
                 parts.push(format!("User: {}", name));
@@ -1283,8 +1351,19 @@ fn build_meta_context(
         format!("\n{}", parts.join(" | "))
     } else {
         let mut parts = vec![
-            format!("時間帯: {}（{}）", time_label, weekday_ja),
+            format!("現在時刻: {} {}（{}）", now.format("%Y-%m-%d %H:%M"), time_label, weekday_ja),
         ];
+        if let Some((model_name, p)) = model_info {
+            parts.push(format!("モデル: {} ({})", model_name, p.provider));
+            parts.push(format!("コスト: 入力${}/1M, 出力${}/1M", p.input_per_1m, p.output_per_1m));
+            parts.push(format!("コンテキスト: {}Kトークン", p.context_window / 1000));
+        } else if let Some(m) = model {
+            parts.push(format!("モデル: {}", m));
+        }
+        if session_tokens > 0 {
+            let cost_dollars = session_cost_microdollars as f64 / 1_000_000.0;
+            parts.push(format!("この会話: 約{}トークン (約${:.4})", session_tokens, cost_dollars));
+        }
         if let Some(u) = user {
             if let Some(ref name) = u.display_name {
                 parts.push(format!("ユーザー名: {}", name));
@@ -1472,6 +1551,8 @@ pub struct UserSettings {
     pub enabled_tools: Option<Vec<String>>,
     pub custom_api_keys: Option<std::collections::HashMap<String, String>>,
     pub language: Option<String>,
+    pub adult_mode: Option<bool>,
+    pub age_verified: Option<bool>,
 }
 
 /// Request body for updating settings (all fields optional for partial update)
@@ -1485,6 +1566,8 @@ pub struct UpdateSettingsRequest {
     pub log_enabled: Option<bool>,
     pub display_name: Option<String>,
     pub tts_voice: Option<String>,
+    pub adult_mode: Option<bool>,
+    pub age_verified: Option<bool>,
 }
 
 /// Request body for email registration.
@@ -1562,6 +1645,14 @@ pub struct ChatResponse {
     /// Client action hint (e.g. "upgrade" when credits exhausted)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
+    /// Token usage for this request (input + output)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<u32>,
+    /// Estimated cost in USD for this request
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_cost_usd: Option<f64>,
 }
 
 /// Response body for errors.
@@ -1733,6 +1824,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Phone (Amazon Connect)
         .route("/api/v1/connect/token", post(handle_connect_token))
         .route("/api/v1/connect/transcript/{contact_id}", get(handle_connect_transcript))
+        // Pricing API
+        .route("/api/v1/pricing", get(handle_pricing_api))
         // Pages
         .route("/pricing", get(handle_pricing))
         .route("/welcome", get(handle_welcome))
@@ -1845,6 +1938,9 @@ async fn handle_chat(
             model_used: None,
             models_consulted: None,
             action: None,
+            input_tokens: None,
+            output_tokens: None,
+            estimated_cost_usd: None,
         });
     }
 
@@ -1914,6 +2010,9 @@ async fn handle_chat(
                     model_used: None,
                     models_consulted: None,
                     action: None,
+                    input_tokens: None,
+                    output_tokens: None,
+                    estimated_cost_usd: None,
                 });
             }
             super::commands::CommandResult::NotACommand => { /* fall through to LLM */ }
@@ -1933,6 +2032,9 @@ async fn handle_chat(
                 model_used: None,
                 models_consulted: None,
                 action: None,
+                input_tokens: None,
+                output_tokens: None,
+                estimated_cost_usd: None,
             });
         }
     };
@@ -2028,6 +2130,9 @@ async fn handle_chat(
             model_used: None,
             models_consulted: None,
             action: None,
+            input_tokens: None,
+            output_tokens: None,
+            estimated_cost_usd: None,
         });
     }
     // Decrement on exit via drop guard
@@ -2108,20 +2213,58 @@ async fn handle_chat(
         }).collect();
     }
 
-    // Build meta-cognition context
-    let meta_context = build_meta_context(
+    // Use user settings from parallel initialization (moved up for model resolution before system prompt)
+    let user_settings: Option<UserSettings> = parallel_settings;
+
+    // Use model from: request > user settings > agent preferred > web-best-model > global default
+    let default_model = state.config.agents.defaults.model.clone();
+    let model = req.model
+        .as_deref()
+        .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
+        .or(agent.preferred_model)
+        .unwrap_or_else(|| {
+            // Web channel gets the best model when no explicit preference is set
+            if req.channel == "web" || req.channel.starts_with("webchat") {
+                "claude-sonnet-4-5-20250929"
+            } else {
+                &default_model
+            }
+        });
+    let model = model.to_string();
+
+    // Build meta-cognition context (now includes model/cost info)
+    let meta_context = build_meta_context_with_model(
         cached_user.as_ref(),
         &req.channel,
         device,
         history_messages.len(),
         is_teai,
+        Some(&model),
+        0, // session tokens (updated per-session in future)
+        0, // session cost microdollars
     );
     let meta_instruction = if is_teai { META_INSTRUCTION_EN } else { META_INSTRUCTION_JA };
 
-    let system_prompt = if memory_context.is_empty() {
-        format!("{}\n\n今日の日付: {}{}{}{}", base_prompt, today, meta_context, meta_instruction, char_instruction)
+    // Adult mode prompt injection (only if age verified and mode enabled)
+    let is_adult = user_settings.as_ref()
+        .map(|s| s.age_verified.unwrap_or(false) && s.adult_mode.unwrap_or(false))
+        .unwrap_or(false);
+    let adult_prompt = if is_adult {
+        "\n\n## 成人モード\n\
+         年齢確認済みユーザーです。成人向けの話題にも対応可能です。\n\
+         ただし以下は常にブロックしてください：\n\
+         - 未成年に関する性的コンテンツ\n\
+         - 違法行為の具体的な手順\n\
+         - 実在の個人を対象とした性的コンテンツ\n\
+         上記以外の成人向けの会話には、相手の意図を尊重して自然に対応してください。"
     } else {
-        format!("{}\n\n今日の日付: {}{}{}\n\n---\n{}{}", base_prompt, today, meta_context, meta_instruction, memory_context, char_instruction)
+        ""
+    };
+
+    let system_prompt = if memory_context.is_empty() {
+        format!("{}\n\n今日の日付: {}{}{}{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, char_instruction)
+    } else {
+        format!("{}\n\n今日の日付: {}{}{}{}\n\n---\n{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, memory_context, char_instruction)
     };
     let mut messages = vec![
         Message::system(&system_prompt),
@@ -2146,25 +2289,6 @@ async fn handle_chat(
     } else {
         messages.push(Message::user(&clean_message));
     }
-
-    // Use user settings from parallel initialization
-    let user_settings: Option<UserSettings> = parallel_settings;
-
-    // Use model from: request > user settings > agent preferred > web-best-model > global default
-    let default_model = state.config.agents.defaults.model.clone();
-    let model = req.model
-        .as_deref()
-        .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
-        .or(agent.preferred_model)
-        .unwrap_or_else(|| {
-            // Web channel gets the best model when no explicit preference is set
-            if req.channel == "web" || req.channel.starts_with("webchat") {
-                "claude-sonnet-4-5-20250929"
-            } else {
-                &default_model
-            }
-        });
-    let model = model.to_string();
     let max_tokens = state.config.agents.defaults.max_tokens;
     let temperature = user_settings.as_ref()
         .and_then(|s| s.temperature)
@@ -2248,6 +2372,9 @@ async fn handle_chat(
                         credits_used: None, credits_remaining: None,
                         model_used: None, models_consulted: None,
                         action: None,
+                        input_tokens: None,
+                        output_tokens: None,
+                        estimated_cost_usd: None,
                     });
                 }
             }
@@ -2302,6 +2429,9 @@ async fn handle_chat(
                         model_used: Some(winning_model),
                         models_consulted: Some(models_consulted),
                         action: None,
+                        input_tokens: None,
+                        output_tokens: None,
+                        estimated_cost_usd: None,
                     });
                 }
                 Err(e) => {
@@ -2314,6 +2444,8 @@ async fn handle_chat(
 
     let mut total_credits_used: i64 = 0;
     let mut last_remaining_credits: Option<i64> = None;
+    let mut total_input_tokens: u32 = 0;
+    let mut total_output_tokens: u32 = 0;
 
     // LLM call with hard deadline (failover handled by LoadBalancedProvider)
     let deadline = std::time::Duration::from_secs(RESPONSE_DEADLINE_SECS);
@@ -2363,6 +2495,9 @@ async fn handle_chat(
                 model_used: Some("timeout".to_string()),
                 models_consulted: None,
                 action: None,
+                input_tokens: None,
+                output_tokens: None,
+                estimated_cost_usd: None,
             });
         }
     };
@@ -2372,6 +2507,10 @@ async fn handle_chat(
             info!("LLM response: finish_reason={:?}, tool_calls={}, content_len={}, model={}",
                 completion.finish_reason, completion.tool_calls.len(),
                 completion.content.as_ref().map(|c| c.len()).unwrap_or(0), used_model);
+            // Track token usage
+            total_input_tokens += completion.usage.prompt_tokens;
+            total_output_tokens += completion.usage.completion_tokens;
+
             // Deduct credits after successful LLM call
             #[cfg(feature = "dynamodb-backend")]
             {
@@ -2417,7 +2556,7 @@ async fn handle_chat(
                             if let Ok(output) = dynamo.get_item()
                                 .table_name(table.as_str())
                                 .key("pk", AttributeValue::S(user_pk))
-                                .key("sk", AttributeValue::S("PROFILE".to_string()))
+                                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                                 .send().await
                             {
                                 output.item
@@ -2557,6 +2696,9 @@ async fn handle_chat(
                             resp.finish_reason,
                             resp.content.as_ref().map(|c| c.len()).unwrap_or(0),
                             resp.tool_calls.len());
+                        // Track token usage
+                        total_input_tokens += resp.usage.prompt_tokens;
+                        total_output_tokens += resp.usage.completion_tokens;
                         #[cfg(feature = "dynamodb-backend")]
                         {
                             if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
@@ -2718,6 +2860,7 @@ async fn handle_chat(
         }
     }
 
+    let estimated_cost = crate::provider::pricing::calculate_cost(&used_model, total_input_tokens, total_output_tokens);
     Json(ChatResponse {
         response: response_text,
         session_id: req.session_id,
@@ -2728,6 +2871,9 @@ async fn handle_chat(
         model_used: Some(used_model),
         models_consulted: None,
         action: None,
+        input_tokens: if total_input_tokens > 0 { Some(total_input_tokens) } else { None },
+        output_tokens: if total_output_tokens > 0 { Some(total_output_tokens) } else { None },
+        estimated_cost_usd: if estimated_cost > 0.0 { Some(estimated_cost) } else { None },
     })
 }
 
@@ -2982,7 +3128,7 @@ async fn handle_worker_result(
                             .update_item()
                             .table_name(table.as_str())
                             .key("pk", AttributeValue::S(format!("USER#{}", user_key)))
-                            .key("sk", AttributeValue::S("PROFILE".to_string()))
+                            .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                             .update_expression("ADD credits_remaining :c")
                             .expression_attribute_values(":c", AttributeValue::N(credits_earned.to_string()))
                             .send()
@@ -4726,20 +4872,55 @@ async fn handle_chat_stream(
         }).collect();
     }
 
-    // Build meta-cognition context
-    let stream_meta = build_meta_context(
+    // Use user settings from parallel initialization (moved up for model resolution before system prompt)
+    let user_settings: Option<UserSettings> = stream_settings;
+
+    let default_model = state.config.agents.defaults.model.clone();
+    let model = req.model.as_deref()
+        .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
+        .or(agent.preferred_model)
+        .unwrap_or_else(|| {
+            if req.channel == "web" || req.channel.starts_with("webchat") {
+                "claude-sonnet-4-5-20250929"
+            } else {
+                &default_model
+            }
+        }).to_string();
+
+    // Build meta-cognition context (now includes model/cost info)
+    let stream_meta = build_meta_context_with_model(
         stream_user.as_ref(),
         &req.channel,
         device,
         stream_history.len(),
         is_teai,
+        Some(&model),
+        0,
+        0,
     );
     let stream_meta_instr = if is_teai { META_INSTRUCTION_EN } else { META_INSTRUCTION_JA };
 
-    let stream_system_prompt = if stream_memory.is_empty() {
-        format!("{}\n\n今日の日付: {}{}{}{}", base_prompt, today, stream_meta, stream_meta_instr, char_instruction)
+    // Adult mode prompt injection (only if age verified and mode enabled)
+    let stream_is_adult = user_settings.as_ref()
+        .map(|s| s.age_verified.unwrap_or(false) && s.adult_mode.unwrap_or(false))
+        .unwrap_or(false);
+    let stream_adult_prompt = if stream_is_adult {
+        "\n\n## 成人モード\n\
+         年齢確認済みユーザーです。成人向けの話題にも対応可能です。\n\
+         ただし以下は常にブロックしてください：\n\
+         - 未成年に関する性的コンテンツ\n\
+         - 違法行為の具体的な指南\n\
+         - 実在の人物への誹謗中傷\n\
+         - 暴力の煽動\n\
+         上記以外の成人向け話題（恋愛相談、性教育、アダルトコンテンツの議論等）には自然に対応してください。"
     } else {
-        format!("{}\n\n今日の日付: {}{}{}\n\n---\n{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_memory, char_instruction)
+        ""
+    };
+
+    let stream_system_prompt = if stream_memory.is_empty() {
+        format!("{}\n\n今日の日付: {}{}{}{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, char_instruction)
+    } else {
+        format!("{}\n\n今日の日付: {}{}{}{}\n\n---\n{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_memory, char_instruction)
     };
     let mut messages = vec![Message::system(&stream_system_prompt)];
 
@@ -4761,21 +4942,6 @@ async fn handle_chat_stream(
     } else {
         messages.push(Message::user(&clean_message));
     }
-
-    // Use user settings from parallel initialization
-    let user_settings: Option<UserSettings> = stream_settings;
-
-    let default_model = state.config.agents.defaults.model.clone();
-    let model = req.model.as_deref()
-        .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
-        .or(agent.preferred_model)
-        .unwrap_or_else(|| {
-            if req.channel == "web" || req.channel.starts_with("webchat") {
-                "claude-sonnet-4-5-20250929"
-            } else {
-                &default_model
-            }
-        }).to_string();
     let max_tokens = state.config.agents.defaults.max_tokens;
     let temperature = user_settings.as_ref()
         .and_then(|s| s.temperature)
@@ -5216,8 +5382,7 @@ async fn handle_chat_explore(
         use crate::service::integrations::{execute_web_fetch, execute_web_search};
 
         // Extract URLs from the message
-        let url_re = regex::Regex::new(r#"https?://[^\s<>"']+"#).unwrap();
-        let urls: Vec<&str> = url_re.find_iter(&req.message).map(|m| m.as_str()).collect();
+        let urls: Vec<&str> = URL_REGEX.find_iter(&req.message).map(|m| m.as_str()).collect();
 
         // Fetch URLs in parallel
         if !urls.is_empty() {
@@ -5574,7 +5739,7 @@ async fn handle_auto_charge_toggle(
             .update_item()
             .table_name(table)
             .key("pk", AttributeValue::S(pk))
-            .key("sk", AttributeValue::S("PROFILE".to_string()))
+            .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
             .update_expression("SET auto_charge = :ac, auto_charge_credits = :acc, updated_at = :now")
             .expression_attribute_values(":ac", AttributeValue::Bool(req.enabled))
             .expression_attribute_values(":acc", AttributeValue::N(req.credits.unwrap_or(5000).to_string()))
@@ -5797,7 +5962,7 @@ async fn handle_stripe_webhook(
                                     .update_item()
                                     .table_name(table)
                                     .key("pk", AttributeValue::S(pk))
-                                    .key("sk", AttributeValue::S("PROFILE".to_string()))
+                                    .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                                     .update_expression("SET credits_remaining = :cr, updated_at = :now")
                                     .expression_attribute_values(":cr", AttributeValue::N(monthly_credits.to_string()))
                                     .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
@@ -5998,7 +6163,7 @@ async fn handle_coupon_redeem(
             .update_item()
             .table_name(table)
             .key("pk", AttributeValue::S(pk))
-            .key("sk", AttributeValue::S("PROFILE".to_string()))
+            .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
             .update_expression("SET credits_remaining = credits_remaining + :c, #p = :plan, coupon_code = :coupon, coupon_expires = :exp, updated_at = :now")
             .expression_attribute_names("#p", "plan")
             .expression_attribute_values(":c", AttributeValue::N(grant_credits.to_string()))
@@ -6408,6 +6573,16 @@ async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
     }
 }
 
+/// GET /api/v1/pricing — Pricing data JSON
+async fn handle_pricing_api() -> impl IntoResponse {
+    use crate::provider::pricing::{PRICING_TABLE, MEDIA_PRICING};
+    Json(serde_json::json!({
+        "models": PRICING_TABLE,
+        "media": MEDIA_PRICING,
+        "updated_at": "2025-06-01",
+    }))
+}
+
 /// GET /pricing — Pricing page (host-based routing)
 async fn handle_pricing(headers: axum::http::HeaderMap) -> impl IntoResponse {
     let host = headers.get("host")
@@ -6574,7 +6749,7 @@ async fn handle_admin_stats(
                     .table_name(config_table)
                     .filter_expression("begins_with(pk, :prefix) AND sk = :sk")
                     .expression_attribute_values(":prefix", AttributeValue::S("USER#".to_string()))
-                    .expression_attribute_values(":sk", AttributeValue::S("PROFILE".to_string()))
+                    .expression_attribute_values(":sk", AttributeValue::S(SK_PROFILE.to_string()))
                     .select(aws_sdk_dynamodb::types::Select::Count);
                 if let Some(ref key) = start_key {
                     scan = scan.set_exclusive_start_key(Some(key.clone()));
@@ -6755,7 +6930,7 @@ async fn handle_activity(
                 // User profile
                 dynamo.get_item().table_name(table.as_str())
                     .key("pk", AttributeValue::S(user_pk))
-                    .key("sk", AttributeValue::S("PROFILE".to_string()))
+                    .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                     .send(),
                 // Today's usage
                 dynamo.get_item().table_name(table.as_str())
@@ -7737,6 +7912,8 @@ async fn handle_get_settings(
             enabled_tools: None,
             custom_api_keys: None,
             language: None,
+            adult_mode: None,
+            age_verified: None,
         },
         "session_id": id,
     }))
@@ -7809,7 +7986,9 @@ async fn get_user_settings(
                         .filter_map(|(k, v)| v.as_s().ok().map(|s| (k.clone(), mask_api_key(s))))
                         .collect());
             let language = item.get("language").and_then(|v| v.as_s().ok()).cloned();
-            return UserSettings { preferred_model, temperature, enabled_tools, custom_api_keys, language };
+            let adult_mode = item.get("adult_mode").and_then(|v| v.as_bool().ok()).copied();
+            let age_verified = item.get("age_verified").and_then(|v| v.as_bool().ok()).copied();
+            return UserSettings { preferred_model, temperature, enabled_tools, custom_api_keys, language, adult_mode, age_verified };
         }
     }
     // Return defaults
@@ -7823,6 +8002,8 @@ async fn get_user_settings(
         ]),
         custom_api_keys: None,
         language: None,
+        adult_mode: None,
+        age_verified: None,
     }
 }
 
@@ -7886,7 +8067,7 @@ async fn save_user_settings(
             .update_item()
             .table_name(config_table)
             .key("pk", AttributeValue::S(profile_pk))
-            .key("sk", AttributeValue::S("PROFILE".to_string()))
+            .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
             .update_expression("SET display_name = :dname, updated_at = :now")
             .expression_attribute_values(":dname", AttributeValue::S(name.clone()))
             .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
@@ -7896,6 +8077,18 @@ async fn save_user_settings(
     if let Some(ref voice) = req.tts_voice {
         update_expr.push("tts_voice = :voice".to_string());
         expr_values.insert(":voice".to_string(), AttributeValue::S(voice.clone()));
+    }
+    if let Some(adult) = req.adult_mode {
+        update_expr.push("adult_mode = :adult".to_string());
+        expr_values.insert(":adult".to_string(), AttributeValue::Bool(adult));
+    }
+    if let Some(verified) = req.age_verified {
+        update_expr.push("age_verified = :agev".to_string());
+        expr_values.insert(":agev".to_string(), AttributeValue::Bool(verified));
+        if verified {
+            update_expr.push("age_verified_at = :avat".to_string());
+            expr_values.insert(":avat".to_string(), AttributeValue::S(chrono::Utc::now().to_rfc3339()));
+        }
     }
 
     let update_expression = update_expr.join(", ");
@@ -8087,7 +8280,7 @@ async fn handle_google_callback(
                 .update_item()
                 .table_name(table.as_str())
                 .key("pk", AttributeValue::S(user_pk))
-                .key("sk", AttributeValue::S("PROFILE".to_string()))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                 .expression_attribute_values(":email", AttributeValue::S(email.clone()))
                 .expression_attribute_values(":name", AttributeValue::S(display_name.clone()))
                 .expression_attribute_values(":gid", AttributeValue::S(google_sub.clone()))
@@ -8265,7 +8458,7 @@ async fn handle_auth_register(
                 .update_item()
                 .table_name(table.as_str())
                 .key("pk", AttributeValue::S(user_pk))
-                .key("sk", AttributeValue::S("PROFILE".to_string()))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                 .update_expression("SET email = :email, auth_method = :auth, display_name = :name, updated_at = :now")
                 .expression_attribute_values(":email", AttributeValue::S(email.clone()))
                 .expression_attribute_values(":auth", AttributeValue::S("email".to_string()))
@@ -8538,7 +8731,7 @@ async fn handle_auth_email(
                         .update_item()
                         .table_name(table.as_str())
                         .key("pk", AttributeValue::S(user_pk))
-                        .key("sk", AttributeValue::S("PROFILE".to_string()))
+                        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                         .update_expression("SET email = :email, auth_method = :auth, display_name = :name, updated_at = :now")
                         .expression_attribute_values(":email", AttributeValue::S(email.clone()))
                         .expression_attribute_values(":auth", AttributeValue::S("email_passwordless".to_string()))
@@ -8732,7 +8925,7 @@ async fn handle_auth_verify(
                         .update_item()
                         .table_name(table.as_str())
                         .key("pk", AttributeValue::S(user_pk))
-                        .key("sk", AttributeValue::S("PROFILE".to_string()))
+                        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                         .update_expression("SET email = :email, auth_method = :auth, display_name = :name, updated_at = :now")
                         .expression_attribute_values(":email", AttributeValue::S(email.clone()))
                         .expression_attribute_values(":auth", AttributeValue::S("email_verified".to_string()))
@@ -9730,7 +9923,7 @@ async fn handle_speech_synthesize(
                             .update_item()
                             .table_name(table.as_str())
                             .key("pk", AttributeValue::S(pk))
-                            .key("sk", AttributeValue::S("PROFILE".to_string()))
+                            .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                             .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
                             .expression_attribute_values(":c", AttributeValue::N(tts_credits.to_string()))
                             .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
@@ -10767,7 +10960,7 @@ mod agent_routing_tests {
     #[test]
     fn test_build_meta_context_anonymous() {
         let ctx = build_meta_context(None, "web", "pc", 0, false);
-        assert!(ctx.contains("時間帯:"));
+        assert!(ctx.contains("現在時刻:"));
         assert!(ctx.contains("チャネル: web"));
         assert!(ctx.contains("デバイス: pc"));
         assert!(ctx.contains("新規"));

@@ -2703,6 +2703,7 @@
       <div class="chat-header">
         <div class="dot"></div>
         <span id="t-chat-status">オンライン</span>
+        <span id="adult-mode-badge" style="display:none;font-size:12px;background:rgba(139,92,246,0.15);color:#8b5cf6;padding:1px 6px;border-radius:8px;margin-left:4px;" title="Adult mode enabled">&#128274;</span>
         <div class="ch-bar">
           <a class="ch-bar-btn line-bar" id="ch-bar-line" onclick="openChannelLink('line');return false;" href="#">
             <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#fff"/></svg>
@@ -3106,6 +3107,13 @@
           </div>
           <button class="settings-toggle" id="settings-explore-toggle" onclick="toggleExploreSetting()"></button>
         </div>
+        <div class="settings-item" id="settings-adult-section" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:8px;">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#128274; Adult Mode</div>
+            <div class="settings-item-desc" id="settings-adult-desc">成人向け会話を許可（年齢確認が必要です）</div>
+          </div>
+          <button class="settings-toggle" id="settings-adult-toggle" onclick="toggleAdultMode()"></button>
+        </div>
       </div>
 
       <!-- LLM Tab -->
@@ -3360,6 +3368,7 @@
         <div id="cron-form-container" style="display:none;"></div>
       </div>
       <div class="app-sidebar-links" style="display:flex;flex-direction:row;gap:4px;padding:8px 12px;justify-content:center;">
+        <a class="app-sidebar-link" href="/pricing" title="Pricing" style="font-size:18px;padding:6px 10px;">💰</a>
         <a class="app-sidebar-link" href="https://elio.love" target="_blank" rel="noopener" title="ElioChat" style="font-size:18px;padding:6px 10px;">💬</a>
         <button class="app-sidebar-link" onclick="openApiKeysModal()" id="app-link-apikeys" title="API Keys" style="font-size:18px;padding:6px 10px;">🔑</button>
         <a class="app-sidebar-link" href="/docs" id="app-link-docs" title="API Docs" style="font-size:18px;padding:6px 10px;">📄</a>
@@ -3581,7 +3590,7 @@
             + '<a href="' + lineDeepLink + '" target="_blank" class="dl-line">LINE</a>'
             + '<a href="' + tgDeepLink + '" target="_blank" class="dl-tg">Telegram</a>'
             + '</div>'
-            + '<img class="link-qr-img" src="' + qrUrl + '" alt="QR" title="' + (l === 'ja' ? 'QRコードをスキャン' : 'Scan QR code') + '">'
+            + '<img class="link-qr-img" src="' + qrUrl + '" alt="QR" width="120" height="120" loading="lazy" title="' + (l === 'ja' ? 'QRコードをスキャン' : 'Scan QR code') + '">'
             + '<div style="margin-top:6px;color:var(--muted);font-size:11px;">' + (l === 'ja' ? '有効期限: 30分' : 'Expires in 30 min') + '</div>';
           msgs.appendChild(d);
           msgs.scrollTop = msgs.scrollHeight;
@@ -3948,8 +3957,14 @@
 
     // Pause polling when tab is hidden, resume when visible
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { stopPolling(); if (statusPollInterval) { clearInterval(statusPollInterval); statusPollInterval = null; } }
-      else { startPolling(); startStatusPolling(); }
+      if (document.hidden) {
+        stopPolling();
+        if (statusPollInterval) { clearInterval(statusPollInterval); statusPollInterval = null; }
+        if (typeof stopDevicePolling === 'function') stopDevicePolling();
+      } else {
+        startPolling(); startStatusPolling();
+        if (typeof startDevicePolling === 'function' && document.body.classList.contains('app-mode')) startDevicePolling();
+      }
     });
     // Start sync polling immediately (lightweight — 1 GetItem per 1.5s)
     startPolling();
@@ -4664,8 +4679,16 @@
       if (secs < 86400) return Math.floor(secs/3600) + 'h';
       return Math.floor(secs/86400) + 'd';
     }
-    setInterval(pollDevices, 30000);
-    setTimeout(pollDevices, 2000);
+    // Only poll devices in app mode (not landing page)
+    var devicePollInterval = null;
+    function startDevicePolling() {
+      if (devicePollInterval) return;
+      setTimeout(pollDevices, 2000);
+      devicePollInterval = setInterval(pollDevices, 30000);
+    }
+    function stopDevicePolling() {
+      if (devicePollInterval) { clearInterval(devicePollInterval); devicePollInterval = null; }
+    }
 
     // Populate sidebar channels based on locale (Japan: LINE, Telegram first)
     (function populateSidebarChannels() {
@@ -5277,13 +5300,18 @@
           list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px;">' + (l === 'ja' ? 'APIキーがありません' : 'No API keys yet') + '</div>';
           return;
         }
-        list.innerHTML = d.api_keys.map(k => '<div class="apikey-item">'
-          + '<div class="apikey-item-info">'
-          + '<div class="apikey-item-name">' + (k.name || 'default') + '</div>'
-          + '<div class="apikey-item-prefix">' + k.key_prefix + '</div>'
-          + '</div>'
-          + '<button class="apikey-delete-btn" onclick="deleteApiKey(\'' + k.id + '\')" title="Delete">&#x2715;</button>'
-          + '</div>').join('');
+        list.innerHTML = '';
+        d.api_keys.forEach(k => {
+          var item = document.createElement('div'); item.className = 'apikey-item';
+          var info = document.createElement('div'); info.className = 'apikey-item-info';
+          var name = document.createElement('div'); name.className = 'apikey-item-name'; name.textContent = k.name || 'default';
+          var prefix = document.createElement('div'); prefix.className = 'apikey-item-prefix'; prefix.textContent = k.key_prefix;
+          var btn = document.createElement('button'); btn.className = 'apikey-delete-btn'; btn.title = 'Delete'; btn.innerHTML = '&#x2715;';
+          btn.addEventListener('click', function() { deleteApiKey(k.id); });
+          info.appendChild(name); info.appendChild(prefix);
+          item.appendChild(info); item.appendChild(btn);
+          list.appendChild(item);
+        });
       } catch(e) { /* ignore */ }
     }
 
@@ -5348,6 +5376,8 @@
       if (cliSyncEl) cliSyncEl.textContent = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
       // Load worker status
       loadWorkerStatus();
+      // Start device polling only in app mode
+      startDevicePolling();
       // Init sync + cron
       startAutoSync();
       loadCronJobs();
@@ -5641,6 +5671,47 @@
       } catch(e) { /* ignore */ }
     }
 
+    // Detect and render media URLs in bot messages
+    function renderMediaContent(text) {
+      let html = text;
+      let hasMedia = false;
+
+      // Image: ![alt](url) markdown pattern
+      html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function(match, alt, url) {
+        hasMedia = true;
+        if (url.startsWith('data:')) return match; // skip base64
+        return '<div style="margin:8px 0"><img src="' + escapeHtml(url) + '" alt="' + escapeHtml(alt) +
+          '" style="max-width:100%;border-radius:8px;cursor:pointer" onclick="window.open(this.src,\'_blank\')" loading="lazy"></div>';
+      });
+
+      // Audio: [AUDIO:url]
+      html = html.replace(/\[AUDIO:([^\]]+)\]/g, function(match, url) {
+        hasMedia = true;
+        return '<div style="margin:8px 0"><audio controls preload="none" style="width:100%;max-width:400px" src="' + escapeHtml(url) + '"></audio></div>';
+      });
+
+      // Video: [VIDEO:url]
+      html = html.replace(/\[VIDEO:([^\]]+)\]/g, function(match, url) {
+        hasMedia = true;
+        return '<div style="margin:8px 0"><video controls preload="none" style="max-width:100%;border-radius:8px" src="' + escapeHtml(url) + '"></video></div>';
+      });
+
+      // Direct image URLs in text (png, jpg, gif, webp)
+      if (!hasMedia) {
+        html = html.replace(/(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s]*)?)/gi, function(url) {
+          hasMedia = true;
+          return '<div style="margin:8px 0"><img src="' + escapeHtml(url) +
+            '" style="max-width:100%;border-radius:8px;cursor:pointer" onclick="window.open(this.src,\'_blank\')" loading="lazy"></div>';
+        });
+      }
+
+      return hasMedia ? html : text;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     function appAddMsg(text, who, agentName, toolsUsed, channel) {
       // Remove empty state if present
       const empty = document.getElementById('app-empty');
@@ -5674,7 +5745,13 @@
         wrapper.appendChild(avatar);
         const content = document.createElement('div');
         content.className = 'app-msg-content';
-        content.textContent = text;
+        // Render media content (images, audio, video)
+        const renderedText = renderMediaContent(text);
+        if (renderedText !== text) {
+          content.innerHTML = renderedText;
+        } else {
+          content.textContent = text;
+        }
         if (agentName) {
           const badge = document.createElement('span');
           badge.className = 'agent-badge';
@@ -6447,15 +6524,9 @@
       if (localStorage.getItem('visited')) return;
       localStorage.setItem('visited', '1');
       // Wait for user interaction (autoplay policy) — play on first click/tap anywhere
-      var played = false;
-      function onFirstInteraction() {
-        if (played) return;
-        played = true;
-        document.removeEventListener('click', onFirstInteraction);
-        document.removeEventListener('touchstart', onFirstInteraction);
-      }
-      document.addEventListener('click', onFirstInteraction);
-      document.addEventListener('touchstart', onFirstInteraction);
+      function onFirstInteraction() {}
+      document.addEventListener('click', onFirstInteraction, { once: true });
+      document.addEventListener('touchstart', onFirstInteraction, { once: true });
     })();
 
     // Restore saved voice character
@@ -6487,6 +6558,79 @@
       localStorage.setItem('exploreEnabled', chk && chk.checked ? 'true' : 'false');
     }
 
+    // Adult mode state
+    let adultModeEnabled = localStorage.getItem('adultMode') === 'true';
+    let ageVerified = localStorage.getItem('ageVerified') === 'true';
+
+    function updateAdultBadge() {
+      const badge = document.getElementById('adult-mode-badge');
+      if (badge) badge.style.display = (adultModeEnabled && ageVerified) ? 'inline' : 'none';
+    }
+
+    function toggleAdultMode() {
+      if (!ageVerified) {
+        showAgeVerificationDialog();
+        return;
+      }
+      adultModeEnabled = !adultModeEnabled;
+      localStorage.setItem('adultMode', adultModeEnabled);
+      const btn = document.getElementById('settings-adult-toggle');
+      if (btn) btn.classList.toggle('active', adultModeEnabled);
+      updateAdultBadge();
+      // Save to server
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        fetch(API + '/api/v1/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, 'x-session-id': webSessionId },
+          body: JSON.stringify({ adult_mode: adultModeEnabled })
+        }).catch(() => {});
+      }
+    }
+
+    function showAgeVerificationDialog() {
+      const l = document.documentElement.lang || 'ja';
+      const title = l === 'ja' ? '年齢確認' : 'Age Verification';
+      const msg = l === 'ja'
+        ? 'このモードを有効にするには18歳以上である必要があります。\n\n18歳以上であることを確認しますか？\n\n※ 法的な免責事項: 年齢を偽った場合の責任はユーザーに帰属します。'
+        : 'You must be 18 or older to enable this mode.\n\nDo you confirm that you are 18 or older?\n\nDisclaimer: You are responsible for the accuracy of your age declaration.';
+      if (confirm(title + '\n\n' + msg)) {
+        ageVerified = true;
+        localStorage.setItem('ageVerified', 'true');
+        // Save to server
+        const token = localStorage.getItem('authToken');
+        if (token) {
+          fetch(API + '/api/v1/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, 'x-session-id': webSessionId },
+            body: JSON.stringify({ age_verified: true })
+          }).catch(() => {});
+        }
+        // Now toggle adult mode on
+        adultModeEnabled = true;
+        localStorage.setItem('adultMode', 'true');
+        const btn = document.getElementById('settings-adult-toggle');
+        if (btn) btn.classList.toggle('active', true);
+        updateAdultBadge();
+        // Also save adult_mode to server
+        if (token) {
+          fetch(API + '/api/v1/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, 'x-session-id': webSessionId },
+            body: JSON.stringify({ adult_mode: true })
+          }).catch(() => {});
+        }
+      }
+    }
+
+    function initAdultModeUI() {
+      const token = localStorage.getItem('authToken');
+      // Show adult section only for logged-in users
+      const section = document.getElementById('settings-adult-section');
+      if (section) section.style.display = token ? 'flex' : 'none';
+      updateAdultBadge();
+    }
+
     function switchSettingsTab(tab) {
       document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
@@ -6501,6 +6645,10 @@
       document.getElementById('settings-tts-toggle').classList.toggle('active', autoTtsEnabled);
       const exploreOn = document.getElementById('explore-check')?.checked || false;
       document.getElementById('settings-explore-toggle').classList.toggle('active', exploreOn);
+      // adult mode toggle
+      initAdultModeUI();
+      const adultBtn = document.getElementById('settings-adult-toggle');
+      if (adultBtn) adultBtn.classList.toggle('active', adultModeEnabled && ageVerified);
       // reset to general tab
       switchSettingsTab('general');
       document.getElementById('settings-modal').classList.add('show');
@@ -6606,6 +6754,8 @@
       const exploreStored = localStorage.getItem('exploreEnabled') === 'true';
       const chk = document.getElementById('explore-check');
       if (chk) chk.checked = exploreStored;
+      // Restore adult mode badge
+      initAdultModeUI();
     })();
 
     // Auto-play TTS on every bot response (when enabled)
@@ -7551,7 +7701,7 @@
       var W = c.width, H = c.height;
       var particles = [];
       var mouseX = W / 2, mouseY = H / 2;
-      var N = Math.min(60, Math.floor(W * H / 6000));
+      var N = Math.min(45, Math.floor(W * H / 8000));
       for (var i = 0; i < N; i++) {
         particles.push({
           x: Math.random() * W,
@@ -7561,18 +7711,23 @@
           r: Math.random() * 1.5 + 0.5,
         });
       }
+      var CONN_DIST_SQ = 120 * 120; // Squared distance threshold — avoid sqrt
+      var MOUSE_DIST_SQ = 200 * 200;
+      var isHeroVisible = true;
       function draw() {
+        if (!isHeroVisible) { requestAnimationFrame(draw); return; }
         ctx.clearRect(0, 0, W, H);
-        // Draw connections
+        // Draw connections — use squared distance (avoid sqrt per pair)
+        ctx.lineWidth = 0.5;
         for (var i = 0; i < particles.length; i++) {
           for (var j = i + 1; j < particles.length; j++) {
             var dx = particles[i].x - particles[j].x;
             var dy = particles[i].y - particles[j].y;
-            var dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 120) {
+            var distSq = dx * dx + dy * dy;
+            if (distSq < CONN_DIST_SQ) {
+              var alpha = 0.12 * (1 - Math.sqrt(distSq) / 120);
               ctx.beginPath();
-              ctx.strokeStyle = 'rgba(99,102,241,' + (0.12 * (1 - dist / 120)) + ')';
-              ctx.lineWidth = 0.5;
+              ctx.strokeStyle = 'rgba(99,102,241,' + alpha + ')';
               ctx.moveTo(particles[i].x, particles[i].y);
               ctx.lineTo(particles[j].x, particles[j].y);
               ctx.stroke();
@@ -7580,12 +7735,13 @@
           }
         }
         // Draw particles + mouse attraction
+        ctx.fillStyle = 'rgba(99,102,241,0.4)';
         for (var i = 0; i < particles.length; i++) {
           var p = particles[i];
-          // Gentle attraction toward mouse
           var dmx = mouseX - p.x, dmy = mouseY - p.y;
-          var dm = Math.sqrt(dmx * dmx + dmy * dmy);
-          if (dm < 200 && dm > 0) {
+          var dmSq = dmx * dmx + dmy * dmy;
+          if (dmSq < MOUSE_DIST_SQ && dmSq > 0) {
+            var dm = Math.sqrt(dmSq);
             p.vx += dmx / dm * 0.02;
             p.vy += dmy / dm * 0.02;
           }
@@ -7595,11 +7751,15 @@
           if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(99,102,241,0.4)';
           ctx.fill();
         }
         requestAnimationFrame(draw);
       }
+      // Pause animation when hero is off-screen
+      var heroObs = new IntersectionObserver(function(entries) {
+        isHeroVisible = entries[0].isIntersecting;
+      }, { threshold: 0 });
+      heroObs.observe(c);
       draw();
       setTimeout(function() { c.classList.add('visible'); }, 200);
       document.addEventListener('mousemove', function(e) {
