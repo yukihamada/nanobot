@@ -10,7 +10,7 @@ description = "A lightweight AI agent framework"
 license = "MIT"
 
 [[bin]]
-name = "nanobot"
+name = "chatweb"
 path = "src/main.rs"
 
 [features]

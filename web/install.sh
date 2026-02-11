@@ -100,7 +100,7 @@ if [ "$download_ok" = false ]; then
   echo ""
   echo "  You can build from source with Rust:"
   echo "    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-  echo "    cargo install --git https://github.com/${REPO} nanobot"
+  echo "    cargo install --git https://github.com/${REPO} chatweb"
   echo ""
   exit 1
 fi
@@ -108,11 +108,11 @@ fi
 # --- Install ---
 mkdir -p "$INSTALL_DIR"
 tar xzf "$TMP/${ASSET}" -C "$TMP"
-mv "$TMP/${BINARY_NAME}" "$INSTALL_DIR/${BINARY_NAME}"
-chmod +x "$INSTALL_DIR/${BINARY_NAME}"
+mv "$TMP/${BINARY_NAME}" "$INSTALL_DIR/chatweb"
+chmod +x "$INSTALL_DIR/chatweb"
 
 echo ""
-printf "${GREEN}${BOLD}  Installed nanobot to ${INSTALL_DIR}/${BINARY_NAME}${RESET}\n"
+printf "${GREEN}${BOLD}  Installed chatweb to ${INSTALL_DIR}/chatweb${RESET}\n"
 
 # --- PATH setup ---
 case ":$PATH:" in
@@ -156,5 +156,5 @@ esac
 # --- Done ---
 echo ""
 printf "${BOLD}Get started:${RESET}\n"
-echo "  nanobot chat \"Hello!\""
+echo "  chatweb chat \"Hello!\""
 echo ""

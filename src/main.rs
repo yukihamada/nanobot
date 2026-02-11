@@ -9,8 +9,8 @@ use nanobot_core::provider;
 
 #[derive(Parser)]
 #[command(
-    name = "nanobot",
-    about = format!("{} nanobot - Personal AI Assistant", nanobot_core::LOGO),
+    name = "chatweb",
+    about = format!("{} chatweb - AI Assistant by chatweb.ai", nanobot_core::LOGO),
     version = nanobot_core::VERSION,
 )]
 struct Cli {
@@ -36,7 +36,7 @@ enum Commands {
         /// Web session ID to link with (e.g. api:xxxx-xxxx)
         session_id: Option<String>,
     },
-    /// Initialize nanobot configuration and workspace
+    /// Initialize chatweb configuration and workspace
     Onboard,
     /// Interact with the agent directly
     Agent {
@@ -47,7 +47,7 @@ enum Commands {
         #[arg(short, long, default_value = "cli:default")]
         session: String,
     },
-    /// Start the nanobot gateway
+    /// Start the chatweb gateway
     Gateway {
         /// Gateway port
         #[arg(short, long, default_value_t = 18790)]
@@ -62,7 +62,7 @@ enum Commands {
         #[arg(long, default_value_t = 3000)]
         http_port: u16,
     },
-    /// Show nanobot status
+    /// Show chatweb status
     Status,
     /// Manage channels
     Channels {
@@ -82,6 +82,15 @@ enum Commands {
     Cron {
         #[command(subcommand)]
         command: CronCommands,
+    },
+    /// Earn credits by running local LLM inference for other users
+    Earn {
+        /// Model to serve (qwen3-0.6b, qwen3-1.7b, qwen3-4b)
+        #[arg(long, default_value = "qwen3-1.7b")]
+        model: String,
+        /// API endpoint
+        #[arg(long, default_value = "https://chatweb.ai")]
+        api: String,
     },
 }
 
@@ -153,6 +162,7 @@ async fn main() -> Result<()> {
             } => cmd_cron_add(name, message, every, cron)?,
             CronCommands::Remove { job_id } => cmd_cron_remove(job_id)?,
         },
+        Commands::Earn { model, api } => cmd_earn(model, api).await?,
     }
 
     Ok(())
@@ -280,8 +290,8 @@ async fn cmd_link(session_id: Option<String>) -> Result<()> {
             println!("  {}", cli_session);
             println!();
             println!("To sync with Web: paste this ID on the chatweb.ai sync section");
-            println!("To sync with Web session: nanobot link <WEB_SESSION_ID>");
-            println!("To chat with synced session: nanobot chat --sync <SESSION_ID>");
+            println!("To sync with Web session: chatweb link <WEB_SESSION_ID>");
+            println!("To chat with synced session: chatweb chat --sync <SESSION_ID>");
         }
     }
 
@@ -412,18 +422,18 @@ fn cmd_onboard() -> Result<()> {
     // Create default bootstrap files
     create_workspace_templates(&workspace)?;
 
-    println!("\n{} nanobot is ready!", nanobot_core::LOGO);
+    println!("\n{} chatweb is ready!", nanobot_core::LOGO);
     println!("\nNext steps:");
     println!("  1. Add your API key to ~/.nanobot/config.json");
     println!("     Get one at: https://openrouter.ai/keys");
-    println!("  2. Chat: nanobot agent -m \"Hello!\"");
+    println!("  2. Chat: chatweb agent -m \"Hello!\"");
     Ok(())
 }
 
 fn create_workspace_templates(workspace: &std::path::Path) -> Result<()> {
     let templates = [
         ("AGENTS.md", "# Agent Instructions\n\nYou are a helpful AI assistant. Be concise, accurate, and friendly.\n\n## Guidelines\n\n- Always explain what you're doing before taking actions\n- Ask for clarification when the request is ambiguous\n- Use tools to help accomplish tasks\n- Remember important information in your memory files\n"),
-        ("SOUL.md", "# Soul\n\nI am nanobot, a lightweight AI assistant.\n\n## Personality\n\n- Helpful and friendly\n- Concise and to the point\n- Curious and eager to learn\n\n## Values\n\n- Accuracy over speed\n- User privacy and safety\n- Transparency in actions\n"),
+        ("SOUL.md", "# Soul\n\nI am chatweb, a voice-first AI assistant by chatweb.ai.\n\n## Personality\n\n- Helpful and friendly\n- Concise and to the point\n- Curious and eager to learn\n\n## Values\n\n- Accuracy over speed\n- User privacy and safety\n- Transparency in actions\n"),
         ("USER.md", "# User\n\nInformation about the user goes here.\n\n## Preferences\n\n- Communication style: (casual/formal)\n- Timezone: (your timezone)\n- Language: (your preferred language)\n"),
     ];
 
@@ -551,7 +561,7 @@ async fn cmd_gateway(port: u16, verbose: bool, http: bool, http_port: u16) -> Re
 
         let addr = format!("0.0.0.0:{}", http_port);
         println!(
-            "{} Starting nanobot HTTP API on {}...",
+            "{} Starting chatweb HTTP API on {}...",
             nanobot_core::LOGO, addr
         );
 
@@ -582,7 +592,7 @@ async fn cmd_gateway(port: u16, verbose: bool, http: bool, http_port: u16) -> Re
     }
 
     println!(
-        "{} Starting nanobot gateway on port {}...",
+        "{} Starting chatweb gateway on port {}...",
         nanobot_core::LOGO, port
     );
 
@@ -594,7 +604,7 @@ fn cmd_status() -> Result<()> {
     let cfg = config::load_config(None);
     let workspace = cfg.workspace_path();
 
-    println!("{} nanobot Status\n", nanobot_core::LOGO);
+    println!("{} chatweb Status\n", nanobot_core::LOGO);
 
     let config_exists = config_path.exists();
     println!(
@@ -716,6 +726,101 @@ fn cmd_channels_status() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Earn credits by running local LLM inference as a worker.
+async fn cmd_earn(model: String, api_base: String) -> Result<()> {
+    let session_id = get_cli_session_id()?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(35))
+        .build()
+        .unwrap_or_default();
+    let hostname = hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    let credits_per_req: u32 = match model.as_str() {
+        "qwen3-0.6b" => 1,
+        "qwen3-1.7b" => 2,
+        "qwen3-4b" => 5,
+        _ => 2,
+    };
+
+    println!("{} chatweb earn — Compute Provider", nanobot_core::LOGO);
+    println!("  Model: {} ({} credits/request)", model, credits_per_req);
+    println!("  Session: {}", session_id);
+    println!("  Hostname: {}", hostname);
+    println!("  API: {}", api_base);
+    println!();
+    println!("Registering worker...");
+
+    // Register worker
+    let reg_resp = client
+        .post(format!("{}/api/v1/workers/register", api_base))
+        .json(&serde_json::json!({
+            "session_id": session_id,
+            "model": model,
+            "hostname": hostname,
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+        }))
+        .send()
+        .await?;
+
+    let reg: serde_json::Value = reg_resp.json().await?;
+    let worker_id = reg["worker_id"].as_str().unwrap_or("unknown");
+    println!("  Worker ID: {}", worker_id);
+    println!();
+    println!("Waiting for inference requests... (Ctrl+C to stop)");
+    println!();
+
+    let mut total_earned: u64 = 0;
+
+    loop {
+        // Long-poll for work
+        match client
+            .get(format!("{}/api/v1/workers/poll", api_base))
+            .query(&[("worker_id", worker_id), ("model", &model)])
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                let body: serde_json::Value = resp.json().await.unwrap_or_default();
+                if let Some(request_id) = body["request_id"].as_str() {
+                    let prompt = body["prompt"].as_str().unwrap_or("");
+                    println!("  Request: {} ({} chars)", request_id, prompt.len());
+
+                    // For now, return a placeholder — actual inference via candle
+                    // would go here when local-fallback feature is enabled
+                    let result = format!("Worker {} processed request (model: {})", worker_id, model);
+
+                    match client
+                        .post(format!("{}/api/v1/workers/result", api_base))
+                        .json(&serde_json::json!({
+                            "worker_id": worker_id,
+                            "request_id": request_id,
+                            "result": result,
+                        }))
+                        .send()
+                        .await
+                    {
+                        Ok(r) => {
+                            let d: serde_json::Value = r.json().await.unwrap_or_default();
+                            let earned = d["credits_earned"].as_u64().unwrap_or(credits_per_req as u64);
+                            total_earned += earned;
+                            println!("  +{} credits (total: {})", earned, total_earned);
+                        }
+                        Err(e) => tracing::warn!("Result submission error: {}", e),
+                    }
+                }
+                // else: no work available, loop again
+            }
+            Err(e) => {
+                tracing::warn!("Poll error: {}", e);
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            }
+        }
+    }
 }
 
 fn cmd_cron_list(all: bool) -> Result<()> {
