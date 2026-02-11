@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pricing - chatweb.ai</title>
   <meta name="description" content="chatweb.ai pricing plans. Free, Starter $9/mo, Pro $29/mo.">
+  <meta property="og:title" content="Pricing - chatweb.ai">
+  <meta property="og:description" content="AI assistant pricing plans. Free, Starter ($9/mo), and Pro ($29/mo).">
+  <meta property="og:image" content="https://chatweb.ai/og.svg">
+  <meta property="og:url" content="https://chatweb.ai/pricing">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
   <style>
     :root {
       --bg: #0a0a0a;
@@ -321,6 +327,8 @@
     @media (max-width: 768px) {
       .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin-left: auto; margin-right: auto; }
       .hero h1 { font-size: 28px; }
+      #media-pricing-section > div:last-child { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; }
+      #cost-calculator > div:first-of-type { grid-template-columns: 1fr; }
     }
   </style>
   <!-- PostHog Analytics (enable by replacing YOUR_PROJECT_KEY) -->
@@ -378,6 +386,79 @@
         <div class="plan-price"><span class="currency">$</span>29<span class="period" id="p-pro-period">/月</span></div>
         <ul class="plan-features" id="p-pro-features"></ul>
         <a href="#" class="plan-cta primary" id="p-pro-cta" data-plan="pro">Proを始める</a>
+      </div>
+    </div>
+
+    <!-- Model Pricing Table -->
+    <div id="model-pricing-section" style="margin-bottom:48px">
+      <h2 style="font-size:24px;font-weight:800;text-align:center;margin-bottom:24px" id="t-model-title">LLMモデル別料金</h2>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;background:var(--surface);border-radius:12px;overflow:hidden">
+          <thead>
+            <tr style="background:rgba(99,102,241,0.1);text-align:left">
+              <th style="padding:12px 16px;font-size:13px;font-weight:600">Model</th>
+              <th style="padding:12px 16px;font-size:13px;font-weight:600">Provider</th>
+              <th style="padding:12px 16px;font-size:13px;font-weight:600;text-align:right" id="t-input-cost">入力 $/1M</th>
+              <th style="padding:12px 16px;font-size:13px;font-weight:600;text-align:right" id="t-output-cost">出力 $/1M</th>
+              <th style="padding:12px 16px;font-size:13px;font-weight:600;text-align:right" id="t-ctx-window">コンテキスト</th>
+            </tr>
+          </thead>
+          <tbody id="model-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Media Generation Pricing -->
+    <div id="media-pricing-section" style="margin-bottom:48px">
+      <h2 style="font-size:24px;font-weight:800;text-align:center;margin-bottom:24px" id="t-media-title">メディア生成料金</h2>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;text-align:center">
+          <div style="font-size:32px;margin-bottom:8px">🎨</div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:4px" id="t-img-title">画像生成</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:16px">gpt-image-1</div>
+          <div style="font-size:14px"><span style="color:var(--green)">$0.011</span> <span style="color:var(--muted)">low</span></div>
+          <div style="font-size:14px"><span style="color:var(--green)">$0.042</span> <span style="color:var(--muted)">medium</span></div>
+          <div style="font-size:14px"><span style="color:var(--green)">$0.167</span> <span style="color:var(--muted)">high</span></div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;text-align:center">
+          <div style="font-size:32px;margin-bottom:8px">🎵</div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:4px" id="t-music-title">音楽生成</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Suno API</div>
+          <div style="font-size:14px"><span style="color:var(--green)">$0.05</span> <span style="color:var(--muted)" id="t-per-song">/曲</span></div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;text-align:center">
+          <div style="font-size:32px;margin-bottom:8px">🎬</div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:4px" id="t-video-title">動画生成</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Kling API</div>
+          <div style="font-size:14px"><span style="color:var(--green)">$0.10</span> <span style="color:var(--muted)">5s standard</span></div>
+          <div style="font-size:14px"><span style="color:var(--green)">$0.35</span> <span style="color:var(--muted)">5s pro</span></div>
+          <div style="font-size:14px"><span style="color:var(--green)">$0.20</span> <span style="color:var(--muted)">10s standard</span></div>
+          <div style="font-size:14px"><span style="color:var(--green)">$0.70</span> <span style="color:var(--muted)">10s pro</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cost Calculator -->
+    <div id="cost-calculator" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:32px;margin-bottom:48px">
+      <h2 style="font-size:20px;font-weight:800;text-align:center;margin-bottom:24px" id="t-calc-title">コスト電卓</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:500px;margin:0 auto 24px">
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" id="t-calc-convos">月間会話数</label>
+          <input type="number" id="calc-convos" value="100" min="1" max="10000" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 14px;font-size:15px;outline:none">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" id="t-calc-tokens">平均トークン/会話</label>
+          <input type="number" id="calc-tokens" value="500" min="50" max="50000" step="50" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 14px;font-size:15px;outline:none">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px" id="t-calc-model">モデル</label>
+        <select id="calc-model" style="width:100%;max-width:500px;display:block;margin:0 auto 24px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 14px;font-size:15px;outline:none"></select>
+      </div>
+      <div style="text-align:center;padding:20px;background:rgba(99,102,241,0.06);border-radius:10px;max-width:500px;margin:0 auto">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px" id="t-calc-result">月間推定コスト</div>
+        <div id="calc-result" style="font-size:36px;font-weight:800;color:var(--accent);letter-spacing:-1px">$0.00</div>
+        <div id="calc-detail" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
       </div>
     </div>
 
@@ -800,6 +881,65 @@
         }
       });
     });
+
+    // Model pricing data (kept in sync with pricing.rs)
+    const MODEL_PRICING = [
+      { model: 'gpt-4o',          provider: 'OpenAI',    input: 2.50,  output: 10.00, ctx: 128000 },
+      { model: 'gpt-4o-mini',     provider: 'OpenAI',    input: 0.15,  output: 0.60,  ctx: 128000 },
+      { model: 'gpt-4.1',         provider: 'OpenAI',    input: 2.00,  output: 8.00,  ctx: 1048576 },
+      { model: 'gpt-4.1-mini',    provider: 'OpenAI',    input: 0.40,  output: 1.60,  ctx: 1048576 },
+      { model: 'gpt-4.1-nano',    provider: 'OpenAI',    input: 0.10,  output: 0.40,  ctx: 1048576 },
+      { model: 'claude-sonnet-4-5', provider: 'Anthropic', input: 3.00,  output: 15.00, ctx: 200000 },
+      { model: 'claude-haiku-3-5',  provider: 'Anthropic', input: 1.00,  output: 5.00,  ctx: 200000 },
+      { model: 'claude-opus-4-5',   provider: 'Anthropic', input: 5.00,  output: 25.00, ctx: 200000 },
+      { model: 'gemini-2.5-flash',  provider: 'Google',   input: 0.15,  output: 0.60,  ctx: 1048576 },
+      { model: 'gemini-2.0-flash',  provider: 'Google',   input: 0.10,  output: 0.40,  ctx: 1048576 },
+      { model: 'llama-3.3-70b',     provider: 'Groq',     input: 0.59,  output: 0.79,  ctx: 128000 },
+    ];
+
+    function renderModelTable() {
+      const tbody = document.getElementById('model-table-body');
+      tbody.innerHTML = MODEL_PRICING.map(m =>
+        '<tr style="border-top:1px solid var(--border)">' +
+        '<td style="padding:10px 16px;font-size:13px;font-weight:600">' + m.model + '</td>' +
+        '<td style="padding:10px 16px;font-size:13px;color:var(--muted)">' + m.provider + '</td>' +
+        '<td style="padding:10px 16px;font-size:13px;text-align:right;color:var(--green)">$' + m.input.toFixed(2) + '</td>' +
+        '<td style="padding:10px 16px;font-size:13px;text-align:right;color:var(--green)">$' + m.output.toFixed(2) + '</td>' +
+        '<td style="padding:10px 16px;font-size:13px;text-align:right">' + (m.ctx >= 1000000 ? (m.ctx/1000000).toFixed(0)+'M' : (m.ctx/1000)+'K') + '</td>' +
+        '</tr>'
+      ).join('');
+    }
+
+    function renderCalcModelSelect() {
+      const sel = document.getElementById('calc-model');
+      sel.innerHTML = MODEL_PRICING.map(m =>
+        '<option value="' + m.model + '">' + m.model + ' (' + m.provider + ') — $' + m.input + '/$' + m.output + '</option>'
+      ).join('');
+    }
+
+    function updateCalcResult() {
+      const convos = parseInt(document.getElementById('calc-convos').value) || 100;
+      const tokensPerConvo = parseInt(document.getElementById('calc-tokens').value) || 500;
+      const modelName = document.getElementById('calc-model').value;
+      const m = MODEL_PRICING.find(p => p.model === modelName) || MODEL_PRICING[0];
+      const totalTokens = convos * tokensPerConvo;
+      // Assume 60% input, 40% output
+      const inputTokens = totalTokens * 0.6;
+      const outputTokens = totalTokens * 0.4;
+      const cost = (inputTokens / 1000000) * m.input + (outputTokens / 1000000) * m.output;
+      document.getElementById('calc-result').textContent = '$' + cost.toFixed(2);
+      const l = document.documentElement.lang || 'ja';
+      document.getElementById('calc-detail').textContent = l === 'ja'
+        ? (totalTokens.toLocaleString() + ' tokens/月 × ' + m.model)
+        : (totalTokens.toLocaleString() + ' tokens/mo × ' + m.model);
+    }
+
+    renderModelTable();
+    renderCalcModelSelect();
+    updateCalcResult();
+    document.getElementById('calc-convos').addEventListener('input', updateCalcResult);
+    document.getElementById('calc-tokens').addEventListener('input', updateCalcResult);
+    document.getElementById('calc-model').addEventListener('change', updateCalcResult);
 
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
     applyRegionPricing();

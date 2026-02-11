@@ -1862,6 +1862,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/link/status/{code}", get(handle_link_status))
         // MCP endpoint
         .route("/mcp", post(handle_mcp))
+        // A/B test
+        .route("/api/v1/ab/variant", get(handle_ab_variant))
+        .route("/api/v1/ab/event", post(handle_ab_event))
+        .route("/api/v1/ab/stats", get(handle_ab_stats))
         // AI agent friendly
         .route("/robots.txt", get(handle_robots_txt))
         .route("/llms.txt", get(handle_llms_txt))
@@ -1915,7 +1919,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                 .allow_headers([
                     http::header::CONTENT_TYPE,
                     http::header::AUTHORIZATION,
-                ]),
+                ])
+                .max_age(std::time::Duration::from_secs(86400)),
         )
         .with_state(state)
 }
@@ -3670,6 +3675,9 @@ async fn handle_telegram_webhook(
 ) -> impl IntoResponse {
     // Verify Telegram webhook secret token if configured
     let webhook_secret = std::env::var("TELEGRAM_WEBHOOK_SECRET").unwrap_or_default();
+    if webhook_secret.is_empty() {
+        tracing::warn!("TELEGRAM_WEBHOOK_SECRET not set — webhook verification disabled");
+    }
     if !webhook_secret.is_empty() {
         let provided = headers.get("x-telegram-bot-api-secret-token")
             .and_then(|v| v.to_str().ok())
@@ -7679,7 +7687,7 @@ async fn handle_status_ping(
     // --- Anthropic ---
     let anthropic_configured = std::env::var("ANTHROPIC_API_KEY").map(|k| !k.is_empty()).unwrap_or(false);
     if anthropic_configured {
-        let key = std::env::var("ANTHROPIC_API_KEY").unwrap();
+        let key = std::env::var("ANTHROPIC_API_KEY").unwrap_or_default();
         let c = client.clone();
         handles.push(tokio::spawn(async move {
             let start = std::time::Instant::now();
@@ -7760,7 +7768,7 @@ async fn handle_status_ping(
     // --- Groq ---
     let groq_configured = std::env::var("GROQ_API_KEY").map(|k| !k.is_empty()).unwrap_or(false);
     if groq_configured {
-        let key = std::env::var("GROQ_API_KEY").unwrap();
+        let key = std::env::var("GROQ_API_KEY").unwrap_or_default();
         let c = client.clone();
         handles.push(tokio::spawn(async move {
             let start = std::time::Instant::now();
@@ -8127,7 +8135,10 @@ fn hash_password(password: &str, salt: &str) -> String {
 
     let key = std::env::var("PASSWORD_HMAC_KEY")
         .or_else(|_| std::env::var("GOOGLE_CLIENT_SECRET"))
-        .unwrap_or_else(|_| "chatweb-default-key".to_string());
+        .unwrap_or_else(|_| {
+            tracing::warn!("PASSWORD_HMAC_KEY not set — using fallback key");
+            "chatweb-default-key-CHANGE-ME".to_string()
+        });
     let mut mac = HmacSha256::new_from_slice(key.as_bytes()).expect("HMAC key");
     mac.update(password.as_bytes());
     mac.update(salt.as_bytes());
@@ -9723,6 +9734,8 @@ struct SpeechRequest {
     speed: f64,
     #[serde(default)]
     engine: Option<String>, // "polly" or "openai" — auto if absent
+    #[serde(default)]
+    instructions: Option<String>, // Voice style instructions for gpt-4o-mini-tts
     session_id: Option<String>,
 }
 
@@ -9802,8 +9815,8 @@ async fn try_polly_tts(text: &str) -> Option<Vec<u8>> {
     }
 }
 
-/// Fallback: OpenAI TTS API
-async fn try_openai_tts(text: &str, voice: &str, speed: f64) -> Result<Vec<u8>, String> {
+/// OpenAI TTS API — uses gpt-4o-mini-tts for natural, steerable voice
+async fn try_openai_tts(text: &str, voice: &str, speed: f64, instructions: Option<&str>) -> Result<Vec<u8>, String> {
     let api_key = std::env::var("OPENAI_API_KEY")
         .or_else(|_| std::env::var("OPENAI_API_KEYS").map(|keys| {
             keys.split(',').next().unwrap_or("").trim().to_string()
@@ -9814,15 +9827,31 @@ async fn try_openai_tts(text: &str, voice: &str, speed: f64) -> Result<Vec<u8>, 
         return Err("Empty OpenAI API key".to_string());
     }
 
+    // Detect Japanese text for auto-instructions
+    let is_ja = text.chars().any(|c| {
+        ('\u{3040}'..='\u{309F}').contains(&c) || // hiragana
+        ('\u{30A0}'..='\u{30FF}').contains(&c) || // katakana
+        ('\u{4E00}'..='\u{9FFF}').contains(&c)    // CJK
+    });
+
+    let default_instructions = if is_ja {
+        "自然な日本語で話してください。温かく親しみやすいトーンで、会話するように。明瞭な発音で、適度なスピードで。感情を込めて、機械的にならないように。"
+    } else {
+        "Speak naturally in a warm, friendly tone. Clear pronunciation at a comfortable pace."
+    };
+
+    let voice_instructions = instructions.unwrap_or(default_instructions);
+
     let client = reqwest::Client::new();
     let resp = client
         .post("https://api.openai.com/v1/audio/speech")
         .header("Authorization", format!("Bearer {}", api_key))
         .json(&serde_json::json!({
-            "model": "tts-1-hd",
+            "model": "gpt-4o-mini-tts",
             "input": text,
             "voice": voice,
             "speed": speed,
+            "instructions": voice_instructions,
             "response_format": "mp3",
         }))
         .send()
@@ -9891,16 +9920,16 @@ async fn handle_speech_synthesize(
         }
     }
 
-    // TTS priority: OpenAI tts-1-hd (most expressive) → AWS Polly Kazuha Neural → fail
+    // TTS priority: OpenAI gpt-4o-mini-tts (most natural, steerable) → AWS Polly Kazuha Neural → fail
     // Frontend adds browser SpeechSynthesis as final fallback
     let force_engine = req.engine.as_deref();
     let mut audio_bytes: Option<Vec<u8>> = None;
 
-    // 1st: OpenAI tts-1-hd (most natural, expressive voices)
+    // 1st: OpenAI gpt-4o-mini-tts (most natural, steerable voices)
     if force_engine != Some("polly") {
-        match try_openai_tts(&req.text, &req.voice, req.speed).await {
+        match try_openai_tts(&req.text, &req.voice, req.speed, req.instructions.as_deref()).await {
             Ok(bytes) => {
-                tracing::info!("TTS: OpenAI tts-1-hd success, {} bytes", bytes.len());
+                tracing::info!("TTS: gpt-4o-mini-tts success, {} bytes", bytes.len());
                 audio_bytes = Some(bytes);
             }
             Err(e) => tracing::warn!("TTS: OpenAI failed ({}), trying Polly...", e),

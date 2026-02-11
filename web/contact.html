@@ -173,6 +173,12 @@
     }
     footer a { color: var(--muted); text-decoration: none; }
     footer a:hover { color: var(--text); }
+    @media (max-width: 600px) {
+      .container { padding: 16px; }
+      h1 { font-size: 24px; }
+      .form-group { margin-bottom: 12px; }
+      .submit-btn { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -208,17 +214,17 @@
 
       <div class="form-group">
         <label for="name" id="t-name-label">Name (optional)</label>
-        <input type="text" id="name" placeholder="">
+        <input type="text" id="name" placeholder="Your name">
       </div>
 
       <div class="form-group">
         <label for="email" id="t-email-label">Email (optional)</label>
-        <input type="email" id="email" placeholder="">
+        <input type="email" id="email" placeholder="you@example.com">
       </div>
 
       <div class="form-group">
         <label for="message" id="t-msg-label">Message *</label>
-        <textarea id="message" required placeholder=""></textarea>
+        <textarea id="message" required placeholder="Describe the issue or your request..."></textarea>
       </div>
 
       <button type="submit" class="submit-btn" id="submit-btn">Send</button>

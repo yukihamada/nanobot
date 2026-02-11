@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>chatweb.ai - お願いしたら、本当にやってくれるAI</title>
   <meta name="description" content="声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料で始められます。">
   <!-- Favicon -->
@@ -72,6 +72,10 @@
       --green: #22c55e;
       --line: #06C755;
       --tg: #2AABEE;
+    }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible, select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -1941,6 +1945,96 @@
     @keyframes tts-pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
     .tts-stop-float .tts-pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: tts-pulse 1.2s infinite; }
 
+    /* Voice conversation state indicator */
+    .voice-state-bar {
+      display: none;
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 199;
+      padding: 8px 20px;
+      border-radius: 20px;
+      backdrop-filter: blur(12px);
+      font-size: 13px;
+      font-weight: 500;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+    .voice-state-bar.visible { display: flex; }
+    .voice-state-bar.state-listening {
+      background: rgba(34,197,94,0.12);
+      color: #22c55e;
+      border: 1px solid rgba(34,197,94,0.3);
+      box-shadow: 0 2px 12px rgba(34,197,94,0.15);
+    }
+    .voice-state-bar.state-thinking {
+      background: rgba(99,102,241,0.12);
+      color: #6366f1;
+      border: 1px solid rgba(99,102,241,0.3);
+      box-shadow: 0 2px 12px rgba(99,102,241,0.15);
+    }
+    .voice-state-bar.state-speaking {
+      background: rgba(168,85,247,0.12);
+      color: #a855f7;
+      border: 1px solid rgba(168,85,247,0.3);
+      box-shadow: 0 2px 12px rgba(168,85,247,0.15);
+    }
+    /* Sound wave animation */
+    .voice-wave {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 16px;
+    }
+    .voice-wave-bar {
+      width: 3px;
+      border-radius: 2px;
+      background: currentColor;
+      animation: voice-wave-anim 0.8s ease-in-out infinite;
+    }
+    .voice-wave-bar:nth-child(1) { height: 40%; animation-delay: 0s; }
+    .voice-wave-bar:nth-child(2) { height: 70%; animation-delay: 0.1s; }
+    .voice-wave-bar:nth-child(3) { height: 100%; animation-delay: 0.2s; }
+    .voice-wave-bar:nth-child(4) { height: 60%; animation-delay: 0.3s; }
+    .voice-wave-bar:nth-child(5) { height: 30%; animation-delay: 0.15s; }
+    @keyframes voice-wave-anim {
+      0%, 100% { transform: scaleY(0.4); }
+      50% { transform: scaleY(1); }
+    }
+    /* Listening dots animation */
+    .voice-listen-dots {
+      display: flex;
+      gap: 3px;
+      align-items: center;
+    }
+    .voice-listen-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: listen-bounce 1.2s ease-in-out infinite;
+    }
+    .voice-listen-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .voice-listen-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes listen-bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+    /* Auto-listen toggle in settings */
+    .voice-loop-badge {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 6px;
+      background: rgba(34,197,94,0.15);
+      color: #22c55e;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
     /* TTS button */
     .app-tts-btn {
       display: inline-flex;
@@ -2552,7 +2646,7 @@
     }
   </script>
   <nav>
-    <button class="app-sidebar-toggle" id="app-sidebar-toggle" onclick="toggleSidebar()" style="display:none;">&#x2630;</button>
+    <button class="app-sidebar-toggle" id="app-sidebar-toggle" onclick="toggleSidebar()" style="display:none;" aria-label="Toggle sidebar">&#x2630;</button>
     <a href="/" class="logo" style="text-decoration:none"><span>chat</span>web.ai</a>
     <div class="nav-right">
       <a href="/pricing" id="nav-pricing">Pricing</a>
@@ -2586,7 +2680,7 @@
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <h3 id="sidebar-title">Conversations</h3>
-      <button class="sidebar-close" onclick="toggleSidebar()">&#x2715;</button>
+      <button class="sidebar-close" onclick="toggleSidebar()" aria-label="Close sidebar">&#x2715;</button>
     </div>
     <button class="sidebar-new-btn" id="new-conv-btn" onclick="newConversation()">+ New Conversation</button>
     <div class="sidebar-list" id="conv-list"></div>
@@ -2957,13 +3051,13 @@
       <h3 id="auth-modal-title">ログイン</h3>
       <div class="auth-error" id="auth-error" style="display:none;"></div>
       <div id="auth-form-email">
-        <input type="text" class="auth-input" id="login-name" placeholder="お名前（ニックネームOK）" maxlength="30" onkeydown="if(event.key==='Enter')document.getElementById('login-email').focus()">
-        <input type="email" class="auth-input" id="login-email" placeholder="Email" onkeydown="if(event.key==='Enter')emailAuth()">
+        <input type="text" class="auth-input" id="login-name" placeholder="お名前（ニックネームOK）" maxlength="30" aria-label="Name" onkeydown="if(event.key==='Enter')document.getElementById('login-email').focus()">
+        <input type="email" class="auth-input" id="login-email" placeholder="Email" aria-label="Email" onkeydown="if(event.key==='Enter')emailAuth()">
         <button class="auth-submit" id="email-auth-btn" onclick="emailAuth()">メールでログイン</button>
       </div>
       <div id="auth-form-verify" style="display:none;">
         <p style="font-size:13px;color:var(--muted);margin-bottom:8px;" id="verify-hint">認証コードをメールに送信しました</p>
-        <input type="text" class="auth-input" id="verify-code" placeholder="6桁の認証コード" maxlength="6" inputmode="numeric" pattern="[0-9]*" onkeydown="if(event.key==='Enter')verifyCode()" style="text-align:center;letter-spacing:6px;font-size:20px;">
+        <input type="text" class="auth-input" id="verify-code" placeholder="6桁の認証コード" maxlength="6" inputmode="numeric" pattern="[0-9]*" aria-label="Verification code" onkeydown="if(event.key==='Enter')verifyCode()" style="text-align:center;letter-spacing:6px;font-size:20px;">
         <button class="auth-submit" onclick="verifyCode()">認証する</button>
         <button class="auth-submit" style="background:transparent;color:var(--muted);margin-top:4px;" onclick="showEmailForm()">戻る</button>
       </div>
@@ -2983,7 +3077,7 @@
         <div style="font-size:48px;margin-bottom:12px;animation:float 3s ease-in-out infinite;">&#x1F44B;</div>
         <h3 style="font-size:22px;font-weight:800;margin-bottom:6px;" id="onboard-title">ようこそ、ChatWebへ</h3>
         <p style="font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.6;" id="onboard-desc">あなたの名前を教えてください。<br>声で呼びかけるときに使います。</p>
-        <input type="text" class="auth-input" id="onboard-name" placeholder="お名前（ニックネームOK）" maxlength="30" style="text-align:center;font-size:16px;margin-bottom:16px;" onkeydown="if(event.key==='Enter')onboardNext()">
+        <input type="text" class="auth-input" id="onboard-name" placeholder="お名前（ニックネームOK）" maxlength="30" aria-label="Your name" style="text-align:center;font-size:16px;margin-bottom:16px;" onkeydown="if(event.key==='Enter')onboardNext()">
         <button class="auth-submit" onclick="onboardNext()" style="width:100%;font-size:15px;padding:14px;">次へ</button>
       </div>
       <div id="onboard-step-2" style="display:none;">
@@ -3053,7 +3147,7 @@
         <div style="font-size:48px;margin-bottom:8px;">&#x2705;</div>
         <div id="modal-success-text" style="font-size:16px;font-weight:600;color:var(--green);"></div>
       </div>
-      <button class="close-btn" id="modal-close-btn" onclick="document.getElementById('modal').classList.remove('show');stopLinkPoll();">閉じる</button>
+      <button class="close-btn" id="modal-close-btn" aria-label="Close" onclick="document.getElementById('modal').classList.remove('show');stopLinkPoll();">閉じる</button>
     </div>
   </div>
 
@@ -3107,6 +3201,13 @@
           </div>
           <button class="settings-toggle" id="settings-explore-toggle" onclick="toggleExploreSetting()"></button>
         </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#127908; ハンズフリー会話</div>
+            <div class="settings-item-desc" id="settings-autolisten-desc">音声応答後に自動でマイクON（連続会話モード）</div>
+          </div>
+          <button class="settings-toggle" id="settings-autolisten-toggle" onclick="toggleAutoListen()"></button>
+        </div>
         <div class="settings-item" id="settings-adult-section" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:8px;">
           <div class="settings-item-info">
             <div class="settings-item-label">&#128274; Adult Mode</div>
@@ -3144,7 +3245,7 @@
           <div class="settings-item-label" style="margin-bottom:6px;">Temperature <span class="settings-range-val" id="temp-val">0.7</span></div>
           <div class="settings-range-row">
             <span style="font-size:11px;color:var(--muted);">0</span>
-            <input type="range" id="settings-temperature" min="0" max="1.5" step="0.1" value="0.7" oninput="document.getElementById('temp-val').textContent=this.value;saveLlmSettings()">
+            <input type="range" id="settings-temperature" min="0" max="1.5" step="0.1" value="0.7" aria-label="Temperature" oninput="document.getElementById('temp-val').textContent=this.value;saveLlmSettings()">
             <span style="font-size:11px;color:var(--muted);">1.5</span>
           </div>
           <div class="settings-item-desc">低い=正確・決定的、高い=創造的・多様</div>
@@ -3153,7 +3254,7 @@
           <div class="settings-item-label" style="margin-bottom:6px;">Max Tokens <span class="settings-range-val" id="maxtok-val">4096</span></div>
           <div class="settings-range-row">
             <span style="font-size:11px;color:var(--muted);">256</span>
-            <input type="range" id="settings-max-tokens" min="256" max="8192" step="256" value="4096" oninput="document.getElementById('maxtok-val').textContent=this.value;saveLlmSettings()">
+            <input type="range" id="settings-max-tokens" min="256" max="8192" step="256" value="4096" aria-label="Maximum tokens" oninput="document.getElementById('maxtok-val').textContent=this.value;saveLlmSettings()">
             <span style="font-size:11px;color:var(--muted);">8192</span>
           </div>
           <div class="settings-item-desc">応答の最大長。大きいほどクレジット消費が増加</div>
@@ -3171,7 +3272,7 @@
             <option value="anthropic">Anthropic</option>
             <option value="google">Google</option>
           </select>
-          <input type="password" id="byok-key" placeholder="sk-... / key-..." style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;" onchange="saveLlmSettings()">
+          <input type="password" id="byok-key" placeholder="sk-... / key-..." aria-label="API key" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;" onchange="saveLlmSettings()">
         </div>
       </div>
 
@@ -3457,6 +3558,12 @@
   <button class="tts-stop-float" id="tts-stop-float" onclick="stopTTS()">
     <span class="tts-pulse-dot"></span> 読み上げ停止
   </button>
+
+  <!-- Voice conversation state indicator -->
+  <div class="voice-state-bar" id="voice-state-bar">
+    <span id="voice-state-icon"></span>
+    <span id="voice-state-text"></span>
+  </div>
 
   <!-- Phone Panel -->
   <div class="phone-panel" id="phone-panel">
@@ -6383,6 +6490,48 @@
     let isRecording = false;
     let voiceInitiated = false; // Track if message was voice-initiated for auto-TTS
 
+    // -----------------------------------------------------------------------
+    // Voice Conversation Engine — Auto-listen, silence detection, barge-in
+    // -----------------------------------------------------------------------
+    let _silenceTimer = null;
+    let _voiceFinalTranscript = '';
+    let _voiceConversationActive = false; // true when in hands-free loop
+    let _autoListenEnabled = localStorage.getItem('autoListenEnabled') === 'true';
+    let _voiceState = 'idle'; // 'idle' | 'listening' | 'thinking' | 'speaking'
+    const _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const SILENCE_MS = 1500; // 1.5s silence timeout for Japanese
+    const RELISTEN_DELAY_MS = 400; // Delay before re-listening (avoid picking up TTS tail)
+
+    function setVoiceState(state) {
+      _voiceState = state;
+      const bar = document.getElementById('voice-state-bar');
+      const icon = document.getElementById('voice-state-icon');
+      const text = document.getElementById('voice-state-text');
+      if (!bar) return;
+
+      bar.className = 'voice-state-bar';
+      if (state === 'idle') {
+        bar.classList.remove('visible');
+        return;
+      }
+      bar.classList.add('visible');
+      if (state === 'listening') {
+        bar.classList.add('state-listening');
+        icon.innerHTML = '<span class="voice-listen-dots"><span></span><span></span><span></span></span>';
+        text.textContent = '聞いています...';
+      } else if (state === 'thinking') {
+        bar.classList.add('state-thinking');
+        icon.innerHTML = '&#129504;';
+        text.textContent = '考え中...';
+      } else if (state === 'speaking') {
+        bar.classList.add('state-speaking');
+        icon.innerHTML = '<span class="voice-wave"><span class="voice-wave-bar"></span><span class="voice-wave-bar"></span><span class="voice-wave-bar"></span><span class="voice-wave-bar"></span><span class="voice-wave-bar"></span></span>';
+        text.textContent = '話しています...';
+      }
+    }
+
     function initSpeechRecognition() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) {
@@ -6391,96 +6540,177 @@
       }
       speechRecognition = new SpeechRecognition();
       speechRecognition.lang = 'ja-JP';
-      speechRecognition.continuous = true;
       speechRecognition.interimResults = true;
 
-      let finalTranscript = '';
+      // iOS Safari: continuous mode is broken — use single-shot
+      if (_isIOS && _isSafari) {
+        speechRecognition.continuous = false;
+      } else {
+        speechRecognition.continuous = true;
+      }
+
       speechRecognition.onresult = function(e) {
+        // Reset silence timer on each result (custom Japanese silence detection)
+        clearTimeout(_silenceTimer);
+
         let interim = '';
         for (let i = e.resultIndex; i < e.results.length; i++) {
           if (e.results[i].isFinal) {
-            finalTranscript += e.results[i][0].transcript;
+            _voiceFinalTranscript += e.results[i][0].transcript;
           } else {
             interim += e.results[i][0].transcript;
           }
         }
         const textarea = document.getElementById('app-input');
-        textarea.value = finalTranscript + interim;
+        textarea.value = _voiceFinalTranscript + interim;
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
+
+        // Japanese silence detection: auto-send after 1.5s of silence
+        if (_voiceFinalTranscript.trim() || interim.trim()) {
+          _silenceTimer = setTimeout(function() {
+            if (isRecording && _voiceFinalTranscript.trim()) {
+              speechRecognition.stop();
+            }
+          }, SILENCE_MS);
+        }
       };
 
       speechRecognition.onend = function() {
+        clearTimeout(_silenceTimer);
         isRecording = false;
         const btn = document.getElementById('app-mic-btn');
         if (btn) btn.classList.remove('recording');
         const heroBtn = document.getElementById('voice-hero-btn');
         if (heroBtn) heroBtn.classList.remove('recording');
         updateVoiceHeroLabel();
-        if (finalTranscript.trim()) {
+
+        if (_voiceFinalTranscript.trim()) {
           voiceInitiated = true;
+          if (_autoListenEnabled) _voiceConversationActive = true;
+          setVoiceState('thinking');
           appSend();
+        } else {
+          setVoiceState('idle');
+          _voiceConversationActive = false;
         }
-        finalTranscript = '';
+        _voiceFinalTranscript = '';
       };
 
       speechRecognition.onerror = function(e) {
+        clearTimeout(_silenceTimer);
         isRecording = false;
         const btn = document.getElementById('app-mic-btn');
         if (btn) btn.classList.remove('recording');
         const heroBtn = document.getElementById('voice-hero-btn');
         if (heroBtn) heroBtn.classList.remove('recording');
         updateVoiceHeroLabel();
-        finalTranscript = '';
+        _voiceFinalTranscript = '';
+
         if (e.error === 'not-allowed') {
           alert('マイクへのアクセスが拒否されました。ブラウザの設定でマイクを許可してください。');
+        } else if (e.error === 'no-speech' && _voiceConversationActive) {
+          // No speech detected but in conversation loop — restart listening
+          setTimeout(function() { startListening(); }, 300);
+          return;
         }
+        setVoiceState('idle');
       };
     }
 
-    function toggleSpeechRecognition() {
+    function startListening() {
       if (!speechRecognition) {
         initSpeechRecognition();
         if (!speechRecognition) return;
       }
-      const btn = document.getElementById('app-mic-btn');
-      if (isRecording) {
-        speechRecognition.stop();
-        isRecording = false;
-        if (btn) btn.classList.remove('recording');
-      } else {
+      // Barge-in: stop any TTS playing
+      if (ttsPlaying || (currentAudio && !currentAudio.paused)) {
+        stopTTS();
+      }
+      try {
         speechRecognition.start();
-        isRecording = true;
-        if (btn) btn.classList.add('recording');
+      } catch(e) {
+        // InvalidStateError if already started — stop and restart
+        try { speechRecognition.stop(); } catch(_) {}
+        setTimeout(function() {
+          try { speechRecognition.start(); } catch(_) {}
+        }, 100);
+      }
+      isRecording = true;
+      const btn = document.getElementById('app-mic-btn');
+      if (btn) btn.classList.add('recording');
+      const heroBtn = document.getElementById('voice-hero-btn');
+      if (heroBtn) heroBtn.classList.add('recording');
+      updateVoiceHeroLabel();
+      setVoiceState('listening');
+    }
+
+    function stopListening() {
+      clearTimeout(_silenceTimer);
+      if (speechRecognition && isRecording) {
+        try { speechRecognition.stop(); } catch(_) {}
+      }
+      isRecording = false;
+      const btn = document.getElementById('app-mic-btn');
+      if (btn) btn.classList.remove('recording');
+      const heroBtn = document.getElementById('voice-hero-btn');
+      if (heroBtn) heroBtn.classList.remove('recording');
+      updateVoiceHeroLabel();
+    }
+
+    function toggleSpeechRecognition() {
+      if (isRecording) {
+        stopListening();
+        _voiceConversationActive = false;
+        setVoiceState('idle');
+      } else {
+        startListening();
       }
     }
 
     // Voice hero button (large mic in empty state)
     function toggleVoiceHero() {
-      if (!speechRecognition) {
-        initSpeechRecognition();
-        if (!speechRecognition) return;
-      }
-      const heroBtn = document.getElementById('voice-hero-btn');
-      const micBtn = document.getElementById('app-mic-btn');
       if (isRecording) {
-        speechRecognition.stop();
-        isRecording = false;
-        if (heroBtn) heroBtn.classList.remove('recording');
-        if (micBtn) micBtn.classList.remove('recording');
+        stopListening();
+        _voiceConversationActive = false;
+        setVoiceState('idle');
       } else {
-        speechRecognition.start();
-        isRecording = true;
-        if (heroBtn) heroBtn.classList.add('recording');
-        if (micBtn) micBtn.classList.add('recording');
+        startListening();
       }
-      updateVoiceHeroLabel();
     }
 
     function updateVoiceHeroLabel() {
       const label = document.getElementById('voice-hero-label');
       if (!label) return;
-      label.textContent = isRecording ? '聞いています...' : 'タップして、話しかけてみて';
+      const l = document.documentElement.lang || 'ja';
+      if (isRecording) {
+        label.textContent = l === 'ja' ? '聞いています...' : 'Listening...';
+      } else if (_voiceConversationActive) {
+        label.textContent = l === 'ja' ? '会話中...' : 'In conversation...';
+      } else {
+        label.textContent = l === 'ja' ? 'タップして、話しかけてみて' : 'Tap to talk';
+      }
+    }
+
+    // Auto-listen after TTS completes (hands-free conversation loop)
+    function onTTSComplete() {
+      if (_voiceConversationActive && _autoListenEnabled && voiceInitiated) {
+        // Brief delay to avoid picking up TTS audio tail
+        setTimeout(function() {
+          if (!isRecording && _voiceConversationActive) {
+            startListening();
+          }
+        }, RELISTEN_DELAY_MS);
+      } else {
+        setVoiceState('idle');
+      }
+    }
+
+    function toggleAutoListen() {
+      _autoListenEnabled = !_autoListenEnabled;
+      localStorage.setItem('autoListenEnabled', _autoListenEnabled);
+      const btn = document.getElementById('settings-autolisten-toggle');
+      if (btn) btn.classList.toggle('active', _autoListenEnabled);
     }
 
     // Voice character selection
@@ -6645,6 +6875,9 @@
       document.getElementById('settings-tts-toggle').classList.toggle('active', autoTtsEnabled);
       const exploreOn = document.getElementById('explore-check')?.checked || false;
       document.getElementById('settings-explore-toggle').classList.toggle('active', exploreOn);
+      // auto-listen toggle
+      const autoListenBtn = document.getElementById('settings-autolisten-toggle');
+      if (autoListenBtn) autoListenBtn.classList.toggle('active', _autoListenEnabled);
       // adult mode toggle
       initAdultModeUI();
       const adultBtn = document.getElementById('settings-adult-toggle');
@@ -6760,15 +6993,27 @@
 
     // Auto-play TTS on every bot response (when enabled)
     // Uses sentence-level parallel TTS for fastest playback
-    // If already playing, interrupts with a transition phrase before new content
+    // Handles voice conversation state transitions
     function autoPlayTTS(text) {
       if (!autoTtsEnabled) return;
       if (!text || text.length < 2) return;
       // Strip markdown formatting for cleaner speech
-      const clean = text.replace(/#{1,6}\s/g, '').replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
-        .replace(/`[^`]+`/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/^[-*]\s/gm, '').replace(/^\d+\.\s/gm, '').trim();
+      const clean = text
+        .replace(/#{1,6}\s/g, '')                    // headers
+        .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')    // bold/italic
+        .replace(/```[\s\S]*?```/g, '')              // code blocks
+        .replace(/`[^`]+`/g, '')                     // inline code
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')    // links
+        .replace(/^[-*]\s/gm, '')                    // bullets
+        .replace(/^\d+\.\s/gm, '')                   // numbered lists
+        .replace(/\[AUDIO:[^\]]+\]/g, '')            // audio markers
+        .replace(/\[VIDEO:[^\]]+\]/g, '')            // video markers
+        .replace(/!\[[^\]]*\]\([^)]+\)/g, '')        // images
+        .replace(/https?:\/\/\S+/g, '')              // URLs
+        .trim();
       if (clean.length < 2) return;
+
+      setVoiceState('speaking');
 
       const wasPlaying = ttsPlaying || (currentAudio && !currentAudio.paused);
       if (wasPlaying) {
@@ -6794,25 +7039,50 @@
     let ttsAborted = false;
     let ttsPendingCount = 0; // how many fetches are in-flight
 
-    // Split text into sentences (Japanese + English boundaries)
+    // Split text into sentences (optimized for Japanese TTS naturalness)
     function splitSentences(text) {
-      // Split on 。！？ and .!? (but not decimals like 3.14)
+      // Primary: split on 。！？ and .!? (keep delimiter attached)
       const parts = text.split(/(?<=[。！？\!\?])\s*|(?<=\.)\s+/);
-      // Merge very short fragments (< 8 chars) with previous
       const merged = [];
       for (const p of parts) {
         const t = p.trim();
         if (!t) continue;
-        if (merged.length > 0 && t.length < 8) {
+        // Merge very short fragments (< 10 chars) with previous
+        if (merged.length > 0 && t.length < 10) {
           merged[merged.length - 1] += t;
         } else {
           merged.push(t);
         }
       }
-      return merged.filter(s => s.length > 0);
+      // Secondary: split overly long segments at 、 (Japanese comma) for natural TTS
+      const result = [];
+      for (const seg of merged) {
+        if (seg.length > 80) {
+          // Split at 、 but keep the comma attached, merge short pieces
+          const subparts = seg.split(/(?<=、)/);
+          let buf = '';
+          for (const sp of subparts) {
+            buf += sp;
+            if (buf.length >= 30) {
+              result.push(buf.trim());
+              buf = '';
+            }
+          }
+          if (buf.trim()) {
+            if (result.length > 0 && buf.trim().length < 15) {
+              result[result.length - 1] += buf.trim();
+            } else {
+              result.push(buf.trim());
+            }
+          }
+        } else {
+          result.push(seg);
+        }
+      }
+      return result.filter(s => s.length > 0);
     }
 
-    // Fetch TTS audio for a single sentence
+    // Fetch TTS audio for a single sentence with natural Japanese voice instructions
     async function fetchTtsAudio(sentence) {
       var voice = selectedVoice || 'nova';
       const cacheKey = voice + ':' + sentence.substring(0, 4096);
@@ -6822,10 +7092,21 @@
       const hdrs = { 'Content-Type': 'application/json', 'x-session-id': webSessionId };
       if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
 
+      // Detect if sentence is Japanese
+      const isJa = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(sentence);
+      const instructions = isJa
+        ? '自然な日本語で話してください。温かく親しみやすいトーンで、友達と会話するように。明瞭な発音で、自然なスピードで。感情を込めて、抑揚をつけて。'
+        : 'Speak naturally in a warm, friendly conversational tone. Clear pronunciation at a natural pace.';
+
       const r = await fetch(API + '/api/v1/speech/synthesize', {
         method: 'POST',
         headers: hdrs,
-        body: JSON.stringify({ text: sentence.substring(0, 4096), voice: voice, session_id: webSessionId }),
+        body: JSON.stringify({
+          text: sentence.substring(0, 4096),
+          voice: voice,
+          instructions: instructions,
+          session_id: webSessionId,
+        }),
       });
 
       if (!r.ok) throw new Error('TTS HTTP ' + r.status);
@@ -6849,10 +7130,13 @@
             refreshCredits();
           }
           showTtsStopBtn(false);
+          // Trigger auto-listen loop
+          onTTSComplete();
         }
         return;
       }
       ttsPlaying = true;
+      setVoiceState('speaking');
       const item = ttsQueue.shift();
       const audio = new Audio(item.blobUrl);
       currentAudio = audio;
@@ -6930,6 +7214,7 @@
         currentTtsBtn = null;
       }
       showTtsStopBtn(false);
+      // Don't reset voice state here — barge-in will set it to 'listening'
     }
 
     // Browser built-in SpeechSynthesis fallback (works offline, zero latency)
