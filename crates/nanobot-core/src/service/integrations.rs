@@ -4090,7 +4090,7 @@ impl Tool for ArxivSearchTool {
             "required": ["query"]
         })
     }
-    async fn execute(&self, params: &HashMap<String, serde_json::Value>) -> String {
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
         let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
         if query.is_empty() {
             return "[TOOL_ERROR] query required".to_string();
