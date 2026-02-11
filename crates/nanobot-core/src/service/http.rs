@@ -1630,6 +1630,28 @@ pub struct GoogleAuthParams {
     pub sid: Option<String>,
 }
 
+// ── Partner API types (Elio integration) ──
+
+/// Request for partner credit granting.
+#[derive(Debug, Deserialize)]
+pub struct PartnerGrantCreditsRequest {
+    pub user_id: String,
+    pub credits: i64,
+    #[serde(default)]
+    pub source: String,
+    pub idempotency_key: String,
+}
+
+/// Request for partner subscription verification.
+#[derive(Debug, Deserialize)]
+pub struct PartnerVerifySubscriptionRequest {
+    pub user_id: String,
+    pub product_id: String,
+    pub transaction_id: String,
+    /// Original transaction ID for renewal tracking
+    pub original_transaction_id: Option<String>,
+}
+
 fn default_session_id() -> String {
     "api:default".to_string()
 }
@@ -1878,10 +1900,18 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/link/status/{code}", get(handle_link_status))
         // MCP endpoint
         .route("/mcp", post(handle_mcp))
+        // Partner API (Elio integration)
+        .route("/api/v1/partner/grant-credits", post(handle_partner_grant_credits))
+        .route("/api/v1/partner/verify-subscription", post(handle_partner_verify_subscription))
         // A/B test
         .route("/api/v1/ab/variant", get(handle_ab_variant))
         .route("/api/v1/ab/event", post(handle_ab_event))
         .route("/api/v1/ab/stats", get(handle_ab_stats))
+        // PWA
+        .route("/manifest.json", get(handle_manifest_json))
+        .route("/sw.js", get(handle_sw_js))
+        // API docs (path alias)
+        .route("/api-docs", get(handle_api_docs))
         // AI agent friendly
         .route("/robots.txt", get(handle_robots_txt))
         .route("/llms.txt", get(handle_llms_txt))
@@ -7059,6 +7089,261 @@ async fn handle_dl_redirect(
 }
 
 /// GET /health — Health check
+// ---------------------------------------------------------------------------
+// Partner API (Elio integration)
+// ---------------------------------------------------------------------------
+
+/// Validate partner API key from Authorization header.
+/// Partner keys have "PARTNER_" prefix and are stored in DynamoDB.
+#[cfg(feature = "dynamodb-backend")]
+async fn validate_partner_key(
+    dynamo: &aws_sdk_dynamodb::Client,
+    table: &str,
+    headers: &axum::http::HeaderMap,
+) -> bool {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    if !token.starts_with("PARTNER_") {
+        return false;
+    }
+
+    // Check if partner key exists in DynamoDB
+    let pk = format!("PARTNER_KEY#{}", token);
+    if let Ok(output) = dynamo
+        .get_item()
+        .table_name(table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S("KEY".to_string()))
+        .send()
+        .await
+    {
+        if let Some(item) = output.item {
+            let is_active = item.get("is_active")
+                .and_then(|v| v.as_bool().ok())
+                .copied()
+                .unwrap_or(false);
+            return is_active;
+        }
+    }
+    false
+}
+
+/// POST /api/v1/partner/grant-credits — Grant credits to a user (partner API)
+async fn handle_partner_grant_credits(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<PartnerGrantCreditsRequest>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            // Validate partner key
+            if !validate_partner_key(dynamo, table, &headers).await {
+                return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
+                    "error": "Invalid or inactive partner API key"
+                })));
+            }
+
+            // Validate request
+            if req.credits <= 0 || req.credits > 100_000 {
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                    "error": "Credits must be between 1 and 100,000"
+                })));
+            }
+            if req.idempotency_key.is_empty() || req.idempotency_key.len() > 128 {
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                    "error": "idempotency_key is required (max 128 chars)"
+                })));
+            }
+
+            // Check idempotency — prevent double-granting
+            let idem_pk = format!("IDEMPOTENT#{}", req.idempotency_key);
+            if let Ok(output) = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(idem_pk.clone()))
+                .key("sk", AttributeValue::S("GRANT".to_string()))
+                .send()
+                .await
+            {
+                if output.item.is_some() {
+                    return (StatusCode::OK, Json(serde_json::json!({
+                        "status": "already_processed",
+                        "idempotency_key": req.idempotency_key
+                    })));
+                }
+            }
+
+            // Atomic credit increment on USER# record
+            let user_pk = format!("USER#{}", req.user_id);
+            let _ = get_or_create_user(dynamo, table, &req.user_id).await;
+
+            let update_result = dynamo
+                .update_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .update_expression("SET credits_remaining = credits_remaining + :c, updated_at = :now")
+                .expression_attribute_values(":c", AttributeValue::N(req.credits.to_string()))
+                .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .send()
+                .await;
+
+            if let Err(e) = update_result {
+                tracing::error!("Failed to grant credits: {:?}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                    "error": "Failed to grant credits"
+                })));
+            }
+
+            // Store idempotency key with 30-day TTL
+            let ttl = (chrono::Utc::now().timestamp() + 30 * 86400).to_string();
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(idem_pk))
+                .item("sk", AttributeValue::S("GRANT".to_string()))
+                .item("user_id", AttributeValue::S(req.user_id.clone()))
+                .item("credits", AttributeValue::N(req.credits.to_string()))
+                .item("source", AttributeValue::S(req.source.clone()))
+                .item("created_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .item("ttl", AttributeValue::N(ttl))
+                .send()
+                .await;
+
+            // Audit log
+            emit_audit_log(dynamo.clone(), table.clone(), "partner_grant_credits", &req.user_id, "",
+                &format!("credits={} source={} key={}", req.credits, req.source, req.idempotency_key));
+
+            let profile = get_or_create_user(dynamo, table, &req.user_id).await;
+            return (StatusCode::OK, Json(serde_json::json!({
+                "status": "granted",
+                "credits_granted": req.credits,
+                "credits_remaining": profile.credits_remaining,
+                "idempotency_key": req.idempotency_key
+            })));
+        }
+    }
+
+    (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+        "error": "DynamoDB not configured"
+    })))
+}
+
+/// POST /api/v1/partner/verify-subscription — Verify Elio subscription and grant credits
+async fn handle_partner_verify_subscription(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<PartnerVerifySubscriptionRequest>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            // Validate partner key
+            if !validate_partner_key(dynamo, table, &headers).await {
+                return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
+                    "error": "Invalid or inactive partner API key"
+                })));
+            }
+
+            // Map product_id to plan and credits
+            let (elio_plan, monthly_credits) = match req.product_id.as_str() {
+                "love.elio.subscription.basic" => ("elio_basic", 500_i64),
+                "love.elio.subscription.pro" => ("elio_pro", 2000_i64),
+                _ => {
+                    return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                        "error": format!("Unknown product_id: {}", req.product_id)
+                    })));
+                }
+            };
+
+            // Idempotency: use user_id + year-month + product_id
+            let now = chrono::Utc::now();
+            let idem_key = format!("{}:{}:{}",
+                req.user_id,
+                now.format("%Y-%m"),
+                req.product_id
+            );
+            let idem_pk = format!("IDEMPOTENT#{}", idem_key);
+
+            // Check if already processed this month
+            if let Ok(output) = dynamo
+                .get_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(idem_pk.clone()))
+                .key("sk", AttributeValue::S("SUB_VERIFY".to_string()))
+                .send()
+                .await
+            {
+                if output.item.is_some() {
+                    let profile = get_or_create_user(dynamo, table, &req.user_id).await;
+                    return (StatusCode::OK, Json(serde_json::json!({
+                        "status": "already_processed",
+                        "elio_plan": elio_plan,
+                        "credits_remaining": profile.credits_remaining
+                    })));
+                }
+            }
+
+            // Ensure user exists
+            let _ = get_or_create_user(dynamo, table, &req.user_id).await;
+            let user_pk = format!("USER#{}", req.user_id);
+
+            // Update user with elio_plan and grant credits
+            let expires_at = (now + chrono::Duration::days(32)).to_rfc3339();
+            let _ = dynamo
+                .update_item()
+                .table_name(table.as_str())
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .update_expression(
+                    "SET elio_plan = :plan, elio_expires_at = :exp, \
+                     credits_remaining = credits_remaining + :c, updated_at = :now"
+                )
+                .expression_attribute_values(":plan", AttributeValue::S(elio_plan.to_string()))
+                .expression_attribute_values(":exp", AttributeValue::S(expires_at))
+                .expression_attribute_values(":c", AttributeValue::N(monthly_credits.to_string()))
+                .expression_attribute_values(":now", AttributeValue::S(now.to_rfc3339()))
+                .send()
+                .await;
+
+            // Store idempotency key with 35-day TTL
+            let ttl = (now.timestamp() + 35 * 86400).to_string();
+            let _ = dynamo
+                .put_item()
+                .table_name(table.as_str())
+                .item("pk", AttributeValue::S(idem_pk))
+                .item("sk", AttributeValue::S("SUB_VERIFY".to_string()))
+                .item("user_id", AttributeValue::S(req.user_id.clone()))
+                .item("product_id", AttributeValue::S(req.product_id.clone()))
+                .item("transaction_id", AttributeValue::S(req.transaction_id.clone()))
+                .item("credits_granted", AttributeValue::N(monthly_credits.to_string()))
+                .item("created_at", AttributeValue::S(now.to_rfc3339()))
+                .item("ttl", AttributeValue::N(ttl))
+                .send()
+                .await;
+
+            emit_audit_log(dynamo.clone(), table.clone(), "partner_verify_subscription", &req.user_id, "",
+                &format!("plan={} credits={} txn={}", elio_plan, monthly_credits, req.transaction_id));
+
+            let profile = get_or_create_user(dynamo, table, &req.user_id).await;
+            return (StatusCode::OK, Json(serde_json::json!({
+                "status": "verified",
+                "elio_plan": elio_plan,
+                "credits_granted": monthly_credits,
+                "credits_remaining": profile.credits_remaining
+            })));
+        }
+    }
+
+    (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+        "error": "DynamoDB not configured"
+    })))
+}
+
 async fn handle_health() -> impl IntoResponse {
     Json(HealthResponse {
         status: "ok".to_string(),
@@ -7067,6 +7352,27 @@ async fn handle_health() -> impl IntoResponse {
 }
 
 // ---------------------------------------------------------------------------
+// PWA: manifest.json, sw.js
+// ---------------------------------------------------------------------------
+
+async fn handle_manifest_json() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/manifest+json")],
+        include_str!("../../../../web/manifest.json"),
+    )
+}
+
+async fn handle_sw_js() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")],
+        include_str!("../../../../web/sw.js"),
+    )
+}
+
+async fn handle_api_docs() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/api-docs.html"))
+}
+
 // AI Agent Friendly: robots.txt, llms.txt, ai-plugin.json
 // ---------------------------------------------------------------------------
 
@@ -7818,36 +8124,65 @@ async fn handle_status_ping(
         }));
     }
 
-    // --- Kimi / Moonshot ---
-    let kimi_key = std::env::var("KIMI_API_KEY")
-        .or_else(|_| std::env::var("MOONSHOT_API_KEY"))
-        .ok()
-        .filter(|k| !k.is_empty());
-    if let Some(key) = kimi_key {
+    // --- DeepSeek ---
+    let deepseek_configured = std::env::var("DEEPSEEK_API_KEY").map(|k| !k.is_empty()).unwrap_or(false);
+    if deepseek_configured {
+        let key = std::env::var("DEEPSEEK_API_KEY").unwrap_or_default();
         let c = client.clone();
         handles.push(tokio::spawn(async move {
             let start = std::time::Instant::now();
-            let res = c.get("https://api.moonshot.cn/v1/models")
+            let res = c.get("https://api.deepseek.com/models")
                 .header("Authorization", format!("Bearer {key}"))
                 .send().await;
             let ms = start.elapsed().as_millis() as u64;
             match res {
                 Ok(r) if r.status().is_success() => serde_json::json!({
-                    "name": "Kimi", "status": "ok", "latency_ms": ms
+                    "name": "DeepSeek", "status": "ok", "latency_ms": ms
                 }),
                 Ok(r) => serde_json::json!({
-                    "name": "Kimi", "status": "error",
+                    "name": "DeepSeek", "status": "error",
                     "latency_ms": ms, "detail": format!("HTTP {}", r.status())
                 }),
                 Err(e) => serde_json::json!({
-                    "name": "Kimi", "status": "error",
+                    "name": "DeepSeek", "status": "error",
                     "latency_ms": ms, "detail": e.to_string()
                 }),
             }
         }));
     } else {
         handles.push(tokio::spawn(async {
-            serde_json::json!({"name": "Kimi", "status": "not_configured"})
+            serde_json::json!({"name": "DeepSeek", "status": "not_configured"})
+        }));
+    }
+
+    // --- OpenRouter ---
+    let openrouter_configured = std::env::var("OPENROUTER_API_KEY").map(|k| !k.is_empty()).unwrap_or(false);
+    if openrouter_configured {
+        let key = std::env::var("OPENROUTER_API_KEY").unwrap_or_default();
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            let start = std::time::Instant::now();
+            let res = c.get("https://openrouter.ai/api/v1/models")
+                .header("Authorization", format!("Bearer {key}"))
+                .send().await;
+            let ms = start.elapsed().as_millis() as u64;
+            match res {
+                Ok(r) if r.status().is_success() => serde_json::json!({
+                    "name": "OpenRouter", "status": "ok", "latency_ms": ms
+                }),
+                Ok(r) => serde_json::json!({
+                    "name": "OpenRouter", "status": "error",
+                    "latency_ms": ms, "detail": format!("HTTP {}", r.status())
+                }),
+                Err(e) => serde_json::json!({
+                    "name": "OpenRouter", "status": "error",
+                    "latency_ms": ms, "detail": e.to_string()
+                }),
+            }
+        }));
+    } else {
+        handles.push(tokio::spawn(async {
+            serde_json::json!({"name": "OpenRouter", "status": "not_configured"})
         }));
     }
 
@@ -8406,6 +8741,23 @@ async fn handle_auth_me(
                     let lookup_id = if !session_key.is_empty() { &session_key } else { &user_id };
                     let user_profile = get_or_create_user(dynamo, table, lookup_id).await;
 
+                    // Parse plan for capabilities
+                    let plan_enum: crate::service::auth::Plan = user_profile.plan.parse().unwrap_or(crate::service::auth::Plan::Free);
+                    let available_models: Vec<&str> = plan_enum.allowed_models().to_vec();
+                    let max_tool_iterations = plan_enum.max_tool_iterations();
+                    let has_sandbox = plan_enum.has_sandbox();
+
+                    // Read elio_plan from DynamoDB item (not in UserProfile struct)
+                    let elio_plan = item.get("elio_plan").and_then(|v| v.as_s().ok()).cloned();
+
+                    // Determine available tools
+                    let available_tools: Vec<String> = if let Some(allowed) = plan_enum.allowed_tools() {
+                        allowed.iter().map(|s| s.to_string()).collect()
+                    } else {
+                        // All tools for paid plans
+                        state.tool_registry.list_tool_names()
+                    };
+
                     return Json(serde_json::json!({
                         "authenticated": true,
                         "user_id": user_id,
@@ -8414,6 +8766,11 @@ async fn handle_auth_me(
                         "credits_remaining": user_profile.credits_remaining,
                         "credits_used": user_profile.credits_used,
                         "plan": user_profile.plan,
+                        "elio_plan": elio_plan,
+                        "available_models": available_models,
+                        "available_tools": available_tools,
+                        "max_tool_iterations": max_tool_iterations,
+                        "has_sandbox": has_sandbox,
                     }));
                 }
             }

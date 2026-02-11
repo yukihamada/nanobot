@@ -92,6 +92,22 @@ impl ToolRegistry {
                 tracing::info!("Registering web_deploy tool (SITES_S3_BUCKET present)");
                 tools.push(Box::new(WebDeployTool));
             }
+
+            // Slack tool requires SLACK_BOT_TOKEN
+            if std::env::var("SLACK_BOT_TOKEN").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering slack tool (SLACK_BOT_TOKEN present)");
+                tools.push(Box::new(SlackTool));
+            }
+
+            // Notion tool requires NOTION_API_KEY
+            if std::env::var("NOTION_API_KEY").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering notion tool (NOTION_API_KEY present)");
+                tools.push(Box::new(NotionTool));
+            }
+
+            // YouTube transcript and arXiv are always available (no API key needed)
+            tools.push(Box::new(YouTubeTranscriptTool));
+            tools.push(Box::new(ArxivSearchTool));
         }
 
         Self { tools }
@@ -129,6 +145,11 @@ impl ToolRegistry {
     }
 
     /// Number of registered tools.
+    /// Get all registered tool names as strings.
+    pub fn list_tool_names(&self) -> Vec<String> {
+        self.tools.iter().map(|t| t.name().to_string()).collect()
+    }
+
     pub fn len(&self) -> usize {
         self.tools.len()
     }
@@ -3662,6 +3683,475 @@ impl Tool for WebhookTriggerTool {
     }
 }
 
+// ─── Slack Integration Tool ───
+
+pub struct SlackTool;
+
+#[async_trait::async_trait]
+impl Tool for SlackTool {
+    fn name(&self) -> &str { "slack" }
+    fn description(&self) -> &str {
+        "Read and send Slack messages. Actions: 'send' (post message to channel), \
+         'read' (get recent messages from channel), 'search' (search messages). \
+         Requires SLACK_BOT_TOKEN env var."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": ["send", "read", "search"], "description": "Action to perform" },
+                "channel": { "type": "string", "description": "Channel name or ID (e.g., '#general' or 'C01234')" },
+                "message": { "type": "string", "description": "Message text to send (for 'send' action)" },
+                "query": { "type": "string", "description": "Search query (for 'search' action)" },
+                "limit": { "type": "integer", "description": "Number of messages to return (default 10)" }
+            },
+            "required": ["action"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let token = match std::env::var("SLACK_BOT_TOKEN") {
+            Ok(t) if !t.is_empty() => t,
+            _ => return "[TOOL_ERROR] SLACK_BOT_TOKEN not configured".to_string(),
+        };
+
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("read");
+        let channel = params.get("channel").and_then(|v| v.as_str()).unwrap_or("");
+        let client = reqwest::Client::new();
+
+        match action {
+            "send" => {
+                let message = params.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                if channel.is_empty() || message.is_empty() {
+                    return "[TOOL_ERROR] channel and message required for send".to_string();
+                }
+                let resp = client.post("https://slack.com/api/chat.postMessage")
+                    .header("Authorization", format!("Bearer {}", token))
+                    .json(&serde_json::json!({ "channel": channel, "text": message }))
+                    .send().await;
+                match resp {
+                    Ok(r) => {
+                        let body: serde_json::Value = r.json().await.unwrap_or_default();
+                        if body["ok"].as_bool() == Some(true) {
+                            format!("Message sent to {}", channel)
+                        } else {
+                            format!("[TOOL_ERROR] Slack error: {}", body["error"].as_str().unwrap_or("unknown"))
+                        }
+                    }
+                    Err(e) => format!("[TOOL_ERROR] {}", e),
+                }
+            }
+            "read" => {
+                if channel.is_empty() {
+                    return "[TOOL_ERROR] channel required for read".to_string();
+                }
+                let limit = params.get("limit").and_then(|v| v.as_i64()).unwrap_or(10);
+                let resp = client.get("https://slack.com/api/conversations.history")
+                    .header("Authorization", format!("Bearer {}", token))
+                    .query(&[("channel", channel), ("limit", &limit.to_string())])
+                    .send().await;
+                match resp {
+                    Ok(r) => {
+                        let body: serde_json::Value = r.json().await.unwrap_or_default();
+                        if body["ok"].as_bool() == Some(true) {
+                            let msgs = body["messages"].as_array().map(|arr| {
+                                arr.iter().map(|m| {
+                                    let user = m["user"].as_str().unwrap_or("?");
+                                    let text = m["text"].as_str().unwrap_or("");
+                                    format!("[{}] {}", user, text)
+                                }).collect::<Vec<_>>().join("\n")
+                            }).unwrap_or_default();
+                            if msgs.is_empty() { "No messages found".to_string() } else { msgs }
+                        } else {
+                            format!("[TOOL_ERROR] {}", body["error"].as_str().unwrap_or("unknown"))
+                        }
+                    }
+                    Err(e) => format!("[TOOL_ERROR] {}", e),
+                }
+            }
+            "search" => {
+                let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
+                if query.is_empty() {
+                    return "[TOOL_ERROR] query required for search".to_string();
+                }
+                let resp = client.get("https://slack.com/api/search.messages")
+                    .header("Authorization", format!("Bearer {}", token))
+                    .query(&[("query", query), ("count", "5")])
+                    .send().await;
+                match resp {
+                    Ok(r) => {
+                        let body: serde_json::Value = r.json().await.unwrap_or_default();
+                        if body["ok"].as_bool() == Some(true) {
+                            let matches = body["messages"]["matches"].as_array().map(|arr| {
+                                arr.iter().take(5).map(|m| {
+                                    let ch = m["channel"]["name"].as_str().unwrap_or("?");
+                                    let text = m["text"].as_str().unwrap_or("");
+                                    format!("[#{}] {}", ch, if text.len() > 200 { &text[..200] } else { text })
+                                }).collect::<Vec<_>>().join("\n---\n")
+                            }).unwrap_or_default();
+                            if matches.is_empty() { "No results found".to_string() } else { matches }
+                        } else {
+                            format!("[TOOL_ERROR] {}", body["error"].as_str().unwrap_or("unknown"))
+                        }
+                    }
+                    Err(e) => format!("[TOOL_ERROR] {}", e),
+                }
+            }
+            _ => "[TOOL_ERROR] Unknown action. Use: send, read, search".to_string(),
+        }
+    }
+}
+
+// ─── YouTube Transcript Tool ───
+
+pub struct YouTubeTranscriptTool;
+
+#[async_trait::async_trait]
+impl Tool for YouTubeTranscriptTool {
+    fn name(&self) -> &str { "youtube_transcript" }
+    fn description(&self) -> &str {
+        "Fetch the transcript (subtitles/captions) of a YouTube video for summarization or analysis. \
+         Provide a YouTube URL or video ID."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "url": { "type": "string", "description": "YouTube video URL or video ID (e.g., 'dQw4w9WgXcQ' or 'https://youtu.be/dQw4w9WgXcQ')" },
+                "language": { "type": "string", "description": "Preferred language (e.g., 'ja', 'en'). Default: auto" }
+            },
+            "required": ["url"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let url = params.get("url").and_then(|v| v.as_str()).unwrap_or("");
+        if url.is_empty() {
+            return "[TOOL_ERROR] url required".to_string();
+        }
+
+        // Extract video ID
+        let video_id = if url.contains("youtube.com") || url.contains("youtu.be") {
+            if url.contains("v=") {
+                url.split("v=").nth(1).unwrap_or("").split('&').next().unwrap_or("")
+            } else if url.contains("youtu.be/") {
+                url.split("youtu.be/").nth(1).unwrap_or("").split('?').next().unwrap_or("")
+            } else {
+                url
+            }
+        } else {
+            url // assume it's a bare video ID
+        };
+
+        if video_id.is_empty() || video_id.len() < 5 {
+            return "[TOOL_ERROR] Could not extract valid video ID".to_string();
+        }
+
+        let lang = params.get("language").and_then(|v| v.as_str()).unwrap_or("ja");
+
+        // Try fetching transcript via YouTube's timedtext API
+        let client = reqwest::Client::new();
+
+        // First get the video page to extract caption tracks
+        let page_url = format!("https://www.youtube.com/watch?v={}", video_id);
+        let page_resp = client.get(&page_url)
+            .header("Accept-Language", format!("{},en;q=0.5", lang))
+            .send().await;
+
+        match page_resp {
+            Ok(resp) => {
+                let body = resp.text().await.unwrap_or_default();
+                // Extract captions URL from page source
+                if let Some(start) = body.find("\"captions\":") {
+                    let captions_json = &body[start..];
+                    if let Some(url_start) = captions_json.find("\"baseUrl\":\"") {
+                        let url_part = &captions_json[url_start + 11..];
+                        if let Some(url_end) = url_part.find('"') {
+                            let caption_url = url_part[..url_end]
+                                .replace("\\u0026", "&")
+                                .replace("\\/", "/");
+
+                            // Add language param
+                            let full_url = if caption_url.contains("lang=") {
+                                caption_url.to_string()
+                            } else {
+                                format!("{}&lang={}", caption_url, lang)
+                            };
+
+                            match client.get(&full_url).send().await {
+                                Ok(r) => {
+                                    let xml = r.text().await.unwrap_or_default();
+                                    // Parse XML transcript: extract text between <text> tags
+                                    let mut transcript = String::new();
+                                    for line in xml.split("<text") {
+                                        if let Some(content_start) = line.find('>') {
+                                            let content = &line[content_start + 1..];
+                                            if let Some(end) = content.find("</text>") {
+                                                let text = &content[..end]
+                                                    .replace("&amp;", "&")
+                                                    .replace("&lt;", "<")
+                                                    .replace("&gt;", ">")
+                                                    .replace("&quot;", "\"")
+                                                    .replace("&#39;", "'")
+                                                    .replace("\n", " ");
+                                                if !text.is_empty() {
+                                                    transcript.push_str(&text);
+                                                    transcript.push(' ');
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if transcript.is_empty() {
+                                        format!("No transcript found for video {} in language '{}'", video_id, lang)
+                                    } else {
+                                        // Truncate if too long
+                                        if transcript.len() > 15000 {
+                                            let mut i = 15000;
+                                            while i > 0 && !transcript.is_char_boundary(i) { i -= 1; }
+                                            format!("{}... [truncated, {} chars total]", &transcript[..i], transcript.len())
+                                        } else {
+                                            transcript
+                                        }
+                                    }
+                                }
+                                Err(e) => format!("[TOOL_ERROR] Failed to fetch captions: {}", e),
+                            }
+                        } else {
+                            format!("No captions available for video {}", video_id)
+                        }
+                    } else {
+                        format!("No captions available for video {}", video_id)
+                    }
+                } else {
+                    format!("No captions found for video {}. The video may not have subtitles.", video_id)
+                }
+            }
+            Err(e) => format!("[TOOL_ERROR] Failed to fetch video page: {}", e),
+        }
+    }
+}
+
+// ─── Notion Integration Tool ───
+
+pub struct NotionTool;
+
+#[async_trait::async_trait]
+impl Tool for NotionTool {
+    fn name(&self) -> &str { "notion" }
+    fn description(&self) -> &str {
+        "Interact with Notion. Actions: 'search' (search pages/databases), \
+         'read' (read a page), 'create' (create a new page). \
+         Requires NOTION_API_KEY env var."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": ["search", "read", "create"], "description": "Action to perform" },
+                "query": { "type": "string", "description": "Search query (for 'search' action)" },
+                "page_id": { "type": "string", "description": "Page ID to read (for 'read' action)" },
+                "parent_id": { "type": "string", "description": "Parent page/database ID (for 'create' action)" },
+                "title": { "type": "string", "description": "Page title (for 'create' action)" },
+                "content": { "type": "string", "description": "Page content in plain text (for 'create' action)" }
+            },
+            "required": ["action"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let token = match std::env::var("NOTION_API_KEY") {
+            Ok(t) if !t.is_empty() => t,
+            _ => return "[TOOL_ERROR] NOTION_API_KEY not configured".to_string(),
+        };
+
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("search");
+        let client = reqwest::Client::new();
+        let headers = |c: reqwest::RequestBuilder| -> reqwest::RequestBuilder {
+            c.header("Authorization", format!("Bearer {}", token))
+             .header("Notion-Version", "2022-06-28")
+             .header("Content-Type", "application/json")
+        };
+
+        match action {
+            "search" => {
+                let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
+                let resp = headers(client.post("https://api.notion.com/v1/search"))
+                    .json(&serde_json::json!({ "query": query, "page_size": 5 }))
+                    .send().await;
+                match resp {
+                    Ok(r) => {
+                        let body: serde_json::Value = r.json().await.unwrap_or_default();
+                        let results = body["results"].as_array().map(|arr| {
+                            arr.iter().take(5).map(|item| {
+                                let title = item["properties"]["title"]["title"].as_array()
+                                    .and_then(|a| a.first())
+                                    .and_then(|t| t["plain_text"].as_str())
+                                    .or_else(|| item["properties"]["Name"]["title"].as_array()
+                                        .and_then(|a| a.first())
+                                        .and_then(|t| t["plain_text"].as_str()))
+                                    .unwrap_or("Untitled");
+                                let id = item["id"].as_str().unwrap_or("");
+                                let obj_type = item["object"].as_str().unwrap_or("page");
+                                format!("- [{}] {} (id: {})", obj_type, title, id)
+                            }).collect::<Vec<_>>().join("\n")
+                        }).unwrap_or_default();
+                        if results.is_empty() { "No results found".to_string() } else { results }
+                    }
+                    Err(e) => format!("[TOOL_ERROR] {}", e),
+                }
+            }
+            "read" => {
+                let page_id = params.get("page_id").and_then(|v| v.as_str()).unwrap_or("");
+                if page_id.is_empty() {
+                    return "[TOOL_ERROR] page_id required for read".to_string();
+                }
+                let url = format!("https://api.notion.com/v1/blocks/{}/children?page_size=50", page_id);
+                let resp = headers(client.get(&url)).send().await;
+                match resp {
+                    Ok(r) => {
+                        let body: serde_json::Value = r.json().await.unwrap_or_default();
+                        let blocks = body["results"].as_array().map(|arr| {
+                            arr.iter().filter_map(|block| {
+                                let btype = block["type"].as_str()?;
+                                let rich_text = block[btype]["rich_text"].as_array()?;
+                                let text: String = rich_text.iter()
+                                    .filter_map(|t| t["plain_text"].as_str())
+                                    .collect::<Vec<_>>().join("");
+                                if text.is_empty() { None } else { Some(text) }
+                            }).collect::<Vec<_>>().join("\n")
+                        }).unwrap_or_default();
+                        if blocks.is_empty() { "Page is empty or could not read content".to_string() } else { blocks }
+                    }
+                    Err(e) => format!("[TOOL_ERROR] {}", e),
+                }
+            }
+            "create" => {
+                let parent_id = params.get("parent_id").and_then(|v| v.as_str()).unwrap_or("");
+                let title = params.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled");
+                let content = params.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                if parent_id.is_empty() {
+                    return "[TOOL_ERROR] parent_id required for create".to_string();
+                }
+
+                let mut children = vec![];
+                for para in content.split('\n') {
+                    if !para.trim().is_empty() {
+                        children.push(serde_json::json!({
+                            "object": "block",
+                            "type": "paragraph",
+                            "paragraph": {
+                                "rich_text": [{ "type": "text", "text": { "content": para } }]
+                            }
+                        }));
+                    }
+                }
+
+                let resp = headers(client.post("https://api.notion.com/v1/pages"))
+                    .json(&serde_json::json!({
+                        "parent": { "page_id": parent_id },
+                        "properties": {
+                            "title": { "title": [{ "text": { "content": title } }] }
+                        },
+                        "children": children
+                    }))
+                    .send().await;
+                match resp {
+                    Ok(r) => {
+                        let body: serde_json::Value = r.json().await.unwrap_or_default();
+                        if let Some(id) = body["id"].as_str() {
+                            format!("Page created: {} (id: {})", title, id)
+                        } else {
+                            format!("[TOOL_ERROR] {}", body["message"].as_str().unwrap_or("Unknown error"))
+                        }
+                    }
+                    Err(e) => format!("[TOOL_ERROR] {}", e),
+                }
+            }
+            _ => "[TOOL_ERROR] Unknown action. Use: search, read, create".to_string(),
+        }
+    }
+}
+
+// ─── arXiv Search Tool ───
+
+pub struct ArxivSearchTool;
+
+#[async_trait::async_trait]
+impl Tool for ArxivSearchTool {
+    fn name(&self) -> &str { "arxiv_search" }
+    fn description(&self) -> &str {
+        "Search for academic papers on arXiv. Returns titles, authors, abstracts, and links. \
+         Great for AI/ML, physics, math, and CS research."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string", "description": "Search query (e.g., 'transformer attention mechanism')" },
+                "max_results": { "type": "integer", "description": "Number of results (default 5, max 10)" }
+            },
+            "required": ["query"]
+        })
+    }
+    async fn execute(&self, params: &HashMap<String, serde_json::Value>) -> String {
+        let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
+        if query.is_empty() {
+            return "[TOOL_ERROR] query required".to_string();
+        }
+        let max_results = params.get("max_results").and_then(|v| v.as_i64()).unwrap_or(5).min(10);
+
+        let url = format!(
+            "http://export.arxiv.org/api/query?search_query=all:{}&start=0&max_results={}&sortBy=submittedDate&sortOrder=descending",
+            urlencoding::encode(query), max_results
+        );
+
+        let client = reqwest::Client::new();
+        match client.get(&url).send().await {
+            Ok(resp) => {
+                let xml = resp.text().await.unwrap_or_default();
+                let mut results = Vec::new();
+                for entry in xml.split("<entry>").skip(1) {
+                    let title = entry.split("<title>").nth(1)
+                        .and_then(|s| s.split("</title>").next())
+                        .unwrap_or("").trim().replace('\n', " ");
+                    let summary = entry.split("<summary>").nth(1)
+                        .and_then(|s| s.split("</summary>").next())
+                        .unwrap_or("").trim().replace('\n', " ");
+                    let link = entry.split("<id>").nth(1)
+                        .and_then(|s| s.split("</id>").next())
+                        .unwrap_or("").trim();
+                    let authors: Vec<&str> = entry.split("<name>")
+                        .skip(1)
+                        .filter_map(|s| s.split("</name>").next())
+                        .collect();
+                    let published = entry.split("<published>").nth(1)
+                        .and_then(|s| s.split("</published>").next())
+                        .unwrap_or("").trim();
+
+                    let summary_short = if summary.len() > 300 {
+                        format!("{}...", &summary[..300])
+                    } else {
+                        summary.to_string()
+                    };
+
+                    results.push(format!(
+                        "## {}\nAuthors: {}\nDate: {}\nURL: {}\n{}\n",
+                        title,
+                        authors.join(", "),
+                        &published[..10.min(published.len())],
+                        link,
+                        summary_short
+                    ));
+                }
+
+                if results.is_empty() {
+                    format!("No papers found for '{}'", query)
+                } else {
+                    results.join("\n---\n")
+                }
+            }
+            Err(e) => format!("[TOOL_ERROR] arXiv API error: {}", e),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3709,9 +4199,11 @@ mod tests {
         // Clear env vars for deterministic count
         std::env::remove_var("GITHUB_TOKEN");
         std::env::remove_var("CONNECT_INSTANCE_ID");
+        std::env::remove_var("SLACK_BOT_TOKEN");
+        std::env::remove_var("NOTION_API_KEY");
         let registry = ToolRegistry::with_builtins();
-        // 19 base (11 original + 4 sandbox + 3 media + 1 webhook), +1 github_read_file when http-api
-        let expected = if cfg!(feature = "http-api") { 20 } else { 19 };
+        // 19 base + 2 always-on (youtube_transcript, arxiv_search) = 21, +1 github_read_file when http-api
+        let expected = if cfg!(feature = "http-api") { 22 } else { 21 };
         assert_eq!(registry.len(), expected);
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
@@ -3731,6 +4223,9 @@ mod tests {
         assert!(names.contains(&"file_read"));
         assert!(names.contains(&"file_write"));
         assert!(names.contains(&"file_list"));
+        // Always-on integration tools
+        assert!(names.contains(&"youtube_transcript"));
+        assert!(names.contains(&"arxiv_search"));
     }
 
     #[test]
@@ -3738,8 +4233,10 @@ mod tests {
     fn test_tool_registry_with_github_token() {
         std::env::set_var("GITHUB_TOKEN", "test-token");
         std::env::remove_var("CONNECT_INSTANCE_ID");
+        std::env::remove_var("SLACK_BOT_TOKEN");
+        std::env::remove_var("NOTION_API_KEY");
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 22); // 19 base + 1 github_read_file + 2 github_write tools
+        assert_eq!(registry.len(), 24); // 21 base + 1 github_read_file + 2 github_write tools
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))

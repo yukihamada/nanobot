@@ -112,10 +112,10 @@ impl LoadBalancedProvider {
             )));
         }
 
-        // Kimi / Moonshot keys
-        for key in Self::read_keys_multi(&["KIMI_API_KEY", "MOONSHOT_API_KEY"]) {
+        // DeepSeek keys
+        for key in Self::read_keys("DEEPSEEK_API_KEY") {
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key, Some("https://api.moonshot.cn/v1".to_string()), "kimi-k2-0711".to_string(),
+                key, Some("https://api.deepseek.com".to_string()), "deepseek-chat".to_string(),
             )));
         }
 
@@ -170,21 +170,21 @@ impl LoadBalancedProvider {
         let req_is_gpt = req_lower.contains("gpt") || req_lower.contains("openai");
         let req_is_gemini = req_lower.contains("gemini");
         let req_is_groq = req_lower.contains("llama") || req_lower.contains("mixtral") || req_lower.contains("groq");
-        let req_is_kimi = req_lower.contains("kimi") || req_lower.contains("moonshot");
+        let req_is_deepseek = req_lower.contains("deepseek");
 
         let prov_is_claude = prov_default.contains("claude") || prov_default.contains("anthropic");
         let prov_is_gemini = prov_default.contains("gemini");
         let prov_is_groq = prov_default.contains("llama") || prov_default.contains("mixtral") || prov_default.contains("groq");
-        let prov_is_kimi = prov_default.contains("kimi") || prov_default.contains("moonshot");
+        let prov_is_deepseek = prov_default.contains("deepseek");
         let prov_is_openrouter = prov_default.contains("openrouter");
-        let prov_is_gpt = !prov_is_claude && !prov_is_gemini && !prov_is_groq && !prov_is_kimi && !prov_is_openrouter;
+        let prov_is_gpt = !prov_is_claude && !prov_is_gemini && !prov_is_groq && !prov_is_deepseek && !prov_is_openrouter;
 
         // Same family → use requested model as-is
         if (req_is_claude && prov_is_claude)
             || (req_is_gpt && prov_is_gpt)
             || (req_is_gemini && prov_is_gemini)
             || (req_is_groq && prov_is_groq)
-            || (req_is_kimi && prov_is_kimi)
+            || (req_is_deepseek && prov_is_deepseek)
         {
             return requested_model.to_string();
         }
@@ -201,8 +201,8 @@ impl LoadBalancedProvider {
             "gemini-2.0-flash".to_string()
         } else if prov_is_groq {
             "llama-3.3-70b-versatile".to_string()
-        } else if prov_is_kimi {
-            "kimi-k2-0711".to_string()
+        } else if prov_is_deepseek {
+            "deepseek-chat".to_string()
         } else {
             // OpenAI-compatible
             "gpt-4o".to_string()
@@ -223,11 +223,11 @@ impl LoadBalancedProvider {
                     default.contains("gemini")
                 } else if model_lower.contains("llama") || model_lower.contains("mixtral") || model_lower.contains("groq") {
                     default.contains("llama") || default.contains("mixtral") || default.contains("groq")
-                } else if model_lower.contains("kimi") || model_lower.contains("moonshot") {
-                    default.contains("kimi") || default.contains("moonshot")
+                } else if model_lower.contains("deepseek") {
+                    default.contains("deepseek")
                 } else if model_lower.contains("gpt") || model_lower.contains("openai") {
-                    // Match OpenAI providers but not Groq/Kimi/OpenRouter
-                    default.contains("gpt") || (!default.contains("claude") && !default.contains("gemini") && !default.contains("llama") && !default.contains("kimi") && !default.contains("moonshot") && !default.contains("openrouter"))
+                    // Match OpenAI providers but not Groq/DeepSeek/OpenRouter
+                    default.contains("gpt") || (!default.contains("claude") && !default.contains("gemini") && !default.contains("llama") && !default.contains("deepseek") && !default.contains("openrouter"))
                 } else {
                     true
                 }
