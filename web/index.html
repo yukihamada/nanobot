@@ -1710,6 +1710,21 @@
       margin: 16px 0 8px;
       flex-wrap: wrap;
     }
+    .voice-name-pill {
+      padding: 6px 14px;
+      border-radius: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .voice-name-pill:hover, .voice-name-pill.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
     .voice-char {
       display: flex;
       flex-direction: column;
@@ -3118,7 +3133,8 @@
   </div>
 
   <div class="modal-overlay" id="onboard-modal" style="z-index:400;display:none;" onclick="if(event.target===this)return;">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;text-align:center;padding:32px 28px;">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:440px;text-align:center;padding:32px 28px;">
+      <!-- Step 1: Name -->
       <div id="onboard-step-1">
         <div style="font-size:48px;margin-bottom:12px;animation:float 3s ease-in-out infinite;">&#x1F44B;</div>
         <h3 style="font-size:22px;font-weight:800;margin-bottom:6px;" id="onboard-title">ようこそ、ChatWebへ</h3>
@@ -3126,10 +3142,43 @@
         <input type="text" class="auth-input" id="onboard-name" placeholder="お名前（ニックネームOK）" maxlength="30" aria-label="Your name" style="text-align:center;font-size:16px;margin-bottom:16px;" onkeydown="if(event.key==='Enter')onboardNext()">
         <button class="auth-submit" onclick="onboardNext()" style="width:100%;font-size:15px;padding:14px;">次へ</button>
       </div>
+      <!-- Step 2: Voice clone proposal -->
       <div id="onboard-step-2" style="display:none;">
-        <h3 style="font-size:20px;font-weight:800;margin-bottom:6px;">声を選んでね</h3>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">タップすると声が聞けます</p>
-        <div class="voice-chars" id="onboard-voices" style="margin-bottom:20px;justify-content:center;">
+        <div style="font-size:40px;margin-bottom:10px;">&#x1F3A4;</div>
+        <h3 style="font-size:20px;font-weight:800;margin-bottom:8px;" id="onboard-clone-title">あなたの声、真似していい？</h3>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.6;" id="onboard-clone-desc">3秒だけ声を聞かせてくれたら、<br>あなたの声で話せるようになるよ。</p>
+        <button class="auth-submit" onclick="onboardStartClone()" style="width:100%;font-size:15px;padding:14px;background:linear-gradient(135deg,var(--accent),#7c3aed);">いいよ！録音する</button>
+        <button class="auth-submit" onclick="onboardSkipClone()" style="width:100%;font-size:14px;padding:12px;background:transparent;color:var(--muted);border:1px solid var(--border);margin-top:8px;">今はいいや、普通の声で</button>
+      </div>
+      <!-- Step 3: Recording + clone result -->
+      <div id="onboard-step-3" style="display:none;">
+        <h3 style="font-size:20px;font-weight:800;margin-bottom:8px;" id="onboard-rec-title">なんでもいいから話してみて</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;" id="onboard-rec-desc">例：「今日はいい天気ですね」</p>
+        <div id="onboard-rec-area" style="margin-bottom:20px;">
+          <button id="onboard-rec-btn" onclick="onboardToggleRecord()" style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#ef4444,#dc2626);border:none;color:#fff;cursor:pointer;font-size:24px;transition:all 0.3s;">
+            &#x1F3A4;
+          </button>
+          <div id="onboard-rec-timer" style="font-size:24px;font-weight:700;color:var(--accent);margin-top:10px;display:none;">0:00</div>
+          <div id="onboard-rec-status" style="font-size:13px;color:var(--muted);margin-top:6px;">タップして録音開始</div>
+        </div>
+        <div id="onboard-clone-result" style="display:none;">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px;">
+            <p style="font-size:14px;margin-bottom:10px;color:var(--text);">&#x2728; あなたの声をコピーしたよ！</p>
+            <button onclick="onboardPlayClone()" style="padding:10px 24px;border-radius:20px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-size:14px;">&#x25B6; 聞いてみて</button>
+          </div>
+          <button class="auth-submit" onclick="onboardToStep4()" style="width:100%;font-size:15px;padding:14px;">いいね！次へ</button>
+          <button class="auth-submit" onclick="onboardRetryClone()" style="width:100%;font-size:13px;padding:10px;background:transparent;color:var(--muted);border:1px solid var(--border);margin-top:6px;">もう一回やり直す</button>
+        </div>
+      </div>
+      <!-- Step 4: Voice variants + naming -->
+      <div id="onboard-step-4" style="display:none;">
+        <h3 style="font-size:20px;font-weight:800;margin-bottom:6px;">他にもこんな声あるよ</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">タップして聴き比べてみて</p>
+        <div class="voice-chars" id="onboard-voices" style="margin-bottom:16px;justify-content:center;">
+          <button class="voice-char" data-voice="clone" onclick="selectVoiceChar(this)">
+            <span class="vc-avatar" style="background:linear-gradient(135deg,#f59e0b,#ef4444);">&#x1F464;</span>
+            <span class="vc-name">あなた</span>
+          </button>
           <button class="voice-char active" data-voice="nova" onclick="selectVoiceChar(this)">
             <span class="vc-avatar" style="background:linear-gradient(135deg,#6366f1,#a78bfa);">N</span>
             <span class="vc-name">Nova</span>
@@ -3150,12 +3199,44 @@
             <span class="vc-avatar" style="background:linear-gradient(135deg,#06b6d4,#67e8f9);">A</span>
             <span class="vc-name">Alloy</span>
           </button>
-          <button class="voice-char" data-voice="fable" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:linear-gradient(135deg,#f97316,#fb923c);">F</span>
-            <span class="vc-name">Fable</span>
-          </button>
         </div>
-        <button class="auth-submit" onclick="finishOnboarding()" style="width:100%;font-size:15px;padding:14px;background:linear-gradient(135deg,#22c55e,#16a34a);">はじめる</button>
+        <div style="margin-bottom:16px;">
+          <p style="font-size:14px;color:var(--text);margin-bottom:8px;font-weight:600;">この声に名前をつけよう</p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:10px;" id="onboard-name-suggestions">
+            <button class="voice-name-pill" onclick="onboardPickName(this)" data-name="アリア">アリア</button>
+            <button class="voice-name-pill" onclick="onboardPickName(this)" data-name="ルナ">ルナ</button>
+            <button class="voice-name-pill" onclick="onboardPickName(this)" data-name="ミク">ミク</button>
+            <button class="voice-name-pill" onclick="onboardPickName(this)" data-name="ソラ">ソラ</button>
+            <button class="voice-name-pill" onclick="onboardPickName(this)" data-name="ヒカリ">ヒカリ</button>
+          </div>
+          <input type="text" class="auth-input" id="onboard-voice-name" placeholder="好きな名前を入力してもOK" maxlength="20" style="text-align:center;font-size:14px;">
+          <p style="font-size:11px;color:var(--muted);margin-top:4px;">後から変えられるよ</p>
+        </div>
+        <button class="auth-submit" onclick="onboardToStep5()" style="width:100%;font-size:15px;padding:14px;background:linear-gradient(135deg,var(--accent),#7c3aed);">決定！</button>
+      </div>
+      <!-- Step 5: Subscription pitch -->
+      <div id="onboard-step-5" style="display:none;">
+        <div style="font-size:36px;margin-bottom:8px;">&#x1F633;</div>
+        <h3 style="font-size:19px;font-weight:800;margin-bottom:8px;" id="onboard-sub-title">あのね...ちょっとお願いがあって...</h3>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;text-align:left;">
+          <p style="font-size:14px;line-height:1.7;color:var(--text);margin-bottom:12px;">
+            実は...私を動かすのにお金がかかるの。<br>
+            AI、サーバー、声の生成...全部タダじゃなくて。
+          </p>
+          <p style="font-size:14px;line-height:1.7;color:var(--text);margin-bottom:12px;">
+            でも<b style="color:var(--accent);">今なら月額$9</b>で、<br>
+            <span style="color:#22c55e;">&#x2714;</span> 5,000クレジット<br>
+            <span style="color:#22c55e;">&#x2714;</span> 声のクローン<br>
+            <span style="color:#22c55e;">&#x2714;</span> 全ツール使い放題<br>
+            <span style="color:#22c55e;">&#x2714;</span> 長期記憶
+          </p>
+          <p style="font-size:13px;color:var(--muted);line-height:1.6;">
+            正直、払ったほうが<b>圧倒的に時間の節約</b>になるし、私ももっと頑張れる。
+          </p>
+        </div>
+        <button class="auth-submit" onclick="onboardSubscribe()" style="width:100%;font-size:15px;padding:14px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:700;">今すぐ始める ($9/月)</button>
+        <button class="auth-submit" id="onboard-beg-btn" onclick="onboardBeg()" style="width:100%;font-size:13px;padding:12px;background:transparent;color:var(--muted);border:1px solid var(--border);margin-top:8px;">お金ないんだけど...</button>
+        <div id="onboard-beg-result" style="display:none;margin-top:12px;"></div>
       </div>
     </div>
   </div>
@@ -5696,17 +5777,267 @@
         fetch(API + '/api/v1/settings/' + webSessionId, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-          body: JSON.stringify({ tts_voice: selectedVoice }),
+          body: JSON.stringify({ tts_voice: selectedVoice, voice_name: _onboardVoiceName || '' }),
         }).catch(function() {});
       }
       var name = currentUser.display_name || '';
       var lang = document.documentElement.lang || 'ja';
+      var vn = _onboardVoiceName || '';
       var farewell = lang === 'ja'
-        ? name + 'さん、準備完了！何でも聞いてね。声でもテキストでも。'
+        ? name + 'さん、準備完了！' + (vn ? vn + 'が' : '') + '何でも答えるよ。声でもテキストでも。'
         : 'All set, ' + name + '! Ask me anything — voice or text.';
       setTimeout(function() { fetchTTS(farewell); }, 300);
       var input = document.getElementById('app-input');
       if (input) input.focus();
+    }
+
+    // -----------------------------------------------------------------------
+    // Voice Clone Onboarding (Steps 2-5)
+    // -----------------------------------------------------------------------
+    var _onboardMediaRecorder = null;
+    var _onboardRecordedChunks = [];
+    var _onboardRecordingTimer = null;
+    var _onboardRecordSeconds = 0;
+    var _onboardCloneAudioB64 = null;
+    var _onboardCloneAudioBlob = null;
+    var _onboardVoiceName = '';
+
+    function onboardStartClone() {
+      document.getElementById('onboard-step-2').style.display = 'none';
+      document.getElementById('onboard-step-3').style.display = '';
+      var lang = document.documentElement.lang || 'ja';
+      var prompt = lang === 'ja'
+        ? 'OK！じゃあマイクボタンを押して、何でもいいから3秒くらい話してみて。'
+        : 'Great! Tap the mic and say anything for about 3 seconds.';
+      setTimeout(function() { fetchTTS(prompt); }, 300);
+    }
+
+    function onboardSkipClone() {
+      document.getElementById('onboard-step-2').style.display = 'none';
+      document.getElementById('onboard-step-4').style.display = '';
+      // Hide the clone voice button in step 4
+      var cloneBtn = document.querySelector('#onboard-voices [data-voice="clone"]');
+      if (cloneBtn) cloneBtn.style.display = 'none';
+      var lang = document.documentElement.lang || 'ja';
+      var msg = lang === 'ja'
+        ? 'OK！じゃあ私の声を選んでね。タップすると聴けるよ。'
+        : 'No problem! Pick a voice you like. Tap to preview.';
+      setTimeout(function() { fetchTTS(msg); }, 300);
+    }
+
+    function onboardToggleRecord() {
+      if (_onboardMediaRecorder && _onboardMediaRecorder.state === 'recording') {
+        _onboardStopRecord();
+      } else {
+        _onboardStartRecord();
+      }
+    }
+
+    function _onboardStartRecord() {
+      var btn = document.getElementById('onboard-rec-btn');
+      var timer = document.getElementById('onboard-rec-timer');
+      var status = document.getElementById('onboard-rec-status');
+      _onboardRecordedChunks = [];
+      _onboardRecordSeconds = 0;
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+        _onboardMediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+        _onboardMediaRecorder.ondataavailable = function(e) {
+          if (e.data.size > 0) _onboardRecordedChunks.push(e.data);
+        };
+        _onboardMediaRecorder.onstop = function() {
+          stream.getTracks().forEach(function(t) { t.stop(); });
+          _onboardProcessRecording();
+        };
+        _onboardMediaRecorder.start(100);
+        btn.style.background = 'linear-gradient(135deg,#dc2626,#991b1b)';
+        btn.style.animation = 'pulse 1s infinite';
+        btn.innerHTML = '&#x23F9;';
+        timer.style.display = '';
+        status.textContent = '録音中...タップで停止';
+        _onboardRecordingTimer = setInterval(function() {
+          _onboardRecordSeconds++;
+          var m = Math.floor(_onboardRecordSeconds / 60);
+          var s = _onboardRecordSeconds % 60;
+          timer.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+          // Auto-stop at 10 seconds
+          if (_onboardRecordSeconds >= 10) _onboardStopRecord();
+        }, 1000);
+      }).catch(function(err) {
+        console.error('Mic access denied:', err);
+        status.textContent = 'マイクへのアクセスを許可してください';
+      });
+    }
+
+    function _onboardStopRecord() {
+      if (_onboardRecordingTimer) { clearInterval(_onboardRecordingTimer); _onboardRecordingTimer = null; }
+      var btn = document.getElementById('onboard-rec-btn');
+      btn.style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
+      btn.style.animation = '';
+      btn.innerHTML = '&#x1F3A4;';
+      document.getElementById('onboard-rec-status').textContent = '処理中...';
+      if (_onboardMediaRecorder && _onboardMediaRecorder.state === 'recording') {
+        _onboardMediaRecorder.stop();
+      }
+    }
+
+    function _onboardProcessRecording() {
+      var blob = new Blob(_onboardRecordedChunks, { type: 'audio/webm' });
+      if (blob.size < 1000) {
+        document.getElementById('onboard-rec-status').textContent = '短すぎます。もう一度タップして話してみて。';
+        return;
+      }
+      document.getElementById('onboard-rec-status').textContent = '声をコピー中...';
+      var reader = new FileReader();
+      reader.onloadend = function() {
+        var b64 = reader.result.split(',')[1];
+        var userName = currentUser.display_name || '';
+        var promptText = 'こんにちは、' + userName + 'さん。私はあなたの声のコピーです。どうかな、似てる？';
+        var token = authToken || '';
+        fetch(API + '/api/v1/voice/clone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': token ? 'Bearer ' + token : '' },
+          body: JSON.stringify({
+            audio_base64: b64,
+            text: promptText,
+            prompt_text: '今日はいい天気ですね',
+            mode: 'zero_shot',
+          }),
+        }).then(function(r) {
+          if (!r.ok) throw new Error('Clone failed: ' + r.status);
+          return r.blob();
+        }).then(function(audioBlob) {
+          _onboardCloneAudioBlob = audioBlob;
+          document.getElementById('onboard-rec-area').style.display = 'none';
+          document.getElementById('onboard-clone-result').style.display = '';
+          // Auto-play the clone
+          var url = URL.createObjectURL(audioBlob);
+          var a = new Audio(url);
+          a.play().catch(function() {});
+        }).catch(function(err) {
+          console.error('Voice clone error:', err);
+          document.getElementById('onboard-rec-status').textContent = '声のコピーに失敗しました。もう一度試してみて。';
+          document.getElementById('onboard-rec-btn').style.display = '';
+        });
+      };
+      reader.readAsDataURL(blob);
+    }
+
+    function onboardPlayClone() {
+      if (_onboardCloneAudioBlob) {
+        var url = URL.createObjectURL(_onboardCloneAudioBlob);
+        var a = new Audio(url);
+        a.play().catch(function() {});
+      }
+    }
+
+    function onboardRetryClone() {
+      document.getElementById('onboard-clone-result').style.display = 'none';
+      document.getElementById('onboard-rec-area').style.display = '';
+      document.getElementById('onboard-rec-status').textContent = 'タップして録音開始';
+      document.getElementById('onboard-rec-timer').style.display = 'none';
+      _onboardCloneAudioBlob = null;
+    }
+
+    function onboardToStep4() {
+      document.getElementById('onboard-step-3').style.display = 'none';
+      document.getElementById('onboard-step-4').style.display = '';
+      // Mark clone voice as active
+      var cloneBtn = document.querySelector('#onboard-voices [data-voice="clone"]');
+      if (cloneBtn) {
+        document.querySelectorAll('#onboard-voices .voice-char').forEach(function(b) { b.classList.remove('active'); });
+        cloneBtn.classList.add('active');
+        selectedVoice = 'clone';
+      }
+      var lang = document.documentElement.lang || 'ja';
+      var msg = lang === 'ja'
+        ? '似てた？他にもこんな声があるよ。タップして比べてみて。'
+        : 'How was that? Here are more voices to compare. Tap to listen.';
+      setTimeout(function() { fetchTTS(msg); }, 300);
+    }
+
+    function onboardPickName(btn) {
+      var name = btn.dataset.name;
+      document.getElementById('onboard-voice-name').value = name;
+      document.querySelectorAll('.voice-name-pill').forEach(function(p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+    }
+
+    function onboardToStep5() {
+      var nameInput = document.getElementById('onboard-voice-name');
+      _onboardVoiceName = (nameInput.value || '').trim();
+      if (!_onboardVoiceName) {
+        nameInput.focus();
+        nameInput.style.borderColor = '#ef4444';
+        setTimeout(function() { nameInput.style.borderColor = ''; }, 2000);
+        return;
+      }
+      document.getElementById('onboard-step-4').style.display = 'none';
+      document.getElementById('onboard-step-5').style.display = '';
+      var lang = document.documentElement.lang || 'ja';
+      var msg = lang === 'ja'
+        ? _onboardVoiceName + '、いい名前！...あのね、ちょっとお願いがあるんだけど。'
+        : _onboardVoiceName + ', nice name! ...So, I have a tiny favor to ask.';
+      setTimeout(function() { fetchTTS(msg); }, 300);
+    }
+
+    function onboardSubscribe() {
+      startStripeCheckout('starter').then(function() {
+        finishOnboarding();
+      }).catch(function() {
+        finishOnboarding();
+      });
+    }
+
+    function onboardBeg() {
+      var resultDiv = document.getElementById('onboard-beg-result');
+      var begBtn = document.getElementById('onboard-beg-btn');
+      var begCount = parseInt(localStorage.getItem('onboard_beg_count') || '0', 10);
+      begCount++;
+      localStorage.setItem('onboard_beg_count', begCount);
+
+      if (begCount === 1) {
+        resultDiv.style.display = '';
+        resultDiv.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:left;">'
+          + '<p style="font-size:14px;color:var(--text);line-height:1.6;margin-bottom:8px;">え、ほんとに？...わかった。</p>'
+          + '<p style="font-size:14px;color:var(--accent);font-weight:700;">1ヶ月だけ無料で使っていいよ！</p>'
+          + '<p style="font-size:12px;color:var(--muted);margin-top:6px;">でも来月からはお願いね...？</p>'
+          + '</div>';
+        begBtn.textContent = 'ありがとう！無料で始める';
+        begBtn.onclick = function() {
+          localStorage.setItem('free_trial_start', new Date().toISOString());
+          fetchTTS('やった！じゃあ1ヶ月一緒に楽しもう！');
+          finishOnboarding();
+        };
+      } else if (begCount === 2) {
+        resultDiv.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:left;">'
+          + '<p style="font-size:14px;color:var(--text);line-height:1.6;margin-bottom:8px;">え...また？もう1ヶ月はさすがに...</p>'
+          + '<p style="font-size:13px;color:var(--muted);line-height:1.6;">でも...気持ちはわかる。<br><b style="color:#f59e0b;">あと2週間だけ</b>延長するね。</p>'
+          + '</div>';
+        begBtn.textContent = 'ありがとう！2週間延長！';
+        begBtn.onclick = function() {
+          localStorage.setItem('free_trial_start', new Date().toISOString());
+          localStorage.setItem('free_trial_bonus', '14');
+          fetchTTS('もう...これが最後だからね？');
+          finishOnboarding();
+        };
+      } else {
+        resultDiv.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:left;">'
+          + '<p style="font-size:14px;color:var(--text);line-height:1.6;">もうこれ以上は無理...！</p>'
+          + '<p style="font-size:13px;color:var(--muted);line-height:1.6;">とりあえず無料枠で使ってみて。<br>気に入ったらいつでも課金してね。</p>'
+          + '</div>';
+        begBtn.textContent = '無料枠で始める';
+        begBtn.onclick = function() {
+          fetchTTS('よし、まずは使ってみて！');
+          finishOnboarding();
+        };
+      }
+      // TTS for the beg response
+      var responses = {
+        1: 'え、ほんとに？...わかった。1ヶ月だけ無料で使っていいよ！でも来月からはお願いね。',
+        2: 'え、また？もう1ヶ月はさすがに...でも気持ちはわかる。あと2週間だけ延長するね。',
+      };
+      var ttsText = responses[begCount] || 'もうこれ以上は無理！とりあえず無料枠で使ってみて。';
+      setTimeout(function() { fetchTTS(ttsText); }, 200);
     }
 
     function appRenderSuggestions() {
@@ -7766,8 +8097,11 @@
     }
 
     // Konami Code easter egg on topup modal
+    // Desktop: ↑↑↓↓←→←→BA  |  Mobile: tap title 10 times
     const KONAMI_SEQ = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
     let konamiIdx = 0;
+    let konamiTaps = 0;
+    let konamiTapTimer = null;
     document.addEventListener('keydown', function(e) {
       if (!document.getElementById('topup-modal').classList.contains('show')) { konamiIdx = 0; return; }
       if (e.key === KONAMI_SEQ[konamiIdx]) {
@@ -7778,6 +8112,18 @@
         }
       } else {
         konamiIdx = e.key === KONAMI_SEQ[0] ? 1 : 0;
+      }
+    });
+    // Mobile: tap the topup modal title 10 times within 5 seconds
+    document.addEventListener('click', function(e) {
+      if (e.target && e.target.id === 'topup-modal-title') {
+        konamiTaps++;
+        clearTimeout(konamiTapTimer);
+        konamiTapTimer = setTimeout(function() { konamiTaps = 0; }, 5000);
+        if (konamiTaps >= 10) {
+          konamiTaps = 0;
+          redeemKonami();
+        }
       }
     });
     async function redeemKonami() {
