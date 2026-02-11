@@ -1857,8 +1857,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/cron", post(handle_cron_create))
         .route("/api/v1/cron/{id}", axum::routing::put(handle_cron_update))
         .route("/api/v1/cron/{id}", delete(handle_cron_delete))
-        // Speech (TTS)
+        // Speech (TTS) — internal + OpenAI-compatible external API
         .route("/api/v1/speech/synthesize", post(handle_speech_synthesize))
+        .route("/v1/audio/speech", post(handle_tts_openai_compat))
         // Phone (Amazon Connect)
         .route("/api/v1/connect/token", post(handle_connect_token))
         .route("/api/v1/connect/transcript/{contact_id}", get(handle_connect_transcript))
@@ -6143,6 +6144,48 @@ async fn handle_coupon_redeem(
 
     #[cfg(feature = "dynamodb-backend")]
     if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        // Special: KONAMI code — grants 1000 credits per use, cap at 100,000 total
+        if code == "KONAMI" {
+            let session_key = if let Some(ref sid) = req.session_id {
+                sid.clone()
+            } else {
+                auth_user_id(&state, &headers).await.unwrap_or_default()
+            };
+            if session_key.is_empty() {
+                return (axum::http::StatusCode::UNAUTHORIZED, Json(serde_json::json!({
+                    "error": "Login required"
+                }))).into_response();
+            }
+            let resolved_user = resolve_session_key(dynamo, table, &session_key).await;
+            let user = get_or_create_user(dynamo, table, &resolved_user).await;
+            if user.credits_remaining >= 100_000 {
+                return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                    "error": "Credit cap reached (100,000)",
+                    "error_ja": "クレジット上限（100,000）に達しています"
+                }))).into_response();
+            }
+            let grant = 1000i64.min(100_000 - user.credits_remaining);
+            let pk = format!("USER#{}", resolved_user);
+            let _ = dynamo
+                .update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(pk))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .update_expression("SET credits_remaining = credits_remaining + :c, updated_at = :now")
+                .expression_attribute_values(":c", AttributeValue::N(grant.to_string()))
+                .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .send()
+                .await;
+            let updated = get_or_create_user(dynamo, table, &resolved_user).await;
+            emit_audit_log(dynamo.clone(), table.clone(), "konami_redeemed", &resolved_user, "",
+                &format!("granted={}, new_balance={}", grant, updated.credits_remaining));
+            return Json(serde_json::json!({
+                "success": true,
+                "credits_granted": grant,
+                "credits_remaining": updated.credits_remaining,
+            })).into_response();
+        }
+
         // 1. Validate coupon exists and is active
         let coupon_resp = dynamo
             .get_item()
@@ -10418,6 +10461,68 @@ async fn try_sbv2_tts(text: &str, model_id: i32, speaker_id: i32, style: &str) -
     }
 }
 
+/// CosyVoice 2 TTS via RunPod Serverless — high-quality multilingual zero-shot voice cloning
+async fn try_cosyvoice_tts(text: &str, mode: &str, speaker_id: &str) -> Result<Vec<u8>, String> {
+    let api_key = std::env::var("RUNPOD_API_KEY")
+        .map_err(|_| "No RUNPOD_API_KEY".to_string())?;
+    let endpoint_id = std::env::var("RUNPOD_COSYVOICE_ENDPOINT_ID")
+        .map_err(|_| "No RUNPOD_COSYVOICE_ENDPOINT_ID".to_string())?;
+
+    if api_key.is_empty() || endpoint_id.is_empty() {
+        return Err("Empty RunPod CosyVoice credentials".to_string());
+    }
+
+    let url = format!("https://api.runpod.ai/v2/{}/runsync", endpoint_id);
+    let client = reqwest::Client::new();
+
+    let mode_str = if mode.is_empty() { "sft" } else { mode };
+    let mut input = serde_json::json!({
+        "text": text,
+        "mode": mode_str,
+        "format": "mp3"
+    });
+    if !speaker_id.is_empty() {
+        input["speaker_id"] = serde_json::json!(speaker_id);
+    }
+
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&serde_json::json!({ "input": input }))
+        .timeout(std::time::Duration::from_secs(90))
+        .send()
+        .await
+        .map_err(|e| format!("RunPod CosyVoice request failed: {}", e))?;
+
+    if resp.status().is_success() {
+        let body: serde_json::Value = resp.json().await
+            .map_err(|e| format!("RunPod CosyVoice JSON parse error: {}", e))?;
+
+        let audio_b64 = body.get("output")
+            .and_then(|o| {
+                o.get("audio_base64").and_then(|v| v.as_str())
+                    .or_else(|| o.get("audio").and_then(|v| v.as_str()))
+                    .or_else(|| o.as_str())
+            })
+            .unwrap_or("");
+
+        if audio_b64.is_empty() {
+            return Err(format!("RunPod CosyVoice returned no audio. Response: {}", body));
+        }
+
+        use base64::Engine as _;
+        let audio = base64::engine::general_purpose::STANDARD.decode(audio_b64)
+            .map_err(|e| format!("Base64 decode error: {}", e))?;
+
+        tracing::info!("CosyVoice TTS success: {} bytes via RunPod", audio.len());
+        Ok(audio)
+    } else {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("RunPod CosyVoice error: {} {}", status, body))
+    }
+}
+
 /// POST /api/v1/speech/synthesize — Convert text to speech (Polly → OpenAI fallback)
 async fn handle_speech_synthesize(
     State(state): State<Arc<AppState>>,
@@ -10499,10 +10604,20 @@ async fn handle_speech_synthesize(
             }
             Err(e) => tracing::warn!("TTS: SBV2 failed: {}", e),
         }
+    } else if force_engine == Some("cosyvoice") {
+        let mode = req.style.as_deref().unwrap_or("sft"); // reuse style field for mode
+        let speaker = req.voice_id.as_deref().unwrap_or("");
+        match try_cosyvoice_tts(&req.text, mode, speaker).await {
+            Ok(bytes) => {
+                tracing::info!("TTS: CosyVoice success, {} bytes", bytes.len());
+                audio_bytes = Some(bytes);
+            }
+            Err(e) => tracing::warn!("TTS: CosyVoice failed: {}", e),
+        }
     }
 
     // Auto fallback chain: OpenAI → Polly
-    if audio_bytes.is_none() && force_engine != Some("polly") && force_engine != Some("elevenlabs") && force_engine != Some("sbv2") {
+    if audio_bytes.is_none() && force_engine != Some("polly") && force_engine != Some("elevenlabs") && force_engine != Some("sbv2") && force_engine != Some("cosyvoice") {
         match try_openai_tts(&req.text, &req.voice, req.speed, req.instructions.as_deref()).await {
             Ok(bytes) => {
                 tracing::info!("TTS: gpt-4o-mini-tts success, {} bytes", bytes.len());
@@ -10556,6 +10671,52 @@ async fn handle_speech_synthesize(
             )
         }
     }
+}
+
+// ─── OpenAI-Compatible TTS API (/v1/audio/speech) ───
+
+/// OpenAI-compatible TTS endpoint: POST /v1/audio/speech
+/// Accepts the same format as OpenAI's API: { model, input, voice, speed, response_format }
+/// Authenticates via Bearer token (chatweb.ai auth token) or x-api-key header.
+/// Uses the same credit system as the internal TTS endpoint.
+async fn handle_tts_openai_compat(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // Map OpenAI format to internal SpeechRequest
+    let input = body.get("input").and_then(|v| v.as_str()).unwrap_or("");
+    let voice = body.get("voice").and_then(|v| v.as_str()).unwrap_or("nova");
+    let speed = body.get("speed").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let model = body.get("model").and_then(|v| v.as_str()).unwrap_or("gpt-4o-mini-tts");
+    let instructions = body.get("instructions").and_then(|v| v.as_str());
+
+    // Determine engine from model name
+    let engine = if model.contains("elevenlabs") || model.contains("eleven") {
+        Some("elevenlabs".to_string())
+    } else if model.contains("sbv2") || model.contains("style-bert") {
+        Some("sbv2".to_string())
+    } else if model.contains("cosyvoice") || model.contains("cosy") {
+        Some("cosyvoice".to_string())
+    } else if model.contains("polly") {
+        Some("polly".to_string())
+    } else {
+        None // default: OpenAI
+    };
+
+    let speech_req = SpeechRequest {
+        text: input.to_string(),
+        voice: voice.to_string(),
+        speed,
+        engine,
+        instructions: instructions.map(|s| s.to_string()),
+        voice_id: body.get("voice_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        model_id: body.get("model_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        style: body.get("style").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        session_id: body.get("session_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
+    };
+
+    handle_speech_synthesize(State(state), headers, Json(speech_req)).await
 }
 
 // ─── Amazon Connect (Phone) API ───

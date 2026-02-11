@@ -7765,6 +7765,43 @@
       document.getElementById('topup-modal').classList.add('show');
     }
 
+    // Konami Code easter egg on topup modal
+    const KONAMI_SEQ = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+    let konamiIdx = 0;
+    document.addEventListener('keydown', function(e) {
+      if (!document.getElementById('topup-modal').classList.contains('show')) { konamiIdx = 0; return; }
+      if (e.key === KONAMI_SEQ[konamiIdx]) {
+        konamiIdx++;
+        if (konamiIdx === KONAMI_SEQ.length) {
+          konamiIdx = 0;
+          redeemKonami();
+        }
+      } else {
+        konamiIdx = e.key === KONAMI_SEQ[0] ? 1 : 0;
+      }
+    });
+    async function redeemKonami() {
+      const l = document.documentElement.lang || 'ja';
+      try {
+        const hdrs = { 'Content-Type': 'application/json', 'X-Session-Id': webSessionId || '' };
+        if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
+        const r = await fetch(API + '/api/v1/coupon/redeem', {
+          method: 'POST',
+          headers: hdrs,
+          body: JSON.stringify({ code: 'KONAMI', session_id: webSessionId }),
+        });
+        const d = await r.json();
+        if (d.success) {
+          if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
+          showToast(l === 'ja' ? '+' + d.credits_granted + ' クレジット獲得!' : '+' + d.credits_granted + ' credits!', 3000);
+        } else {
+          showToast(d.error_ja || d.error || 'Error', 2000);
+        }
+      } catch {
+        showToast('Error', 2000);
+      }
+    }
+
     function showTopupTab(tab) {
       var plans = document.getElementById('topup-plans');
       var credits = document.getElementById('topup-credits');
