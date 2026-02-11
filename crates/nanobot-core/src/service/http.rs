@@ -975,15 +975,25 @@ fn spawn_update_conv_meta(
         let sk = format!("CONV#{}", conv_id);
         let now = chrono::Utc::now().to_rfc3339();
 
-        // Always update message_count and updated_at
+        // Build preview from user message (max 120 chars)
+        let preview = if user_message.len() > 120 {
+            let mut i = 120;
+            while i > 0 && !user_message.is_char_boundary(i) { i -= 1; }
+            format!("{}...", &user_message[..i])
+        } else {
+            user_message.clone()
+        };
+
+        // Always update message_count, updated_at, and last_message_preview
         let _ = dynamo
             .update_item()
             .table_name(&config_table)
             .key("pk", AttributeValue::S(user_pk.clone()))
             .key("sk", AttributeValue::S(sk.clone()))
-            .update_expression("SET message_count = :mc, updated_at = :now")
+            .update_expression("SET message_count = :mc, updated_at = :now, last_message_preview = :preview")
             .expression_attribute_values(":mc", AttributeValue::N(message_count.to_string()))
             .expression_attribute_values(":now", AttributeValue::S(now.clone()))
+            .expression_attribute_values(":preview", AttributeValue::S(preview))
             .send()
             .await;
 
@@ -1403,8 +1413,13 @@ fn detect_agent(text: &str) -> (&'static AgentProfile, String, u32) {
         }
     }
 
-    // Weighted keyword scoring
-    let lower = trimmed.to_lowercase();
+    // Weighted keyword scoring — only scan first 256 chars for efficiency
+    let scan_end = if trimmed.len() <= 256 { trimmed.len() } else {
+        let mut i = 256;
+        while i > 0 && !trimmed.is_char_boundary(i) { i -= 1; }
+        i
+    };
+    let lower = trimmed[..scan_end].to_lowercase();
 
     // (agent_index, keywords with weights)
     // Weight 3 = strong signal, 2 = medium, 1 = weak
@@ -1802,6 +1817,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Conversations
         .route("/api/v1/conversations", get(handle_list_conversations))
         .route("/api/v1/conversations", post(handle_create_conversation))
+        .route("/api/v1/conversations/finalize", post(handle_finalize_conversation))
         .route("/api/v1/conversations/{id}/messages", get(handle_get_conversation_messages))
         .route("/api/v1/conversations/{id}", delete(handle_delete_conversation))
         .route("/api/v1/conversations/{id}/share", post(handle_share_conversation))
@@ -3098,13 +3114,13 @@ async fn handle_worker_poll(
     let _worker_id = params.get("worker_id").cloned().unwrap_or_default();
     let _model = params.get("model").cloned().unwrap_or_default();
 
-    // Long-poll: wait up to 30 seconds for a request
-    // In production, this would check a DynamoDB queue or SQS
-    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+    // Long-poll: wait up to 5 seconds for a request
+    // TODO: Replace with DynamoDB queue or SQS integration
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
-    // No work available (placeholder — real impl would check pending requests)
     (StatusCode::OK, Json(serde_json::json!({
         "status": "no_work",
+        "retry_after_secs": 5,
     })))
 }
 
@@ -3132,7 +3148,7 @@ async fn handle_worker_result(
                 if let Some(item) = resp.item() {
                     if let Some(user_key) = item.get("user_key").and_then(|v| v.as_s().ok()) {
                         // Add credits to user
-                        let _ = dynamo
+                        if let Err(e) = dynamo
                             .update_item()
                             .table_name(table.as_str())
                             .key("pk", AttributeValue::S(format!("USER#{}", user_key)))
@@ -3140,7 +3156,10 @@ async fn handle_worker_result(
                             .update_expression("ADD credits_remaining :c")
                             .expression_attribute_values(":c", AttributeValue::N(credits_earned.to_string()))
                             .send()
-                            .await;
+                            .await
+                        {
+                            tracing::error!("Failed to credit worker {}: {}", req.worker_id, e);
+                        }
                     }
                 }
             }
@@ -3166,7 +3185,7 @@ async fn handle_worker_heartbeat(
     {
         if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
             let now = chrono::Utc::now();
-            let _ = dynamo
+            if let Err(e) = dynamo
                 .update_item()
                 .table_name(table.as_str())
                 .key("pk", AttributeValue::S(format!("WORKER#{}", req.worker_id)))
@@ -3178,7 +3197,10 @@ async fn handle_worker_heartbeat(
                 .expression_attribute_values(":s", AttributeValue::S("active".to_string()))
                 .expression_attribute_values(":ttl", AttributeValue::N((now.timestamp() + 86400).to_string()))
                 .send()
-                .await;
+                .await
+            {
+                tracing::error!("Worker heartbeat failed for {}: {}", req.worker_id, e);
+            }
         }
     }
 
@@ -9050,6 +9072,8 @@ async fn handle_list_conversations(
                             "created_at": item.get("created_at").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
                             "updated_at": item.get("updated_at").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
                             "message_count": item.get("message_count").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0),
+                            "preview": item.get("last_message_preview").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                            "session_id": item.get("session_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
                         })
                     }).collect()
                 }
@@ -9061,6 +9085,54 @@ async fn handle_list_conversations(
     }
 
     Json(serde_json::json!({ "conversations": [] }))
+}
+
+/// POST /api/v1/conversations/finalize — Finalize current conversation before switching.
+/// Triggers memory consolidation (fire-and-forget) so context is preserved as long-term memory.
+async fn handle_finalize_conversation(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    let old_session_id = body.get("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    if old_session_id.is_empty() {
+        return Json(serde_json::json!({"ok": false, "error": "session_id required"}));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user_id = resolve_user_from_token(dynamo, table, &token).await;
+            if user_id.is_empty() {
+                return Json(serde_json::json!({"ok": false, "error": "Not authenticated"}));
+            }
+
+            // Resolve session key for the old conversation
+            let session_key = resolve_session_key(dynamo, table, old_session_id).await;
+
+            // Force memory consolidation (fire-and-forget)
+            let provider_for_mem = state.lb_provider.clone().or_else(|| state.provider.clone());
+            if let Some(provider) = provider_for_mem {
+                let dynamo_c = dynamo.clone();
+                let table_c = table.clone();
+                let sk = session_key.clone();
+                spawn_consolidate_memory(dynamo_c, table_c, sk, provider);
+            }
+
+            return Json(serde_json::json!({"ok": true}));
+        }
+    }
+
+    let _ = (&state, &token);
+    Json(serde_json::json!({"ok": true}))
 }
 
 /// POST /api/v1/conversations — Create a new conversation
@@ -9161,13 +9233,19 @@ async fn handle_get_conversation_messages(
                 format!("webchat:{}", id)
             };
 
-            // Get messages from session store
+            // Get messages from session store (include timestamps and channel info)
             let mut store = state.sessions.lock().await;
             let session = store.get_or_create(&session_id);
             let messages: Vec<serde_json::Value> = session.messages.iter().map(|m| {
+                let ch = m.extra.get("channel")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("web");
+                let ts = m.timestamp.as_deref().unwrap_or("");
                 serde_json::json!({
                     "role": m.role,
                     "content": m.content,
+                    "channel": ch,
+                    "timestamp": ts,
                 })
             }).collect();
 
@@ -9733,9 +9811,15 @@ struct SpeechRequest {
     #[serde(default = "default_tts_speed")]
     speed: f64,
     #[serde(default)]
-    engine: Option<String>, // "polly" or "openai" — auto if absent
+    engine: Option<String>, // "polly", "openai", "elevenlabs", "sbv2" — auto if absent
     #[serde(default)]
     instructions: Option<String>, // Voice style instructions for gpt-4o-mini-tts
+    #[serde(default)]
+    voice_id: Option<String>, // ElevenLabs voice ID
+    #[serde(default)]
+    model_id: Option<String>, // ElevenLabs model ID or SBV2 model_id
+    #[serde(default)]
+    style: Option<String>, // SBV2 voice style (e.g., "Neutral", "Happy")
     session_id: Option<String>,
 }
 
@@ -9868,6 +9952,115 @@ async fn try_openai_tts(text: &str, voice: &str, speed: f64, instructions: Optio
     }
 }
 
+/// ElevenLabs TTS API — high-quality multilingual voices
+async fn try_elevenlabs_tts(text: &str, voice_id: &str, model_id: &str) -> Result<Vec<u8>, String> {
+    let api_key = std::env::var("ELEVENLABS_API_KEY")
+        .map_err(|_| "No ELEVENLABS_API_KEY".to_string())?;
+    if api_key.is_empty() {
+        return Err("Empty ELEVENLABS_API_KEY".to_string());
+    }
+
+    // Default voice: "pNInz6obpgDQGcFmaJgB" = Adam (multilingual), good for Japanese too
+    let vid = if voice_id.is_empty() { "pNInz6obpgDQGcFmaJgB" } else { voice_id };
+    // Default model: eleven_multilingual_v2 for Japanese support
+    let mid = if model_id.is_empty() { "eleven_multilingual_v2" } else { model_id };
+
+    let url = format!("https://api.elevenlabs.io/v1/text-to-speech/{}", vid);
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("xi-api-key", &api_key)
+        .header("Accept", "audio/mpeg")
+        .json(&serde_json::json!({
+            "text": text,
+            "model_id": mid,
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75,
+                "style": 0.3,
+                "use_speaker_boost": true
+            }
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("ElevenLabs request failed: {}", e))?;
+
+    if resp.status().is_success() {
+        let audio = resp.bytes().await.unwrap_or_default().to_vec();
+        if audio.is_empty() {
+            Err("ElevenLabs returned empty audio".to_string())
+        } else {
+            tracing::info!("ElevenLabs TTS success: {} bytes, voice={}, model={}", audio.len(), vid, mid);
+            Ok(audio)
+        }
+    } else {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("ElevenLabs error: {} {}", status, body))
+    }
+}
+
+/// Style-Bert-VITS2 TTS via RunPod Serverless — high-quality Japanese voice
+async fn try_sbv2_tts(text: &str, model_id: i32, speaker_id: i32, style: &str) -> Result<Vec<u8>, String> {
+    let api_key = std::env::var("RUNPOD_API_KEY")
+        .map_err(|_| "No RUNPOD_API_KEY".to_string())?;
+    let endpoint_id = std::env::var("RUNPOD_SBV2_ENDPOINT_ID")
+        .map_err(|_| "No RUNPOD_SBV2_ENDPOINT_ID".to_string())?;
+
+    if api_key.is_empty() || endpoint_id.is_empty() {
+        return Err("Empty RunPod credentials".to_string());
+    }
+
+    let url = format!("https://api.runpod.ai/v2/{}/runsync", endpoint_id);
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&serde_json::json!({
+            "input": {
+                "text": text,
+                "model_id": model_id,
+                "speaker_id": speaker_id,
+                "style": style,
+                "language": "JP"
+            }
+        }))
+        .timeout(std::time::Duration::from_secs(60)) // Allow for cold start
+        .send()
+        .await
+        .map_err(|e| format!("RunPod request failed: {}", e))?;
+
+    if resp.status().is_success() {
+        let body: serde_json::Value = resp.json().await
+            .map_err(|e| format!("RunPod JSON parse error: {}", e))?;
+
+        // RunPod returns { "output": { "audio_base64": "..." } } or { "output": "base64..." }
+        let audio_b64 = body.get("output")
+            .and_then(|o| {
+                o.get("audio_base64").and_then(|v| v.as_str())
+                    .or_else(|| o.get("audio").and_then(|v| v.as_str()))
+                    .or_else(|| o.as_str())
+            })
+            .unwrap_or("");
+
+        if audio_b64.is_empty() {
+            return Err(format!("RunPod SBV2 returned no audio. Response: {}", body));
+        }
+
+        // Decode base64 audio
+        use base64::Engine as _;
+        let audio = base64::engine::general_purpose::STANDARD.decode(audio_b64)
+            .map_err(|e| format!("Base64 decode error: {}", e))?;
+
+        tracing::info!("SBV2 TTS success: {} bytes via RunPod", audio.len());
+        Ok(audio)
+    } else {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("RunPod SBV2 error: {} {}", status, body))
+    }
+}
+
 /// POST /api/v1/speech/synthesize — Convert text to speech (Polly → OpenAI fallback)
 async fn handle_speech_synthesize(
     State(state): State<Arc<AppState>>,
@@ -9920,13 +10113,39 @@ async fn handle_speech_synthesize(
         }
     }
 
-    // TTS priority: OpenAI gpt-4o-mini-tts (most natural, steerable) → AWS Polly Kazuha Neural → fail
-    // Frontend adds browser SpeechSynthesis as final fallback
+    // TTS engine routing: explicit engine → auto fallback chain
+    // Priority: ElevenLabs / SBV2 (if requested) → OpenAI gpt-4o-mini-tts → Polly → fail
     let force_engine = req.engine.as_deref();
     let mut audio_bytes: Option<Vec<u8>> = None;
 
-    // 1st: OpenAI gpt-4o-mini-tts (most natural, steerable voices)
-    if force_engine != Some("polly") {
+    // If specific engine requested, try only that
+    if force_engine == Some("elevenlabs") {
+        match try_elevenlabs_tts(
+            &req.text,
+            req.voice_id.as_deref().unwrap_or(""),
+            req.model_id.as_deref().unwrap_or(""),
+        ).await {
+            Ok(bytes) => {
+                tracing::info!("TTS: ElevenLabs success, {} bytes", bytes.len());
+                audio_bytes = Some(bytes);
+            }
+            Err(e) => tracing::warn!("TTS: ElevenLabs failed: {}", e),
+        }
+    } else if force_engine == Some("sbv2") {
+        let sbv2_model = req.model_id.as_deref().unwrap_or("0").parse::<i32>().unwrap_or(0);
+        let sbv2_speaker = req.voice_id.as_deref().unwrap_or("0").parse::<i32>().unwrap_or(0);
+        let sbv2_style = req.style.as_deref().unwrap_or("Neutral");
+        match try_sbv2_tts(&req.text, sbv2_model, sbv2_speaker, sbv2_style).await {
+            Ok(bytes) => {
+                tracing::info!("TTS: SBV2 success, {} bytes", bytes.len());
+                audio_bytes = Some(bytes);
+            }
+            Err(e) => tracing::warn!("TTS: SBV2 failed: {}", e),
+        }
+    }
+
+    // Auto fallback chain: OpenAI → Polly
+    if audio_bytes.is_none() && force_engine != Some("polly") && force_engine != Some("elevenlabs") && force_engine != Some("sbv2") {
         match try_openai_tts(&req.text, &req.voice, req.speed, req.instructions.as_deref()).await {
             Ok(bytes) => {
                 tracing::info!("TTS: gpt-4o-mini-tts success, {} bytes", bytes.len());
@@ -9936,9 +10155,9 @@ async fn handle_speech_synthesize(
         }
     }
 
-    // 2nd: AWS Polly Neural (Kazuha for JP — reliable, low latency)
+    // Polly fallback
     #[cfg(feature = "dynamodb-backend")]
-    if audio_bytes.is_none() && force_engine != Some("openai") {
+    if audio_bytes.is_none() && force_engine != Some("openai") && force_engine != Some("elevenlabs") && force_engine != Some("sbv2") {
         audio_bytes = try_polly_tts(&req.text).await;
     }
 
@@ -11292,5 +11511,652 @@ mod agent_routing_tests {
         assert!(ctx.contains("Channel: web"));
         assert!(ctx.contains("Device: pc"));
         assert!(ctx.contains("ongoing(3msgs)"));
+    }
+
+    // -----------------------------------------------------------------------
+    // is_admin tests
+    // -----------------------------------------------------------------------
+
+    /// All is_admin tests in a single test to avoid env var race conditions
+    /// between parallel test threads.
+    #[test]
+    fn test_is_admin_all_cases() {
+        // Matching keys
+        std::env::set_var("ADMIN_SESSION_KEYS", "admin1,admin2");
+        assert!(is_admin("admin1"));
+        assert!(is_admin("admin2"));
+        assert!(!is_admin("unknown"));
+        assert!(!is_admin(""));
+
+        // Whitespace trimming
+        std::env::set_var("ADMIN_SESSION_KEYS", " key1 , key2 ");
+        assert!(is_admin("key1"));
+        assert!(is_admin("key2"));
+        assert!(!is_admin(" key1 "));
+
+        // Single key
+        std::env::set_var("ADMIN_SESSION_KEYS", "onlyone");
+        assert!(is_admin("onlyone"));
+        assert!(!is_admin("other"));
+
+        // Empty env
+        std::env::remove_var("ADMIN_SESSION_KEYS");
+        assert!(!is_admin("anything"));
+    }
+
+    // -----------------------------------------------------------------------
+    // UserProfile serialization tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_user_profile_serialization() {
+        let profile = UserProfile {
+            user_id: "test-user".to_string(),
+            display_name: Some("Test".to_string()),
+            plan: "free".to_string(),
+            credits_remaining: 100,
+            credits_used: 0,
+            channels: vec!["web".to_string()],
+            stripe_customer_id: None,
+            email: Some("test@example.com".to_string()),
+            created_at: "2025-01-01".to_string(),
+        };
+        let json = serde_json::to_string(&profile).unwrap();
+        assert!(json.contains("test-user"));
+        assert!(json.contains("free"));
+        assert!(json.contains("test@example.com"));
+        let deser: UserProfile = serde_json::from_str(&json).unwrap();
+        assert_eq!(deser.user_id, "test-user");
+        assert_eq!(deser.credits_remaining, 100);
+        assert_eq!(deser.credits_used, 0);
+        assert_eq!(deser.channels, vec!["web"]);
+    }
+
+    #[test]
+    fn test_user_profile_optional_fields() {
+        let profile = UserProfile {
+            user_id: "u1".to_string(),
+            display_name: None,
+            plan: "pro".to_string(),
+            credits_remaining: 5000,
+            credits_used: 200,
+            channels: vec![],
+            stripe_customer_id: None,
+            email: None,
+            created_at: "2025-06-01".to_string(),
+        };
+        let json = serde_json::to_string(&profile).unwrap();
+        // None fields serialize as null in serde default
+        let deser: UserProfile = serde_json::from_str(&json).unwrap();
+        assert_eq!(deser.display_name, None);
+        assert_eq!(deser.email, None);
+        assert_eq!(deser.plan, "pro");
+        assert_eq!(deser.credits_remaining, 5000);
+    }
+
+    #[test]
+    fn test_user_profile_roundtrip() {
+        let profile = UserProfile {
+            user_id: "roundtrip-user".to_string(),
+            display_name: Some("Alice".to_string()),
+            plan: "starter".to_string(),
+            credits_remaining: 999,
+            credits_used: 1,
+            channels: vec!["line".to_string(), "telegram".to_string()],
+            stripe_customer_id: Some("cus_abc123".to_string()),
+            email: Some("alice@example.com".to_string()),
+            created_at: "2025-03-15T10:00:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&profile).unwrap();
+        let deser: UserProfile = serde_json::from_str(&json).unwrap();
+        assert_eq!(deser.user_id, profile.user_id);
+        assert_eq!(deser.display_name, profile.display_name);
+        assert_eq!(deser.plan, profile.plan);
+        assert_eq!(deser.credits_remaining, profile.credits_remaining);
+        assert_eq!(deser.credits_used, profile.credits_used);
+        assert_eq!(deser.channels, profile.channels);
+        assert_eq!(deser.stripe_customer_id, profile.stripe_customer_id);
+        assert_eq!(deser.email, profile.email);
+        assert_eq!(deser.created_at, profile.created_at);
+    }
+
+    // -----------------------------------------------------------------------
+    // ChatRequest deserialization tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_chat_request_deserialization() {
+        let json = r#"{"message": "hello", "session_id": "sess1"}"#;
+        let req: ChatRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.message, "hello");
+        assert_eq!(req.session_id, "sess1");
+        // channel defaults to "api"
+        assert_eq!(req.channel, "api");
+        assert_eq!(req.model, None);
+        assert!(!req.multi_model);
+    }
+
+    #[test]
+    fn test_chat_request_defaults() {
+        // Only message is truly required; session_id and channel have defaults
+        let json = r#"{"message": "test"}"#;
+        let req: ChatRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.message, "test");
+        assert_eq!(req.session_id, "api:default");
+        assert_eq!(req.channel, "api");
+        assert_eq!(req.multi_model, false);
+        assert_eq!(req.device, None);
+    }
+
+    #[test]
+    fn test_chat_request_all_fields() {
+        let json = r#"{
+            "message": "hello",
+            "session_id": "s1",
+            "channel": "web",
+            "model": "gpt-4o",
+            "multi_model": true,
+            "device": "mobile"
+        }"#;
+        let req: ChatRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.message, "hello");
+        assert_eq!(req.session_id, "s1");
+        assert_eq!(req.channel, "web");
+        assert_eq!(req.model, Some("gpt-4o".to_string()));
+        assert!(req.multi_model);
+        assert_eq!(req.device, Some("mobile".to_string()));
+    }
+
+    #[test]
+    fn test_chat_request_missing_message_fails() {
+        let json = r#"{"session_id": "s1"}"#;
+        let result = serde_json::from_str::<ChatRequest>(json);
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // ChatResponse serialization tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_chat_response_serialization() {
+        let resp = ChatResponse {
+            response: "hi".to_string(),
+            session_id: "s1".to_string(),
+            agent: Some("assistant".to_string()),
+            tools_used: None,
+            credits_used: Some(5),
+            credits_remaining: Some(95),
+            model_used: Some("gpt-4o".to_string()),
+            models_consulted: None,
+            action: None,
+            input_tokens: Some(100),
+            output_tokens: Some(20),
+            estimated_cost_usd: Some(0.001),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"credits_used\":5"));
+        assert!(json.contains("\"estimated_cost_usd\":0.001"));
+        // None fields with skip_serializing_if should be absent
+        assert!(!json.contains("models_consulted"));
+        assert!(!json.contains("action"));
+        assert!(!json.contains("tools_used"));
+    }
+
+    #[test]
+    fn test_chat_response_minimal() {
+        let resp = ChatResponse {
+            response: "ok".to_string(),
+            session_id: "s2".to_string(),
+            agent: None,
+            tools_used: None,
+            credits_used: None,
+            credits_remaining: None,
+            model_used: None,
+            models_consulted: None,
+            action: None,
+            input_tokens: None,
+            output_tokens: None,
+            estimated_cost_usd: None,
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        // Only response and session_id should be present
+        assert!(json.contains("\"response\":\"ok\""));
+        assert!(json.contains("\"session_id\":\"s2\""));
+        // All optional fields should be skipped
+        assert!(!json.contains("agent"));
+        assert!(!json.contains("credits_used"));
+        assert!(!json.contains("model_used"));
+        assert!(!json.contains("input_tokens"));
+        assert!(!json.contains("output_tokens"));
+        assert!(!json.contains("estimated_cost_usd"));
+    }
+
+    #[test]
+    fn test_chat_response_with_tools() {
+        let resp = ChatResponse {
+            response: "result".to_string(),
+            session_id: "s3".to_string(),
+            agent: Some("coder".to_string()),
+            tools_used: Some(vec!["web_search".to_string(), "calculator".to_string()]),
+            credits_used: Some(10),
+            credits_remaining: Some(90),
+            model_used: Some("claude-sonnet-4-5-20250929".to_string()),
+            models_consulted: Some(vec!["claude-sonnet-4-5-20250929".to_string(), "gpt-4o".to_string()]),
+            action: Some("upgrade".to_string()),
+            input_tokens: Some(500),
+            output_tokens: Some(150),
+            estimated_cost_usd: Some(0.005),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("web_search"));
+        assert!(json.contains("calculator"));
+        assert!(json.contains("upgrade"));
+        assert!(json.contains("claude-sonnet-4-5-20250929"));
+    }
+
+    // -----------------------------------------------------------------------
+    // detect_agent additional tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_detect_agent_default() {
+        let (agent, cleaned, score) = detect_agent("hello world");
+        assert_eq!(agent.id, "assistant");
+        assert_eq!(cleaned, "hello world");
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_detect_agent_code_keywords() {
+        // "debug" has weight 3 in coder, which is >= threshold 2
+        let (agent, _, score) = detect_agent("debugして");
+        assert_eq!(agent.id, "coder");
+        assert!(score >= 2);
+    }
+
+    #[test]
+    fn test_detect_agent_search_keywords() {
+        // "検索" has weight 3 in researcher
+        let (agent, _, score) = detect_agent("AIについて検索して");
+        assert_eq!(agent.id, "researcher");
+        assert!(score >= 2);
+    }
+
+    #[test]
+    fn test_detect_agent_explicit_prefix_unknown() {
+        // Unknown @agent falls through to keyword scoring
+        let (agent, _, _) = detect_agent("@unknown hello");
+        // "unknown" is not in AGENTS, so falls to keyword scoring
+        // "hello" has no keywords, so defaults to assistant
+        assert_eq!(agent.id, "assistant");
+    }
+
+    #[test]
+    fn test_detect_agent_empty_message() {
+        let (agent, cleaned, score) = detect_agent("");
+        assert_eq!(agent.id, "assistant");
+        assert_eq!(cleaned, "");
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_detect_agent_threshold() {
+        // A single weak keyword (weight=1) should not trigger agent switch
+        let (agent, _, score) = detect_agent("rust");
+        assert_eq!(agent.id, "assistant");
+        assert_eq!(score, 0); // below threshold of 2
+    }
+
+    #[test]
+    fn test_detect_agent_multiple_keywords_accumulate() {
+        // "コード" (weight 2) + "python" (weight 1) = coder score 3
+        let (agent, _, score) = detect_agent("pythonでコードを書く方法");
+        assert_eq!(agent.id, "coder");
+        assert!(score >= 2);
+    }
+
+    // -----------------------------------------------------------------------
+    // SK_PROFILE constant test
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_sk_profile_constant() {
+        assert_eq!(SK_PROFILE, "PROFILE");
+    }
+
+    // -----------------------------------------------------------------------
+    // URL_REGEX tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_url_regex_matches() {
+        let urls: Vec<&str> = URL_REGEX
+            .find_iter("Check https://example.com and http://test.org/page?q=1")
+            .map(|m| m.as_str())
+            .collect();
+        assert_eq!(urls.len(), 2);
+        assert_eq!(urls[0], "https://example.com");
+        assert!(urls[1].starts_with("http://test.org"));
+    }
+
+    #[test]
+    fn test_url_regex_no_match() {
+        let urls: Vec<&str> = URL_REGEX
+            .find_iter("no urls here")
+            .map(|m| m.as_str())
+            .collect();
+        assert!(urls.is_empty());
+    }
+
+    #[test]
+    fn test_url_regex_with_path_and_query() {
+        let urls: Vec<&str> = URL_REGEX
+            .find_iter("Visit https://example.com/path/to/page?key=val&foo=bar#section")
+            .map(|m| m.as_str())
+            .collect();
+        assert_eq!(urls.len(), 1);
+        assert!(urls[0].starts_with("https://example.com/path/to/page"));
+    }
+
+    #[test]
+    fn test_url_regex_multiple_urls() {
+        let text = "See https://a.com https://b.com and http://c.org/d";
+        let urls: Vec<&str> = URL_REGEX.find_iter(text).map(|m| m.as_str()).collect();
+        assert_eq!(urls.len(), 3);
+    }
+
+    // -----------------------------------------------------------------------
+    // ErrorResponse serialization test
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_error_response_serialization() {
+        let err = ErrorResponse {
+            error: "not found".to_string(),
+        };
+        let json = serde_json::to_string(&err).unwrap();
+        assert_eq!(json, r#"{"error":"not found"}"#);
+    }
+
+    #[test]
+    fn test_error_response_empty_message() {
+        let err = ErrorResponse {
+            error: "".to_string(),
+        };
+        let json = serde_json::to_string(&err).unwrap();
+        assert_eq!(json, r#"{"error":""}"#);
+    }
+
+    // -----------------------------------------------------------------------
+    // hash_password tests
+    // -----------------------------------------------------------------------
+
+    /// All hash_password tests in a single test to avoid env var race conditions
+    /// between parallel test threads.
+    #[test]
+    fn test_hash_password_properties() {
+        // Use a unique env key for this test
+        std::env::set_var("PASSWORD_HMAC_KEY", "test-secret-key-for-hash-tests");
+
+        // Deterministic: same inputs produce same hash
+        let hash1 = hash_password("mypassword", "user@example.com");
+        let hash2 = hash_password("mypassword", "user@example.com");
+        assert_eq!(hash1, hash2, "Same inputs should produce same hash");
+
+        // Different passwords produce different hashes
+        let hash_a = hash_password("password1", "salt1");
+        let hash_b = hash_password("password2", "salt1");
+        assert_ne!(hash_a, hash_b, "Different passwords should produce different hashes");
+
+        // Different salts produce different hashes
+        let hash_c = hash_password("password", "salt1");
+        let hash_d = hash_password("password", "salt2");
+        assert_ne!(hash_c, hash_d, "Different salts should produce different hashes");
+
+        // Output is 64 hex characters (HMAC-SHA256 = 32 bytes)
+        assert_eq!(hash1.len(), 64, "Hash should be 64 hex characters");
+        assert!(hash1.chars().all(|c| c.is_ascii_hexdigit()), "Hash should be valid hex");
+
+        std::env::remove_var("PASSWORD_HMAC_KEY");
+
+        // Fallback key: when no env vars set, still produces valid hash
+        std::env::remove_var("GOOGLE_CLIENT_SECRET");
+        let hash_fallback = hash_password("test", "salt");
+        assert_eq!(hash_fallback.len(), 64);
+        assert!(hash_fallback.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    // -----------------------------------------------------------------------
+    // detect_language additional tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_detect_language_mixed_content() {
+        // Japanese chars present -> "ja"
+        assert_eq!(detect_language("Hello こんにちは"), "ja");
+        assert_eq!(detect_language("テスト test"), "ja");
+    }
+
+    #[test]
+    fn test_detect_language_katakana() {
+        assert_eq!(detect_language("カタカナ"), "ja");
+    }
+
+    #[test]
+    fn test_detect_language_kanji() {
+        assert_eq!(detect_language("漢字"), "ja");
+    }
+
+    #[test]
+    fn test_detect_language_pure_ascii() {
+        assert_eq!(detect_language("hello world 123 !@#"), "en");
+    }
+
+    #[test]
+    fn test_detect_language_non_ja_non_ascii() {
+        assert_eq!(detect_language("Bonjour le monde"), "en"); // all ASCII
+        assert_eq!(detect_language("straße"), "other"); // non-ASCII, non-ja
+    }
+
+    // -----------------------------------------------------------------------
+    // build_meta_context_with_model tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_build_meta_context_with_model_ja() {
+        let ctx = build_meta_context_with_model(
+            None, "web", "pc", 0, false,
+            Some("unknown-model"), 500, 1500,
+        );
+        assert!(ctx.contains("現在時刻:"));
+        assert!(ctx.contains("モデル: unknown-model"));
+        assert!(ctx.contains("この会話: 約500トークン"));
+        assert!(ctx.contains("チャネル: web"));
+        assert!(ctx.contains("新規"));
+    }
+
+    #[test]
+    fn test_build_meta_context_with_model_en() {
+        let ctx = build_meta_context_with_model(
+            None, "api", "voice", 10, true,
+            Some("unknown-model"), 1000, 5000,
+        );
+        assert!(ctx.contains("Time:"));
+        assert!(ctx.contains("Model: unknown-model"));
+        assert!(ctx.contains("Session: ~1000 tokens"));
+        assert!(ctx.contains("Channel: api"));
+        assert!(ctx.contains("Device: voice"));
+        assert!(ctx.contains("ongoing(10msgs)"));
+    }
+
+    #[test]
+    fn test_build_meta_context_with_model_no_model() {
+        let ctx = build_meta_context_with_model(
+            None, "line", "mobile", 0, false,
+            None, 0, 0,
+        );
+        assert!(ctx.contains("現在時刻:"));
+        assert!(ctx.contains("チャネル: line"));
+        assert!(!ctx.contains("モデル:"));
+        // session_tokens=0 means no session info
+        assert!(!ctx.contains("この会話:"));
+    }
+
+    #[test]
+    fn test_build_meta_context_low_credits_warning_ja() {
+        let user = UserProfile {
+            user_id: "low-cred".to_string(),
+            display_name: None,
+            plan: "free".to_string(),
+            credits_remaining: 50,
+            credits_used: 50,
+            channels: vec![],
+            stripe_customer_id: None,
+            email: None,
+            created_at: "2025-01-01".to_string(),
+        };
+        let ctx = build_meta_context(Some(&user), "web", "pc", 0, false);
+        assert!(ctx.contains("クレジット残少"));
+    }
+
+    #[test]
+    fn test_build_meta_context_low_credits_warning_en() {
+        let user = UserProfile {
+            user_id: "low-cred-en".to_string(),
+            display_name: None,
+            plan: "free".to_string(),
+            credits_remaining: 50,
+            credits_used: 50,
+            channels: vec![],
+            stripe_customer_id: None,
+            email: None,
+            created_at: "2025-01-01".to_string(),
+        };
+        let ctx = build_meta_context(Some(&user), "web", "pc", 0, true);
+        assert!(ctx.contains("LOW_CREDITS"));
+    }
+
+    #[test]
+    fn test_build_meta_context_no_low_credits_for_paid() {
+        let user = UserProfile {
+            user_id: "paid-user".to_string(),
+            display_name: None,
+            plan: "pro".to_string(),
+            credits_remaining: 50,
+            credits_used: 50,
+            channels: vec![],
+            stripe_customer_id: None,
+            email: None,
+            created_at: "2025-01-01".to_string(),
+        };
+        let ctx = build_meta_context(Some(&user), "web", "pc", 0, false);
+        // Low credits warning only appears for free plan
+        assert!(!ctx.contains("クレジット残少"));
+    }
+
+    // -----------------------------------------------------------------------
+    // AgentProfile and AGENTS constant tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_agents_array_has_expected_ids() {
+        let ids: Vec<&str> = AGENTS.iter().map(|a| a.id).collect();
+        assert!(ids.contains(&"orchestrator"));
+        assert!(ids.contains(&"assistant"));
+        assert!(ids.contains(&"researcher"));
+        assert!(ids.contains(&"coder"));
+        assert!(ids.contains(&"analyst"));
+        assert!(ids.contains(&"creative"));
+    }
+
+    #[test]
+    fn test_agent_profile_serialization() {
+        let agent = &AGENTS[1]; // assistant
+        let json = serde_json::to_string(agent).unwrap();
+        assert!(json.contains("\"id\":\"assistant\""));
+        assert!(json.contains("\"name\":\"Assistant\""));
+        assert!(json.contains("\"tools_enabled\":true"));
+    }
+
+    // -----------------------------------------------------------------------
+    // UserSettings serialization tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_user_settings_roundtrip() {
+        let settings = UserSettings {
+            preferred_model: Some("gpt-4o".to_string()),
+            temperature: Some(0.7),
+            enabled_tools: Some(vec!["web_search".to_string()]),
+            custom_api_keys: None,
+            language: Some("ja".to_string()),
+            adult_mode: Some(false),
+            age_verified: Some(true),
+        };
+        let json = serde_json::to_string(&settings).unwrap();
+        let deser: UserSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(deser.preferred_model, Some("gpt-4o".to_string()));
+        assert_eq!(deser.temperature, Some(0.7));
+        assert_eq!(deser.language, Some("ja".to_string()));
+    }
+
+    #[test]
+    fn test_user_settings_all_none() {
+        let settings = UserSettings {
+            preferred_model: None,
+            temperature: None,
+            enabled_tools: None,
+            custom_api_keys: None,
+            language: None,
+            adult_mode: None,
+            age_verified: None,
+        };
+        let json = serde_json::to_string(&settings).unwrap();
+        let deser: UserSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(deser.preferred_model, None);
+        assert_eq!(deser.temperature, None);
+    }
+
+    // -----------------------------------------------------------------------
+    // SessionInfo serialization test
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_session_info_serialization() {
+        let info = SessionInfo {
+            key: "webchat:abc123".to_string(),
+            created_at: Some("2025-01-01T00:00:00Z".to_string()),
+            updated_at: None,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("webchat:abc123"));
+        assert!(json.contains("2025-01-01T00:00:00Z"));
+    }
+
+    // -----------------------------------------------------------------------
+    // GITHUB_TOOL_NAMES constant test
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_github_tool_names() {
+        assert!(GITHUB_TOOL_NAMES.contains(&"github_read_file"));
+        assert!(GITHUB_TOOL_NAMES.contains(&"github_create_or_update_file"));
+        assert!(GITHUB_TOOL_NAMES.contains(&"github_create_pr"));
+        assert_eq!(GITHUB_TOOL_NAMES.len(), 3);
+    }
+
+    // -----------------------------------------------------------------------
+    // default_session_id and default_channel tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_default_session_id() {
+        assert_eq!(default_session_id(), "api:default");
+    }
+
+    #[test]
+    fn test_default_channel() {
+        assert_eq!(default_channel(), "api");
     }
 }

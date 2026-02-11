@@ -235,9 +235,12 @@
 
   <div class="layout">
     <nav class="sidebar">
-      <div class="sidebar-logo">
-        <a href="https://chatweb.ai"><span>chat</span>web.ai</a>
-        <span class="api-badge">API</span>
+      <div class="sidebar-logo" style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <a href="https://chatweb.ai"><span>chat</span>web.ai</a>
+          <span class="api-badge">API</span>
+        </div>
+        <button onclick="setLang(document.documentElement.lang==='ja'?'en':'ja')" style="background:none;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;" id="lang-btn">EN</button>
       </div>
 
       <h3>Getting Started</h3>
@@ -653,6 +656,127 @@ curl https://api.chatweb.ai/health
         a.classList.toggle('active', a.getAttribute('href') === '#' + current);
       });
     });
+
+    // Language switching
+    function setLang(l) {
+      document.documentElement.lang = l;
+      localStorage.setItem('nl', l);
+      var btn = document.getElementById('lang-btn');
+      btn.textContent = l === 'ja' ? 'EN' : 'JA';
+
+      var t = {
+        ja: {
+          title: 'chatweb.ai API',
+          subtitle: 'マルチチャネルAIチャットAPI。ロードバランシング、ツール呼び出し、統一課金に対応。',
+          baseLabel: 'ベースURL',
+          desc: 'chatweb.ai APIで、AIモデル（GPT-4o、Claude、Gemini）に単一エンドポイントからメッセージを送信できます。セッション管理、クロスチャネル同期（Web/LINE/Telegram）、ツール呼び出し（Web検索、天気、計算）、クレジット課金に対応。',
+          auth: '認証',
+          authDesc: 'すべてのAPIリクエストにはAuthorizationヘッダーにAPIキーが必要です。',
+          quickstart: 'クイックスタート',
+          quickDesc: '数秒で最初のメッセージを送信:',
+          chat: 'メッセージ送信',
+          sessions: 'セッション',
+          account: 'アカウント',
+          usage: '使用量',
+          providers: 'プロバイダー',
+          integrations: 'インテグレーション',
+          health: 'ヘルスチェック',
+          billing: '課金 - チェックアウト',
+          portal: '課金 - ポータル',
+          coupons: 'クーポン',
+          line: 'LINE Webhook',
+          telegram: 'Telegram Webhook',
+          linking: 'チャネル連携',
+          plans: 'プラン',
+          creditRates: 'クレジットレート',
+          gettingStarted: 'はじめに',
+          overview: '概要',
+          quickStart: 'クイックスタート',
+          sendMessage: 'メッセージ送信',
+          accountInfo: 'アカウント情報',
+          platform: 'プラットフォーム',
+          channels: 'チャネル',
+          links: 'リンク',
+          checkout: 'チェックアウト',
+          billingPortal: '課金ポータル',
+          channelLinking: 'チャネル連携'
+        },
+        en: {
+          title: 'chatweb.ai API',
+          subtitle: 'Multi-channel AI chat API with load balancing, tool calling, and unified billing.',
+          baseLabel: 'Base URL',
+          desc: 'The chatweb.ai API lets you send messages to AI models (GPT-4o, Claude, Gemini) via a single unified endpoint. Features include session management, cross-channel sync (Web/LINE/Telegram), tool calling (web search, weather, calculator), and credit-based billing.',
+          auth: 'Authentication',
+          authDesc: 'All API requests require an API key passed in the Authorization header.',
+          quickstart: 'Quick Start',
+          quickDesc: 'Send your first message in seconds:',
+          chat: 'Send Message',
+          sessions: 'Sessions',
+          account: 'Account',
+          usage: 'Usage',
+          providers: 'Providers',
+          integrations: 'Integrations',
+          health: 'Health Check',
+          billing: 'Billing - Checkout',
+          portal: 'Billing - Portal',
+          coupons: 'Coupons',
+          line: 'LINE Webhook',
+          telegram: 'Telegram Webhook',
+          linking: 'Channel Linking',
+          plans: 'Plans',
+          creditRates: 'Credit Rates',
+          gettingStarted: 'Getting Started',
+          overview: 'Overview',
+          quickStart: 'Quick Start',
+          sendMessage: 'Send Message',
+          accountInfo: 'Account Info',
+          platform: 'Platform',
+          channels: 'Channels',
+          links: 'Links',
+          checkout: 'Checkout',
+          billingPortal: 'Billing Portal',
+          channelLinking: 'Channel Linking'
+        }
+      };
+      var s = t[l];
+
+      // Main content
+      document.getElementById('overview').textContent = s.title;
+      document.querySelector('.subtitle').textContent = s.subtitle;
+      document.querySelector('.base-url .label').textContent = s.baseLabel;
+
+      // Section headings by id
+      var headingMap = {
+        auth: s.auth, quickstart: s.quickstart, chat: s.chat, sessions: s.sessions,
+        account: s.account, usage: s.usage, providers: s.providers, integrations: s.integrations,
+        health: s.health, billing: s.billing, portal: s.portal, coupons: s.coupons,
+        line: s.line, telegram: s.telegram, linking: s.linking
+      };
+      for (var id in headingMap) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = headingMap[id];
+      }
+
+      // Sidebar nav headings (h3 in sidebar)
+      var sidebarH3 = document.querySelectorAll('.sidebar h3');
+      var h3Keys = ['gettingStarted', 'chat', 'account', 'platform', 'billing', 'channels', 'links'];
+      sidebarH3.forEach(function(h, i) { if (s[h3Keys[i]]) h.textContent = s[h3Keys[i]]; });
+
+      // Sidebar nav items
+      var navMap = {
+        '#overview': s.overview, '#auth': s.auth, '#quickstart': s.quickStart,
+        '#chat': s.sendMessage, '#sessions': s.sessions,
+        '#account': s.accountInfo, '#usage': s.usage,
+        '#providers': s.providers, '#integrations': s.integrations, '#health': s.health,
+        '#billing': s.checkout, '#portal': s.billingPortal, '#coupons': s.coupons,
+        '#line': s.line, '#telegram': s.telegram, '#linking': s.channelLinking
+      };
+      document.querySelectorAll('.sidebar a.nav-item[href^="#"]').forEach(function(a) {
+        if (navMap[a.getAttribute('href')]) a.textContent = navMap[a.getAttribute('href')];
+      });
+    }
+    // Initialize language from localStorage or browser
+    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
   </script>
 </body>
 </html>

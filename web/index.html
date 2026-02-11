@@ -5,10 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>chatweb.ai - お願いしたら、本当にやってくれるAI</title>
   <meta name="description" content="声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料で始められます。">
-  <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
   <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%236366f1'/%3E%3Ctext x='90' y='115' text-anchor='middle' font-size='80' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
-  <!-- OGP -->
   <meta property="og:title" content="chatweb.ai - お願いしたら、本当にやってくれるAI">
   <meta property="og:description" content="声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料。">
   <meta property="og:image" content="https://chatweb.ai/og.svg">
@@ -17,19 +15,20 @@
   <meta property="og:site_name" content="chatweb.ai">
   <meta property="og:locale" content="ja_JP">
   <meta property="og:locale:alternate" content="en_US">
-  <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@chatweb_ai">
   <meta name="twitter:title" content="chatweb.ai - お願いしたら、本当にやってくれるAI">
   <meta name="twitter:description" content="声で頼むだけ。検索・コード実行・定期監視まで全自動。Web・LINE・Telegram対応。">
   <meta name="twitter:image" content="https://chatweb.ai/og.svg">
-  <!-- Canonical & PWA -->
   <link rel="canonical" href="https://chatweb.ai/">
+  <link rel="alternate" hreflang="ja" href="https://chatweb.ai/">
+  <link rel="alternate" hreflang="en" href="https://chatweb.ai/?lang=en">
+  <link rel="alternate" hreflang="x-default" href="https://chatweb.ai/">
   <meta name="theme-color" content="#6366f1">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="chatweb.ai">
-  <!-- Structured Data -->
+  <link rel="manifest" href="/manifest.json">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -55,7 +54,6 @@
     "sameAs": ["https://github.com/yukihamada/nanobot", "https://teai.io"]
   }
   </script>
-  <!-- Preconnect to API Gateway for faster first request -->
   <link rel="preconnect" href="https://chatweb.ai">
   <link rel="dns-prefetch" href="https://chatweb.ai">
   <style>
@@ -546,6 +544,29 @@
     .msg .channel-badge.ch-line { background: rgba(6,199,85,0.2); color: var(--line); }
     .msg .channel-badge.ch-telegram { background: rgba(42,171,238,0.2); color: var(--tg); }
     .msg .channel-badge.ch-web { background: rgba(99,102,241,0.15); color: var(--accent-hover); }
+
+    /* Time divider for cross-channel sync (time gap between messages) */
+    .sync-time-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 16px 0 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .sync-time-divider::before, .sync-time-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .sync-time-divider .divider-text {
+      white-space: nowrap;
+      padding: 2px 10px;
+      border-radius: 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
 
     /* QR in link code response */
     .link-qr-row {
@@ -2630,7 +2651,6 @@
     /* Demo messages fade when user logs in */
     body.app-mode .demo-msg { display: none; }
   </style>
-  <!-- PostHog Analytics (enable by replacing YOUR_PROJECT_KEY) -->
   <!--
   <script>
     !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
@@ -2640,7 +2660,6 @@
 </head>
 <body>
   <script>
-    // Instantly apply app-mode if user is logged in (prevent landing page flash)
     if (localStorage.getItem('authToken') || new URLSearchParams(window.location.search).get('token')) {
       document.body.classList.add('app-mode');
     }
@@ -2676,7 +2695,6 @@
     </div>
   </nav>
 
-  <!-- Sidebar for conversation history -->
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <h3 id="sidebar-title">Conversations</h3>
@@ -2697,7 +2715,6 @@
       </div>
     </div>
 
-    <!-- Use cases section -->
     <div class="fade-up fade-up-d1" id="use-cases" style="max-width:640px;margin:0 auto 32px;padding:0 16px;">
       <div style="display:flex;flex-direction:column;gap:12px;">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;">
@@ -2831,7 +2848,6 @@
       </div>
     </div>
 
-    <!-- Capabilities section -->
     <div class="cap-section fade-up fade-up-d3" id="cap-section">
       <h2 id="t-cap-title">AI + ツールで、なんでも自動化</h2>
       <p class="cap-sub" id="t-cap-sub">内蔵ツール + MCP拡張で無限の可能性</p>
@@ -2899,7 +2915,6 @@
 
     <div id="recipe-section" class="fade-up fade-up-d3"></div>
 
-    <!-- Sync section -->
     <div class="sync-section fade-up fade-up-d3" id="sync-section">
       <h3 id="t-sync-title">どのチャネルでも同じ会話</h3>
       <p class="sync-desc" id="t-sync-desc">Web・LINE・Telegramの会話をリンクして、どこからでも続きを。</p>
@@ -2934,7 +2949,6 @@
       </div>
     </div>
 
-    <!-- Device Monitoring Section -->
     <div class="sync-section fade-up fade-up-d4" id="device-section" style="display:none;">
       <h3 id="t-device-title">Connected Devices</h3>
       <p class="sync-desc" id="t-device-desc">CLI daemon running on your machines.</p>
@@ -2944,7 +2958,6 @@
       </div>
     </div>
 
-    <!-- Messenger Integrations -->
     <div class="channel-cards fade-up fade-up-d4" style="flex-wrap:wrap;">
       <a class="channel-card line-card" id="line-card" onclick="openChannelLink('line');return false;" href="#">
         <div class="cc-header">
@@ -3002,7 +3015,6 @@
       </a>
     </div>
 
-    <!-- Link command hint -->
     <div id="link-cmd-hint" class="fade-up fade-up-d4" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 20px;margin-bottom:20px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
         <span style="font-size:18px;">🔗</span>
@@ -3018,7 +3030,6 @@
       </button>
     </div>
 
-    <!-- CLI install -->
     <div id="cli-install-section" class="fade-up fade-up-d4" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;margin-bottom:20px;text-align:center;">
       <div style="font-size:13px;font-weight:700;margin-bottom:8px;" id="t-cli-title">CLI</div>
       <div style="background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:'SF Mono','Fira Code',monospace;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="navigator.clipboard.writeText('curl -fsSL https://chatweb.ai/install.sh | sh');this.querySelector('.cp').textContent='Copied!';setTimeout(()=>this.querySelector('.cp').textContent='Copy',1500)">
@@ -3042,10 +3053,8 @@
       <div class="price-hint" id="t-bottom-hint">Starter $9/月 &middot; Pro $29/月 &middot; いつでもキャンセル可能</div>
     </div>
 
-    <!-- Auth Modal -->
   </div>
 
-  <!-- Modals (outside .main so they work in app mode) -->
   <div class="modal-overlay" id="auth-modal" onclick="closeAuthModal(event)" style="z-index:300;">
     <div class="modal auth-modal" onclick="event.stopPropagation()">
       <h3 id="auth-modal-title">ログイン</h3>
@@ -3070,7 +3079,6 @@
     </div>
   </div>
 
-  <!-- Onboarding modal — first-time welcome -->
   <div class="modal-overlay" id="onboard-modal" style="z-index:400;display:none;" onclick="if(event.target===this)return;">
     <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;text-align:center;padding:32px 28px;">
       <div id="onboard-step-1">
@@ -3116,33 +3124,26 @@
 
   </main>
 
-  <!-- Link success overlay -->
   <div class="link-success-overlay" id="link-success-overlay">
     <div class="lso-icon" id="lso-icon"></div>
     <div class="lso-text" id="lso-text"></div>
   </div>
 
-  <!-- Channel QR Modal (outside main so it's visible in app-mode) -->
   <div class="modal-overlay" id="modal" onclick="closeModal(event)" style="z-index:300;">
     <div class="modal" id="modal-content">
       <h3 id="modal-title"></h3>
       <div id="modal-steps" style="display:flex;justify-content:center;gap:8px;margin:8px 0 12px;font-size:12px;color:var(--muted);"></div>
       <p id="modal-desc" style="white-space:pre-line;"></p>
-      <!-- Primary CTA: big button for mobile -->
       <a id="modal-cta" class="modal-link" target="_blank" style="display:none;font-size:16px;padding:14px 28px;margin:12px 0;"></a>
-      <!-- QR code for desktop -->
       <div class="qr-wrapper" id="modal-qr-wrap">
         <div class="qr-spinner" id="qr-spinner"></div>
         <img id="modal-qr" alt="QR Code">
       </div>
-      <!-- Secondary link -->
       <a id="modal-link" class="modal-link" target="_blank" style="font-size:13px;"></a>
-      <!-- Manual code copy -->
       <div id="modal-code-row" style="display:none;margin:8px 0;text-align:center;">
         <span style="font-size:11px;color:var(--muted);" id="modal-code-label"></span>
         <code id="modal-code-val" style="background:var(--surface);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:14px;letter-spacing:1px;" onclick="navigator.clipboard.writeText(this.textContent);this.style.background='var(--green)';this.style.color='#fff';setTimeout(()=>{this.style.background='var(--surface)';this.style.color=''},500);"></code>
       </div>
-      <!-- Success state -->
       <div id="modal-success" style="display:none;text-align:center;padding:20px 0;">
         <div style="font-size:48px;margin-bottom:8px;">&#x2705;</div>
         <div id="modal-success-text" style="font-size:16px;font-weight:600;color:var(--green);"></div>
@@ -3151,7 +3152,6 @@
     </div>
   </div>
 
-  <!-- API Keys Modal (outside main so it's visible in app-mode) -->
   <div class="modal-overlay" id="apikey-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
     <div class="modal apikey-modal" onclick="event.stopPropagation()">
       <h3 id="apikey-modal-title">API Keys</h3>
@@ -3174,7 +3174,6 @@
     </div>
   </div>
 
-  <!-- Settings Modal -->
   <div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
     <div class="modal settings-modal" onclick="event.stopPropagation()">
       <h3 id="settings-modal-title">Settings</h3>
@@ -3185,7 +3184,6 @@
         <button class="settings-tab" onclick="switchSettingsTab('activity')">Activity</button>
       </div>
 
-      <!-- General Tab -->
       <div class="settings-section active" id="settings-tab-general">
         <div class="settings-item">
           <div class="settings-item-info">
@@ -3208,6 +3206,32 @@
           </div>
           <button class="settings-toggle" id="settings-autolisten-toggle" onclick="toggleAutoListen()"></button>
         </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#127760; 音声言語 / Voice Language</div>
+          <select class="settings-select" id="settings-stt-lang" onchange="setSTTLanguage(this.value)">
+          </select>
+          <div class="settings-item-desc">音声認識の言語を選択（ブラウザ言語で自動検出）</div>
+        </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#127911; 音声エンジン / Voice Engine</div>
+          <select class="settings-select" id="settings-tts-engine" onchange="setTTSEngine(this.value)">
+            <option value="openai">OpenAI gpt-4o-mini-tts (default)</option>
+            <option value="elevenlabs">ElevenLabs (high quality)</option>
+            <option value="sbv2">Style-Bert-VITS2 (Japanese)</option>
+            <option value="polly">AWS Polly Neural</option>
+          </select>
+          <div class="settings-item-desc" id="settings-tts-desc">読み上げ音声エンジンを選択</div>
+        </div>
+        <div class="settings-item" id="settings-elevenlabs-voice" style="flex-direction:column;align-items:stretch;display:none;">
+          <div class="settings-item-label" style="margin-bottom:6px;">ElevenLabs Voice</div>
+          <select class="settings-select" id="settings-el-voice" onchange="setElevenLabsVoice(this.value)">
+            <option value="pNInz6obpgDQGcFmaJgB">Adam (multilingual)</option>
+            <option value="EXAVITQu4vr4xnSDxMaL">Sarah (warm)</option>
+            <option value="onwK4e9ZLuTAKqWW03F9">Daniel (deep)</option>
+            <option value="XB0fDUnXU5powFXDhCwa">Charlotte (elegant)</option>
+            <option value="jBpfAFnaylXS2maSnkdl">Yuki (Japanese)</option>
+          </select>
+        </div>
         <div class="settings-item" id="settings-adult-section" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:8px;">
           <div class="settings-item-info">
             <div class="settings-item-label">&#128274; Adult Mode</div>
@@ -3217,7 +3241,6 @@
         </div>
       </div>
 
-      <!-- LLM Tab -->
       <div class="settings-section" id="settings-tab-llm">
         <div class="settings-item" style="flex-direction:column;align-items:stretch;">
           <div class="settings-item-label" style="margin-bottom:6px;">Model</div>
@@ -3276,7 +3299,6 @@
         </div>
       </div>
 
-      <!-- Memory Tab -->
       <div class="settings-section" id="settings-tab-memory">
         <div class="memory-label">Long-term Memory</div>
         <div class="memory-box" id="memory-longterm"></div>
@@ -3286,7 +3308,6 @@
         <button style="width:100%;padding:8px;margin-top:4px;background:none;border:1px solid #e53e3e;border-radius:8px;cursor:pointer;font-size:12px;color:#e53e3e;" onclick="clearMemory()">Clear Memory</button>
       </div>
 
-      <!-- Activity Tab -->
       <div class="settings-section" id="settings-tab-activity">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;">
@@ -3315,19 +3336,16 @@
     </div>
   </div>
 
-  <!-- Top Up Modal -->
   <div class="modal-overlay" id="topup-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
     <div class="modal settings-modal" onclick="event.stopPropagation()">
       <h3 id="topup-modal-title">クレジットをチャージ</h3>
       <p style="font-size:12px;color:var(--muted);margin-bottom:16px;" id="topup-modal-desc">お好きな方法でクレジットを追加できます</p>
 
-      <!-- Tab switcher -->
       <div id="topup-tabs" style="display:flex;gap:4px;margin-bottom:14px;background:var(--bg);border-radius:10px;padding:3px;border:1px solid var(--border);">
         <button onclick="showTopupTab('plans')" id="topup-tab-plans" style="flex:1;padding:8px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;">プラン</button>
         <button onclick="showTopupTab('credits')" id="topup-tab-credits" style="flex:1;padding:8px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:var(--muted);">クレジット追加</button>
       </div>
 
-      <!-- Plans section -->
       <div id="topup-plans" style="display:flex;flex-direction:column;gap:10px;">
         <button onclick="startStripeCheckout('starter')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
           <span style="font-size:24px;">💳</span>
@@ -3355,7 +3373,6 @@
         </button>
       </div>
 
-      <!-- Credit packs section -->
       <div id="topup-credits" style="display:none;flex-direction:column;gap:10px;">
         <button onclick="buyCreditPack(1000)" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
           <span style="font-size:24px;">🪙</span>
@@ -3381,7 +3398,6 @@
           </div>
           <span style="font-size:12px;color:var(--accent);">購入 ›</span>
         </button>
-        <!-- Auto-charge toggle -->
         <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;">
           <span style="font-size:20px;">🔄</span>
           <div style="flex:1;">
@@ -3417,7 +3433,6 @@
     </div>
   </div>
 
-  <!-- App Mode Container (shown when authenticated, OUTSIDE main so display:none doesn't hide it) -->
   <div class="app-container" id="app-container">
     <div class="app-sidebar-backdrop" id="app-sidebar-backdrop" onclick="document.getElementById('app-sidebar').classList.remove('open');this.classList.remove('show');"></div>
     <div class="app-sidebar" id="app-sidebar">
@@ -3431,7 +3446,6 @@
       <div class="app-sidebar-channels">
         <div class="app-sidebar-channels-label" id="app-channels-label">Channels</div>
         <div class="app-sidebar-channels-grid" id="app-channels-grid">
-          <!-- Populated by JS based on region -->
         </div>
       </div>
       <div class="app-sidebar-cli" id="app-sidebar-cli">
@@ -3500,7 +3514,6 @@
           </button>
           <div class="voice-hero-label" id="voice-hero-label">タップして、話しかけてみて</div>
           <div class="app-chat-empty-text" id="app-empty-text">静かなところで、ゆっくり話しましょう</div>
-          <!-- Voice character selector -->
           <div class="voice-chars" id="voice-chars">
             <button class="voice-char active" data-voice="nova" onclick="selectVoiceChar(this)">
               <span class="vc-avatar" style="background:linear-gradient(135deg,#6366f1,#a78bfa);">N</span>
@@ -3554,18 +3567,15 @@
     </div>
   </div>
 
-  <!-- Floating TTS stop button -->
   <button class="tts-stop-float" id="tts-stop-float" onclick="stopTTS()">
     <span class="tts-pulse-dot"></span> 読み上げ停止
   </button>
 
-  <!-- Voice conversation state indicator -->
   <div class="voice-state-bar" id="voice-state-bar">
     <span id="voice-state-icon"></span>
     <span id="voice-state-text"></span>
   </div>
 
-  <!-- Phone Panel -->
   <div class="phone-panel" id="phone-panel">
     <div class="phone-panel-header">
       <span>&#128222; Phone</span>
@@ -3597,7 +3607,6 @@
     <div class="phone-transcript" id="phone-transcript"></div>
   </div>
 
-  <!-- CCP iframe container (hidden, used by amazon-connect-streams) -->
   <div id="ccp-container" style="display:none;width:0;height:0;overflow:hidden;"></div>
 
   <footer>
@@ -3613,7 +3622,6 @@
     const input = document.getElementById('input');
 
     let webSessionId = localStorage.getItem('webSessionId');
-    // Migrate old api: prefix to webchat:
     if (webSessionId && webSessionId.startsWith('api:')) {
       webSessionId = 'webchat:' + webSessionId.slice(4);
       localStorage.setItem('webSessionId', webSessionId);
@@ -3625,7 +3633,6 @@
 
     input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) send(); });
 
-    // Typewriter effect
     function typewriter(el, text, speed = 20) {
       return new Promise(resolve => {
         el.textContent = '';
@@ -3647,7 +3654,6 @@
       });
     }
 
-    // Format /link responses with rich UI
     function isLinkCodeResponse(text) {
       return text.includes('\u30EA\u30F3\u30AF\u30B3\u30FC\u30C9:') || text.includes('Link code:');
     }
@@ -3664,7 +3670,6 @@
       const d = document.createElement('div');
       d.className = 'msg ' + who;
 
-      // Show channel badge for messages from other channels
       if (channel && channel !== 'web') {
         const badge = document.createElement('div');
         badge.className = 'channel-badge ch-' + channel;
@@ -3719,7 +3724,6 @@
         return;
       }
 
-      // Helper to append agent badge and tool badges after text
       function appendBadges() {
         if (agentName && who === 'bot') {
           const badge = document.createElement('span');
@@ -3759,7 +3763,6 @@
       send();
     }
 
-    // Staged thinking status messages
     const THINKING_STAGES = {
       ja: [
         { time: 0,     icon: '\u26A1', text: '\u8003\u3048\u4E2D...' },
@@ -3781,7 +3784,6 @@
       ]
     };
 
-    // Ambient thinking BGM (Web Audio API — plays after 5s wait)
     let _thinkingAudioCtx = null;
     let _thinkingGain = null;
     let _thinkingOscs = [];
@@ -3793,7 +3795,6 @@
         gain.gain.setValueAtTime(0, ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 1.0);
         gain.connect(ctx.destination);
-        // C4, E4, G4 chord — gentle sine waves
         const freqs = [261.63, 329.63, 392.00];
         const oscs = freqs.map(f => {
           const osc = ctx.createOscillator();
@@ -3825,7 +3826,6 @@
       } catch(e) { /* ignore */ }
     }
 
-    // Timeout fallback messages (matches server-side)
     const TIMEOUT_FALLBACKS = {
       ja: [
         '\u3054\u3081\u3093\u306D\u3001\u3061\u3087\u3063\u3068\u8003\u3048\u3059\u304E\u3061\u3083\u3063\u305F...\u3082\u3046\u4E00\u56DE\u805E\u3044\u3066\u304F\u308C\u308B\uFF1F',
@@ -3839,7 +3839,6 @@
       ],
     };
 
-    // Tool name display mapping
     const TOOL_LABELS = {
       web_search: { icon: '\uD83D\uDD0D', ja: 'Web\u691C\u7D22', en: 'Web Search' },
       web_fetch: { icon: '\uD83C\uDF10', ja: '\u30DA\u30FC\u30B8\u53D6\u5F97', en: 'Page Fetch' },
@@ -3853,7 +3852,6 @@
     };
 
     async function send() {
-      // Require login to chat
       if (!currentUser) {
         openAuthModal();
         return;
@@ -3876,7 +3874,6 @@
       msgs.appendChild(typing);
       msgs.scrollTop = msgs.scrollHeight;
 
-      // Staged status transitions
       const startTime = Date.now();
       let stageIdx = 0;
       let ambientStarted = false;
@@ -3940,11 +3937,11 @@
       }
     }
 
-    // Cross-channel real-time sync (lightweight DynamoDB version counter)
     let pollInterval = null;
     let knownMsgCount = 0;
     let syncVersion = 0;
     let isPolling = false;
+    let _lastSyncTimestamp = null; // Track last synced message time for gap detection
 
     function startPolling() {
       if (pollInterval) return;
@@ -3953,6 +3950,37 @@
 
     function stopPolling() {
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+
+    function insertTimeDivider(timestamp) {
+      const d = new Date(timestamp);
+      const now = new Date();
+      const l = document.documentElement.lang || 'ja';
+      let label;
+      const diffMs = now - d;
+      const diffMin = Math.floor(diffMs / 60000);
+      if (diffMin < 1) {
+        label = l === 'ja' ? 'たった今' : 'Just now';
+      } else if (diffMin < 60) {
+        label = l === 'ja' ? diffMin + '分前' : diffMin + 'm ago';
+      } else {
+        const h = d.getHours().toString().padStart(2, '0');
+        const m = d.getMinutes().toString().padStart(2, '0');
+        const isToday = d.toDateString() === now.toDateString();
+        if (isToday) {
+          label = (l === 'ja' ? '今日 ' : 'Today ') + h + ':' + m;
+        } else {
+          const mon = d.getMonth() + 1;
+          const day = d.getDate();
+          label = (l === 'ja' ? mon + '/' + day + ' ' : mon + '/' + day + ' ') + h + ':' + m;
+        }
+      }
+      const divider = document.createElement('div');
+      divider.className = 'sync-time-divider';
+      divider.innerHTML = '<span class="divider-text">' + label + '</span>';
+      const isApp = document.body.classList.contains('app-mode');
+      const container = isApp ? document.getElementById('app-messages') : document.getElementById('msgs');
+      if (container) container.appendChild(divider);
     }
 
     async function pollSync() {
@@ -3965,8 +3993,19 @@
           const lastCh = data.last_channel || '';
           for (const m of data.messages) {
             const ch = m.channel || 'web';
-            // Only show messages from other channels (avoid duplicating own messages)
             if (ch !== 'web') {
+              if (m.timestamp && _lastSyncTimestamp) {
+                const prev = new Date(_lastSyncTimestamp);
+                const curr = new Date(m.timestamp);
+                const gapMin = (curr - prev) / 60000;
+                if (gapMin > 30) {
+                  insertTimeDivider(m.timestamp);
+                }
+              } else if (m.timestamp && !_lastSyncTimestamp) {
+                insertTimeDivider(m.timestamp);
+              }
+              if (m.timestamp) _lastSyncTimestamp = m.timestamp;
+
               const isApp = document.body.classList.contains('app-mode');
               if (isApp) {
                 appAddMsg(m.content, m.role === 'user' ? 'user' : 'bot', null, null, ch);
@@ -3977,7 +4016,6 @@
           }
           syncVersion = data.version;
           knownMsgCount = Math.max(knownMsgCount, syncVersion * 2);
-          // Show sync indicator
           showSyncToast(lastCh);
         } else if (data.version) {
           syncVersion = data.version;
@@ -3998,7 +4036,6 @@
       setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2500);
     }
 
-    // Fallback: full session poll for channel status (less frequent)
     let statusPollInterval = null;
     function startStatusPolling() {
       if (statusPollInterval) return;
@@ -4027,7 +4064,6 @@
         tgBar && tgBar.classList.add('connected');
         tgCard && tgCard.classList.add('connected');
       }
-      // Hide channel cards entirely when at least one channel is linked
       const nonWeb = channels.filter(c => c !== 'web');
       if (nonWeb.length > 0) {
         document.querySelectorAll('.channel-cards').forEach(g => g.style.display = 'none');
@@ -4036,7 +4072,6 @@
         const cli = document.getElementById('cli-install-section');
         if (cli) cli.style.display = 'none';
       }
-      // Also update app-mode sidebar channel buttons with linked info
       const chMap = { line: 'app-ch-line', telegram: 'app-ch-tg', whatsapp: 'app-ch-whatsapp', discord: 'app-ch-discord', slack: 'app-ch-slack', teams: 'app-ch-teams' };
       channels.forEach(ch => {
         const el = document.getElementById(chMap[ch]);
@@ -4058,11 +4093,9 @@
           }
         }
       });
-      // Update sidebar user area badges
       updateSidebarChannelBadges(channels, details);
     }
 
-    // Pause polling when tab is hidden, resume when visible
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         stopPolling();
@@ -4073,12 +4106,10 @@
         if (typeof startDevicePolling === 'function' && document.body.classList.contains('app-mode')) startDevicePolling();
       }
     });
-    // Start sync polling immediately (lightweight — 1 GetItem per 1.5s)
     startPolling();
     pollChannelStatus(); // Check channel status immediately on load
     startStatusPolling();
 
-    // Recipes data — organized by use case persona (OpenClaw: your tireless AI assistant)
     const R = {
       ja: {
         categories: [
@@ -4290,7 +4321,6 @@
     };
 
     // -----------------------------------------------------------------------
-    // A/B Test Framework — 3 variants for landing page personality
     // -----------------------------------------------------------------------
     const AB_VARIANTS = {
       a: {
@@ -4378,7 +4408,6 @@
     }
 
     // -----------------------------------------------------------------------
-    // Voice demo – "listen to AI speak" interactive section
     // -----------------------------------------------------------------------
     const DEMO_VOICES = [
       { icon: '🌤️', ja: '天気', en: 'Weather',
@@ -4421,7 +4450,6 @@
       demoAudio = null;
       const prev = demoPlayingIdx;
       demoPlayingIdx = -1;
-      // Remove playing class from all buttons
       document.querySelectorAll('.voice-demo-btn').forEach(b => b.classList.remove('playing'));
       const output = document.getElementById('voice-demo-output');
       if (prev !== -1) {
@@ -4432,7 +4460,6 @@
 
     async function playDemoVoice(idx) {
       const prev = stopDemoVoice();
-      // Toggle off if same button
       if (prev === idx) return;
 
       demoPlayingIdx = idx;
@@ -4441,12 +4468,10 @@
       const btns = document.querySelectorAll('.voice-demo-btn');
       if (btns[idx]) btns[idx].classList.add('playing');
 
-      // Typewriter into output
       const output = document.getElementById('voice-demo-output');
       output.textContent = '';
       output.classList.add('active');
 
-      // Start typewriter (uses only demoTypewriterAbort to stop)
       (function demoTypewrite() {
         let i = 0;
         function tick() {
@@ -4456,7 +4481,6 @@
             i++;
             setTimeout(tick, 25);
           } else {
-            // Typewriter finished — remove playing state if audio isn't playing
             if (!demoAudio || demoAudio.paused || demoAudio.ended) {
               demoPlayingIdx = -1;
               if (btns[idx]) btns[idx].classList.remove('playing');
@@ -4466,7 +4490,6 @@
         tick();
       })();
 
-      // Fetch TTS audio
       try {
         const headers = { 'Content-Type': 'application/json', 'x-session-id': typeof webSessionId !== 'undefined' ? webSessionId : '' };
         if (typeof authToken !== 'undefined' && authToken) headers['Authorization'] = 'Bearer ' + authToken;
@@ -4494,7 +4517,6 @@
 
         demoAudio.play().catch(function(e) {
           console.warn('Demo TTS autoplay blocked:', e.message);
-          // Autoplay policy blocked — stop playing state
           if (demoPlayingIdx === idx) {
             demoPlayingIdx = -1;
             if (btns[idx]) btns[idx].classList.remove('playing');
@@ -4534,7 +4556,6 @@
       const t = T[l];
       document.getElementById('t-title').textContent = t.title;
       document.getElementById('t-subtitle').textContent = t.sub;
-      // Typewriter welcome
       const welcomeEl = document.getElementById('t-welcome');
       if (!welcomeEl.dataset.typed) {
         welcomeEl.dataset.typed = '1';
@@ -4596,7 +4617,6 @@
       document.getElementById('t-device-title').textContent = t.deviceTitle;
       document.getElementById('t-device-desc').textContent = t.deviceDesc;
       document.getElementById('t-device-hint').innerHTML = t.deviceHint;
-      // Capabilities section
       document.getElementById('t-cap-title').textContent = t.capTitle;
       document.getElementById('t-cap-sub').textContent = t.capSub;
       document.getElementById('cap-search').textContent = t.capSearch;
@@ -4619,7 +4639,6 @@
       document.getElementById('cap-memory-d').textContent = t.capMemoryD;
       document.getElementById('cap-note-text').textContent = t.capNote;
       document.getElementById('cap-note-link').textContent = t.capNoteLink;
-      // Use cases section
       var uc1t = document.getElementById('uc-1-title'); if (uc1t) uc1t.textContent = t.uc1Title;
       var uc1d = document.getElementById('uc-1-desc'); if (uc1d) uc1d.textContent = t.uc1Desc;
       var uc2t = document.getElementById('uc-2-title'); if (uc2t) uc2t.textContent = t.uc2Title;
@@ -4632,10 +4651,8 @@
       var uc5d = document.getElementById('uc-5-desc'); if (uc5d) uc5d.textContent = t.uc5Desc;
       var uc6t = document.getElementById('uc-6-title'); if (uc6t) uc6t.textContent = t.uc6Title;
       var uc6d = document.getElementById('uc-6-desc'); if (uc6d) uc6d.textContent = t.uc6Desc;
-      // Demo messages
       var dq1 = document.getElementById('demo-q1'); if (dq1) dq1.textContent = t.demoQ1;
       var da1 = document.getElementById('demo-a1'); if (da1) da1.innerHTML = t.demoA1.replace(/\n/g, '<br>');
-      // Auth UI translations
       if (!currentUser) document.getElementById('login-btn').textContent = t.loginBtn;
       document.getElementById('chat-login-text').textContent = t.chatLoginPrompt;
       const lang2 = document.documentElement.lang || 'ja';
@@ -4645,7 +4662,6 @@
       if (bonusEl) bonusEl.textContent = lang2 === 'ja' ? '登録で100クレジット無料!' : '100 credits free on signup!';
       document.getElementById('sidebar-title').textContent = t.sidebarTitle;
       document.getElementById('new-conv-btn').textContent = t.newConv;
-      // App mode translations
       const appNewConvText = document.getElementById('app-new-conv-text');
       if (appNewConvText) appNewConvText.textContent = t.appNewChat;
       const appEmptyText = document.querySelector('.app-chat-empty-text');
@@ -4654,7 +4670,6 @@
       if (appInput) appInput.placeholder = t.appPlaceholder;
       const appChLabel = document.getElementById('app-channels-label');
       if (appChLabel) appChLabel.textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
-      // Link command hint
       const linkCmdTitle = document.getElementById('t-link-cmd-title');
       if (linkCmdTitle) linkCmdTitle.textContent = l === 'ja' ? 'コマンドで連携' : 'Link via Command';
       const linkCmdDesc = document.getElementById('t-link-cmd-desc');
@@ -4663,17 +4678,14 @@
         : 'Type <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link</code> in chat to generate a link code. Send <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link CODE</code> from another channel (LINE, Telegram, etc.) to connect.';
       const linkCmdBtn = document.getElementById('t-link-cmd-btn');
       if (linkCmdBtn) linkCmdBtn.textContent = l === 'ja' ? '/link コードを生成' : '/link Generate Code';
-      // TTS stop button
       const ttsStopFloat = document.getElementById('tts-stop-float');
       if (ttsStopFloat) ttsStopFloat.innerHTML = '<span class="tts-pulse-dot"></span> ' + (l === 'ja' ? '読み上げ停止' : 'Stop Speaking');
       if (document.body.classList.contains('app-mode')) appRenderSuggestions();
       renderRecipes(l);
-      // Voice demo
       document.getElementById('t-voice-label').textContent = t.voiceLabel;
       renderVoiceDemo(l);
     }
 
-    // CLI sync command copy helper
     function copyCliSync(el) {
       const cmd = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
       navigator.clipboard.writeText(cmd);
@@ -4681,7 +4693,6 @@
       if (cp) { cp.textContent = 'Copied!'; setTimeout(() => cp.textContent = 'Copy', 1500); }
     }
 
-    // Sidebar CLI copy helper
     function copyCli(el, cmd) {
       if (!cmd) {
         cmd = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
@@ -4691,7 +4702,6 @@
       if (cp) { cp.textContent = 'Copied!'; setTimeout(() => cp.textContent = 'Copy', 1500); }
     }
 
-    // Load worker status for sidebar
     async function loadWorkerStatus() {
       try {
         const hdrs = {};
@@ -4711,7 +4721,6 @@
       } catch(e) { /* ignore */ }
     }
 
-    // Show session ID (masked for display, full ID on click to copy)
     function maskSessionId(id) {
       const parts = id.split(':');
       if (parts.length === 2) {
@@ -4729,13 +4738,10 @@
       setTimeout(() => this.style.opacity = 1, 300);
     };
 
-    // Channel deep links with auto-link session ID
     function getLineDeepLink() {
-      // LINE OA message deep link with /link command + session ID prefilled
       return 'https://line.me/R/oaMessage/@619jcqqh/?%2Flink%20' + encodeURIComponent(webSessionId);
     }
     function getTgDeepLink() {
-      // Telegram deep link: /start payload (replace : with _ for Telegram)
       const payload = webSessionId.replace(':', '_');
       return 'https://t.me/chatweb_ai_bot?start=' + payload;
     }
@@ -4758,11 +4764,9 @@
       showModal(ch);
     }
 
-    // Agent selector (always auto)
     let selectedAgent = 'auto';
     function selectAgent(val) { selectedAgent = val; }
 
-    // Device monitoring
     async function pollDevices() {
       try {
         const r = await fetch(API + '/api/v1/devices', {
@@ -4786,7 +4790,6 @@
       if (secs < 86400) return Math.floor(secs/3600) + 'h';
       return Math.floor(secs/86400) + 'd';
     }
-    // Only poll devices in app mode (not landing page)
     var devicePollInterval = null;
     function startDevicePolling() {
       if (devicePollInterval) return;
@@ -4797,7 +4800,6 @@
       if (devicePollInterval) { clearInterval(devicePollInterval); devicePollInterval = null; }
     }
 
-    // Populate sidebar channels based on locale (Japan: LINE, Telegram first)
     (function populateSidebarChannels() {
       const grid = document.getElementById('app-channels-grid');
       if (!grid) return;
@@ -4813,7 +4815,6 @@
         { id: 'teams', name: 'Teams', color: '#6264A7', path: 'M20.5 7h-3V5.5a2.5 2.5 0 0 0-5 0V7h-1a1.5 1.5 0 0 0-1.5 1.5v8a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 20.5 7z' },
       ];
 
-      // Japan: LINE, Telegram first. Others: WhatsApp, Telegram first
       const order = isJapan
         ? ['line', 'tg', 'whatsapp', 'discord', 'slack', 'teams']
         : ['whatsapp', 'tg', 'discord', 'slack', 'line', 'teams'];
@@ -4838,8 +4839,8 @@
         bg: 'line-bg',
       },
       tg: {
-        ja: { title: 'Telegramで開始', desc: 'ボタンを押すとTelegramが開き、自動でこのWebの会話と連携されます。', link: 'Telegramで開く' },
-        en: { title: 'Start on Telegram', desc: 'Tap the button to open Telegram. Your Web conversation will be auto-linked.', link: 'Open in Telegram' },
+        ja: { title: 'Telegramで開始', desc: 'QRコードをスマホで読み取るか、ボタンを押してTelegramを開いてください。自動でWebの会話と連携されます。', descMobile: 'ボタンを押すとTelegramが開きます。送信で連携完了。QRコードで別端末からも連携できます。', link: 'Telegramで開く' },
+        en: { title: 'Start on Telegram', desc: 'Scan the QR code with your phone, or tap the button to open Telegram. Your Web conversation will be auto-linked.', descMobile: 'Tap the button to open Telegram. You can also scan the QR from another device.', link: 'Open in Telegram' },
         bg: 'tg-bg',
       },
       whatsapp: {
@@ -4878,7 +4879,6 @@
       return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
         || (navigator.maxTouchPoints > 0 && window.innerWidth < 768);
     }
-    // Generate a link code via backend for QR-based channel linking
     async function generateLinkCode() {
       try {
         const resp = await fetch(API + '/api/v1/link/generate', {
@@ -4924,16 +4924,13 @@
       document.getElementById('modal-success-text').textContent = l === 'ja'
         ? chName + ' 連携完了！' : chName + ' linked!';
       document.getElementById('modal-close-btn').textContent = l === 'ja' ? '閉じる' : 'Close';
-      // Update channel status for all channel types
       const barId = 'ch-bar-' + ch;
       const cardId = ch + '-card';
       const appId = 'app-ch-' + ch;
       document.getElementById(barId)?.classList.add('connected');
       document.getElementById(cardId)?.classList.add('connected');
       document.getElementById(appId)?.classList.add('connected');
-      // Compact the channel cards grid
       document.querySelectorAll('.channel-cards').forEach(g => g.classList.add('has-linked'));
-      // Auto close after 1.5s, then show fullscreen overlay
       setTimeout(() => {
         document.getElementById('modal').classList.remove('show');
         showLinkOverlay(ch);
@@ -5010,7 +5007,6 @@
       const t = c[l] || c.ja;
       const mobile = isMobileDevice();
 
-      // Reset all elements
       document.getElementById('modal-success').style.display = 'none';
       document.getElementById('modal-desc').style.display = '';
       document.getElementById('modal-qr-wrap').style.display = '';
@@ -5048,26 +5044,32 @@
         deepLink = getDeepLink(ch);
       }
 
-      // QR code (always generated)
       qrImg.onload = function() { qrSpinner.classList.add('hidden'); qrImg.classList.add('loaded'); };
       qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
 
       if (mobile) {
-        // Mobile: big CTA button first, QR smaller below
         cta.style.display = '';
         cta.href = deepLink;
         cta.textContent = t.link || (l === 'ja' ? 'アプリで開く' : 'Open app');
-        document.getElementById('modal-qr-wrap').style.display = 'none';
+        if (ch === 'line' || ch === 'tg') {
+          document.getElementById('modal-qr-wrap').style.display = '';
+          document.getElementById('modal-qr-wrap').style.marginTop = '12px';
+          document.getElementById('modal-qr-wrap').style.opacity = '0.85';
+          document.getElementById('modal-qr-wrap').style.transform = 'scale(0.8)';
+        } else {
+          document.getElementById('modal-qr-wrap').style.display = 'none';
+        }
         link.style.display = 'none';
       } else {
-        // Desktop: QR prominent, text link below
         cta.style.display = 'none';
+        document.getElementById('modal-qr-wrap').style.marginTop = '';
+        document.getElementById('modal-qr-wrap').style.opacity = '';
+        document.getElementById('modal-qr-wrap').style.transform = '';
         link.href = deepLink;
         link.textContent = t.link;
         link.style.display = '';
       }
 
-      // Show link code for manual entry
       if (code) {
         const codeRow = document.getElementById('modal-code-row');
         codeRow.style.display = '';
@@ -5075,7 +5077,6 @@
         document.getElementById('modal-code-val').textContent = code;
       }
 
-      // Start polling for link completion (all channels)
       if (code) {
         startLinkPoll(ch, code);
       }
@@ -5091,7 +5092,6 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Auth functions
     // ---------------------------------------------------------------------------
     let authToken = localStorage.getItem('authToken');
     let currentUser = null;
@@ -5160,7 +5160,6 @@
         });
         const d = await r.json();
         if (d.ok && d.pending_verification) {
-          // Show verification code input
           pendingVerifyEmail = email;
           document.getElementById('auth-form-email').style.display = 'none';
           document.getElementById('auth-form-verify').style.display = '';
@@ -5227,17 +5226,14 @@
     }
 
     async function checkAuth() {
-      // Check for token in URL (from Google OAuth callback)
       const urlParams = new URLSearchParams(window.location.search);
       const urlToken = urlParams.get('token');
       if (urlToken) {
         localStorage.setItem('authToken', urlToken);
         authToken = urlToken;
-        // Clean URL
         window.history.replaceState({}, '', '/');
       }
 
-      // Handle checkout success/cancel
       var checkoutStatus = urlParams.get('checkout');
       if (checkoutStatus === 'success') {
         window.history.replaceState({}, '', '/');
@@ -5260,17 +5256,14 @@
           document.getElementById('user-menu').style.display = '';
           document.getElementById('user-display-name').textContent = d.display_name || 'User';
           document.getElementById('chat-login-overlay').classList.add('hidden');
-          // Show credits if available
           if (d.credits_remaining !== undefined) {
             updateCredits(d.credits_remaining);
           }
           window._userPlan = d.plan || 'free';
-          // Show multi-model toggle for paid users
           const mmToggle = document.getElementById('multi-model-toggle');
           if (mmToggle && d.plan && d.plan !== 'free') {
             mmToggle.style.display = '';
           }
-          // Enter ChatGPT-like app mode
           enterAppMode();
         } else {
           localStorage.removeItem('authToken');
@@ -5285,7 +5278,6 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Sidebar / Conversation history
     // ---------------------------------------------------------------------------
     function toggleSidebar() {
       document.getElementById('sidebar').classList.toggle('open');
@@ -5318,18 +5310,15 @@
           headers: { 'Authorization': 'Bearer ' + authToken },
         });
         const d = await r.json();
-        // Update session
         if (d.session_id) {
           webSessionId = d.session_id;
           localStorage.setItem('webSessionId', webSessionId);
         }
-        // Clear and re-render messages
         msgs.innerHTML = '';
         (d.messages || []).forEach(m => {
           addMsg(m.content, m.role === 'user' ? 'user' : 'bot');
         });
         knownMsgCount = (d.messages || []).length;
-        // Highlight active
         document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
         event.target.classList.add('active');
         toggleSidebar();
@@ -5339,6 +5328,8 @@
     async function newConversation() {
       if (!authToken) return;
       try {
+        await finalizeCurrentConversation();
+
         const r = await fetch(API + '/api/v1/conversations', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + authToken },
@@ -5349,6 +5340,8 @@
           localStorage.setItem('webSessionId', webSessionId);
           msgs.innerHTML = '<div class="msg bot" id="t-welcome"></div>';
           knownMsgCount = 0;
+          syncVersion = 0;
+          _lastSyncTimestamp = null;
           const lang = document.documentElement.lang || 'ja';
           const t = T[lang];
           typewriter(document.getElementById('t-welcome'), t.welcome, 25);
@@ -5358,7 +5351,6 @@
       } catch(e) { /* ignore */ }
     }
 
-    // Mobile menu
     function toggleMobileMenu() {
       document.getElementById('mobile-menu').classList.toggle('show');
     }
@@ -5372,19 +5364,16 @@
     });
 
     // ---------------------------------------------------------------------------
-    // App Mode (ChatGPT-like UI for authenticated users)
     // ---------------------------------------------------------------------------
     let appConversations = [];
     let appCurrentConvId = null;
 
     // ---------------------------------------------------------------------------
-    // API Key management
     // ---------------------------------------------------------------------------
     function openApiKeysModal() {
       document.getElementById('apikey-modal').classList.add('show');
       document.getElementById('apikey-new-key').style.display = 'none';
       loadApiKeys();
-      // i18n
       const l = document.documentElement.lang || 'ja';
       document.getElementById('apikey-modal-title').textContent = 'API Keys';
       document.getElementById('apikey-modal-desc').textContent = l === 'ja'
@@ -5455,21 +5444,15 @@
     function enterAppMode() {
       document.body.classList.add('app-mode');
       document.getElementById('app-sidebar-toggle').style.display = '';
-      // Hide old sidebar toggle
       document.getElementById('sidebar-toggle').style.display = 'none';
       document.getElementById('sidebar').classList.remove('open');
-      // Set user info in sidebar
       const name = currentUser.display_name || 'User';
       document.getElementById('app-user-name').textContent = name;
       document.getElementById('app-user-avatar').textContent = name.charAt(0).toUpperCase();
       document.getElementById('app-user-email').textContent = currentUser.email || '';
-      // Always show credit display
       updateCredits(currentUser.credits_remaining || 0);
-      // Load conversations into app sidebar
       appLoadConversations();
-      // Render suggestions
       appRenderSuggestions();
-      // Set i18n
       const l = document.documentElement.lang || 'ja';
       document.getElementById('app-new-conv-text').textContent = l === 'ja' ? '新しいチャット' : 'New chat';
       var userName = currentUser.display_name && currentUser.display_name !== 'User' ? currentUser.display_name : '';
@@ -5478,25 +5461,19 @@
         : (userName ? 'What can I do for you, ' + userName + '?' : 'Let\'s talk. Ask me anything.');
       document.getElementById('app-input').placeholder = l === 'ja' ? 'メッセージを入力...' : 'Message chatweb.ai...';
       document.getElementById('app-channels-label').textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
-      // Set CLI sidebar sync command
       const cliSyncEl = document.getElementById('cli-sidebar-sync-text');
       if (cliSyncEl) cliSyncEl.textContent = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
-      // Load worker status
       loadWorkerStatus();
-      // Start device polling only in app mode
       startDevicePolling();
-      // Init sync + cron
       startAutoSync();
       loadCronJobs();
       updateSyncUI();
-      // First-time onboarding — skip name step if already set (not email, not default)
       if (!localStorage.getItem('onboarded')) {
         var dn = currentUser.display_name || '';
         var needsName = !dn || dn === 'User' || dn.includes('@');
         if (needsName) {
           setTimeout(showOnboarding, 600);
         } else {
-          // Name already set from registration — skip to voice selection
           setTimeout(function() { showOnboarding(); skipToVoiceStep(dn); }, 600);
         }
       }
@@ -5509,7 +5486,6 @@
     }
 
     // -----------------------------------------------------------------------
-    // Onboarding — first-time welcome
     // -----------------------------------------------------------------------
     function showOnboarding() {
       var modal = document.getElementById('onboard-modal');
@@ -5522,7 +5498,6 @@
         ? 'あなたの名前を教えてください。<br>声で呼びかけるときに使います。'
         : 'What should I call you?<br>I\'ll use this name when I speak to you.';
       document.getElementById('onboard-name').placeholder = lang === 'ja' ? 'お名前（ニックネームOK）' : 'Your name (nickname OK)';
-      // Play welcome voice after a moment
       setTimeout(function() {
         var greeting = lang === 'ja'
           ? 'こんにちは！ChatWebへようこそ。あなたの名前を教えてくれたら嬉しいな。'
@@ -5532,7 +5507,6 @@
     }
 
     function skipToVoiceStep(name) {
-      // Name already set from registration — skip directly to voice selection
       currentUser.display_name = name;
       document.getElementById('app-user-name').textContent = name;
       document.getElementById('app-user-avatar').textContent = name.charAt(0).toUpperCase();
@@ -5549,7 +5523,6 @@
       var nameInput = document.getElementById('onboard-name');
       var name = (nameInput.value || '').trim();
       if (!name) { nameInput.focus(); return; }
-      // Save name to backend
       if (authToken) {
         fetch(API + '/api/v1/settings/' + webSessionId, {
           method: 'POST',
@@ -5557,14 +5530,11 @@
           body: JSON.stringify({ display_name: name }),
         }).catch(function() {});
       }
-      // Update local UI
       currentUser.display_name = name;
       document.getElementById('app-user-name').textContent = name;
       document.getElementById('app-user-avatar').textContent = name.charAt(0).toUpperCase();
-      // Switch to step 2 (voice selection)
       document.getElementById('onboard-step-1').style.display = 'none';
       document.getElementById('onboard-step-2').style.display = '';
-      // Play personalized greeting
       var lang = document.documentElement.lang || 'ja';
       var greeting = lang === 'ja'
         ? name + 'さん、いい名前だね！次は、私の声を選んでください。'
@@ -5576,7 +5546,6 @@
       localStorage.setItem('onboarded', '1');
       var modal = document.getElementById('onboard-modal');
       if (modal) { modal.classList.remove('show'); modal.style.display = 'none'; }
-      // Save voice preference to backend
       if (authToken) {
         fetch(API + '/api/v1/settings/' + webSessionId, {
           method: 'POST',
@@ -5590,7 +5559,6 @@
         ? name + 'さん、準備完了！何でも聞いてね。声でもテキストでも。'
         : 'All set, ' + name + '! Ask me anything — voice or text.';
       setTimeout(function() { fetchTTS(farewell); }, 300);
-      // Focus input
       var input = document.getElementById('app-input');
       if (input) input.focus();
     }
@@ -5635,7 +5603,6 @@
         const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
         const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
 
-        // Group conversations by date
         const groups = {};
         appConversations.forEach(conv => {
           const d2 = new Date(conv.updated_at || conv.created_at);
@@ -5673,16 +5640,56 @@
           convs.forEach(conv => {
             const item = document.createElement('div');
             item.className = 'app-conv-item' + (conv.id === appCurrentConvId ? ' active' : '');
-            item.style.cssText = 'display:flex;align-items:center;gap:4px;';
+            item.style.cssText = 'display:flex;align-items:flex-start;gap:4px;cursor:pointer;';
+            item.onclick = () => appLoadConversation(conv.id, conv.session_id);
+
+            const info = document.createElement('div');
+            info.style.cssText = 'flex:1;overflow:hidden;min-width:0;';
+
+            // Title row with time
+            const titleRow = document.createElement('div');
+            titleRow.style.cssText = 'display:flex;align-items:center;gap:4px;';
             const title = document.createElement('span');
-            title.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            title.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;font-size:13px;';
             const convTitle = conv.title || (l === 'ja' ? '新しい会話' : 'New conversation');
             title.textContent = convTitle === 'New conversation' && l === 'ja' ? '新しい会話' : convTitle;
-            title.onclick = () => appLoadConversation(conv.id, conv.session_id);
-            item.appendChild(title);
+            titleRow.appendChild(title);
+
+            // Time badge
+            const ts = conv.updated_at || conv.created_at;
+            if (ts) {
+              const d2 = new Date(ts);
+              const timeBadge = document.createElement('span');
+              timeBadge.style.cssText = 'font-size:10px;color:var(--muted);white-space:nowrap;flex-shrink:0;';
+              const h = d2.getHours().toString().padStart(2, '0');
+              const m = d2.getMinutes().toString().padStart(2, '0');
+              timeBadge.textContent = h + ':' + m;
+              titleRow.appendChild(timeBadge);
+            }
+            info.appendChild(titleRow);
+
+            // Preview text (up to 3 lines)
+            const preview = conv.preview || '';
+            if (preview) {
+              const prevEl = document.createElement('div');
+              prevEl.style.cssText = 'font-size:11px;color:var(--muted);line-height:1.3;margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;';
+              prevEl.textContent = preview;
+              info.appendChild(prevEl);
+            }
+
+            // Message count
+            if (conv.message_count > 0) {
+              const countEl = document.createElement('div');
+              countEl.style.cssText = 'font-size:10px;color:var(--muted);margin-top:1px;opacity:0.7;';
+              countEl.textContent = conv.message_count + (l === 'ja' ? ' メッセージ' : ' messages');
+              info.appendChild(countEl);
+            }
+
+            item.appendChild(info);
+
             const shareBtn = document.createElement('button');
             shareBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-            shareBtn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;flex-shrink:0;opacity:0;transition:opacity 0.15s;';
+            shareBtn.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;flex-shrink:0;opacity:0;transition:opacity 0.15s;margin-top:2px;';
             shareBtn.title = 'Share';
             shareBtn.onclick = (e) => { e.stopPropagation(); shareConversation(conv.id); };
             item.appendChild(shareBtn);
@@ -5699,7 +5706,10 @@
 
     async function appLoadConversation(convId, sessionId) {
       if (!authToken) return;
+      await finalizeCurrentConversation();
       appCurrentConvId = convId;
+      syncVersion = 0;
+      _lastSyncTimestamp = null;
       try {
         const r = await fetch(API + '/api/v1/conversations/' + encodeURIComponent(convId) + '/messages', {
           headers: { 'Authorization': 'Bearer ' + authToken },
@@ -5712,17 +5722,24 @@
         const msgsEl = document.getElementById('app-messages');
         msgsEl.innerHTML = '';
         document.getElementById('app-empty')?.remove();
+        let prevTs = null;
         (d.messages || []).forEach(m => {
-          appAddMsg(m.content, m.role === 'user' ? 'user' : 'bot');
+          if (m.timestamp && prevTs) {
+            const gap = (new Date(m.timestamp) - new Date(prevTs)) / 60000;
+            if (gap > 30) {
+              insertTimeDivider(m.timestamp);
+            }
+          }
+          if (m.timestamp) prevTs = m.timestamp;
+          const ch = (m.channel && m.channel !== 'web') ? m.channel : null;
+          appAddMsg(m.content, m.role === 'user' ? 'user' : 'bot', null, null, ch);
         });
         knownMsgCount = (d.messages || []).length;
-        // Update active state
         document.querySelectorAll('.app-conv-item').forEach(el => el.classList.remove('active'));
         const items = document.querySelectorAll('.app-conv-item');
         appConversations.forEach((conv, i) => {
           if (conv.id === convId && items[i]) items[i].classList.add('active');
         });
-        // Close sidebar on mobile
         document.getElementById('app-sidebar').classList.remove('open');
       } catch(e) { /* ignore */ }
     }
@@ -5739,14 +5756,40 @@
         localStorage.setItem('sidebarCollapsed', document.body.classList.contains('sidebar-collapsed') ? '1' : '');
       }
     }
-    // Restore sidebar state on load
     if (localStorage.getItem('sidebarCollapsed') === '1') {
       document.body.classList.add('sidebar-collapsed');
+    }
+
+    async function finalizeCurrentConversation() {
+      if (!authToken || !webSessionId) return;
+      try {
+        await fetch(API + '/api/v1/conversations/finalize', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: webSessionId }),
+        });
+      } catch(e) { /* fire-and-forget */ }
+    }
+
+    // Insert a visual conversation divider (-----) when switching conversations
+    function insertConversationDivider() {
+      const msgsEl = document.getElementById('app-messages');
+      if (!msgsEl || msgsEl.children.length === 0) return;
+      const divider = document.createElement('div');
+      divider.className = 'sync-time-divider';
+      const l = document.documentElement.lang || 'ja';
+      const now = new Date();
+      const h = now.getHours().toString().padStart(2, '0');
+      const m = now.getMinutes().toString().padStart(2, '0');
+      divider.innerHTML = '<span class="divider-text">' + (l === 'ja' ? '新しい会話 ' : 'New conversation ') + h + ':' + m + '</span>';
+      msgsEl.appendChild(divider);
     }
 
     async function appNewConversation() {
       if (!authToken) return;
       try {
+        await finalizeCurrentConversation();
+
         const r = await fetch(API + '/api/v1/conversations', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + authToken },
@@ -5758,7 +5801,6 @@
           appCurrentConvId = d.conversation_id || null;
           const msgsEl = document.getElementById('app-messages');
           msgsEl.innerHTML = '';
-          // Re-add empty state
           const empty = document.createElement('div');
           empty.className = 'app-chat-empty';
           empty.id = 'app-empty';
@@ -5772,18 +5814,18 @@
           msgsEl.appendChild(empty);
           appRenderSuggestions();
           knownMsgCount = 0;
+          syncVersion = 0;
+          _lastSyncTimestamp = null;
           appLoadConversations();
           document.getElementById('app-sidebar').classList.remove('open');
         }
       } catch(e) { /* ignore */ }
     }
 
-    // Detect and render media URLs in bot messages
     function renderMediaContent(text) {
       let html = text;
       let hasMedia = false;
 
-      // Image: ![alt](url) markdown pattern
       html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function(match, alt, url) {
         hasMedia = true;
         if (url.startsWith('data:')) return match; // skip base64
@@ -5791,19 +5833,16 @@
           '" style="max-width:100%;border-radius:8px;cursor:pointer" onclick="window.open(this.src,\'_blank\')" loading="lazy"></div>';
       });
 
-      // Audio: [AUDIO:url]
       html = html.replace(/\[AUDIO:([^\]]+)\]/g, function(match, url) {
         hasMedia = true;
         return '<div style="margin:8px 0"><audio controls preload="none" style="width:100%;max-width:400px" src="' + escapeHtml(url) + '"></audio></div>';
       });
 
-      // Video: [VIDEO:url]
       html = html.replace(/\[VIDEO:([^\]]+)\]/g, function(match, url) {
         hasMedia = true;
         return '<div style="margin:8px 0"><video controls preload="none" style="max-width:100%;border-radius:8px" src="' + escapeHtml(url) + '"></video></div>';
       });
 
-      // Direct image URLs in text (png, jpg, gif, webp)
       if (!hasMedia) {
         html = html.replace(/(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s]*)?)/gi, function(url) {
           hasMedia = true;
@@ -5820,7 +5859,6 @@
     }
 
     function appAddMsg(text, who, agentName, toolsUsed, channel) {
-      // Remove empty state if present
       const empty = document.getElementById('app-empty');
       if (empty) empty.remove();
 
@@ -5829,7 +5867,6 @@
       wrapper.className = 'app-msg app-msg-' + who;
 
       if (who === 'user') {
-        // Channel badge for messages from other channels
         if (channel && channel !== 'web') {
           const chBadge = document.createElement('div');
           chBadge.style.cssText = 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:4px;display:inline-block;';
@@ -5852,7 +5889,6 @@
         wrapper.appendChild(avatar);
         const content = document.createElement('div');
         content.className = 'app-msg-content';
-        // Render media content (images, audio, video)
         const renderedText = renderMediaContent(text);
         if (renderedText !== text) {
           content.innerHTML = renderedText;
@@ -5878,7 +5914,6 @@
           });
           content.appendChild(container);
         }
-        // TTS button for bot messages
         const ttsBtn = document.createElement('button');
         ttsBtn.className = 'app-tts-btn';
         ttsBtn.textContent = '\uD83D\uDD0A';
@@ -5886,7 +5921,6 @@
         ttsBtn.onclick = function() { playTTS(this); };
         content.appendChild(ttsBtn);
 
-        // Satisfaction actions (escalate)
         var actionsBar = document.createElement('div');
         actionsBar.className = 'msg-actions';
         var escalateBtn = document.createElement('button');
@@ -5908,7 +5942,6 @@
     }
 
     // -----------------------------------------------------------------------
-    // Response escalation — smarter AI → human contact
     // -----------------------------------------------------------------------
     async function escalateResponse(btn) {
       var level = parseInt(btn.dataset.level || '0') + 1;
@@ -5918,7 +5951,6 @@
       var lang = document.documentElement.lang || 'ja';
 
       if (level === 1) {
-        // Level 1: Re-ask with smarter model + deeper analysis
         btn.classList.add('loading');
         btn.innerHTML = '<span class="dot-pulse" style="display:inline-block;width:6px;height:6px;background:var(--accent);border-radius:50%;animation:pulse 1s infinite;margin-right:4px;"></span>'
           + (lang === 'ja' ? '深く考え中...' : 'Thinking deeper...');
@@ -5946,11 +5978,9 @@
           if (d.response) {
             appAddMsg(d.response, 'bot', 'deep-think');
             if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
-            // Update button to level 2
             btn.dataset.level = '1';
             btn.classList.add('done');
             btn.innerHTML = (lang === 'ja' ? '回答済み' : 'Answered');
-            // Add human escalation button
             var humanBtn = document.createElement('button');
             humanBtn.className = 'escalate-human';
             humanBtn.innerHTML = (lang === 'ja' ? '作者に聞く' : 'Ask creator');
@@ -5970,7 +6000,6 @@
         ? 'AIでは解決できなかったようです。作者の濱田優貴がLINEで直接お答えします。LINEで質問を送りますか？'
         : 'The AI couldn\'t fully help. Creator Yuki Hamada will answer personally via LINE. Send your question?';
       if (!confirm(msg)) return;
-      // Send via LINE deep link to creator
       var encoded = encodeURIComponent(question.substring(0, 200));
       window.open('https://line.me/R/oaMessage/@619jcqqh/?text=' + encoded, '_blank');
       showToast(lang === 'ja' ? 'LINEで質問を送信してください' : 'Send your question via LINE', 3000);
@@ -5981,7 +6010,6 @@
         e.preventDefault();
         appSend();
       }
-      // Auto-resize textarea
       setTimeout(() => {
         e.target.style.height = 'auto';
         e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px';
@@ -5995,22 +6023,18 @@
       textarea.value = '';
       textarea.style.height = 'auto';
       appAddMsg(text, 'user');
-      // Track A/B test engagement
       trackAbMessage();
 
-      // Immediately update conversation title client-side (avoid race with backend)
       if (appCurrentConvId && appConversations) {
         const conv = appConversations.find(c => c.id === appCurrentConvId);
         if (conv && (!conv.title || conv.title === 'New conversation')) {
           const trimmed = text.trim();
           conv.title = trimmed.length > 50 ? trimmed.substring(0, 50) + '...' : trimmed;
-          // Update the active sidebar item directly without re-fetching
           const activeItem = document.querySelector('.app-conv-item.active span');
           if (activeItem) activeItem.textContent = conv.title;
         }
       }
 
-      // Show thinking indicator
       const msgsEl = document.getElementById('app-messages');
       const thinking = document.createElement('div');
       thinking.className = 'app-msg app-msg-bot';
@@ -6033,7 +6057,6 @@
         const elapsedEl = thinking.querySelector('.thinking-elapsed');
         if (elapsedEl) elapsedEl.textContent = '(' + elapsed + 's)';
         const elapsedMs = Date.now() - startTime;
-        // Start ambient BGM after 5 seconds of waiting
         if (!ambientStarted && elapsedMs >= 5000) {
           ambientStarted = true;
           playThinkingAmbient();
@@ -6048,7 +6071,6 @@
         }
       }, 100);
 
-      // Frontend timeout: 11s (X+Y) hard deadline with AbortController
       const abortCtrl = new AbortController();
       const frontendTimeout = setTimeout(() => { abortCtrl.abort(); }, 11000);
 
@@ -6056,7 +6078,6 @@
         const agentSel = document.getElementById('app-agent-select').value;
         const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
 
-        // Check explore mode
         const exploreMode = document.getElementById('explore-check')?.checked || false;
         if (exploreMode) {
           clearTimeout(frontendTimeout);
@@ -6067,10 +6088,8 @@
           return;
         }
 
-        // Check multi-model mode
         const multiModel = document.getElementById('multi-model-check')?.checked || false;
 
-        // SSE streaming for real-time response (disable SSE for multi-model — needs full response)
         if (multiModel) {
           const r = await fetch(API + '/api/v1/chat', {
             method: 'POST',
@@ -6094,11 +6113,9 @@
           return;
         }
 
-        // Detect device type for response length optimization
         const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
         const deviceType = voiceInitiated ? 'voice' : (isMobile ? 'mobile' : 'pc');
 
-        // Use forced model for summary, then clear
         const chatBody = { message: msgToSend, session_id: webSessionId, channel: 'web', device: deviceType };
         if (window._forceSummaryModel) {
           chatBody.model = window._forceSummaryModel;
@@ -6112,7 +6129,6 @@
         });
 
         if (!r.ok || !r.body) {
-          // Fallback to non-streaming
           const fallback = await fetch(API + '/api/v1/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -6131,13 +6147,11 @@
           autoPlayTTS(d.response);
           setTimeout(() => appLoadConversations(), 1500);
         } else {
-          // Read SSE stream (supports agentic multi-iteration tool events)
           const reader = r.body.getReader();
           const decoder = new TextDecoder();
           let buf = '';
           let gotContent = false;
 
-          // Agent progress container (inserted before final answer)
           let agentProgressEl = null;
           function ensureAgentProgress() {
             if (agentProgressEl) return agentProgressEl;
@@ -6151,7 +6165,6 @@
 
           function processEvent(evt) {
             if (evt.type === 'start' && evt.agent) {
-              // Update thinking indicator with agent estimate
               const agentLabels = {
                 assistant: { ja: 'すぐ回答', en: 'Responding' },
                 researcher: { ja: 'リサーチ中', en: 'Researching' },
@@ -6199,7 +6212,6 @@
               clearInterval(statusInterval);
               stopThinkingAmbient();
               thinking.remove();
-              // Remove thinking indicators
               if (agentProgressEl) {
                 const thinkSteps = agentProgressEl.querySelectorAll('.thinking-step');
                 thinkSteps.forEach(el => el.remove());
@@ -6215,7 +6227,6 @@
               thinking.remove();
               var errMsg = evt.content || 'Error';
               appAddMsg(errMsg, 'bot');
-              // If action=upgrade, show inline button + auto-open topup modal
               if (evt.action === 'upgrade') {
                 appendUpgradeButton();
                 var plan = (window._userPlan || 'free').toLowerCase();
@@ -6231,7 +6242,6 @@
             if (done) break;
             buf += decoder.decode(value, { stream: true });
 
-            // Parse SSE events from buffer
             const lines = buf.split('\n');
             buf = lines.pop() || '';
 
@@ -6241,13 +6251,11 @@
               if (!data || data === '') continue;
               try {
                 const parsed = JSON.parse(data);
-                // New format: JSON array of events
                 if (Array.isArray(parsed)) {
                   for (const evt of parsed) {
                     processEvent(evt);
                   }
                 } else {
-                  // Legacy format: single event object
                   processEvent(parsed);
                 }
               } catch {}
@@ -6269,7 +6277,6 @@
         stopThinkingAmbient();
         thinking.remove();
         if (e && e.name === 'AbortError') {
-          // Frontend timeout — show loving fallback
           const msgs = TIMEOUT_FALLBACKS[lang] || TIMEOUT_FALLBACKS.ja;
           appAddMsg(msgs[Math.floor(Math.random() * msgs.length)], 'bot');
         } else {
@@ -6279,13 +6286,11 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Explore mode — multi-model parallel + hierarchical re-query
     // ---------------------------------------------------------------------------
     async function appExplore(msgToSend, originalText, level) {
       const msgsEl = document.getElementById('app-messages');
       const lang = document.documentElement.lang || 'ja';
 
-      // Create explore container
       const container = document.createElement('div');
       container.className = 'explore-container';
       const levelLabels = ['Direct', 'Step-by-Step', 'Expert Deep'];
@@ -6296,7 +6301,6 @@
         container.appendChild(levelHeader);
       }
 
-      // Pending indicator
       const pending = document.createElement('div');
       pending.className = 'explore-pending';
       pending.innerHTML = '<span class="dot-pulse"></span> ' +
@@ -6333,7 +6337,6 @@
           return;
         }
 
-        // Read SSE response (single event with all results)
         const reader = r.body.getReader();
         const decoder = new TextDecoder();
         let buf = '';
@@ -6345,7 +6348,6 @@
           buf += decoder.decode(value, { stream: true });
         }
 
-        // Parse SSE data lines
         for (const line of buf.split('\n')) {
           if (!line.startsWith('data:')) continue;
           const dataStr = line.slice(5).trim();
@@ -6357,7 +6359,6 @@
               pending.remove();
               exploreData = data;
 
-              // Render each model result as a card
               for (const result of data.results) {
                 const card = document.createElement('div');
                 card.className = 'explore-card';
@@ -6385,7 +6386,6 @@
         }
         msgsEl.scrollTop = msgsEl.scrollHeight;
 
-        // Add action buttons
         if (exploreData) {
           const actions = document.createElement('div');
           actions.className = 'explore-actions-bar';
@@ -6405,7 +6405,6 @@
               : 'Synthesize the following AI model responses into one accurate, comprehensive answer. Incorporate the best points from each and prioritize the most reliable information where answers conflict:\n\n' + combined;
             document.getElementById('app-input').value = summaryPrompt;
             document.getElementById('explore-check').checked = false;
-            // Force best model for summary
             window._forceSummaryModel = 'claude-sonnet-4-5-20250929';
             appSend();
           };
@@ -6462,7 +6461,6 @@
 
     function exploreAdopt(btn) {
       const response = btn.dataset.response;
-      // Show adopted response as the final bot message
       const msgsEl = document.getElementById('app-messages');
       const wrapper = document.createElement('div');
       wrapper.className = 'app-msg app-msg-bot';
@@ -6473,7 +6471,6 @@
       const content = document.createElement('div');
       content.className = 'app-msg-content';
       content.textContent = response;
-      // TTS button
       const ttsBtn = document.createElement('button');
       ttsBtn.className = 'app-tts-btn';
       ttsBtn.textContent = '\ud83d\udd0a';
@@ -6486,14 +6483,12 @@
     }
 
     // ---------------------------------------------------------------------------
-    // STT (Speech-to-Text) — Web Speech API
     // ---------------------------------------------------------------------------
     let speechRecognition = null;
     let isRecording = false;
     let voiceInitiated = false; // Track if message was voice-initiated for auto-TTS
 
     // -----------------------------------------------------------------------
-    // Voice Conversation Engine — Auto-listen, silence detection, barge-in
     // -----------------------------------------------------------------------
     let _silenceTimer = null;
     let _voiceFinalTranscript = '';
@@ -6534,6 +6529,41 @@
       }
     }
 
+    const STT_LANGUAGES = [
+      { code: 'ja-JP', label: '日本語', flag: '🇯🇵' },
+      { code: 'en-US', label: 'English', flag: '🇺🇸' },
+      { code: 'zh-CN', label: '中文', flag: '🇨🇳' },
+      { code: 'ko-KR', label: '한국어', flag: '🇰🇷' },
+      { code: 'es-ES', label: 'Español', flag: '🇪🇸' },
+      { code: 'fr-FR', label: 'Français', flag: '🇫🇷' },
+      { code: 'de-DE', label: 'Deutsch', flag: '🇩🇪' },
+      { code: 'pt-BR', label: 'Português', flag: '🇧🇷' },
+      { code: 'it-IT', label: 'Italiano', flag: '🇮🇹' },
+      { code: 'ru-RU', label: 'Русский', flag: '🇷🇺' },
+      { code: 'ar-SA', label: 'العربية', flag: '🇸🇦' },
+      { code: 'hi-IN', label: 'हिन्दी', flag: '🇮🇳' },
+      { code: 'th-TH', label: 'ไทย', flag: '🇹🇭' },
+      { code: 'vi-VN', label: 'Tiếng Việt', flag: '🇻🇳' },
+    ];
+
+    function detectSTTLanguage() {
+      const saved = localStorage.getItem('sttLanguage');
+      if (saved) return saved;
+      const browserLang = (navigator.language || 'ja-JP').replace('_', '-');
+      const match = STT_LANGUAGES.find(l => l.code === browserLang || l.code.startsWith(browserLang.split('-')[0]));
+      return match ? match.code : 'ja-JP';
+    }
+
+    let _sttLanguage = detectSTTLanguage();
+
+    function setSTTLanguage(langCode) {
+      _sttLanguage = langCode;
+      localStorage.setItem('sttLanguage', langCode);
+      if (speechRecognition) {
+        speechRecognition.lang = langCode;
+      }
+    }
+
     function initSpeechRecognition() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) {
@@ -6541,10 +6571,9 @@
         return;
       }
       speechRecognition = new SpeechRecognition();
-      speechRecognition.lang = 'ja-JP';
+      speechRecognition.lang = _sttLanguage;
       speechRecognition.interimResults = true;
 
-      // iOS Safari: continuous mode is broken — use single-shot
       if (_isIOS && _isSafari) {
         speechRecognition.continuous = false;
       } else {
@@ -6552,7 +6581,6 @@
       }
 
       speechRecognition.onresult = function(e) {
-        // Reset silence timer on each result (custom Japanese silence detection)
         clearTimeout(_silenceTimer);
 
         let interim = '';
@@ -6568,7 +6596,6 @@
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
 
-        // Japanese silence detection: auto-send after 1.5s of silence
         if (_voiceFinalTranscript.trim() || interim.trim()) {
           _silenceTimer = setTimeout(function() {
             if (isRecording && _voiceFinalTranscript.trim()) {
@@ -6612,7 +6639,6 @@
         if (e.error === 'not-allowed') {
           alert('マイクへのアクセスが拒否されました。ブラウザの設定でマイクを許可してください。');
         } else if (e.error === 'no-speech' && _voiceConversationActive) {
-          // No speech detected but in conversation loop — restart listening
           setTimeout(function() { startListening(); }, 300);
           return;
         }
@@ -6625,14 +6651,12 @@
         initSpeechRecognition();
         if (!speechRecognition) return;
       }
-      // Barge-in: stop any TTS playing
       if (ttsPlaying || (currentAudio && !currentAudio.paused)) {
         stopTTS();
       }
       try {
         speechRecognition.start();
       } catch(e) {
-        // InvalidStateError if already started — stop and restart
         try { speechRecognition.stop(); } catch(_) {}
         setTimeout(function() {
           try { speechRecognition.start(); } catch(_) {}
@@ -6670,7 +6694,6 @@
       }
     }
 
-    // Voice hero button (large mic in empty state)
     function toggleVoiceHero() {
       if (isRecording) {
         stopListening();
@@ -6694,10 +6717,8 @@
       }
     }
 
-    // Auto-listen after TTS completes (hands-free conversation loop)
     function onTTSComplete() {
       if (_voiceConversationActive && _autoListenEnabled && voiceInitiated) {
-        // Brief delay to avoid picking up TTS audio tail
         setTimeout(function() {
           if (!isRecording && _voiceConversationActive) {
             startListening();
@@ -6715,7 +6736,6 @@
       if (btn) btn.classList.toggle('active', _autoListenEnabled);
     }
 
-    // Voice character selection
     var selectedVoice = localStorage.getItem('ttsVoice') || 'nova';
     function selectVoiceChar(btn) {
       var voice = btn.dataset.voice;
@@ -6723,7 +6743,6 @@
       localStorage.setItem('ttsVoice', voice);
       document.querySelectorAll('.voice-char').forEach(function(b) { b.classList.remove('active'); });
       btn.classList.add('active');
-      // Play a short greeting in the selected voice
       playVoiceGreeting(voice);
     }
     function playVoiceGreeting(voice) {
@@ -6751,17 +6770,14 @@
       }).catch(function() {});
     }
 
-    // First-visit: auto-play greeting after small delay
     (function() {
       if (localStorage.getItem('visited')) return;
       localStorage.setItem('visited', '1');
-      // Wait for user interaction (autoplay policy) — play on first click/tap anywhere
       function onFirstInteraction() {}
       document.addEventListener('click', onFirstInteraction, { once: true });
       document.addEventListener('touchstart', onFirstInteraction, { once: true });
     })();
 
-    // Restore saved voice character
     (function() {
       var saved = localStorage.getItem('ttsVoice');
       if (saved) {
@@ -6771,7 +6787,6 @@
       }
     })();
 
-    // Auto-TTS: always read aloud when enabled (default ON)
     let autoTtsEnabled = localStorage.getItem('autoTtsEnabled') !== 'false'; // default true
 
     function toggleAutoTTS() {
@@ -6790,7 +6805,6 @@
       localStorage.setItem('exploreEnabled', chk && chk.checked ? 'true' : 'false');
     }
 
-    // Adult mode state
     let adultModeEnabled = localStorage.getItem('adultMode') === 'true';
     let ageVerified = localStorage.getItem('ageVerified') === 'true';
 
@@ -6809,7 +6823,6 @@
       const btn = document.getElementById('settings-adult-toggle');
       if (btn) btn.classList.toggle('active', adultModeEnabled);
       updateAdultBadge();
-      // Save to server
       const token = localStorage.getItem('authToken');
       if (token) {
         fetch(API + '/api/v1/settings', {
@@ -6829,7 +6842,6 @@
       if (confirm(title + '\n\n' + msg)) {
         ageVerified = true;
         localStorage.setItem('ageVerified', 'true');
-        // Save to server
         const token = localStorage.getItem('authToken');
         if (token) {
           fetch(API + '/api/v1/settings', {
@@ -6838,13 +6850,11 @@
             body: JSON.stringify({ age_verified: true })
           }).catch(() => {});
         }
-        // Now toggle adult mode on
         adultModeEnabled = true;
         localStorage.setItem('adultMode', 'true');
         const btn = document.getElementById('settings-adult-toggle');
         if (btn) btn.classList.toggle('active', true);
         updateAdultBadge();
-        // Also save adult_mode to server
         if (token) {
           fetch(API + '/api/v1/settings', {
             method: 'POST',
@@ -6857,7 +6867,6 @@
 
     function initAdultModeUI() {
       const token = localStorage.getItem('authToken');
-      // Show adult section only for logged-in users
       const section = document.getElementById('settings-adult-section');
       if (section) section.style.display = token ? 'flex' : 'none';
       updateAdultBadge();
@@ -6873,18 +6882,21 @@
       if (tab === 'activity') loadActivityData();
     }
     function openSettingsModal() {
-      // sync toggle states
       document.getElementById('settings-tts-toggle').classList.toggle('active', autoTtsEnabled);
       const exploreOn = document.getElementById('explore-check')?.checked || false;
       document.getElementById('settings-explore-toggle').classList.toggle('active', exploreOn);
-      // auto-listen toggle
       const autoListenBtn = document.getElementById('settings-autolisten-toggle');
       if (autoListenBtn) autoListenBtn.classList.toggle('active', _autoListenEnabled);
-      // adult mode toggle
+      // Sync TTS engine selector
+      const ttsSelect = document.getElementById('settings-tts-engine');
+      if (ttsSelect) ttsSelect.value = _ttsEngine || 'openai';
+      const elSection = document.getElementById('settings-elevenlabs-voice');
+      if (elSection) elSection.style.display = _ttsEngine === 'elevenlabs' ? '' : 'none';
+      const elVoice = document.getElementById('settings-el-voice');
+      if (elVoice) elVoice.value = _elVoiceId || 'pNInz6obpgDQGcFmaJgB';
       initAdultModeUI();
       const adultBtn = document.getElementById('settings-adult-toggle');
       if (adultBtn) adultBtn.classList.toggle('active', adultModeEnabled && ageVerified);
-      // reset to general tab
       switchSettingsTab('general');
       document.getElementById('settings-modal').classList.add('show');
     }
@@ -6982,7 +6994,6 @@
     }
 
     // -----------------------------------------------------------------------
-    // A/B Test Client — Auto-optimizing conversation style
     // -----------------------------------------------------------------------
     let _abVariant = null;
     let _abSessionStart = Date.now();
@@ -7000,7 +7011,6 @@
         _abVariant = await r.json();
         localStorage.setItem('abVariant', _abVariant.variant_id);
 
-        // Apply variant greeting to empty state
         applyAbVariant();
       } catch(e) {
         console.warn('A/B test init failed:', e);
@@ -7010,11 +7020,9 @@
     function applyAbVariant() {
       if (!_abVariant) return;
       const l = document.documentElement.lang || 'ja';
-      // Update the empty state greeting
       const emptyLogo = document.querySelector('.app-chat-empty-logo');
       if (emptyLogo) {
         const greeting = l === 'ja' ? _abVariant.greeting_ja : _abVariant.greeting_en;
-        // Add greeting below logo
         let greetEl = document.getElementById('ab-greeting');
         if (!greetEl) {
           greetEl = document.createElement('div');
@@ -7028,7 +7036,6 @@
 
     function trackAbMessage() {
       _abMessageCount++;
-      // Report engagement when user sends 3+ messages
       if (_abMessageCount === 3 && !_abEventSent && _abVariant) {
         _abEventSent = true;
         const duration = Math.floor((Date.now() - _abSessionStart) / 1000);
@@ -7045,11 +7052,9 @@
       }
     }
 
-    // Report bounce on page unload if user didn't engage
     window.addEventListener('beforeunload', function() {
       if (!_abEventSent && _abVariant && _abMessageCount < 3) {
         const duration = Math.floor((Date.now() - _abSessionStart) / 1000);
-        // Use sendBeacon for reliable delivery on page close
         navigator.sendBeacon(API + '/api/v1/ab/event', JSON.stringify({
           variant_id: _abVariant.variant_id,
           event: 'bounced',
@@ -7059,27 +7064,29 @@
       }
     });
 
-    // Initialize settings on load
     (function initSettings() {
       const btn = document.getElementById('settings-tts-toggle');
       if (btn) btn.classList.toggle('active', autoTtsEnabled);
-      // Restore explore state
       const exploreStored = localStorage.getItem('exploreEnabled') === 'true';
       const chk = document.getElementById('explore-check');
       if (chk) chk.checked = exploreStored;
-      // Restore adult mode badge
+      const sttSelect = document.getElementById('settings-stt-lang');
+      if (sttSelect && sttSelect.options.length === 0) {
+        STT_LANGUAGES.forEach(function(l) {
+          const opt = document.createElement('option');
+          opt.value = l.code;
+          opt.textContent = l.flag + ' ' + l.label + ' (' + l.code + ')';
+          if (l.code === _sttLanguage) opt.selected = true;
+          sttSelect.appendChild(opt);
+        });
+      }
       initAdultModeUI();
-      // Initialize A/B test
       initAbTest();
     })();
 
-    // Auto-play TTS on every bot response (when enabled)
-    // Uses sentence-level parallel TTS for fastest playback
-    // Handles voice conversation state transitions
     function autoPlayTTS(text) {
       if (!autoTtsEnabled) return;
       if (!text || text.length < 2) return;
-      // Strip markdown formatting for cleaner speech
       const clean = text
         .replace(/#{1,6}\s/g, '')                    // headers
         .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')    // bold/italic
@@ -7099,7 +7106,6 @@
 
       const wasPlaying = ttsPlaying || (currentAudio && !currentAudio.paused);
       if (wasPlaying) {
-        // Interrupt: prepend a brief transition phrase
         const transition = 'ちょっと待ってね。';
         streamTTS(transition + clean);
       } else {
@@ -7107,11 +7113,9 @@
       }
     }
 
-    // Initialize STT on load
     initSpeechRecognition();
 
     // ---------------------------------------------------------------------------
-    // TTS — Sentence-level parallel fetch + sequential playback + browser fallback
     // ---------------------------------------------------------------------------
     let currentAudio = null;
     let currentTtsBtn = null;
@@ -7121,26 +7125,21 @@
     let ttsAborted = false;
     let ttsPendingCount = 0; // how many fetches are in-flight
 
-    // Split text into sentences (optimized for Japanese TTS naturalness)
     function splitSentences(text) {
-      // Primary: split on 。！？ and .!? (keep delimiter attached)
       const parts = text.split(/(?<=[。！？\!\?])\s*|(?<=\.)\s+/);
       const merged = [];
       for (const p of parts) {
         const t = p.trim();
         if (!t) continue;
-        // Merge very short fragments (< 10 chars) with previous
         if (merged.length > 0 && t.length < 10) {
           merged[merged.length - 1] += t;
         } else {
           merged.push(t);
         }
       }
-      // Secondary: split overly long segments at 、 (Japanese comma) for natural TTS
       const result = [];
       for (const seg of merged) {
         if (seg.length > 80) {
-          // Split at 、 but keep the comma attached, merge short pieces
           const subparts = seg.split(/(?<=、)/);
           let buf = '';
           for (const sp of subparts) {
@@ -7164,31 +7163,60 @@
       return result.filter(s => s.length > 0);
     }
 
-    // Fetch TTS audio for a single sentence with natural Japanese voice instructions
+    // TTS engine state
+    let _ttsEngine = localStorage.getItem('ttsEngine') || 'openai';
+    let _elVoiceId = localStorage.getItem('elVoiceId') || 'pNInz6obpgDQGcFmaJgB';
+
+    function setTTSEngine(engine) {
+      _ttsEngine = engine;
+      localStorage.setItem('ttsEngine', engine);
+      // Show/hide ElevenLabs voice selector
+      const elSection = document.getElementById('settings-elevenlabs-voice');
+      if (elSection) elSection.style.display = engine === 'elevenlabs' ? '' : 'none';
+      // Clear TTS cache when switching engine
+      ttsCache.clear();
+    }
+
+    function setElevenLabsVoice(voiceId) {
+      _elVoiceId = voiceId;
+      localStorage.setItem('elVoiceId', voiceId);
+      ttsCache.clear();
+    }
+
     async function fetchTtsAudio(sentence) {
       var voice = selectedVoice || 'nova';
-      const cacheKey = voice + ':' + sentence.substring(0, 4096);
+      const engine = _ttsEngine || 'openai';
+      const cacheKey = engine + ':' + voice + ':' + sentence.substring(0, 4096);
       let blobUrl = ttsCache.get(cacheKey);
       if (blobUrl) return blobUrl;
 
       const hdrs = { 'Content-Type': 'application/json', 'x-session-id': webSessionId };
       if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
 
-      // Detect if sentence is Japanese
       const isJa = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(sentence);
       const instructions = isJa
         ? '自然な日本語で話してください。温かく親しみやすいトーンで、友達と会話するように。明瞭な発音で、自然なスピードで。感情を込めて、抑揚をつけて。'
         : 'Speak naturally in a warm, friendly conversational tone. Clear pronunciation at a natural pace.';
 
+      const body = {
+        text: sentence.substring(0, 4096),
+        voice: voice,
+        instructions: instructions,
+        session_id: webSessionId,
+        engine: engine,
+      };
+
+      // Add engine-specific params
+      if (engine === 'elevenlabs') {
+        body.voice_id = _elVoiceId;
+      } else if (engine === 'sbv2') {
+        body.style = 'Neutral';
+      }
+
       const r = await fetch(API + '/api/v1/speech/synthesize', {
         method: 'POST',
         headers: hdrs,
-        body: JSON.stringify({
-          text: sentence.substring(0, 4096),
-          voice: voice,
-          instructions: instructions,
-          session_id: webSessionId,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!r.ok) throw new Error('TTS HTTP ' + r.status);
@@ -7199,11 +7227,9 @@
       return blobUrl;
     }
 
-    // Play next audio in the queue
     function playNextQueued() {
       if (ttsAborted || ttsQueue.length === 0) {
         ttsPlaying = false;
-        // Update button state if all done
         if (ttsPendingCount <= 0) {
           if (currentTtsBtn) {
             currentTtsBtn.classList.remove('playing');
@@ -7212,7 +7238,6 @@
             refreshCredits();
           }
           showTtsStopBtn(false);
-          // Trigger auto-listen loop
           onTTSComplete();
         }
         return;
@@ -7227,15 +7252,12 @@
       audio.play().catch(function() { playNextQueued(); });
     }
 
-    // Show/hide floating TTS stop button
     function showTtsStopBtn(show) {
       const btn = document.getElementById('tts-stop-float');
       if (btn) btn.classList.toggle('visible', show);
     }
 
-    // Stream TTS: split into sentences, fetch in parallel, play in order
     function streamTTS(text) {
-      // Abort any previous stream
       stopTTS();
       ttsAborted = false;
 
@@ -7243,13 +7265,11 @@
       if (sentences.length === 0) return;
       showTtsStopBtn(true);
 
-      // Pre-allocate slots to maintain order
       const slots = new Array(sentences.length).fill(null);
       ttsPendingCount = sentences.length;
       let nextToPlay = 0;
 
       function tryEnqueue() {
-        // Enqueue all consecutive ready slots
         while (nextToPlay < slots.length && slots[nextToPlay] !== null) {
           if (ttsAborted) return;
           ttsQueue.push({ blobUrl: slots[nextToPlay], sentence: sentences[nextToPlay] });
@@ -7258,7 +7278,6 @@
         }
       }
 
-      // Fire all TTS requests in parallel
       sentences.forEach(function(sentence, idx) {
         fetchTtsAudio(sentence).then(function(blobUrl) {
           if (ttsAborted) return;
@@ -7268,7 +7287,6 @@
         }).catch(function(err) {
           console.warn('TTS API failed for sentence, trying browser fallback:', err.message);
           ttsPendingCount--;
-          // Use browser built-in SpeechSynthesis as fallback
           if (ttsAborted) return;
           speakWithBrowser(sentence);
           slots[idx] = 'SPOKEN'; // mark as handled
@@ -7277,7 +7295,6 @@
       });
     }
 
-    // Stop all TTS playback
     function stopTTS() {
       ttsAborted = true;
       ttsQueue = [];
@@ -7288,7 +7305,6 @@
       }
       currentAudio = null;
       ttsPlaying = false;
-      // Cancel browser speech too
       if (window.speechSynthesis) window.speechSynthesis.cancel();
       if (currentTtsBtn) {
         currentTtsBtn.classList.remove('playing');
@@ -7296,16 +7312,13 @@
         currentTtsBtn = null;
       }
       showTtsStopBtn(false);
-      // Don't reset voice state here — barge-in will set it to 'listening'
     }
 
-    // Browser built-in SpeechSynthesis fallback (works offline, zero latency)
     function speakWithBrowser(text) {
       if (!window.speechSynthesis) return;
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = 'ja-JP';
       utter.rate = 1.1;
-      // Try to find a good Japanese voice
       const voices = speechSynthesis.getVoices();
       const jaVoice = voices.find(v => v.lang === 'ja-JP' && v.name.includes('Kyoko'))
         || voices.find(v => v.lang === 'ja-JP' && v.name.includes('O-Ren'))
@@ -7315,25 +7328,21 @@
       speechSynthesis.speak(utter);
     }
 
-    // Manual TTS button click — play full text
     async function playTTS(btn) {
       const text = btn.dataset.text;
       if (!text) return;
 
-      // If already playing this button, stop
       if (currentTtsBtn === btn && (ttsPlaying || (currentAudio && !currentAudio.paused))) {
         stopTTS();
         return;
       }
 
-      // Stop any previous
       stopTTS();
 
       btn.classList.add('playing');
       btn.textContent = '\u23F9';
       currentTtsBtn = btn;
 
-      // Strip markdown
       const clean = text.replace(/#{1,6}\s/g, '').replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
         .replace(/`[^`]+`/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
         .replace(/^[-*]\s/gm, '').replace(/^\d+\.\s/gm, '').trim();
@@ -7342,7 +7351,6 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Real-time credit display
     // ---------------------------------------------------------------------------
     let lowCreditShown = false;
     function updateCredits(remaining) {
@@ -7356,7 +7364,6 @@
         display.classList.add('credit-flash');
         setTimeout(() => display.classList.remove('credit-flash'), 600);
       }
-      // Low credit urgency prompt
       if (remaining <= 100 && remaining > 0 && !lowCreditShown) {
         lowCreditShown = true;
         setTimeout(() => showLowCreditBanner(remaining), 800);
@@ -7364,12 +7371,10 @@
     }
 
     function showLowCreditBanner(remaining) {
-      // Don't show again if already visible or user is already paid
       if (document.getElementById('low-credit-banner')) return;
       if (currentUser && currentUser.plan && currentUser.plan !== 'free') return;
 
       const l = document.documentElement.lang || 'ja';
-      // Calculate "deadline" — 2 weeks from now
       const deadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
       const deadlineStr = (deadline.getMonth() + 1) + '/' + deadline.getDate();
 
@@ -7410,7 +7415,6 @@
       } catch(e) { /* ignore */ }
     }
 
-    // Append upgrade button to the last bot message
     function appendUpgradeButton() {
       var msgs = document.querySelectorAll('.app-msg-bot .app-msg-content');
       var last = msgs[msgs.length - 1];
@@ -7424,13 +7428,11 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Top-up modal + Stripe Checkout
     // ---------------------------------------------------------------------------
     function showTopupModal(tab) {
       const l = document.documentElement.lang || 'ja';
       document.getElementById('topup-modal-title').textContent = l === 'ja' ? 'クレジットをチャージ' : 'Top Up Credits';
       document.getElementById('topup-modal-desc').textContent = l === 'ja' ? 'お好きな方法でクレジットを追加できます' : 'Add credits using your preferred payment method';
-      // Show manage plan button if user is on a paid plan
       var mp = document.getElementById('manage-plan-btn');
       if (mp) {
         var plan = (window._userPlan || 'free').toLowerCase();
@@ -7459,7 +7461,6 @@
     }
 
     async function startStripeCheckout(plan) {
-      // First try API-based checkout (creates Stripe Session)
       try {
         const r = await fetch('/api/v1/billing/checkout', {
           method: 'POST',
@@ -7474,7 +7475,6 @@
         }
       } catch(e) { /* fallback to Payment Links */ }
 
-      // Fallback: direct Payment Links
       const links = {
         starter: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o',
         pro: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p',
@@ -7530,7 +7530,6 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Crypto top-up (ETH/MATIC/Base via OpenRouter)
     // ---------------------------------------------------------------------------
     function showCryptoTopup() {
       const modal = document.getElementById('modal');
@@ -7609,12 +7608,10 @@
       statusEl.style.color = 'var(--accent)';
 
       try {
-        // Request wallet connection
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         const wallet = accounts[0];
         statusEl.textContent = lang === 'ja' ? '決済データ取得中...' : 'Getting payment data...';
 
-        // Get calldata from our API
         const hdrs = { 'Content-Type': 'application/json' };
         if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
 
@@ -7636,7 +7633,6 @@
           return;
         }
 
-        // Switch chain if needed
         const currentChain = parseInt(await window.ethereum.request({ method: 'eth_chainId' }), 16);
         if (currentChain !== window._cryptoChain) {
           statusEl.textContent = lang === 'ja' ? 'チェーン切替中...' : 'Switching chain...';
@@ -7652,7 +7648,6 @@
           }
         }
 
-        // Send transaction
         statusEl.textContent = lang === 'ja' ? 'トランザクション承認を待っています...' : 'Waiting for transaction approval...';
 
         const calldata = data.calldata;
@@ -7672,7 +7667,6 @@
           + '<br><span style="font-size:10px;word-break:break-all;">' + txHash + '</span>';
         statusEl.style.color = '#22c55e';
 
-        // Confirm with our backend
         const confirmResp = await fetch(API + '/api/v1/crypto/confirm', {
           method: 'POST',
           headers: hdrs,
@@ -7697,7 +7691,6 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Earn with PC — show CLI instructions
     // ---------------------------------------------------------------------------
     function showEarnOption() {
       const modal = document.getElementById('modal');
@@ -7725,7 +7718,6 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Shared conversation view
     // ---------------------------------------------------------------------------
     async function enterSharedViewMode(hash) {
       try {
@@ -7735,7 +7727,6 @@
           document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui;color:#ccc;background:#0d0d0d;"><h1 style="font-size:24px;margin-bottom:8px;">chatweb.ai</h1><p style="color:#888;">' + (d.error || 'Share not found') + '</p><a href="/" style="margin-top:24px;color:#4f8eff;">chatweb.ai\u3067\u4f1a\u8a71\u3092\u59cb\u3081\u308b</a></div>';
           return;
         }
-        // Hide everything and show shared view
         document.body.classList.add('app-mode');
         document.getElementById('app-sidebar').style.display = 'none';
         document.getElementById('app-sidebar-toggle').style.display = 'none';
@@ -7746,16 +7737,13 @@
         msgsEl.innerHTML = '';
         const emptyEl = document.getElementById('app-empty');
         if (emptyEl) emptyEl.remove();
-        // Shared header
         const header = document.createElement('div');
         header.style.cssText = 'padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;';
         header.innerHTML = '<div style="font-size:15px;color:#aaa;">\u5171\u6709\u3055\u308c\u305f\u4f1a\u8a71' + (d.title ? ' \u2014 ' + d.title.replace(/</g,'&lt;') : '') + '</div>';
         msgsEl.parentElement.insertBefore(header, msgsEl);
-        // Render messages
         (d.messages || []).forEach(m => {
           appAddMsg(m.content, m.role === 'user' ? 'user' : 'bot');
         });
-        // CTA
         const cta = document.createElement('div');
         cta.style.cssText = 'padding:24px;text-align:center;';
         cta.innerHTML = '<a href="/" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#4f8eff,#3b6fd4);color:#fff;border-radius:12px;text-decoration:none;font-size:15px;font-weight:600;">chatweb.ai\u3067\u4f1a\u8a71\u3092\u59cb\u3081\u308b</a>';
@@ -7796,7 +7784,6 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Auto-sync: 5min (free) / 1min (paid)
     // ---------------------------------------------------------------------------
     let syncTimer = null;
     let lastSyncTime = null;
@@ -7849,7 +7836,6 @@
       stopAutoSync();
       const ms = getSyncIntervalMs();
       syncTimer = setInterval(syncNow, ms);
-      // Update "ago" display every 30s
       if (!window._syncUiTimer) {
         window._syncUiTimer = setInterval(updateSyncUI, 30000);
       }
@@ -7860,7 +7846,6 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Cron CRUD (Scheduled Tasks)
     // ---------------------------------------------------------------------------
     let cronJobs = [];
 
@@ -8049,17 +8034,14 @@
       } catch(e) { /* ignore */ }
     }
 
-    // Detect shared view URL before normal init
     const shareMatch = window.location.pathname.match(/^\/c\/([a-zA-Z0-9]{8,12})$/);
     if (shareMatch) {
       enterSharedViewMode(shareMatch[1]);
     } else {
-      // Check auth on page load
       checkAuth();
     }
 
     // -----------------------------------------------------------------------
-    // Hero particle canvas — neural network constellation
     // -----------------------------------------------------------------------
     (function() {
       var c = document.getElementById('hero-canvas');
@@ -8084,7 +8066,6 @@
       function draw() {
         if (!isHeroVisible) { requestAnimationFrame(draw); return; }
         ctx.clearRect(0, 0, W, H);
-        // Draw connections — use squared distance (avoid sqrt per pair)
         ctx.lineWidth = 0.5;
         for (var i = 0; i < particles.length; i++) {
           for (var j = i + 1; j < particles.length; j++) {
@@ -8101,7 +8082,6 @@
             }
           }
         }
-        // Draw particles + mouse attraction
         ctx.fillStyle = 'rgba(99,102,241,0.4)';
         for (var i = 0; i < particles.length; i++) {
           var p = particles[i];
@@ -8122,7 +8102,6 @@
         }
         requestAnimationFrame(draw);
       }
-      // Pause animation when hero is off-screen
       var heroObs = new IntersectionObserver(function(entries) {
         isHeroVisible = entries[0].isIntersecting;
       }, { threshold: 0 });
@@ -8137,7 +8116,6 @@
     })();
 
     // -----------------------------------------------------------------------
-    // Hero text character-by-character reveal
     // -----------------------------------------------------------------------
     (function() {
       var h1 = document.getElementById('t-title');
@@ -8154,7 +8132,6 @@
     })();
 
     // -----------------------------------------------------------------------
-    // Stat counter animation
     // -----------------------------------------------------------------------
     (function() {
       var statEls = document.querySelectorAll('.stat-value');
@@ -8187,7 +8164,6 @@
       statEls.forEach(function(el) { observer.observe(el); });
     })();
 
-    // IntersectionObserver for scroll-triggered fade-up
     (function() {
       const targets = document.querySelectorAll('.cap-section, .sync-section, .channel-cards, .bottom-cta, .cli-section');
       targets.forEach(el => el.classList.add('scroll-fade-up'));
@@ -8202,14 +8178,11 @@
       targets.forEach(el => observer.observe(el));
     })();
 
-    // A/B variant must be applied before setLang so T values are overwritten first
     applyABVariant(getABVariant());
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
 
-    // ─── Phone Panel (Amazon Connect CCP) ───
     let phoneState = { active: false, contactId: null, ccpInitialized: false, transcriptPoll: null };
 
-    // Check if Connect is configured (phone button visibility)
     (async function checkConnectEnabled() {
       try {
         const token = localStorage.getItem('auth_token');
@@ -8240,7 +8213,6 @@
     }
 
     function initCCP() {
-      // Load amazon-connect-streams if not already loaded
       if (typeof connect === 'undefined') {
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/amazon-connect-streams@2/release/connect-streams-min.js';
@@ -8268,7 +8240,6 @@
         phoneState.ccpInitialized = true;
         document.getElementById('phone-status').textContent = 'Connected';
 
-        // Listen for contact events
         connect.contact(function(contact) {
           contact.onConnecting(function() {
             phoneState.active = true;
@@ -8299,17 +8270,14 @@
 
     async function phoneAction() {
       if (phoneState.active) {
-        // Hangup
         await endCall();
       } else {
-        // Initiate call
         await initiateCall();
       }
     }
 
     function normalizePhoneNumber(raw) {
       let num = raw.replace(/[\s\-()]/g, '');
-      // Japanese number conversion: 090xxx -> +8190xxx
       if (num.startsWith('0') && !num.startsWith('+')) {
         num = '+81' + num.substring(1);
       }
@@ -8322,7 +8290,6 @@
       const number = normalizePhoneNumber(raw);
       updatePhoneUI('dialing');
 
-      // Try CCP first if available
       if (phoneState.ccpInitialized && typeof connect !== 'undefined') {
         try {
           const agent = new connect.Agent();
@@ -8332,7 +8299,6 @@
         } catch(e) { /* fallback to API */ }
       }
 
-      // Fallback: use chat API to trigger phone_call tool
       await fallbackApiCall(number);
     }
 
@@ -8373,7 +8339,6 @@
     async function endCall() {
       if (!phoneState.contactId) { updatePhoneUI('ready'); return; }
 
-      // Try CCP
       if (phoneState.ccpInitialized && typeof connect !== 'undefined') {
         try {
           const agent = new connect.Agent();
@@ -8382,7 +8347,6 @@
         } catch(e) {}
       }
 
-      // Also end via API
       try {
         const token = localStorage.getItem('auth_token');
         const sessionId = localStorage.getItem('session_id') || '';
@@ -8436,7 +8400,6 @@
       }
     }
 
-    // ─── Live Transcript Polling ───
     function startTranscriptPolling(contactId) {
       stopTranscriptPolling();
       const transcriptEl = document.getElementById('phone-transcript');
@@ -8468,5 +8431,6 @@
       }
     }
   </script>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
 </body>
 </html>
