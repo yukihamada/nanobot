@@ -170,7 +170,22 @@
       text-align: center;
       margin-bottom: 28px;
       position: relative;
+      z-index: 1;
     }
+    #hero-canvas {
+      position: absolute;
+      top: -60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100vw;
+      max-width: 900px;
+      height: 380px;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 1.5s ease;
+    }
+    #hero-canvas.visible { opacity: 1; }
     .hero h1 {
       font-size: 42px;
       font-weight: 900;
@@ -182,6 +197,18 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       animation: shimmer 3s ease-in-out infinite;
+      position: relative;
+      z-index: 1;
+    }
+    .hero h1 .char {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(10px) scale(0.9);
+      filter: blur(4px);
+      animation: charReveal 0.5s ease forwards;
+    }
+    @keyframes charReveal {
+      to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
     }
     .hero p {
       color: var(--muted);
@@ -344,7 +371,7 @@
     .ch-bar-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
     .ch-bar-btn .ch-check { display: none; margin-left: 2px; }
     .ch-bar-btn.connected .ch-check { display: inline; }
-    .ch-bar-btn.connected { opacity: 0.5; pointer-events: none; }
+    .ch-bar-btn.connected { opacity: 1; pointer-events: none; box-shadow: 0 0 0 1.5px var(--green); }
     .ch-bar-btn svg { width: 14px; height: 14px; }
 
     /* Channel cards (larger CTA) */
@@ -540,9 +567,12 @@
     .link-qr-img {
       width: 120px;
       height: 120px;
-      border-radius: 8px;
+      border-radius: 0;
       background: #fff;
       margin-top: 8px;
+      padding: 6px;
+      border-radius: 10px;
+      box-sizing: content-box;
     }
 
     /* Link code display */
@@ -939,15 +969,19 @@
     .modal .qr-wrapper {
       position: relative;
       display: inline-block;
-      width: 200px;
-      height: 200px;
+      width: 216px;
+      height: 216px;
       margin-bottom: 16px;
+      background: #fff;
+      border-radius: 16px;
+      padding: 8px;
+      box-sizing: border-box;
     }
     .modal .qr-wrapper img {
       width: 200px;
       height: 200px;
-      border-radius: 14px;
-      background: #fff;
+      border-radius: 0;
+      display: block;
       opacity: 0;
       transition: opacity 0.4s ease;
     }
@@ -992,6 +1026,10 @@
       transition: color 0.2s;
     }
     .modal .close-btn:hover { color: var(--text); }
+
+    /* Toggle switch */
+    #auto-charge-toggle:checked + span { background: var(--accent, #6366f1) !important; }
+    #auto-charge-toggle:checked + span + span { left: 22px !important; }
 
     /* Card hover glow */
     .cap-card, .recipe-card, .channel-card {
@@ -1239,6 +1277,7 @@
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
+      transition: width 0.25s ease;
     }
     .app-sidebar-header {
       padding: 12px;
@@ -1603,6 +1642,44 @@
       letter-spacing: 0.5px;
     }
 
+    /* Voice character selector */
+    .voice-chars {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin: 16px 0 8px;
+      flex-wrap: wrap;
+    }
+    .voice-char {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: 2px solid transparent;
+      border-radius: 14px;
+      padding: 8px 10px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      opacity: 0.5;
+    }
+    .voice-char:hover { opacity: 0.8; transform: translateY(-2px); }
+    .voice-char.active {
+      opacity: 1;
+      border-color: var(--accent);
+      background: rgba(99,102,241,0.08);
+    }
+    .vc-avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; color: #fff;
+      transition: transform 0.2s;
+    }
+    .voice-char.active .vc-avatar { transform: scale(1.1); }
+    .vc-name { font-size: 10px; color: var(--muted); font-weight: 600; }
+    .voice-char.active .vc-name { color: var(--accent); }
+
     .app-chat-suggestions {
       display: flex;
       flex-wrap: wrap;
@@ -1886,6 +1963,48 @@
       border-color: var(--accent);
     }
 
+    /* Response action buttons */
+    .msg-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .app-msg:hover .msg-actions { opacity: 1; }
+    .escalate-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .escalate-btn:hover { background: rgba(99,102,241,0.1); color: var(--accent); border-color: var(--accent); }
+    .escalate-btn.loading {
+      pointer-events: none;
+      opacity: 0.5;
+    }
+    .escalate-btn.done {
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .escalate-human {
+      background: transparent;
+      border: 1px solid rgba(239,68,68,0.3);
+      color: #ef4444;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .escalate-human:hover { background: rgba(239,68,68,0.1); }
+
     /* Settings modal */
     .settings-modal { max-width: 480px; text-align: left; max-height: 80vh; overflow-y: auto; }
     .settings-modal h3 { text-align: center; }
@@ -1955,6 +2074,10 @@
     @keyframes credit-pulse {
       0% { transform: scale(1.3); color: #f5a623; }
       100% { transform: scale(1); }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
     }
 
     /* App mode message styling */
@@ -2243,11 +2366,17 @@
       display: none;
       background: none;
       border: none;
-      color: var(--text);
-      font-size: 20px;
+      color: var(--muted);
+      font-size: 18px;
       cursor: pointer;
       padding: 4px 8px;
+      transition: color 0.2s;
     }
+    .app-sidebar-toggle:hover { color: var(--text); }
+    body.app-mode .app-sidebar-toggle { display: block; }
+    /* Desktop sidebar collapse */
+    body.sidebar-collapsed .app-sidebar { width: 0; overflow: hidden; border-right: none; }
+    body.sidebar-collapsed .app-sidebar > * { opacity: 0; pointer-events: none; }
 
     @media (max-width: 768px) {
       .app-sidebar {
@@ -2423,7 +2552,7 @@
     }
   </script>
   <nav>
-    <button class="app-sidebar-toggle" id="app-sidebar-toggle" onclick="var s=document.getElementById('app-sidebar'),b=document.getElementById('app-sidebar-backdrop');s.classList.toggle('open');b.classList.toggle('show');" style="display:none;">&#x2630;</button>
+    <button class="app-sidebar-toggle" id="app-sidebar-toggle" onclick="toggleSidebar()" style="display:none;">&#x2630;</button>
     <a href="/" class="logo" style="text-decoration:none"><span>chat</span>web.ai</a>
     <div class="nav-right">
       <a href="/pricing" id="nav-pricing">Pricing</a>
@@ -2466,11 +2595,11 @@
 
   <main class="main" role="main">
     <div class="hero fade-up">
+      <canvas id="hero-canvas" width="900" height="380"></canvas>
       <h1 id="t-title">お願いしたら、本当にやってくれるAI。</h1>
       <p id="t-subtitle">チャットで頼むだけ。検索、コード実行、ファイル操作、定期監視まで — 声でもテキストでも。</p>
       <div class="hero-cta" id="t-hero-cta">
         <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="document.getElementById('input').focus();return false;">今すぐ無料で試す</a>
-        <a href="/pricing" class="cta-secondary" id="t-hero-plans">プランを見る</a>
       </div>
     </div>
 
@@ -2595,8 +2724,8 @@
       </div>
       <div class="chat-messages" id="messages">
         <div class="msg bot" id="t-welcome"></div>
-        <div class="msg user demo-msg" id="demo-q1">東京の天気を調べて</div>
-        <div class="msg bot demo-msg" id="demo-a1"><span style="font-size:11px;color:var(--accent);display:block;margin-bottom:4px;" id="demo-tool">🔍 web_search("東京 天気")</span>東京は晴れ、気温18°Cです。午後から曇りの予報なので、折りたたみ傘があると安心です。</div>
+        <div class="msg user demo-msg" id="demo-q1">やる気が出ない</div>
+        <div class="msg bot demo-msg" id="demo-a1">わかります。やる気って、待ってても来ないんですよね。<br>...でも不思議と、誰かと話してると出てきたりする。<br>というわけで、今ちょっとだけ出てきてません？ 😏</div>
       </div>
       <div class="chat-input" style="position:relative;">
         <input type="text" id="input" placeholder="何でも聞いてください..." autocomplete="off">
@@ -2827,6 +2956,7 @@
       <h3 id="auth-modal-title">ログイン</h3>
       <div class="auth-error" id="auth-error" style="display:none;"></div>
       <div id="auth-form-email">
+        <input type="text" class="auth-input" id="login-name" placeholder="お名前（ニックネームOK）" maxlength="30" onkeydown="if(event.key==='Enter')document.getElementById('login-email').focus()">
         <input type="email" class="auth-input" id="login-email" placeholder="Email" onkeydown="if(event.key==='Enter')emailAuth()">
         <button class="auth-submit" id="email-auth-btn" onclick="emailAuth()">メールでログイン</button>
       </div>
@@ -2842,6 +2972,50 @@
         Sign in with Google
       </button>
       <button class="close-btn" onclick="closeAuthModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- Onboarding modal — first-time welcome -->
+  <div class="modal-overlay" id="onboard-modal" style="z-index:400;display:none;" onclick="if(event.target===this)return;">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;text-align:center;padding:32px 28px;">
+      <div id="onboard-step-1">
+        <div style="font-size:48px;margin-bottom:12px;animation:float 3s ease-in-out infinite;">&#x1F44B;</div>
+        <h3 style="font-size:22px;font-weight:800;margin-bottom:6px;" id="onboard-title">ようこそ、ChatWebへ</h3>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.6;" id="onboard-desc">あなたの名前を教えてください。<br>声で呼びかけるときに使います。</p>
+        <input type="text" class="auth-input" id="onboard-name" placeholder="お名前（ニックネームOK）" maxlength="30" style="text-align:center;font-size:16px;margin-bottom:16px;" onkeydown="if(event.key==='Enter')onboardNext()">
+        <button class="auth-submit" onclick="onboardNext()" style="width:100%;font-size:15px;padding:14px;">次へ</button>
+      </div>
+      <div id="onboard-step-2" style="display:none;">
+        <h3 style="font-size:20px;font-weight:800;margin-bottom:6px;">声を選んでね</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">タップすると声が聞けます</p>
+        <div class="voice-chars" id="onboard-voices" style="margin-bottom:20px;justify-content:center;">
+          <button class="voice-char active" data-voice="nova" onclick="selectVoiceChar(this)">
+            <span class="vc-avatar" style="background:linear-gradient(135deg,#6366f1,#a78bfa);">N</span>
+            <span class="vc-name">Nova</span>
+          </button>
+          <button class="voice-char" data-voice="shimmer" onclick="selectVoiceChar(this)">
+            <span class="vc-avatar" style="background:linear-gradient(135deg,#ec4899,#f472b6);">S</span>
+            <span class="vc-name">Shimmer</span>
+          </button>
+          <button class="voice-char" data-voice="echo" onclick="selectVoiceChar(this)">
+            <span class="vc-avatar" style="background:linear-gradient(135deg,#22c55e,#4ade80);">E</span>
+            <span class="vc-name">Echo</span>
+          </button>
+          <button class="voice-char" data-voice="onyx" onclick="selectVoiceChar(this)">
+            <span class="vc-avatar" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);">O</span>
+            <span class="vc-name">Onyx</span>
+          </button>
+          <button class="voice-char" data-voice="alloy" onclick="selectVoiceChar(this)">
+            <span class="vc-avatar" style="background:linear-gradient(135deg,#06b6d4,#67e8f9);">A</span>
+            <span class="vc-name">Alloy</span>
+          </button>
+          <button class="voice-char" data-voice="fable" onclick="selectVoiceChar(this)">
+            <span class="vc-avatar" style="background:linear-gradient(135deg,#f97316,#fb923c);">F</span>
+            <span class="vc-name">Fable</span>
+          </button>
+        </div>
+        <button class="auth-submit" onclick="finishOnboarding()" style="width:100%;font-size:15px;padding:14px;background:linear-gradient(135deg,#22c55e,#16a34a);">はじめる</button>
+      </div>
     </div>
   </div>
 
@@ -3037,43 +3211,100 @@
     <div class="modal settings-modal" onclick="event.stopPropagation()">
       <h3 id="topup-modal-title">クレジットをチャージ</h3>
       <p style="font-size:12px;color:var(--muted);margin-bottom:16px;" id="topup-modal-desc">お好きな方法でクレジットを追加できます</p>
-      <div style="display:flex;flex-direction:column;gap:10px;">
+
+      <!-- Tab switcher -->
+      <div id="topup-tabs" style="display:flex;gap:4px;margin-bottom:14px;background:var(--bg);border-radius:10px;padding:3px;border:1px solid var(--border);">
+        <button onclick="showTopupTab('plans')" id="topup-tab-plans" style="flex:1;padding:8px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;">プラン</button>
+        <button onclick="showTopupTab('credits')" id="topup-tab-credits" style="flex:1;padding:8px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:var(--muted);">クレジット追加</button>
+      </div>
+
+      <!-- Plans section -->
+      <div id="topup-plans" style="display:flex;flex-direction:column;gap:10px;">
         <button onclick="startStripeCheckout('starter')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
           <span style="font-size:24px;">💳</span>
           <div style="flex:1;">
-            <div style="font-size:14px;font-weight:600;color:var(--text);">Starter — $5/mo</div>
-            <div style="font-size:12px;color:var(--muted);">5,000 credits + tools</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text);">Starter — ¥980/月</div>
+            <div style="font-size:12px;color:var(--muted);">25,000 credits + 全ツール</div>
           </div>
-          <span style="font-size:12px;color:var(--accent);">Stripe ›</span>
+          <span style="font-size:12px;color:var(--accent);">購入 ›</span>
         </button>
         <button onclick="startStripeCheckout('pro')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border:2px solid var(--accent);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
           <span style="font-size:24px;">⚡</span>
           <div style="flex:1;">
-            <div style="font-size:14px;font-weight:700;color:var(--text);">Pro — $20/mo</div>
-            <div style="font-size:12px;color:var(--muted);">25,000 credits + priority</div>
+            <div style="font-size:14px;font-weight:700;color:var(--text);">Pro — ¥4,980/月</div>
+            <div style="font-size:12px;color:var(--muted);">300,000 credits + 優先処理</div>
           </div>
-          <span style="font-size:12px;color:var(--accent);">Stripe ›</span>
+          <span style="font-size:12px;color:var(--accent);">購入 ›</span>
         </button>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--muted);font-size:11px;"><hr style="flex:1;border:none;border-top:1px solid var(--border);"><span>or</span><hr style="flex:1;border:none;border-top:1px solid var(--border);"></div>
-        <button onclick="document.getElementById('topup-modal').classList.remove('show');showCryptoTopup()" style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
-          <span style="font-size:24px;">◆</span>
+        <button onclick="openBillingPortal()" id="manage-plan-btn" style="display:none;align-items:center;gap:10px;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:24px;">⚙️</span>
           <div style="flex:1;">
-            <div style="font-size:14px;font-weight:600;color:var(--text);">Crypto</div>
-            <div style="font-size:12px;color:var(--muted);">ETH / MATIC / Base</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text);" id="manage-plan-label">プラン管理</div>
+            <div style="font-size:12px;color:var(--muted);">プラン変更・解約</div>
           </div>
-          <span style="font-size:12px;color:#8b5cf6;">MetaMask ›</span>
-        </button>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--muted);font-size:11px;"><hr style="flex:1;border:none;border-top:1px solid var(--border);"><span>or</span><hr style="flex:1;border:none;border-top:1px solid var(--border);"></div>
-        <button onclick="document.getElementById('topup-modal').classList.remove('show');showEarnOption()" style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:linear-gradient(135deg,rgba(34,197,94,0.08),rgba(16,185,129,0.08));border:1px solid rgba(34,197,94,0.3);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
-          <span style="font-size:24px;">🖥️</span>
-          <div style="flex:1;">
-            <div style="font-size:14px;font-weight:600;color:var(--text);" id="earn-btn-title">Earn with your PC</div>
-            <div style="font-size:12px;color:var(--muted);" id="earn-btn-desc">Run local LLM to earn credits</div>
-          </div>
-          <span style="font-size:12px;color:#22c55e;">chatweb earn →</span>
+          <span style="font-size:12px;color:var(--accent);">管理 ›</span>
         </button>
       </div>
-      <button class="close-btn" onclick="document.getElementById('topup-modal').classList.remove('show')">Close</button>
+
+      <!-- Credit packs section -->
+      <div id="topup-credits" style="display:none;flex-direction:column;gap:10px;">
+        <button onclick="buyCreditPack(1000)" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:24px;">🪙</span>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);">1,000 クレジット</div>
+            <div style="font-size:12px;color:var(--muted);">¥500（¥0.5/クレジット）</div>
+          </div>
+          <span style="font-size:12px;color:var(--accent);">購入 ›</span>
+        </button>
+        <button onclick="buyCreditPack(5000)" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border:2px solid var(--accent);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:24px;">💎</span>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:700;color:var(--text);">5,000 クレジット</div>
+            <div style="font-size:12px;color:var(--muted);">¥1,980（¥0.40/クレジット・20%お得）</div>
+          </div>
+          <span style="font-size:12px;color:var(--accent);">購入 ›</span>
+        </button>
+        <button onclick="buyCreditPack(20000)" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:24px;">👑</span>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);">20,000 クレジット</div>
+            <div style="font-size:12px;color:var(--muted);">¥5,980（¥0.30/クレジット・40%お得）</div>
+          </div>
+          <span style="font-size:12px;color:var(--accent);">購入 ›</span>
+        </button>
+        <!-- Auto-charge toggle -->
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;">
+          <span style="font-size:20px;">🔄</span>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);">オートチャージ</div>
+            <div style="font-size:11px;color:var(--muted);">クレジットが0になったら自動で5,000追加</div>
+          </div>
+          <label style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;">
+            <input type="checkbox" id="auto-charge-toggle" onchange="toggleAutoCharge(this.checked)" style="opacity:0;width:0;height:0;">
+            <span style="position:absolute;inset:0;background:var(--border);border-radius:12px;transition:0.3s;"></span>
+            <span style="position:absolute;left:2px;top:2px;width:20px;height:20px;background:#fff;border-radius:50%;transition:0.3s;"></span>
+          </label>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;margin:12px 0 4px;color:var(--muted);font-size:11px;"><hr style="flex:1;border:none;border-top:1px solid var(--border);"><span>or</span><hr style="flex:1;border:none;border-top:1px solid var(--border);"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="document.getElementById('topup-modal').classList.remove('show');showCryptoTopup()" style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:18px;">◆</span>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);">Crypto</div>
+            <div style="font-size:10px;color:var(--muted);">ETH/Base</div>
+          </div>
+        </button>
+        <button onclick="document.getElementById('topup-modal').classList.remove('show');showEarnOption()" style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;background:linear-gradient(135deg,rgba(34,197,94,0.08),rgba(16,185,129,0.08));border:1px solid rgba(34,197,94,0.3);border-radius:10px;cursor:pointer;text-align:left;transition:all 0.2s;">
+          <span style="font-size:18px;">🖥️</span>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);" id="earn-btn-title">PCで稼ぐ</div>
+            <div style="font-size:10px;color:var(--muted);" id="earn-btn-desc">LLMでクレジット獲得</div>
+          </div>
+        </button>
+      </div>
+      <button class="close-btn" onclick="document.getElementById('topup-modal').classList.remove('show')" style="margin-top:12px;">Close</button>
     </div>
   </div>
 
@@ -3157,9 +3388,40 @@
           <button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()">
             <svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
-          <div class="voice-hero-label" id="voice-hero-label">タップして話す</div>
-          <div class="app-chat-empty-text" id="app-empty-text">何でも聞いてください</div>
+          <div class="voice-hero-label" id="voice-hero-label">タップして、話しかけてみて</div>
+          <div class="app-chat-empty-text" id="app-empty-text">静かなところで、ゆっくり話しましょう</div>
+          <!-- Voice character selector -->
+          <div class="voice-chars" id="voice-chars">
+            <button class="voice-char active" data-voice="nova" onclick="selectVoiceChar(this)">
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#6366f1,#a78bfa);">N</span>
+              <span class="vc-name">Nova</span>
+            </button>
+            <button class="voice-char" data-voice="shimmer" onclick="selectVoiceChar(this)">
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#ec4899,#f472b6);">S</span>
+              <span class="vc-name">Shimmer</span>
+            </button>
+            <button class="voice-char" data-voice="echo" onclick="selectVoiceChar(this)">
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#22c55e,#4ade80);">E</span>
+              <span class="vc-name">Echo</span>
+            </button>
+            <button class="voice-char" data-voice="onyx" onclick="selectVoiceChar(this)">
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);">O</span>
+              <span class="vc-name">Onyx</span>
+            </button>
+            <button class="voice-char" data-voice="alloy" onclick="selectVoiceChar(this)">
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#06b6d4,#67e8f9);">A</span>
+              <span class="vc-name">Alloy</span>
+            </button>
+            <button class="voice-char" data-voice="fable" onclick="selectVoiceChar(this)">
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#f97316,#fb923c);">F</span>
+              <span class="vc-name">Fable</span>
+            </button>
+          </div>
           <div class="app-chat-suggestions" id="app-suggestions"></div>
+          <div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;">
+            <a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a>
+            <a href="/pricing" style="color:var(--muted);text-decoration:none;">Pricing</a>
+          </div>
         </div>
       </div>
       <div class="app-chat-input-area">
@@ -3287,10 +3549,11 @@
       d.className = 'msg ' + who;
 
       // Show channel badge for messages from other channels
-      if (channel && channel !== 'web' && who === 'user') {
+      if (channel && channel !== 'web') {
         const badge = document.createElement('div');
         badge.className = 'channel-badge ch-' + channel;
-        badge.textContent = channel === 'line' ? 'LINE' : channel === 'telegram' ? 'Telegram' : channel;
+        const chNames = { line: 'LINE', telegram: 'Telegram', whatsapp: 'WhatsApp', facebook: 'Facebook', teams: 'Teams' };
+        badge.textContent = chNames[channel] || channel;
         d.appendChild(badge);
       }
 
@@ -3545,7 +3808,7 @@
         stopThinkingAmbient();
         typing.remove();
         addMsg(d.response, 'bot', true, null, d.agent || null, d.tools_used || null);
-        knownMsgCount += 2; // user + assistant messages
+        knownMsgCount += 2; syncVersion++;
         startPolling();
       } catch (e) {
         clearTimeout(frontendTimeout);
@@ -3561,43 +3824,78 @@
       }
     }
 
-    // Session polling for cross-channel sync
+    // Cross-channel real-time sync (lightweight DynamoDB version counter)
     let pollInterval = null;
     let knownMsgCount = 0;
+    let syncVersion = 0;
     let isPolling = false;
 
     function startPolling() {
       if (pollInterval) return;
-      pollInterval = setInterval(pollSession, 3000);
+      pollInterval = setInterval(pollSync, 1500);
     }
 
     function stopPolling() {
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
     }
 
-    async function pollSession() {
+    async function pollSync() {
       if (isPolling) return;
       isPolling = true;
       try {
-        const r = await fetch(API + '/api/v1/sessions/' + encodeURIComponent(webSessionId));
+        const r = await fetch(API + '/api/v1/sync/poll?session_key=' + encodeURIComponent(webSessionId) + '&v=' + syncVersion);
         const data = await r.json();
-        const serverMsgs = data.messages || [];
-        if (serverMsgs.length > knownMsgCount) {
-          const newMsgs = serverMsgs.slice(knownMsgCount);
-          for (const m of newMsgs) {
+        if (data.updated && data.messages && data.messages.length > 0) {
+          const lastCh = data.last_channel || '';
+          for (const m of data.messages) {
             const ch = m.channel || 'web';
+            // Only show messages from other channels (avoid duplicating own messages)
             if (ch !== 'web') {
-              addMsg(m.content, m.role === 'user' ? 'user' : 'bot', false, ch);
+              const isApp = document.body.classList.contains('app-mode');
+              if (isApp) {
+                appAddMsg(m.content, m.role === 'user' ? 'user' : 'bot', null, null, ch);
+              } else {
+                addMsg(m.content, m.role === 'user' ? 'user' : 'bot', false, ch);
+              }
             }
           }
-          knownMsgCount = serverMsgs.length;
-        }
-        // Update connected channel status
-        if (data.linked_channels) {
-          updateChannelStatus(data.linked_channels, data.linked_channel_details);
+          syncVersion = data.version;
+          knownMsgCount = Math.max(knownMsgCount, syncVersion * 2);
+          // Show sync indicator
+          showSyncToast(lastCh);
+        } else if (data.version) {
+          syncVersion = data.version;
         }
       } catch(e) { /* ignore poll errors */ }
       isPolling = false;
+    }
+
+    function showSyncToast(channel) {
+      const chNames = { line: 'LINE', telegram: 'Telegram', facebook: 'Facebook', whatsapp: 'WhatsApp', teams: 'Teams', feishu: 'Feishu', zalo: 'Zalo', google_chat: 'Google Chat' };
+      const name = chNames[channel] || channel;
+      if (!name || name === 'web') return;
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#6366f1;color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;';
+      toast.textContent = name + ' から同期しました';
+      document.body.appendChild(toast);
+      requestAnimationFrame(() => { toast.style.opacity = '1'; });
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2500);
+    }
+
+    // Fallback: full session poll for channel status (less frequent)
+    let statusPollInterval = null;
+    function startStatusPolling() {
+      if (statusPollInterval) return;
+      statusPollInterval = setInterval(pollChannelStatus, 15000);
+    }
+    async function pollChannelStatus() {
+      try {
+        const r = await fetch(API + '/api/v1/sessions/' + encodeURIComponent(webSessionId));
+        const data = await r.json();
+        if (data.linked_channels) {
+          updateChannelStatus(data.linked_channels, data.linked_channel_details);
+        }
+      } catch(e) { /* ignore */ }
     }
 
     function updateChannelStatus(channels, details) {
@@ -3613,10 +3911,14 @@
         tgBar && tgBar.classList.add('connected');
         tgCard && tgCard.classList.add('connected');
       }
-      // Compact the channel cards grid when at least one non-web channel is linked
+      // Hide channel cards entirely when at least one channel is linked
       const nonWeb = channels.filter(c => c !== 'web');
       if (nonWeb.length > 0) {
-        document.querySelectorAll('.channel-cards').forEach(g => g.classList.add('has-linked'));
+        document.querySelectorAll('.channel-cards').forEach(g => g.style.display = 'none');
+        const hint = document.getElementById('link-cmd-hint');
+        if (hint) hint.style.display = 'none';
+        const cli = document.getElementById('cli-install-section');
+        if (cli) cli.style.display = 'none';
       }
       // Also update app-mode sidebar channel buttons with linked info
       const chMap = { line: 'app-ch-line', telegram: 'app-ch-tg', whatsapp: 'app-ch-whatsapp', discord: 'app-ch-discord', slack: 'app-ch-slack', teams: 'app-ch-teams' };
@@ -3644,11 +3946,15 @@
       updateSidebarChannelBadges(channels, details);
     }
 
-    // Pause polling when tab is hidden
+    // Pause polling when tab is hidden, resume when visible
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stopPolling();
-      else if (knownMsgCount > 0) startPolling();
+      if (document.hidden) { stopPolling(); if (statusPollInterval) { clearInterval(statusPollInterval); statusPollInterval = null; } }
+      else { startPolling(); startStatusPolling(); }
     });
+    // Start sync polling immediately (lightweight — 1 GetItem per 1.5s)
+    startPolling();
+    pollChannelStatus(); // Check channel status immediately on load
+    startStatusPolling();
 
     // Recipes data — organized by use case persona (OpenClaw: your tireless AI assistant)
     const R = {
@@ -3751,7 +4057,7 @@
         lineDesc: '1タップで友だち追加 → 自動連携', tgDesc: 'ボタンを押すだけ → 今すぐ開始',
         lineConnected: '&#x2713; 連携済み', tgConnected: '&#x2713; 連携済み', chConnected: '&#x2713; 連携済み',
         ph: '何でも聞いてください...', send: '送信',
-        heroTry: '今すぐ無料で試す', heroPlans: 'プランを見る', pricing: '料金', settings: '設定', status: 'ステータス', comparison: '比較',
+        heroTry: '今すぐ無料で試す', pricing: '料金', settings: '設定', status: 'ステータス', comparison: '比較',
         chatStatus: 'オンライン',
         statsUptime: '稼働率', statsSpeed: '平均応答', statsModels: 'AIモデル', statsChannels: 'チャネル', statsTools: 'ツール',
         trustSsl: 'SSL暗号化', trustStripe: 'Stripe決済', trustNocard: 'カード不要で開始',
@@ -3799,8 +4105,7 @@
         uc4Title: 'Web操作の代行', uc4Desc: '「最安値フライトを探してカレンダーに入れて」— 複数サイトを巡回し、予定登録まで全自動。',
         uc5Title: 'ずっと覚えている（永続メモリ）', uc5Desc: '「いつもの感じでメール返信して」— 過去の会話や好みをずっと覚えているから、毎回の説明が不要。',
         uc6Title: '声で操作、どこからでも', uc6Desc: '「声で指示するだけ」— Web・LINE・Telegramどこからでも同じAIが応答。マルチチャネル対応。',
-        demoQ1: '東京の天気を調べて', demoTool: '🔍 web_search("東京 天気")', demoA1: '東京は晴れ、気温18°Cです。午後から曇りの予報なので、折りたたみ傘があると安心です。',
-        demoQ2: 'ありがとう！声で読み上げて', demoA2Tool: '🔊 speech_synthesize', demoA2: '読み上げました。他にも何でも聞いてください。',
+        demoQ1: 'やる気が出ない', demoA1: 'わかります。やる気って、待ってても来ないんですよね。\n...でも不思議と、誰かと話してると出てきたりする。\nというわけで、今ちょっとだけ出てきてません？ 😏',
       },
       en: {
         title: 'AI that actually does the work.',
@@ -3810,7 +4115,7 @@
         lineDesc: '1 tap to add friend → auto-link', tgDesc: 'Just tap → start now',
         lineConnected: '&#x2713; Connected', tgConnected: '&#x2713; Connected', chConnected: '&#x2713; Connected',
         ph: 'Ask me anything...', send: 'Send',
-        heroTry: 'Try Free Now', heroPlans: 'View Plans', pricing: 'Pricing', settings: 'Settings', status: 'Status', comparison: 'Comparison',
+        heroTry: 'Try Free Now', pricing: 'Pricing', settings: 'Settings', status: 'Status', comparison: 'Comparison',
         chatStatus: 'Online',
         statsUptime: 'Uptime', statsSpeed: 'Avg Response', statsModels: 'AI Models', statsChannels: 'Channels', statsTools: 'Tools',
         trustSsl: 'SSL Encrypted', trustStripe: 'Stripe Payments', trustNocard: 'No card required',
@@ -3858,10 +4163,97 @@
         uc4Title: 'Web Task Automation', uc4Desc: '"Find cheapest flights and add to my calendar" — Browses sites and books automatically.',
         uc5Title: 'Persistent Memory', uc5Desc: '"Reply to Bob in my usual tone" — Remembers past conversations and preferences.',
         uc6Title: 'Voice Control, Anywhere', uc6Desc: '"Just tell it by voice" — Same AI responds from Web, LINE, or Telegram. Multi-channel ready.',
-        demoQ1: 'Check the weather in Tokyo', demoTool: '🔍 web_search("Tokyo weather")', demoA1: 'Tokyo is sunny, 18°C. Clouds expected in the afternoon — bring a folding umbrella just in case.',
-        demoQ2: 'Thanks! Read it aloud', demoA2Tool: '🔊 speech_synthesize', demoA2: 'Done reading. Feel free to ask anything else.',
+        demoQ1: "I can't get motivated", demoA1: "I get it. Motivation doesn't come when you wait for it.\n...But weirdly, it shows up when you start talking to someone.\nSo... feeling a little spark right now? 😏",
       }
     };
+
+    // -----------------------------------------------------------------------
+    // A/B Test Framework — 3 variants for landing page personality
+    // -----------------------------------------------------------------------
+    const AB_VARIANTS = {
+      a: {
+        ja: {
+          title: '何でも聞いて。たぶん、笑わせちゃうけど。',
+          sub: '知識もあるし、話も面白い。たまに予想外のことを言うAI。',
+          heroTry: '話しかけてみる',
+          welcome: 'やあ、何でも聞いて。たぶん期待以上の答え、返しますよ。',
+          demoQ1: 'やる気が出ない',
+          demoA1: 'わかります。やる気って、待ってても来ないんですよね。\n...でも不思議と、誰かと話してると出てきたりする。\nというわけで、今ちょっとだけ出てきてません？ 😏',
+        },
+        en: {
+          title: "Ask me anything. I'll probably make you laugh.",
+          sub: 'Smart, funny, and occasionally surprising AI.',
+          heroTry: 'Start talking',
+          welcome: "Hey, ask me anything. I'll probably exceed your expectations.",
+          demoQ1: "I can't get motivated",
+          demoA1: "I get it. Motivation doesn't come when you wait for it.\n...But weirdly, it shows up when you start talking to someone.\nSo... feeling a little spark right now? 😏",
+        }
+      },
+      b: {
+        ja: {
+          title: '賢いAIは、退屈じゃない。',
+          sub: '知識とユーモアで、あなたの質問を面白くする。',
+          heroTry: '無料で試す',
+          welcome: '何でも聞いてください。きっと驚きますよ。',
+          demoQ1: '相対性理論をわかりやすく',
+          demoA1: '好きな人と一緒の1時間は一瞬。退屈な会議の1時間は永遠。\n...これ、アインシュタインが本当に言った例えなんです。\nつまり、楽しい会話って一瞬で終わっちゃうんですよね。',
+        },
+        en: {
+          title: "Smart AI isn't boring.",
+          sub: 'Making your questions interesting with knowledge and humor.',
+          heroTry: 'Try free',
+          welcome: "Ask me anything. You'll be surprised.",
+          demoQ1: 'Explain relativity simply',
+          demoA1: "An hour with someone you love feels like a second. An hour in a boring meeting feels like eternity.\n...Einstein actually said that.\nPoint is, good conversations end way too fast.",
+        }
+      },
+      c: {
+        ja: {
+          title: '話しかけたら、最後。',
+          sub: 'ハマる人、続出中。賢くて面白くて、ちょっと予想外なAI。',
+          heroTry: '試してみる',
+          welcome: '...お、来ましたね。何か聞きたいことがある顔してる。',
+          demoQ1: 'おすすめの映画ある？',
+          demoA1: 'あなたの好みがまだわからないので...直感で。\n『her/世界でひとつの彼女』。AIと人間のラブストーリー。\nなぜこれを選んだかは...ご想像にお任せします 🎬',
+        },
+        en: {
+          title: "Once you start talking, you won't stop.",
+          sub: "People are getting hooked. Smart, funny, and a little unpredictable.",
+          heroTry: 'Try it',
+          welcome: "...Oh, you're here. You look like you've got something to ask.",
+          demoQ1: 'Any movie recommendations?',
+          demoA1: "I don't know your taste yet... so I'll go with instinct.\n\"Her\" — a love story between a human and an AI.\nWhy I picked it? ...I'll let you figure that out 🎬",
+        }
+      }
+    };
+
+    function getABVariant() {
+      var params = new URLSearchParams(window.location.search);
+      var forced = params.get('v');
+      if (forced && AB_VARIANTS[forced]) {
+        localStorage.setItem('abVariant', forced);
+        return forced;
+      }
+      var stored = localStorage.getItem('abVariant');
+      if (stored && AB_VARIANTS[stored]) return stored;
+      var keys = Object.keys(AB_VARIANTS);
+      var picked = keys[Math.floor(Math.random() * keys.length)];
+      localStorage.setItem('abVariant', picked);
+      return picked;
+    }
+
+    function applyABVariant(variant) {
+      var v = AB_VARIANTS[variant];
+      if (!v) return;
+      console.log('AB variant:', variant);
+      ['ja', 'en'].forEach(function(lang) {
+        if (v[lang]) {
+          Object.keys(v[lang]).forEach(function(key) {
+            T[lang][key] = v[lang][key];
+          });
+        }
+      });
+    }
 
     // -----------------------------------------------------------------------
     // Voice demo – "listen to AI speak" interactive section
@@ -4041,7 +4433,6 @@
       input.placeholder = t.ph;
       document.getElementById('send-btn').textContent = t.send;
       document.getElementById('t-hero-try').textContent = t.heroTry;
-      document.getElementById('t-hero-plans').textContent = t.heroPlans;
       document.getElementById('nav-pricing').textContent = t.pricing;
       document.getElementById('nav-settings').textContent = t.settings;
       document.getElementById('nav-status').textContent = t.status;
@@ -4121,10 +4512,7 @@
       var uc6d = document.getElementById('uc-6-desc'); if (uc6d) uc6d.textContent = t.uc6Desc;
       // Demo messages
       var dq1 = document.getElementById('demo-q1'); if (dq1) dq1.textContent = t.demoQ1;
-      var dt = document.getElementById('demo-tool'); if (dt) dt.textContent = t.demoTool;
-      var da1 = document.getElementById('demo-a1'); if (da1) { da1.innerHTML = '<span style="font-size:11px;color:var(--accent);display:block;margin-bottom:4px;">' + t.demoTool + '</span>' + t.demoA1; }
-      var dq2 = document.getElementById('demo-q2'); if (dq2) dq2.textContent = t.demoQ2;
-      var da2 = document.getElementById('demo-a2'); if (da2) { da2.innerHTML = '<span style="font-size:11px;color:var(--accent);display:block;margin-bottom:4px;">' + t.demoA2Tool + '</span>' + t.demoA2; }
+      var da1 = document.getElementById('demo-a1'); if (da1) da1.innerHTML = t.demoA1.replace(/\n/g, '<br>');
       // Auth UI translations
       if (!currentUser) document.getElementById('login-btn').textContent = t.loginBtn;
       document.getElementById('chat-login-text').textContent = t.chatLoginPrompt;
@@ -4631,13 +5019,14 @@
     async function emailAuth() {
       const email = document.getElementById('login-email').value.trim();
       if (!email) return showAuthError('メールアドレスを入力してください');
+      const name = (document.getElementById('login-name').value || '').trim() || undefined;
       try {
         document.getElementById('email-auth-btn').disabled = true;
         document.getElementById('email-auth-btn').textContent = '送信中...';
         const r = await fetch(API + '/api/v1/auth/email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, session_id: webSessionId }),
+          body: JSON.stringify({ email, session_id: webSessionId, name }),
         });
         const d = await r.json();
         if (d.ok && d.pending_verification) {
@@ -4718,6 +5107,17 @@
         window.history.replaceState({}, '', '/');
       }
 
+      // Handle checkout success/cancel
+      var checkoutStatus = urlParams.get('checkout');
+      if (checkoutStatus === 'success') {
+        window.history.replaceState({}, '', '/');
+        setTimeout(function() {
+          showToast(document.documentElement.lang === 'ja' ? '決済完了！クレジットが反映されました' : 'Payment successful! Credits updated.', 4000);
+        }, 1000);
+      } else if (checkoutStatus === 'cancel') {
+        window.history.replaceState({}, '', '/');
+      }
+
       if (!authToken) return;
       try {
         const r = await fetch(API + '/api/v1/auth/me', {
@@ -4734,6 +5134,7 @@
           if (d.credits_remaining !== undefined) {
             updateCredits(d.credits_remaining);
           }
+          window._userPlan = d.plan || 'free';
           // Show multi-model toggle for paid users
           const mmToggle = document.getElementById('multi-model-toggle');
           if (mmToggle && d.plan && d.plan !== 'free') {
@@ -4936,7 +5337,10 @@
       // Set i18n
       const l = document.documentElement.lang || 'ja';
       document.getElementById('app-new-conv-text').textContent = l === 'ja' ? '新しいチャット' : 'New chat';
-      document.getElementById('app-empty-text').textContent = l === 'ja' ? '何でも聞いてください' : 'Ask me anything';
+      var userName = currentUser.display_name && currentUser.display_name !== 'User' ? currentUser.display_name : '';
+      document.getElementById('app-empty-text').textContent = l === 'ja'
+        ? (userName ? userName + 'さん、何でも聞いてね' : '静かなところで、ゆっくり話しましょう')
+        : (userName ? 'What can I do for you, ' + userName + '?' : 'Let\'s talk. Ask me anything.');
       document.getElementById('app-input').placeholder = l === 'ja' ? 'メッセージを入力...' : 'Message chatweb.ai...';
       document.getElementById('app-channels-label').textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
       // Set CLI sidebar sync command
@@ -4948,12 +5352,110 @@
       startAutoSync();
       loadCronJobs();
       updateSyncUI();
+      // First-time onboarding — skip name step if already set (not email, not default)
+      if (!localStorage.getItem('onboarded')) {
+        var dn = currentUser.display_name || '';
+        var needsName = !dn || dn === 'User' || dn.includes('@');
+        if (needsName) {
+          setTimeout(showOnboarding, 600);
+        } else {
+          // Name already set from registration — skip to voice selection
+          setTimeout(function() { showOnboarding(); skipToVoiceStep(dn); }, 600);
+        }
+      }
     }
 
     function exitAppMode() {
       stopAutoSync();
       document.body.classList.remove('app-mode');
       document.getElementById('app-sidebar-toggle').style.display = 'none';
+    }
+
+    // -----------------------------------------------------------------------
+    // Onboarding — first-time welcome
+    // -----------------------------------------------------------------------
+    function showOnboarding() {
+      var modal = document.getElementById('onboard-modal');
+      if (!modal) return;
+      modal.style.display = '';
+      modal.classList.add('show');
+      var lang = document.documentElement.lang || 'ja';
+      document.getElementById('onboard-title').textContent = lang === 'ja' ? 'ようこそ、ChatWebへ' : 'Welcome to ChatWeb';
+      document.getElementById('onboard-desc').innerHTML = lang === 'ja'
+        ? 'あなたの名前を教えてください。<br>声で呼びかけるときに使います。'
+        : 'What should I call you?<br>I\'ll use this name when I speak to you.';
+      document.getElementById('onboard-name').placeholder = lang === 'ja' ? 'お名前（ニックネームOK）' : 'Your name (nickname OK)';
+      // Play welcome voice after a moment
+      setTimeout(function() {
+        var greeting = lang === 'ja'
+          ? 'こんにちは！ChatWebへようこそ。あなたの名前を教えてくれたら嬉しいな。'
+          : 'Hi there! Welcome to ChatWeb. I\'d love to know your name.';
+        fetchTTS(greeting);
+      }, 800);
+    }
+
+    function skipToVoiceStep(name) {
+      // Name already set from registration — skip directly to voice selection
+      currentUser.display_name = name;
+      document.getElementById('app-user-name').textContent = name;
+      document.getElementById('app-user-avatar').textContent = name.charAt(0).toUpperCase();
+      document.getElementById('onboard-step-1').style.display = 'none';
+      document.getElementById('onboard-step-2').style.display = '';
+      var lang = document.documentElement.lang || 'ja';
+      var greeting = lang === 'ja'
+        ? name + 'さん、ようこそ！声を選んでね。'
+        : 'Welcome, ' + name + '! Pick my voice.';
+      setTimeout(function() { fetchTTS(greeting); }, 800);
+    }
+
+    function onboardNext() {
+      var nameInput = document.getElementById('onboard-name');
+      var name = (nameInput.value || '').trim();
+      if (!name) { nameInput.focus(); return; }
+      // Save name to backend
+      if (authToken) {
+        fetch(API + '/api/v1/settings/' + webSessionId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ display_name: name }),
+        }).catch(function() {});
+      }
+      // Update local UI
+      currentUser.display_name = name;
+      document.getElementById('app-user-name').textContent = name;
+      document.getElementById('app-user-avatar').textContent = name.charAt(0).toUpperCase();
+      // Switch to step 2 (voice selection)
+      document.getElementById('onboard-step-1').style.display = 'none';
+      document.getElementById('onboard-step-2').style.display = '';
+      // Play personalized greeting
+      var lang = document.documentElement.lang || 'ja';
+      var greeting = lang === 'ja'
+        ? name + 'さん、いい名前だね！次は、私の声を選んでください。'
+        : 'Nice to meet you, ' + name + '! Now pick my voice.';
+      setTimeout(function() { fetchTTS(greeting); }, 300);
+    }
+
+    function finishOnboarding() {
+      localStorage.setItem('onboarded', '1');
+      var modal = document.getElementById('onboard-modal');
+      if (modal) { modal.classList.remove('show'); modal.style.display = 'none'; }
+      // Save voice preference to backend
+      if (authToken) {
+        fetch(API + '/api/v1/settings/' + webSessionId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ tts_voice: selectedVoice }),
+        }).catch(function() {});
+      }
+      var name = currentUser.display_name || '';
+      var lang = document.documentElement.lang || 'ja';
+      var farewell = lang === 'ja'
+        ? name + 'さん、準備完了！何でも聞いてね。声でもテキストでも。'
+        : 'All set, ' + name + '! Ask me anything — voice or text.';
+      setTimeout(function() { fetchTTS(farewell); }, 300);
+      // Focus input
+      var input = document.getElementById('app-input');
+      if (input) input.focus();
     }
 
     function appRenderSuggestions() {
@@ -5088,6 +5590,23 @@
       } catch(e) { /* ignore */ }
     }
 
+    function toggleSidebar() {
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        const s = document.getElementById('app-sidebar');
+        const b = document.getElementById('app-sidebar-backdrop');
+        s.classList.toggle('open');
+        b.classList.toggle('show');
+      } else {
+        document.body.classList.toggle('sidebar-collapsed');
+        localStorage.setItem('sidebarCollapsed', document.body.classList.contains('sidebar-collapsed') ? '1' : '');
+      }
+    }
+    // Restore sidebar state on load
+    if (localStorage.getItem('sidebarCollapsed') === '1') {
+      document.body.classList.add('sidebar-collapsed');
+    }
+
     async function appNewConversation() {
       if (!authToken) return;
       try {
@@ -5111,7 +5630,8 @@
             + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
             + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
             + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '何でも聞いてください' : 'Ask me anything') + '</div>'
-            + '<div class="app-chat-suggestions" id="app-suggestions"></div>';
+            + '<div class="app-chat-suggestions" id="app-suggestions"></div>'
+            + '<div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;"><a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a><a href="/pricing" style="color:var(--muted);text-decoration:none;">Pricing</a></div>';
           msgsEl.appendChild(empty);
           appRenderSuggestions();
           knownMsgCount = 0;
@@ -5121,7 +5641,7 @@
       } catch(e) { /* ignore */ }
     }
 
-    function appAddMsg(text, who, agentName, toolsUsed) {
+    function appAddMsg(text, who, agentName, toolsUsed, channel) {
       // Remove empty state if present
       const empty = document.getElementById('app-empty');
       if (empty) empty.remove();
@@ -5131,6 +5651,18 @@
       wrapper.className = 'app-msg app-msg-' + who;
 
       if (who === 'user') {
+        // Channel badge for messages from other channels
+        if (channel && channel !== 'web') {
+          const chBadge = document.createElement('div');
+          chBadge.style.cssText = 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:4px;display:inline-block;';
+          const chColors = { line: ['rgba(6,199,85,0.2)','#06c755'], telegram: ['rgba(42,171,238,0.2)','#24a1de'], whatsapp: ['rgba(37,211,102,0.2)','#25D366'], facebook: ['rgba(24,119,242,0.2)','#1877F2'] };
+          const [bg, fg] = chColors[channel] || ['rgba(99,102,241,0.15)','#6366f1'];
+          chBadge.style.background = bg;
+          chBadge.style.color = fg;
+          const chNames = { line: 'LINE', telegram: 'Telegram', whatsapp: 'WhatsApp', facebook: 'Facebook', teams: 'Teams', feishu: 'Feishu', zalo: 'Zalo' };
+          chBadge.textContent = chNames[channel] || channel;
+          wrapper.appendChild(chBadge);
+        }
         const bubble = document.createElement('div');
         bubble.className = 'app-msg-bubble';
         bubble.textContent = text;
@@ -5169,11 +5701,95 @@
         ttsBtn.dataset.text = text;
         ttsBtn.onclick = function() { playTTS(this); };
         content.appendChild(ttsBtn);
+
+        // Satisfaction actions (escalate)
+        var actionsBar = document.createElement('div');
+        actionsBar.className = 'msg-actions';
+        var escalateBtn = document.createElement('button');
+        escalateBtn.className = 'escalate-btn';
+        escalateBtn.dataset.text = text;
+        escalateBtn.dataset.level = '0';
+        var lang = document.documentElement.lang || 'ja';
+        escalateBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:-1px;"><path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> '
+          + (lang === 'ja' ? 'もっと詳しく' : 'Go deeper');
+        escalateBtn.onclick = function() { escalateResponse(this); };
+        actionsBar.appendChild(escalateBtn);
+        content.appendChild(actionsBar);
+
         wrapper.appendChild(content);
       }
 
       msgsEl.appendChild(wrapper);
       msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+
+    // -----------------------------------------------------------------------
+    // Response escalation — smarter AI → human contact
+    // -----------------------------------------------------------------------
+    async function escalateResponse(btn) {
+      var level = parseInt(btn.dataset.level || '0') + 1;
+      var originalQuestion = btn.closest('.app-msg').previousElementSibling;
+      var question = originalQuestion ? originalQuestion.textContent : '';
+      var previousAnswer = btn.dataset.text || '';
+      var lang = document.documentElement.lang || 'ja';
+
+      if (level === 1) {
+        // Level 1: Re-ask with smarter model + deeper analysis
+        btn.classList.add('loading');
+        btn.innerHTML = '<span class="dot-pulse" style="display:inline-block;width:6px;height:6px;background:var(--accent);border-radius:50%;animation:pulse 1s infinite;margin-right:4px;"></span>'
+          + (lang === 'ja' ? '深く考え中...' : 'Thinking deeper...');
+
+        try {
+          var r = await fetch(API + '/api/v1/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authToken ? 'Bearer ' + authToken : '',
+              'X-Session-Id': webSessionId || '',
+            },
+            body: JSON.stringify({
+              message: (lang === 'ja'
+                ? '前の回答に満足できませんでした。以下の質問にもっと詳しく、正確に、深く答えてください。ステップバイステップで考えてください。\n\n質問: '
+                : 'The previous answer was insufficient. Please answer this question more thoroughly, step by step.\n\nQuestion: ')
+                + question
+                + (lang === 'ja' ? '\n\n前の回答: ' : '\n\nPrevious answer: ') + previousAnswer.substring(0, 500),
+              session_id: webSessionId,
+              model: 'claude-sonnet-4-5-20250929',
+            }),
+          });
+          var d = await r.json();
+          btn.classList.remove('loading');
+          if (d.response) {
+            appAddMsg(d.response, 'bot', 'deep-think');
+            if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
+            // Update button to level 2
+            btn.dataset.level = '1';
+            btn.classList.add('done');
+            btn.innerHTML = (lang === 'ja' ? '回答済み' : 'Answered');
+            // Add human escalation button
+            var humanBtn = document.createElement('button');
+            humanBtn.className = 'escalate-human';
+            humanBtn.innerHTML = (lang === 'ja' ? '作者に聞く' : 'Ask creator');
+            humanBtn.onclick = function() { escalateToHuman(question); };
+            btn.parentElement.appendChild(humanBtn);
+          }
+        } catch(e) {
+          btn.classList.remove('loading');
+          btn.textContent = lang === 'ja' ? 'エラー' : 'Error';
+        }
+      }
+    }
+
+    function escalateToHuman(question) {
+      var lang = document.documentElement.lang || 'ja';
+      var msg = lang === 'ja'
+        ? 'AIでは解決できなかったようです。作者の濱田優貴がLINEで直接お答えします。LINEで質問を送りますか？'
+        : 'The AI couldn\'t fully help. Creator Yuki Hamada will answer personally via LINE. Send your question?';
+      if (!confirm(msg)) return;
+      // Send via LINE deep link to creator
+      var encoded = encodeURIComponent(question.substring(0, 200));
+      window.open('https://line.me/R/oaMessage/@619jcqqh/?text=' + encoded, '_blank');
+      showToast(lang === 'ja' ? 'LINEで質問を送信してください' : 'Send your question via LINE', 3000);
     }
 
     function appInputKeydown(e) {
@@ -5284,8 +5900,9 @@
           let botMsg = d.response;
           if (d.model_used) botMsg += '\n\n<small style="color:var(--muted);">Model: ' + d.model_used + (d.models_consulted ? ' (' + d.models_consulted.length + ' raced)' : '') + '</small>';
           appAddMsg(botMsg, 'bot', d.agent || null, d.tools_used || null);
-          knownMsgCount += 2;
+          knownMsgCount += 2; syncVersion++;
           if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
+          if (d.action === 'upgrade') { appendUpgradeButton(); setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800); }
           autoPlayTTS(d.response);
           setTimeout(() => appLoadConversations(), 1500);
           return;
@@ -5322,8 +5939,9 @@
           stopThinkingAmbient();
           thinking.remove();
           appAddMsg(d.response, 'bot', d.agent || null, d.tools_used || null);
-          knownMsgCount += 2;
+          knownMsgCount += 2; syncVersion++;
           if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
+          if (d.action === 'upgrade') { appendUpgradeButton(); setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800); }
           autoPlayTTS(d.response);
           setTimeout(() => appLoadConversations(), 1500);
         } else {
@@ -5401,7 +6019,7 @@
                 thinkSteps.forEach(el => el.remove());
               }
               appAddMsg(evt.content, 'bot', evt.agent || null, evt.tools_used || null);
-              knownMsgCount += 2;
+              knownMsgCount += 2; syncVersion++;
               if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
               autoPlayTTS(evt.content);
             } else if (evt.type === 'error') {
@@ -5409,7 +6027,16 @@
               clearInterval(statusInterval);
               stopThinkingAmbient();
               thinking.remove();
-              appAddMsg(evt.content || 'Error', 'bot');
+              var errMsg = evt.content || 'Error';
+              appAddMsg(errMsg, 'bot');
+              // If action=upgrade, show inline button + auto-open topup modal
+              if (evt.action === 'upgrade') {
+                appendUpgradeButton();
+                var plan = (window._userPlan || 'free').toLowerCase();
+                setTimeout(function() {
+                  showTopupModal(plan === 'free' ? 'plans' : 'credits');
+                }, 800);
+              }
             }
           }
 
@@ -5620,7 +6247,7 @@
           msgsEl.scrollTop = msgsEl.scrollHeight;
         }
 
-        knownMsgCount += 2;
+        knownMsgCount += 2; syncVersion++;
         setTimeout(() => appLoadConversations(), 1500);
 
       } catch (e) {
@@ -5776,8 +6403,70 @@
     function updateVoiceHeroLabel() {
       const label = document.getElementById('voice-hero-label');
       if (!label) return;
-      label.textContent = isRecording ? '聞いています...' : 'タップして話す';
+      label.textContent = isRecording ? '聞いています...' : 'タップして、話しかけてみて';
     }
+
+    // Voice character selection
+    var selectedVoice = localStorage.getItem('ttsVoice') || 'nova';
+    function selectVoiceChar(btn) {
+      var voice = btn.dataset.voice;
+      selectedVoice = voice;
+      localStorage.setItem('ttsVoice', voice);
+      document.querySelectorAll('.voice-char').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      // Play a short greeting in the selected voice
+      playVoiceGreeting(voice);
+    }
+    function playVoiceGreeting(voice) {
+      var greetings = {
+        nova: 'こんにちは！ノヴァです。何でも聞いてね。',
+        shimmer: 'シマーです。一緒に何か素敵なこと始めましょう。',
+        echo: 'エコーだよ。君の力になれるよ。',
+        onyx: 'オニキスです。どんな難題でも任せてください。',
+        alloy: 'アロイです！今日は何をしましょうか？',
+        fable: 'フェイブルです。物語のように楽しい時間にしましょう。',
+      };
+      var text = greetings[voice] || greetings.nova;
+      fetchTTS(text, voice);
+    }
+    function fetchTTS(text, voice) {
+      var token = authToken || '';
+      fetch(API + '/api/v1/speech/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': token ? 'Bearer ' + token : '' },
+        body: JSON.stringify({ text: text, voice: voice || selectedVoice }),
+      }).then(function(r) { return r.blob(); }).then(function(blob) {
+        var url = URL.createObjectURL(blob);
+        var a = new Audio(url);
+        a.play().catch(function() {});
+      }).catch(function() {});
+    }
+
+    // First-visit: auto-play greeting after small delay
+    (function() {
+      if (localStorage.getItem('visited')) return;
+      localStorage.setItem('visited', '1');
+      // Wait for user interaction (autoplay policy) — play on first click/tap anywhere
+      var played = false;
+      function onFirstInteraction() {
+        if (played) return;
+        played = true;
+        document.removeEventListener('click', onFirstInteraction);
+        document.removeEventListener('touchstart', onFirstInteraction);
+      }
+      document.addEventListener('click', onFirstInteraction);
+      document.addEventListener('touchstart', onFirstInteraction);
+    })();
+
+    // Restore saved voice character
+    (function() {
+      var saved = localStorage.getItem('ttsVoice');
+      if (saved) {
+        document.querySelectorAll('.voice-char').forEach(function(b) {
+          b.classList.toggle('active', b.dataset.voice === saved);
+        });
+      }
+    })();
 
     // Auto-TTS: always read aloud when enabled (default ON)
     let autoTtsEnabled = localStorage.getItem('autoTtsEnabled') !== 'false'; // default true
@@ -5975,7 +6664,8 @@
 
     // Fetch TTS audio for a single sentence
     async function fetchTtsAudio(sentence) {
-      const cacheKey = sentence.substring(0, 4096);
+      var voice = selectedVoice || 'nova';
+      const cacheKey = voice + ':' + sentence.substring(0, 4096);
       let blobUrl = ttsCache.get(cacheKey);
       if (blobUrl) return blobUrl;
 
@@ -5985,7 +6675,7 @@
       const r = await fetch(API + '/api/v1/speech/synthesize', {
         method: 'POST',
         headers: hdrs,
-        body: JSON.stringify({ text: cacheKey, session_id: webSessionId }),
+        body: JSON.stringify({ text: sentence.substring(0, 4096), voice: voice, session_id: webSessionId }),
       });
 
       if (!r.ok) throw new Error('TTS HTTP ' + r.status);
@@ -6137,6 +6827,7 @@
     // ---------------------------------------------------------------------------
     // Real-time credit display
     // ---------------------------------------------------------------------------
+    let lowCreditShown = false;
     function updateCredits(remaining) {
       const display = document.getElementById('credit-display');
       const count = document.getElementById('credit-count');
@@ -6148,6 +6839,45 @@
         display.classList.add('credit-flash');
         setTimeout(() => display.classList.remove('credit-flash'), 600);
       }
+      // Low credit urgency prompt
+      if (remaining <= 100 && remaining > 0 && !lowCreditShown) {
+        lowCreditShown = true;
+        setTimeout(() => showLowCreditBanner(remaining), 800);
+      }
+    }
+
+    function showLowCreditBanner(remaining) {
+      // Don't show again if already visible or user is already paid
+      if (document.getElementById('low-credit-banner')) return;
+      if (currentUser && currentUser.plan && currentUser.plan !== 'free') return;
+
+      const l = document.documentElement.lang || 'ja';
+      // Calculate "deadline" — 2 weeks from now
+      const deadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+      const deadlineStr = (deadline.getMonth() + 1) + '/' + deadline.getDate();
+
+      const banner = document.createElement('div');
+      banner.id = 'low-credit-banner';
+      banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:250;background:linear-gradient(135deg,#1a1a2e,#16213e);border-top:2px solid #f59e0b;padding:16px 20px;animation:slideUp .4s ease-out;';
+      banner.innerHTML = '<div style="max-width:480px;margin:0 auto;">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+        + '<span style="font-size:20px;">⚡</span>'
+        + '<span style="font-size:15px;font-weight:700;color:#fbbf24;">'
+        + (l === 'ja' ? 'クレジット残り ' + remaining : remaining + ' credits left') + '</span>'
+        + '</div>'
+        + '<div style="font-size:13px;color:#e2e8f0;margin-bottom:12px;line-height:1.5;">'
+        + (l === 'ja'
+          ? '今なら <b style="color:#fbbf24;">月額 ¥980</b> で5,000クレジット+全ツール解放。<br><span style="color:#f87171;font-size:12px;">' + deadlineStr + ' 以降は ¥1,480 に値上げ予定</span>'
+          : 'Get <b style="color:#fbbf24;">5,000 credits + all tools</b> for just $5/mo.<br><span style="color:#f87171;font-size:12px;">Price increases to $9/mo after ' + deadlineStr + '</span>')
+        + '</div>'
+        + '<div style="display:flex;gap:8px;align-items:center;">'
+        + '<button onclick="document.getElementById(\'low-credit-banner\').remove();document.getElementById(\'topup-modal\').classList.add(\'show\');" style="flex:1;padding:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:700;font-size:14px;border:none;border-radius:10px;cursor:pointer;">'
+        + (l === 'ja' ? '今すぐアップグレード' : 'Upgrade now') + '</button>'
+        + '<button onclick="this.parentElement.parentElement.parentElement.remove();" style="padding:10px 14px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:12px;">'
+        + (l === 'ja' ? '後で' : 'Later') + '</button>'
+        + '</div>'
+        + '</div>';
+      document.body.appendChild(banner);
     }
 
     async function refreshCredits() {
@@ -6163,31 +6893,123 @@
       } catch(e) { /* ignore */ }
     }
 
+    // Append upgrade button to the last bot message
+    function appendUpgradeButton() {
+      var msgs = document.querySelectorAll('.app-msg-bot .app-msg-content');
+      var last = msgs[msgs.length - 1];
+      if (!last) return;
+      var l = document.documentElement.lang || 'ja';
+      var btn = document.createElement('button');
+      btn.style.cssText = 'margin-top:12px;padding:10px 24px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;display:block;';
+      btn.textContent = l === 'ja' ? 'プランをアップグレード' : 'Upgrade Plan';
+      btn.onclick = function() { showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); };
+      last.appendChild(btn);
+    }
+
     // ---------------------------------------------------------------------------
     // Top-up modal + Stripe Checkout
     // ---------------------------------------------------------------------------
-    function showTopupModal() {
+    function showTopupModal(tab) {
       const l = document.documentElement.lang || 'ja';
       document.getElementById('topup-modal-title').textContent = l === 'ja' ? 'クレジットをチャージ' : 'Top Up Credits';
       document.getElementById('topup-modal-desc').textContent = l === 'ja' ? 'お好きな方法でクレジットを追加できます' : 'Add credits using your preferred payment method';
-      const earnTitle = document.getElementById('earn-btn-title');
-      const earnDesc = document.getElementById('earn-btn-desc');
-      if (earnTitle) earnTitle.textContent = l === 'ja' ? 'PCで稼ぐ' : 'Earn with your PC';
-      if (earnDesc) earnDesc.textContent = l === 'ja' ? 'ローカルLLMを動かしてクレジット獲得' : 'Run local LLM to earn credits';
+      // Show manage plan button if user is on a paid plan
+      var mp = document.getElementById('manage-plan-btn');
+      if (mp) {
+        var plan = (window._userPlan || 'free').toLowerCase();
+        mp.style.display = (plan !== 'free') ? 'flex' : 'none';
+      }
+      showTopupTab(tab || 'plans');
       document.getElementById('topup-modal').classList.add('show');
     }
 
-    function startStripeCheckout(plan) {
+    function showTopupTab(tab) {
+      var plans = document.getElementById('topup-plans');
+      var credits = document.getElementById('topup-credits');
+      var tabPlans = document.getElementById('topup-tab-plans');
+      var tabCredits = document.getElementById('topup-tab-credits');
+      if (tab === 'credits') {
+        plans.style.display = 'none';
+        credits.style.display = 'flex';
+        tabPlans.style.background = 'transparent'; tabPlans.style.color = 'var(--muted)';
+        tabCredits.style.background = 'var(--accent)'; tabCredits.style.color = '#fff';
+      } else {
+        plans.style.display = 'flex';
+        credits.style.display = 'none';
+        tabPlans.style.background = 'var(--accent)'; tabPlans.style.color = '#fff';
+        tabCredits.style.background = 'transparent'; tabCredits.style.color = 'var(--muted)';
+      }
+    }
+
+    async function startStripeCheckout(plan) {
+      // First try API-based checkout (creates Stripe Session)
+      try {
+        const r = await fetch('/api/v1/billing/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': webSessionId || '' },
+          body: JSON.stringify({ plan: plan }),
+        });
+        const d = await r.json();
+        if (d.checkout_url) {
+          window.open(d.checkout_url, '_blank');
+          document.getElementById('topup-modal').classList.remove('show');
+          return;
+        }
+      } catch(e) { /* fallback to Payment Links */ }
+
+      // Fallback: direct Payment Links
       const links = {
         starter: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o',
         pro: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p',
-        enterprise: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p',
       };
       const url = links[plan];
       if (!url) { alert('Invalid plan'); return; }
-      const ref = encodeURIComponent(webSessionId || '');
+      var ref = encodeURIComponent(webSessionId || '');
       window.open(url + '?client_reference_id=' + ref, '_blank');
       document.getElementById('topup-modal').classList.remove('show');
+    }
+
+    async function buyCreditPack(credits) {
+      try {
+        const r = await fetch('/api/v1/billing/credit-pack', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': webSessionId || '' },
+          body: JSON.stringify({ credits: credits }),
+        });
+        const d = await r.json();
+        if (d.checkout_url) {
+          window.open(d.checkout_url, '_blank');
+          document.getElementById('topup-modal').classList.remove('show');
+        } else {
+          alert(d.error || 'Error creating checkout session');
+        }
+      } catch(e) {
+        alert('Payment service unavailable. Please try again.');
+      }
+    }
+
+    async function openBillingPortal() {
+      try {
+        const r = await fetch('/api/v1/billing/portal', {
+          headers: { 'X-Session-Id': webSessionId || '' },
+        });
+        const d = await r.json();
+        if (d.portal_url) {
+          window.open(d.portal_url, '_blank');
+          document.getElementById('topup-modal').classList.remove('show');
+        }
+      } catch(e) { alert('Could not open billing portal'); }
+    }
+
+    async function toggleAutoCharge(enabled) {
+      try {
+        await fetch('/api/v1/billing/auto-charge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Session-Id': webSessionId || '' },
+          body: JSON.stringify({ enabled: enabled, credits: 5000 }),
+        });
+        showToast(enabled ? 'オートチャージON' : 'オートチャージOFF', 2000);
+      } catch(e) { /* ignore */ }
     }
 
     // ---------------------------------------------------------------------------
@@ -6719,6 +7541,125 @@
       checkAuth();
     }
 
+    // -----------------------------------------------------------------------
+    // Hero particle canvas — neural network constellation
+    // -----------------------------------------------------------------------
+    (function() {
+      var c = document.getElementById('hero-canvas');
+      if (!c) return;
+      var ctx = c.getContext('2d');
+      var W = c.width, H = c.height;
+      var particles = [];
+      var mouseX = W / 2, mouseY = H / 2;
+      var N = Math.min(60, Math.floor(W * H / 6000));
+      for (var i = 0; i < N; i++) {
+        particles.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          vx: (Math.random() - 0.5) * 0.3,
+          vy: (Math.random() - 0.5) * 0.3,
+          r: Math.random() * 1.5 + 0.5,
+        });
+      }
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+        // Draw connections
+        for (var i = 0; i < particles.length; i++) {
+          for (var j = i + 1; j < particles.length; j++) {
+            var dx = particles[i].x - particles[j].x;
+            var dy = particles[i].y - particles[j].y;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 120) {
+              ctx.beginPath();
+              ctx.strokeStyle = 'rgba(99,102,241,' + (0.12 * (1 - dist / 120)) + ')';
+              ctx.lineWidth = 0.5;
+              ctx.moveTo(particles[i].x, particles[i].y);
+              ctx.lineTo(particles[j].x, particles[j].y);
+              ctx.stroke();
+            }
+          }
+        }
+        // Draw particles + mouse attraction
+        for (var i = 0; i < particles.length; i++) {
+          var p = particles[i];
+          // Gentle attraction toward mouse
+          var dmx = mouseX - p.x, dmy = mouseY - p.y;
+          var dm = Math.sqrt(dmx * dmx + dmy * dmy);
+          if (dm < 200 && dm > 0) {
+            p.vx += dmx / dm * 0.02;
+            p.vy += dmy / dm * 0.02;
+          }
+          p.x += p.vx; p.y += p.vy;
+          p.vx *= 0.99; p.vy *= 0.99;
+          if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+          if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(99,102,241,0.4)';
+          ctx.fill();
+        }
+        requestAnimationFrame(draw);
+      }
+      draw();
+      setTimeout(function() { c.classList.add('visible'); }, 200);
+      document.addEventListener('mousemove', function(e) {
+        var rect = c.getBoundingClientRect();
+        mouseX = (e.clientX - rect.left) / rect.width * W;
+        mouseY = (e.clientY - rect.top) / rect.height * H;
+      });
+    })();
+
+    // -----------------------------------------------------------------------
+    // Hero text character-by-character reveal
+    // -----------------------------------------------------------------------
+    (function() {
+      var h1 = document.getElementById('t-title');
+      if (!h1 || document.body.classList.contains('app-mode')) return;
+      var text = h1.textContent;
+      h1.innerHTML = '';
+      for (var i = 0; i < text.length; i++) {
+        var span = document.createElement('span');
+        span.className = 'char';
+        span.textContent = text[i] === ' ' ? '\u00a0' : text[i];
+        span.style.animationDelay = (i * 0.04 + 0.3) + 's';
+        h1.appendChild(span);
+      }
+    })();
+
+    // -----------------------------------------------------------------------
+    // Stat counter animation
+    // -----------------------------------------------------------------------
+    (function() {
+      var statEls = document.querySelectorAll('.stat-value');
+      var observed = false;
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting && !observed) {
+            observed = true;
+            statEls.forEach(function(el) {
+              var text = el.textContent;
+              var match = text.match(/^([<>]?)(\d+\.?\d*)(.*)/);
+              if (!match) return;
+              var prefix = match[1], target = parseFloat(match[2]), suffix = match[3];
+              var isFloat = text.includes('.');
+              var start = 0, duration = 1200, startTime = null;
+              function tick(ts) {
+                if (!startTime) startTime = ts;
+                var progress = Math.min((ts - startTime) / duration, 1);
+                var eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+                var val = start + (target - start) * eased;
+                el.textContent = prefix + (isFloat ? val.toFixed(1) : Math.round(val)) + suffix;
+                if (progress < 1) requestAnimationFrame(tick);
+              }
+              requestAnimationFrame(tick);
+            });
+            observer.disconnect();
+          }
+        });
+      }, { threshold: 0.3 });
+      statEls.forEach(function(el) { observer.observe(el); });
+    })();
+
     // IntersectionObserver for scroll-triggered fade-up
     (function() {
       const targets = document.querySelectorAll('.cap-section, .sync-section, .channel-cards, .bottom-cta, .cli-section');
@@ -6734,6 +7675,8 @@
       targets.forEach(el => observer.observe(el));
     })();
 
+    // A/B variant must be applied before setLang so T values are overwritten first
+    applyABVariant(getABVariant());
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
 
     // ─── Phone Panel (Amazon Connect CCP) ───
