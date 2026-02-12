@@ -144,10 +144,10 @@
 
   <!-- Stats -->
   <div class="stats">
-    <div class="stat"><div class="num">16+</div><div class="label" id="s-tools">Built-in Tools</div></div>
+    <div class="stat"><div class="num">30+</div><div class="label" id="s-tools">Built-in Tools</div></div>
     <div class="stat"><div class="num">14+</div><div class="label" id="s-channels">Channels</div></div>
     <div class="stat"><div class="num">7</div><div class="label" id="s-providers">LLM Providers</div></div>
-    <div class="stat"><div class="num">70+</div><div class="label" id="s-api">API Endpoints</div></div>
+    <div class="stat"><div class="num">110+</div><div class="label" id="s-api">API Endpoints</div></div>
     <div class="stat"><div class="num">&lt;50ms</div><div class="label" id="s-cold">Cold Start</div></div>
   </div>
 
@@ -199,7 +199,7 @@
       <!-- Channels -->
       <tr class="cat-row"><td colspan="6" id="cat-channels">Channels</td></tr>
       <tr><td id="f-ch-count">Channel Count</td>
-        <td class="hl"><span class="ck">14+</span> (Web, LINE, Telegram, WhatsApp, Discord, Slack, Teams, Facebook...)</td>
+        <td class="hl"><span class="ck">14+</span> (Web, LINE, Telegram, WhatsApp, Discord, Slack, Teams, Facebook, Signal, Matrix, iMessage...)</td>
         <td>13+ (WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Teams...)</td>
         <td>2 (Discord, Slack)</td>
         <td>3 (Terminal, IDE, GitHub)</td>
@@ -274,7 +274,7 @@
       <!-- Tools -->
       <tr class="cat-row"><td colspan="6" id="cat-tools">Tools & Agent</td></tr>
       <tr><td id="f-tool-count">Built-in Tools</td>
-        <td class="hl"><span class="ck">16+</span> (web search, code exec, file ops, weather, calculator, QR...)</td>
+        <td class="hl"><span class="ck">30+</span> (web search, code exec, file ops, image/music/video gen, browser, weather, calculator...)</td>
         <td>50+ (ClawHub skills)</td>
         <td>File ops, workspace tools</td>
         <td>fs, git, shell, MCP</td>
@@ -307,7 +307,7 @@
       <!-- API & Developer -->
       <tr class="cat-row"><td colspan="6" id="cat-api">API & Developer</td></tr>
       <tr><td id="f-rest-api">REST API</td>
-        <td class="hl"><span class="ck">&#x2713;</span> 70+ endpoints</td>
+        <td class="hl"><span class="ck">&#x2713;</span> 110+ endpoints</td>
         <td><span class="cp">&#x25CB;</span> Local Gateway</td>
         <td><span class="cx">&#x2717;</span></td>
         <td><span class="cx">&#x2717;</span></td>
@@ -396,20 +396,25 @@
       </ul>
     </div>
     <div class="card">
-      <h3>&#x1F6E0; 16+ Built-in Tools</h3>
+      <h3>&#x1F6E0; 30+ Built-in Tools</h3>
       <ul>
         <li>Web Search &mdash; Brave/Bing/Jina 3-tier fallback</li>
         <li>Web Fetch &mdash; Jina Reader for JS-heavy pages</li>
+        <li>Browser &mdash; CSS selector, screenshots, form submit</li>
         <li>Code Execution &mdash; Sandboxed shell/Python/Node.js</li>
         <li>File Read/Write/List &mdash; Per-session sandbox</li>
-        <li>Calculator &mdash; Math expression evaluation</li>
-        <li>Weather &mdash; Open-Meteo API</li>
-        <li>Wikipedia &mdash; Article search + summaries</li>
-        <li>Translation &mdash; MyMemory API</li>
-        <li>News Search &mdash; Latest news aggregation</li>
-        <li>QR Code &mdash; Generate QR codes</li>
+        <li>Filesystem &mdash; find (glob), grep, diff</li>
+        <li>Image Generate &mdash; OpenAI gpt-image-1</li>
+        <li>Music Generate &mdash; Suno API</li>
+        <li>Video Generate &mdash; Kling API</li>
+        <li>Calculator / Weather / Wikipedia / Translation</li>
+        <li>YouTube Transcript / arXiv Search / News Search</li>
+        <li>QR Code / DateTime / CSV Analysis</li>
         <li>Google Calendar / Gmail (OAuth)</li>
-        <li>DateTime &mdash; All timezones</li>
+        <li>Slack / Discord / Notion / PostgreSQL</li>
+        <li>Phone Call (Amazon Connect) / Webhook Trigger</li>
+        <li>Web Deploy &mdash; S3/CloudFront subdomain</li>
+        <li>GitHub &mdash; Read/Write files, Create PRs</li>
       </ul>
     </div>
     <div class="card">
@@ -422,6 +427,7 @@
         <li>WhatsApp Cloud API</li>
         <li>Discord, Slack, Microsoft Teams</li>
         <li>Zalo, Feishu/Lark, Google Chat</li>
+        <li>Signal, Matrix, iMessage (BlueBubbles)</li>
         <li>CLI &mdash; nanobot chat --session sync</li>
         <li>REST API &amp; MCP for AI agents</li>
       </ul>
@@ -441,7 +447,7 @@
     <div class="card">
       <h3>&#x1F527; Developer Platform</h3>
       <ul>
-        <li>REST API &mdash; 70+ endpoints</li>
+        <li>REST API &mdash; 110+ endpoints</li>
         <li>SSE streaming responses</li>
         <li>MCP server (JSON-RPC 2.0)</li>
         <li>API Playground with shareable results</li>
