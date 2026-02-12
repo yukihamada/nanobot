@@ -68,6 +68,10 @@ impl ToolRegistry {
             Box::new(VideoGenerateTool),
             // Webhook / IoT tools
             Box::new(WebhookTriggerTool),
+            // Always-on analysis and utility tools
+            Box::new(CsvAnalysisTool),
+            Box::new(FilesystemTool),
+            Box::new(BrowserTool),
         ];
 
         // Register GitHub tools (read works on public repos without token)
@@ -103,6 +107,24 @@ impl ToolRegistry {
             if std::env::var("NOTION_API_KEY").map(|v| !v.is_empty()).unwrap_or(false) {
                 tracing::info!("Registering notion tool (NOTION_API_KEY present)");
                 tools.push(Box::new(NotionTool));
+            }
+
+            // Discord tool requires DISCORD_WEBHOOK_URL
+            if std::env::var("DISCORD_WEBHOOK_URL").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering discord tool (DISCORD_WEBHOOK_URL present)");
+                tools.push(Box::new(DiscordTool));
+            }
+
+            // Spotify tool requires SPOTIFY_CLIENT_ID
+            if std::env::var("SPOTIFY_CLIENT_ID").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering spotify tool (SPOTIFY_CLIENT_ID present)");
+                tools.push(Box::new(SpotifyTool));
+            }
+
+            // Postgres tool requires POSTGRES_URL
+            if std::env::var("POSTGRES_URL").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering postgres tool (POSTGRES_URL present)");
+                tools.push(Box::new(PostgresTool));
             }
 
             // YouTube transcript and arXiv are always available (no API key needed)
@@ -905,6 +927,12 @@ pub enum IntegrationType {
     Notion,
     Slack,
     GitHub,
+    Discord,
+    Spotify,
+    Postgres,
+    CsvAnalysis,
+    Filesystem,
+    Browser,
 }
 
 /// An integration connection for a user.
@@ -1965,6 +1993,54 @@ pub fn list_integrations() -> Vec<Integration> {
             enabled: std::env::var("GITHUB_TOKEN").map(|t| !t.is_empty()).unwrap_or(false),
             requires_auth: true,
             auth_url: Some("https://github.com/login/oauth/authorize".to_string()),
+        },
+        Integration {
+            integration_type: IntegrationType::Discord,
+            name: "Discord".to_string(),
+            description: "Send messages to Discord channels via webhooks".to_string(),
+            enabled: std::env::var("DISCORD_WEBHOOK_URL").map(|v| !v.is_empty()).unwrap_or(false),
+            requires_auth: true,
+            auth_url: None,
+        },
+        Integration {
+            integration_type: IntegrationType::Spotify,
+            name: "Spotify".to_string(),
+            description: "Search tracks, albums, and artists on Spotify".to_string(),
+            enabled: std::env::var("SPOTIFY_CLIENT_ID").map(|v| !v.is_empty()).unwrap_or(false),
+            requires_auth: true,
+            auth_url: None,
+        },
+        Integration {
+            integration_type: IntegrationType::Postgres,
+            name: "PostgreSQL".to_string(),
+            description: "Query PostgreSQL databases (read-only)".to_string(),
+            enabled: std::env::var("POSTGRES_URL").map(|v| !v.is_empty()).unwrap_or(false),
+            requires_auth: true,
+            auth_url: None,
+        },
+        Integration {
+            integration_type: IntegrationType::CsvAnalysis,
+            name: "CSV Analysis".to_string(),
+            description: "Parse and analyze CSV data".to_string(),
+            enabled: true,
+            requires_auth: false,
+            auth_url: None,
+        },
+        Integration {
+            integration_type: IntegrationType::Filesystem,
+            name: "Filesystem".to_string(),
+            description: "Extended file operations (find, grep, diff) in sandbox".to_string(),
+            enabled: true,
+            requires_auth: false,
+            auth_url: None,
+        },
+        Integration {
+            integration_type: IntegrationType::Browser,
+            name: "Browser".to_string(),
+            description: "Fetch and extract content from web pages using CSS selectors".to_string(),
+            enabled: true,
+            requires_auth: false,
+            auth_url: None,
         },
     ]
 }
@@ -4152,6 +4228,1082 @@ impl Tool for ArxivSearchTool {
     }
 }
 
+// ─── Discord Integration Tool ───
+
+pub struct DiscordTool;
+
+#[async_trait::async_trait]
+impl Tool for DiscordTool {
+    fn name(&self) -> &str { "discord" }
+    fn description(&self) -> &str {
+        "Send messages to Discord via webhook. Actions: 'send' (post a message or embed to a Discord channel). \
+         Requires DISCORD_WEBHOOK_URL env var."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": ["send"], "description": "Action to perform" },
+                "content": { "type": "string", "description": "Message text to send" },
+                "username": { "type": "string", "description": "Override the webhook's default username (optional)" },
+                "embed_title": { "type": "string", "description": "Embed title (optional, creates a rich embed)" },
+                "embed_description": { "type": "string", "description": "Embed description (optional)" },
+                "embed_color": { "type": "integer", "description": "Embed color as decimal integer (optional, e.g. 5814783 for blue)" }
+            },
+            "required": ["action"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let webhook_url = match std::env::var("DISCORD_WEBHOOK_URL") {
+            Ok(u) if !u.is_empty() => u,
+            _ => return "[TOOL_ERROR] DISCORD_WEBHOOK_URL not configured".to_string(),
+        };
+
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("send");
+
+        match action {
+            "send" => {
+                let content = params.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                let username = params.get("username").and_then(|v| v.as_str());
+                let embed_title = params.get("embed_title").and_then(|v| v.as_str());
+                let embed_description = params.get("embed_description").and_then(|v| v.as_str());
+                let embed_color = params.get("embed_color").and_then(|v| v.as_i64());
+
+                if content.is_empty() && embed_title.is_none() {
+                    return "[TOOL_ERROR] content or embed_title required for send".to_string();
+                }
+
+                let mut body = serde_json::Map::new();
+                if !content.is_empty() {
+                    body.insert("content".to_string(), serde_json::json!(content));
+                }
+                if let Some(name) = username {
+                    body.insert("username".to_string(), serde_json::json!(name));
+                }
+
+                // Build embed if title is provided
+                if let Some(title) = embed_title {
+                    let mut embed = serde_json::Map::new();
+                    embed.insert("title".to_string(), serde_json::json!(title));
+                    if let Some(desc) = embed_description {
+                        embed.insert("description".to_string(), serde_json::json!(desc));
+                    }
+                    if let Some(color) = embed_color {
+                        embed.insert("color".to_string(), serde_json::json!(color));
+                    }
+                    body.insert("embeds".to_string(), serde_json::json!([serde_json::Value::Object(embed)]));
+                }
+
+                let client = reqwest::Client::new();
+                match client.post(&webhook_url)
+                    .header("Content-Type", "application/json")
+                    .json(&serde_json::Value::Object(body))
+                    .send().await
+                {
+                    Ok(resp) => {
+                        let status = resp.status().as_u16();
+                        if status >= 200 && status < 300 {
+                            "Message sent to Discord successfully".to_string()
+                        } else {
+                            let text = resp.text().await.unwrap_or_default();
+                            format!("[TOOL_ERROR] Discord returned status {}: {}", status, text)
+                        }
+                    }
+                    Err(e) => format!("[TOOL_ERROR] Discord request failed: {}", e),
+                }
+            }
+            _ => "[TOOL_ERROR] Unknown action. Use: send".to_string(),
+        }
+    }
+}
+
+// ─── Spotify Integration Tool ───
+
+pub struct SpotifyTool;
+
+#[async_trait::async_trait]
+impl Tool for SpotifyTool {
+    fn name(&self) -> &str { "spotify" }
+    fn description(&self) -> &str {
+        "Search Spotify for tracks, albums, and artists, or get track details. \
+         Actions: 'search' (search by query and type), 'get_track' (get track info by ID). \
+         Requires SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET env vars."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": ["search", "get_track"], "description": "Action to perform" },
+                "query": { "type": "string", "description": "Search query (for 'search' action)" },
+                "search_type": { "type": "string", "enum": ["track", "album", "artist"], "description": "Type to search for (default: 'track')" },
+                "track_id": { "type": "string", "description": "Spotify track ID (for 'get_track' action)" },
+                "limit": { "type": "integer", "description": "Number of results (default 5, max 10)" }
+            },
+            "required": ["action"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let client_id = match std::env::var("SPOTIFY_CLIENT_ID") {
+            Ok(v) if !v.is_empty() => v,
+            _ => return "[TOOL_ERROR] SPOTIFY_CLIENT_ID not configured".to_string(),
+        };
+        let client_secret = match std::env::var("SPOTIFY_CLIENT_SECRET") {
+            Ok(v) if !v.is_empty() => v,
+            _ => return "[TOOL_ERROR] SPOTIFY_CLIENT_SECRET not configured".to_string(),
+        };
+
+        // Get access token via client credentials flow
+        let client = reqwest::Client::new();
+        let token_resp = client.post("https://accounts.spotify.com/api/token")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .basic_auth(&client_id, Some(&client_secret))
+            .body("grant_type=client_credentials")
+            .send().await;
+
+        let access_token = match token_resp {
+            Ok(r) => {
+                let body: serde_json::Value = r.json().await.unwrap_or_default();
+                match body["access_token"].as_str() {
+                    Some(t) => t.to_string(),
+                    None => return format!("[TOOL_ERROR] Failed to get Spotify token: {}", body),
+                }
+            }
+            Err(e) => return format!("[TOOL_ERROR] Spotify auth failed: {}", e),
+        };
+
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("search");
+
+        match action {
+            "search" => {
+                let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
+                if query.is_empty() {
+                    return "[TOOL_ERROR] query required for search".to_string();
+                }
+                let search_type = params.get("search_type").and_then(|v| v.as_str()).unwrap_or("track");
+                let limit = params.get("limit").and_then(|v| v.as_i64()).unwrap_or(5).min(10);
+
+                let url = format!(
+                    "https://api.spotify.com/v1/search?q={}&type={}&limit={}",
+                    urlencoding::encode(query), search_type, limit
+                );
+
+                match client.get(&url)
+                    .header("Authorization", format!("Bearer {}", access_token))
+                    .send().await
+                {
+                    Ok(r) => {
+                        let body: serde_json::Value = r.json().await.unwrap_or_default();
+                        let key = format!("{}s", search_type); // "tracks", "albums", "artists"
+                        let items = body[&key]["items"].as_array();
+
+                        match items {
+                            Some(arr) if !arr.is_empty() => {
+                                let results: Vec<String> = arr.iter().map(|item| {
+                                    match search_type {
+                                        "track" => {
+                                            let name = item["name"].as_str().unwrap_or("?");
+                                            let artists: Vec<&str> = item["artists"].as_array()
+                                                .map(|a| a.iter().filter_map(|x| x["name"].as_str()).collect())
+                                                .unwrap_or_default();
+                                            let album = item["album"]["name"].as_str().unwrap_or("?");
+                                            let duration_ms = item["duration_ms"].as_i64().unwrap_or(0);
+                                            let mins = duration_ms / 60000;
+                                            let secs = (duration_ms % 60000) / 1000;
+                                            let url = item["external_urls"]["spotify"].as_str().unwrap_or("");
+                                            format!("- {} by {} | Album: {} | {}:{:02} | {}", name, artists.join(", "), album, mins, secs, url)
+                                        }
+                                        "album" => {
+                                            let name = item["name"].as_str().unwrap_or("?");
+                                            let artists: Vec<&str> = item["artists"].as_array()
+                                                .map(|a| a.iter().filter_map(|x| x["name"].as_str()).collect())
+                                                .unwrap_or_default();
+                                            let total = item["total_tracks"].as_i64().unwrap_or(0);
+                                            let date = item["release_date"].as_str().unwrap_or("?");
+                                            let url = item["external_urls"]["spotify"].as_str().unwrap_or("");
+                                            format!("- {} by {} | {} tracks | Released: {} | {}", name, artists.join(", "), total, date, url)
+                                        }
+                                        "artist" => {
+                                            let name = item["name"].as_str().unwrap_or("?");
+                                            let followers = item["followers"]["total"].as_i64().unwrap_or(0);
+                                            let genres: Vec<&str> = item["genres"].as_array()
+                                                .map(|g| g.iter().filter_map(|x| x.as_str()).collect())
+                                                .unwrap_or_default();
+                                            let url = item["external_urls"]["spotify"].as_str().unwrap_or("");
+                                            format!("- {} | Followers: {} | Genres: {} | {}", name, followers, genres.join(", "), url)
+                                        }
+                                        _ => format!("- {}", item["name"].as_str().unwrap_or("?")),
+                                    }
+                                }).collect();
+                                results.join("\n")
+                            }
+                            _ => format!("No {} found for '{}'", search_type, query),
+                        }
+                    }
+                    Err(e) => format!("[TOOL_ERROR] Spotify search failed: {}", e),
+                }
+            }
+            "get_track" => {
+                let track_id = params.get("track_id").and_then(|v| v.as_str()).unwrap_or("");
+                if track_id.is_empty() {
+                    return "[TOOL_ERROR] track_id required for get_track".to_string();
+                }
+
+                let url = format!("https://api.spotify.com/v1/tracks/{}", track_id);
+                match client.get(&url)
+                    .header("Authorization", format!("Bearer {}", access_token))
+                    .send().await
+                {
+                    Ok(r) => {
+                        let track: serde_json::Value = r.json().await.unwrap_or_default();
+                        if track["error"].is_object() {
+                            return format!("[TOOL_ERROR] {}", track["error"]["message"].as_str().unwrap_or("Track not found"));
+                        }
+                        let name = track["name"].as_str().unwrap_or("?");
+                        let artists: Vec<&str> = track["artists"].as_array()
+                            .map(|a| a.iter().filter_map(|x| x["name"].as_str()).collect())
+                            .unwrap_or_default();
+                        let album = track["album"]["name"].as_str().unwrap_or("?");
+                        let duration_ms = track["duration_ms"].as_i64().unwrap_or(0);
+                        let mins = duration_ms / 60000;
+                        let secs = (duration_ms % 60000) / 1000;
+                        let popularity = track["popularity"].as_i64().unwrap_or(0);
+                        let preview_url = track["preview_url"].as_str().unwrap_or("N/A");
+                        let spotify_url = track["external_urls"]["spotify"].as_str().unwrap_or("");
+                        let release_date = track["album"]["release_date"].as_str().unwrap_or("?");
+
+                        format!(
+                            "Track: {}\nArtists: {}\nAlbum: {}\nDuration: {}:{:02}\nPopularity: {}/100\nRelease: {}\nPreview: {}\nSpotify: {}",
+                            name, artists.join(", "), album, mins, secs, popularity, release_date, preview_url, spotify_url
+                        )
+                    }
+                    Err(e) => format!("[TOOL_ERROR] Spotify API error: {}", e),
+                }
+            }
+            _ => "[TOOL_ERROR] Unknown action. Use: search, get_track".to_string(),
+        }
+    }
+}
+
+// ─── PostgreSQL Tool ───
+
+pub struct PostgresTool;
+
+#[async_trait::async_trait]
+impl Tool for PostgresTool {
+    fn name(&self) -> &str { "postgres" }
+    fn description(&self) -> &str {
+        "Query a PostgreSQL database (read-only). Actions: 'query' (execute SELECT statements), \
+         'describe' (list tables or describe a table's columns). \
+         SAFETY: Only SELECT statements are allowed. INSERT/UPDATE/DELETE/DROP are rejected. \
+         Requires POSTGRES_URL env var."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": ["query", "describe"], "description": "Action to perform" },
+                "sql": { "type": "string", "description": "SQL SELECT query (for 'query' action). Only SELECT is allowed." },
+                "table": { "type": "string", "description": "Table name to describe (for 'describe' action). Omit to list all tables." }
+            },
+            "required": ["action"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let db_url = match std::env::var("POSTGRES_URL") {
+            Ok(u) if !u.is_empty() => u,
+            _ => return "[TOOL_ERROR] POSTGRES_URL not configured".to_string(),
+        };
+
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("describe");
+
+        // We use reqwest to call a simple HTTP-based PostgreSQL proxy if available,
+        // but since we don't have a direct PG driver, we'll use the pg REST pattern.
+        // For a Lambda environment, we POST SQL to a REST endpoint or use the DATA API.
+        // Here we implement a safety-first approach using a simple HTTP proxy pattern.
+
+        match action {
+            "query" => {
+                let sql = params.get("sql").and_then(|v| v.as_str()).unwrap_or("");
+                if sql.is_empty() {
+                    return "[TOOL_ERROR] sql required for query".to_string();
+                }
+
+                // Safety check: only allow SELECT statements
+                let sql_upper = sql.trim().to_uppercase();
+                if !sql_upper.starts_with("SELECT") && !sql_upper.starts_with("WITH") {
+                    return "[TOOL_ERROR] Only SELECT (and WITH ... SELECT) statements are allowed. \
+                            INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE are forbidden."
+                        .to_string();
+                }
+
+                // Reject dangerous keywords even within CTEs
+                let dangerous = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE", "GRANT", "REVOKE"];
+                for kw in &dangerous {
+                    // Check for the keyword as a standalone word (not part of column names)
+                    let pattern = format!(" {} ", kw);
+                    let padded = format!(" {} ", sql_upper);
+                    if padded.contains(&pattern) || sql_upper.starts_with(&format!("{} ", kw)) {
+                        return format!("[TOOL_ERROR] {} statements are not allowed. Read-only access only.", kw);
+                    }
+                }
+
+                // Execute via a lightweight HTTP request to the database URL
+                // If POSTGRES_URL is a REST API endpoint (e.g., PostgREST, Supabase)
+                let client = reqwest::Client::new();
+                if db_url.starts_with("http") {
+                    // REST API mode: POST SQL query
+                    match client.post(&db_url)
+                        .header("Content-Type", "application/json")
+                        .json(&serde_json::json!({ "query": sql }))
+                        .timeout(std::time::Duration::from_secs(8))
+                        .send().await
+                    {
+                        Ok(r) => {
+                            let status = r.status().as_u16();
+                            let body = r.text().await.unwrap_or_default();
+                            if status >= 200 && status < 300 {
+                                // Truncate if very long
+                                if body.len() > 15000 {
+                                    format!("{}... [truncated, {} chars total]", &body[..15000], body.len())
+                                } else {
+                                    body
+                                }
+                            } else {
+                                format!("[TOOL_ERROR] Database returned status {}: {}", status, body)
+                            }
+                        }
+                        Err(e) => format!("[TOOL_ERROR] Database query failed: {}", e),
+                    }
+                } else {
+                    // Connection string mode — not directly supported without a PG driver.
+                    // Return helpful message.
+                    "[TOOL_ERROR] Direct PostgreSQL connections require a database proxy. \
+                     Set POSTGRES_URL to an HTTP endpoint (e.g., PostgREST, Supabase REST) instead."
+                        .to_string()
+                }
+            }
+            "describe" => {
+                let table = params.get("table").and_then(|v| v.as_str()).unwrap_or("");
+
+                let sql = if table.is_empty() {
+                    // List all tables
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name".to_string()
+                } else {
+                    // Describe specific table — validate table name to prevent injection
+                    if !table.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                        return "[TOOL_ERROR] Invalid table name".to_string();
+                    }
+                    format!(
+                        "SELECT column_name, data_type, is_nullable, column_default \
+                         FROM information_schema.columns WHERE table_name = '{}' ORDER BY ordinal_position",
+                        table
+                    )
+                };
+
+                // Re-use the query path
+                let client = reqwest::Client::new();
+                if db_url.starts_with("http") {
+                    match client.post(&db_url)
+                        .header("Content-Type", "application/json")
+                        .json(&serde_json::json!({ "query": sql }))
+                        .timeout(std::time::Duration::from_secs(8))
+                        .send().await
+                    {
+                        Ok(r) => {
+                            let body = r.text().await.unwrap_or_default();
+                            if body.is_empty() || body == "[]" {
+                                if table.is_empty() {
+                                    "No tables found in public schema".to_string()
+                                } else {
+                                    format!("Table '{}' not found or has no columns", table)
+                                }
+                            } else {
+                                body
+                            }
+                        }
+                        Err(e) => format!("[TOOL_ERROR] Database describe failed: {}", e),
+                    }
+                } else {
+                    "[TOOL_ERROR] Direct PostgreSQL connections require a database proxy. \
+                     Set POSTGRES_URL to an HTTP endpoint (e.g., PostgREST, Supabase REST) instead."
+                        .to_string()
+                }
+            }
+            _ => "[TOOL_ERROR] Unknown action. Use: query, describe".to_string(),
+        }
+    }
+}
+
+// ─── CSV Analysis Tool ───
+
+pub struct CsvAnalysisTool;
+
+#[async_trait::async_trait]
+impl Tool for CsvAnalysisTool {
+    fn name(&self) -> &str { "csv_analysis" }
+    fn description(&self) -> &str {
+        "Parse and analyze CSV data. Actions: 'summary' (get row count, column names, and sample data), \
+         'query' (filter rows or compute simple aggregations). \
+         Pass CSV content directly as a string parameter. No external dependencies."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": ["summary", "query"], "description": "Action to perform" },
+                "csv_data": { "type": "string", "description": "CSV content as a string (with header row)" },
+                "column": { "type": "string", "description": "Column name for filtering/aggregation (for 'query' action)" },
+                "operator": { "type": "string", "enum": ["eq", "ne", "gt", "lt", "gte", "lte", "contains", "sum", "avg", "min", "max", "count"], "description": "Operator for query (comparison or aggregation)" },
+                "value": { "type": "string", "description": "Value to compare against (for comparison operators)" }
+            },
+            "required": ["action", "csv_data"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("summary");
+        let csv_data = params.get("csv_data").and_then(|v| v.as_str()).unwrap_or("");
+
+        if csv_data.is_empty() {
+            return "[TOOL_ERROR] csv_data is required".to_string();
+        }
+
+        // Parse CSV lines
+        let lines: Vec<&str> = csv_data.lines().collect();
+        if lines.is_empty() {
+            return "[TOOL_ERROR] CSV data is empty".to_string();
+        }
+
+        // Parse header
+        let headers: Vec<&str> = lines[0].split(',').map(|s| s.trim().trim_matches('"')).collect();
+        let data_lines: Vec<Vec<String>> = lines[1..].iter()
+            .filter(|l| !l.trim().is_empty())
+            .map(|line| {
+                // Simple CSV parsing (handles quoted fields with commas)
+                let mut fields = Vec::new();
+                let mut current = String::new();
+                let mut in_quotes = false;
+                for ch in line.chars() {
+                    match ch {
+                        '"' => in_quotes = !in_quotes,
+                        ',' if !in_quotes => {
+                            fields.push(current.trim().to_string());
+                            current = String::new();
+                        }
+                        _ => current.push(ch),
+                    }
+                }
+                fields.push(current.trim().to_string());
+                fields
+            })
+            .collect();
+
+        match action {
+            "summary" => {
+                let row_count = data_lines.len();
+                let col_count = headers.len();
+
+                // Detect column types by sampling first few rows
+                let mut col_types: Vec<&str> = vec!["unknown"; col_count];
+                for (i, _) in headers.iter().enumerate() {
+                    let sample_values: Vec<&str> = data_lines.iter()
+                        .take(5)
+                        .filter_map(|row| row.get(i).map(|s| s.as_str()))
+                        .collect();
+
+                    let all_numeric = sample_values.iter().all(|v| v.parse::<f64>().is_ok());
+                    let all_integer = sample_values.iter().all(|v| v.parse::<i64>().is_ok());
+
+                    if all_integer && !sample_values.is_empty() {
+                        col_types[i] = "integer";
+                    } else if all_numeric && !sample_values.is_empty() {
+                        col_types[i] = "float";
+                    } else {
+                        col_types[i] = "string";
+                    }
+                }
+
+                // Build summary
+                let mut result = format!("CSV Summary:\n- Rows: {}\n- Columns: {}\n\nColumns:\n", row_count, col_count);
+                for (i, header) in headers.iter().enumerate() {
+                    result.push_str(&format!("  - {} ({})\n", header, col_types[i]));
+                }
+
+                // Show first 3 rows as sample
+                result.push_str("\nSample data (first 3 rows):\n");
+                for row in data_lines.iter().take(3) {
+                    let pairs: Vec<String> = headers.iter().zip(row.iter())
+                        .map(|(h, v)| format!("{}: {}", h, v))
+                        .collect();
+                    result.push_str(&format!("  {}\n", pairs.join(" | ")));
+                }
+
+                result
+            }
+            "query" => {
+                let column = params.get("column").and_then(|v| v.as_str()).unwrap_or("");
+                let operator = params.get("operator").and_then(|v| v.as_str()).unwrap_or("eq");
+                let value = params.get("value").and_then(|v| v.as_str()).unwrap_or("");
+
+                if column.is_empty() {
+                    return "[TOOL_ERROR] column required for query".to_string();
+                }
+
+                // Find column index
+                let col_idx = match headers.iter().position(|h| h.eq_ignore_ascii_case(column)) {
+                    Some(i) => i,
+                    None => return format!("[TOOL_ERROR] Column '{}' not found. Available: {}", column, headers.join(", ")),
+                };
+
+                // Aggregation operators
+                match operator {
+                    "sum" | "avg" | "min" | "max" | "count" => {
+                        let values: Vec<f64> = data_lines.iter()
+                            .filter_map(|row| row.get(col_idx)?.parse::<f64>().ok())
+                            .collect();
+
+                        if values.is_empty() && operator != "count" {
+                            return format!("No numeric values found in column '{}'", column);
+                        }
+
+                        match operator {
+                            "sum" => format!("Sum of {}: {}", column, values.iter().sum::<f64>()),
+                            "avg" => format!("Average of {}: {:.2}", column, values.iter().sum::<f64>() / values.len() as f64),
+                            "min" => format!("Min of {}: {}", column, values.iter().cloned().fold(f64::INFINITY, f64::min)),
+                            "max" => format!("Max of {}: {}", column, values.iter().cloned().fold(f64::NEG_INFINITY, f64::max)),
+                            "count" => format!("Count of rows: {}", data_lines.len()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    // Comparison operators — filter rows
+                    _ => {
+                        let filtered: Vec<&Vec<String>> = data_lines.iter().filter(|row| {
+                            let cell = match row.get(col_idx) {
+                                Some(c) => c.as_str(),
+                                None => return false,
+                            };
+
+                            match operator {
+                                "eq" => cell == value,
+                                "ne" => cell != value,
+                                "contains" => cell.to_lowercase().contains(&value.to_lowercase()),
+                                "gt" | "lt" | "gte" | "lte" => {
+                                    if let (Ok(a), Ok(b)) = (cell.parse::<f64>(), value.parse::<f64>()) {
+                                        match operator {
+                                            "gt" => a > b,
+                                            "lt" => a < b,
+                                            "gte" => a >= b,
+                                            "lte" => a <= b,
+                                            _ => false,
+                                        }
+                                    } else {
+                                        // String comparison
+                                        match operator {
+                                            "gt" => cell > value,
+                                            "lt" => cell < value,
+                                            "gte" => cell >= value,
+                                            "lte" => cell <= value,
+                                            _ => false,
+                                        }
+                                    }
+                                }
+                                _ => false,
+                            }
+                        }).collect();
+
+                        if filtered.is_empty() {
+                            format!("No rows match {} {} '{}'", column, operator, value)
+                        } else {
+                            let mut result = format!("Found {} matching rows:\n", filtered.len());
+                            for row in filtered.iter().take(20) {
+                                let pairs: Vec<String> = headers.iter().zip(row.iter())
+                                    .map(|(h, v)| format!("{}: {}", h, v))
+                                    .collect();
+                                result.push_str(&format!("  {}\n", pairs.join(" | ")));
+                            }
+                            if filtered.len() > 20 {
+                                result.push_str(&format!("  ... and {} more rows\n", filtered.len() - 20));
+                            }
+                            result
+                        }
+                    }
+                }
+            }
+            _ => "[TOOL_ERROR] Unknown action. Use: summary, query".to_string(),
+        }
+    }
+}
+
+// ─── Extended Filesystem Tool ───
+
+pub struct FilesystemTool;
+
+#[async_trait::async_trait]
+impl Tool for FilesystemTool {
+    fn name(&self) -> &str { "filesystem" }
+    fn description(&self) -> &str {
+        "Extended file operations in the sandbox. Actions: 'find' (glob search for files), \
+         'grep' (search file contents for a pattern), 'diff' (compare two files). \
+         All operations are restricted to the sandbox directory."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": ["find", "grep", "diff"], "description": "Action to perform" },
+                "pattern": { "type": "string", "description": "Glob pattern for 'find' (e.g., '*.py', '**/*.json') or regex pattern for 'grep'" },
+                "path": { "type": "string", "description": "Directory to search in for 'find'/'grep', or first file for 'diff'. Relative to sandbox." },
+                "path2": { "type": "string", "description": "Second file path for 'diff' action. Relative to sandbox." },
+                "max_results": { "type": "integer", "description": "Maximum number of results to return (default 50)" }
+            },
+            "required": ["action"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let sandbox_dir = params.get("_sandbox_dir").and_then(|v| v.as_str()).unwrap_or("/tmp/sandbox/default");
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("find");
+
+        let validate_path = |p: &str| -> Result<std::path::PathBuf, String> {
+            if p.contains("..") {
+                return Err("[TOOL_ERROR] Path traversal not allowed".to_string());
+            }
+            let full = std::path::Path::new(sandbox_dir).join(p);
+            if !full.starts_with(sandbox_dir) {
+                return Err("[TOOL_ERROR] Path outside sandbox".to_string());
+            }
+            Ok(full)
+        };
+
+        match action {
+            "find" => {
+                let pattern = params.get("pattern").and_then(|v| v.as_str()).unwrap_or("*");
+                let path = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+                let max_results = params.get("max_results").and_then(|v| v.as_i64()).unwrap_or(50) as usize;
+
+                let search_dir = match validate_path(path) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+
+                if !search_dir.exists() {
+                    return format!("Directory not found: {}", path);
+                }
+
+                // Recursive directory walk with glob matching
+                let mut results = Vec::new();
+                let mut stack = vec![search_dir.clone()];
+
+                while let Some(dir) = stack.pop() {
+                    if results.len() >= max_results { break; }
+                    if let Ok(entries) = std::fs::read_dir(&dir) {
+                        for entry in entries.flatten() {
+                            let entry_path = entry.path();
+                            if entry_path.is_dir() {
+                                stack.push(entry_path.clone());
+                            }
+                            // Simple glob matching
+                            let name = entry_path.file_name()
+                                .and_then(|n| n.to_str()).unwrap_or("");
+                            if glob_matches(pattern, name) {
+                                let rel = entry_path.strip_prefix(sandbox_dir)
+                                    .map(|p| p.display().to_string())
+                                    .unwrap_or_else(|_| entry_path.display().to_string());
+                                let suffix = if entry_path.is_dir() { "/" } else { "" };
+                                results.push(format!("{}{}", rel, suffix));
+                                if results.len() >= max_results { break; }
+                            }
+                        }
+                    }
+                }
+
+                if results.is_empty() {
+                    format!("No files matching '{}' found in {}", pattern, path)
+                } else {
+                    format!("Found {} file(s):\n{}", results.len(), results.join("\n"))
+                }
+            }
+            "grep" => {
+                let pattern = params.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
+                let path = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+                let max_results = params.get("max_results").and_then(|v| v.as_i64()).unwrap_or(50) as usize;
+
+                if pattern.is_empty() {
+                    return "[TOOL_ERROR] pattern required for grep".to_string();
+                }
+
+                let search_dir = match validate_path(path) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+
+                let pattern_lower = pattern.to_lowercase();
+                let mut results = Vec::new();
+                let mut stack = vec![search_dir.clone()];
+
+                while let Some(dir) = stack.pop() {
+                    if results.len() >= max_results { break; }
+                    if let Ok(entries) = std::fs::read_dir(&dir) {
+                        for entry in entries.flatten() {
+                            let entry_path = entry.path();
+                            if entry_path.is_dir() {
+                                stack.push(entry_path);
+                                continue;
+                            }
+                            // Only search text files (skip binary)
+                            if let Ok(content) = std::fs::read_to_string(&entry_path) {
+                                let rel = entry_path.strip_prefix(sandbox_dir)
+                                    .map(|p| p.display().to_string())
+                                    .unwrap_or_else(|_| entry_path.display().to_string());
+                                for (i, line) in content.lines().enumerate() {
+                                    if line.to_lowercase().contains(&pattern_lower) {
+                                        results.push(format!("{}:{}: {}", rel, i + 1, line.chars().take(200).collect::<String>()));
+                                        if results.len() >= max_results { break; }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if results.is_empty() {
+                    format!("No matches for '{}' found in {}", pattern, path)
+                } else {
+                    format!("Found {} match(es):\n{}", results.len(), results.join("\n"))
+                }
+            }
+            "diff" => {
+                let path1 = params.get("path").and_then(|v| v.as_str()).unwrap_or("");
+                let path2 = params.get("path2").and_then(|v| v.as_str()).unwrap_or("");
+
+                if path1.is_empty() || path2.is_empty() {
+                    return "[TOOL_ERROR] path and path2 required for diff".to_string();
+                }
+
+                let full1 = match validate_path(path1) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+                let full2 = match validate_path(path2) {
+                    Ok(p) => p,
+                    Err(e) => return e,
+                };
+
+                let content1 = match std::fs::read_to_string(&full1) {
+                    Ok(c) => c,
+                    Err(e) => return format!("[TOOL_ERROR] Cannot read {}: {}", path1, e),
+                };
+                let content2 = match std::fs::read_to_string(&full2) {
+                    Ok(c) => c,
+                    Err(e) => return format!("[TOOL_ERROR] Cannot read {}: {}", path2, e),
+                };
+
+                if content1 == content2 {
+                    return format!("Files are identical: {} and {}", path1, path2);
+                }
+
+                // Simple line-by-line diff
+                let lines1: Vec<&str> = content1.lines().collect();
+                let lines2: Vec<&str> = content2.lines().collect();
+                let mut diffs = Vec::new();
+
+                let max_lines = lines1.len().max(lines2.len());
+                for i in 0..max_lines {
+                    let l1 = lines1.get(i).copied();
+                    let l2 = lines2.get(i).copied();
+                    match (l1, l2) {
+                        (Some(a), Some(b)) if a != b => {
+                            diffs.push(format!("Line {}:\n  - {}\n  + {}", i + 1, a, b));
+                        }
+                        (Some(a), None) => {
+                            diffs.push(format!("Line {}: (only in {})\n  - {}", i + 1, path1, a));
+                        }
+                        (None, Some(b)) => {
+                            diffs.push(format!("Line {}: (only in {})\n  + {}", i + 1, path2, b));
+                        }
+                        _ => {}
+                    }
+                }
+
+                if diffs.len() > 50 {
+                    format!("Showing first 50 of {} differences:\n{}", diffs.len(), diffs[..50].join("\n"))
+                } else {
+                    format!("{} difference(s) found:\n{}", diffs.len(), diffs.join("\n"))
+                }
+            }
+            _ => "[TOOL_ERROR] Unknown action. Use: find, grep, diff".to_string(),
+        }
+    }
+}
+
+/// Simple glob matching: supports '*' (any sequence) and '?' (any single char).
+fn glob_matches(pattern: &str, name: &str) -> bool {
+    let pattern_chars: Vec<char> = pattern.chars().collect();
+    let name_chars: Vec<char> = name.chars().collect();
+    glob_matches_inner(&pattern_chars, &name_chars)
+}
+
+fn glob_matches_inner(pattern: &[char], name: &[char]) -> bool {
+    match (pattern.first(), name.first()) {
+        (None, None) => true,
+        (Some('*'), _) => {
+            // '*' matches zero or more characters
+            glob_matches_inner(&pattern[1..], name) ||
+            (!name.is_empty() && glob_matches_inner(pattern, &name[1..]))
+        }
+        (Some('?'), Some(_)) => glob_matches_inner(&pattern[1..], &name[1..]),
+        (Some(pc), Some(nc)) if pc == nc => glob_matches_inner(&pattern[1..], &name[1..]),
+        _ => false,
+    }
+}
+
+// ─── Browser Tool ───
+
+pub struct BrowserTool;
+
+#[async_trait::async_trait]
+impl Tool for BrowserTool {
+    fn name(&self) -> &str { "browser" }
+    fn description(&self) -> &str {
+        "Fetch web pages and extract content using CSS selectors. \
+         Actions: 'extract' (fetch URL and extract elements matching a CSS selector), \
+         'screenshot' (get a screenshot URL via an external service), \
+         'fill_form' (simulate form submission via POST). \
+         This is a simplified browser that uses HTTP requests (no JavaScript rendering)."
+    }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": ["extract", "screenshot", "fill_form"], "description": "Action to perform" },
+                "url": { "type": "string", "description": "URL to fetch or screenshot" },
+                "selector": { "type": "string", "description": "CSS selector to extract elements (for 'extract' action, e.g., 'h1', '.title', '#content', 'a[href]')" },
+                "attribute": { "type": "string", "description": "Extract specific attribute instead of text content (e.g., 'href', 'src')" },
+                "form_data": { "type": "object", "description": "Form data as key-value pairs (for 'fill_form' action)" },
+                "method": { "type": "string", "enum": ["GET", "POST"], "description": "HTTP method for fill_form (default: POST)" }
+            },
+            "required": ["action", "url"]
+        })
+    }
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("extract");
+        let url = params.get("url").and_then(|v| v.as_str()).unwrap_or("");
+
+        if url.is_empty() {
+            return "[TOOL_ERROR] url is required".to_string();
+        }
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(8))
+            .user_agent("Mozilla/5.0 (compatible; ChatWebBot/1.0)")
+            .redirect(reqwest::redirect::Policy::limited(5))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
+        match action {
+            "extract" => {
+                let selector = params.get("selector").and_then(|v| v.as_str()).unwrap_or("");
+                let attribute = params.get("attribute").and_then(|v| v.as_str());
+
+                let html = match client.get(url).send().await {
+                    Ok(r) => r.text().await.unwrap_or_default(),
+                    Err(e) => return format!("[TOOL_ERROR] Failed to fetch {}: {}", url, e),
+                };
+
+                if selector.is_empty() {
+                    // Return cleaned text content (strip HTML tags)
+                    let text = strip_html_tags(&html);
+                    if text.len() > 10000 {
+                        let mut i = 10000;
+                        while i > 0 && !text.is_char_boundary(i) { i -= 1; }
+                        format!("{}... [truncated, {} chars total]", &text[..i], text.len())
+                    } else {
+                        text
+                    }
+                } else {
+                    // Simple CSS selector extraction
+                    // Supports: tag, .class, #id, tag.class, tag[attr]
+                    let elements = extract_by_selector(&html, selector, attribute);
+                    if elements.is_empty() {
+                        format!("No elements matching '{}' found on {}", selector, url)
+                    } else {
+                        let count = elements.len();
+                        let display: Vec<String> = elements.into_iter().take(50).collect();
+                        if count > 50 {
+                            format!("Found {} elements (showing first 50):\n{}", count, display.join("\n"))
+                        } else {
+                            format!("Found {} element(s):\n{}", count, display.join("\n"))
+                        }
+                    }
+                }
+            }
+            "screenshot" => {
+                // Use a free screenshot service
+                let encoded_url = urlencoding::encode(url);
+                let screenshot_url = format!(
+                    "https://api.screenshotmachine.com?key=guest&url={}&dimension=1024x768",
+                    encoded_url
+                );
+                format!("Screenshot URL: {}\n\nNote: This uses a third-party screenshot service. The page is rendered server-side.", screenshot_url)
+            }
+            "fill_form" => {
+                let form_data = params.get("form_data").and_then(|v| v.as_object());
+                let method = params.get("method").and_then(|v| v.as_str()).unwrap_or("POST");
+
+                let data: HashMap<String, String> = form_data
+                    .map(|m| {
+                        m.iter()
+                            .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                if data.is_empty() {
+                    return "[TOOL_ERROR] form_data is required for fill_form".to_string();
+                }
+
+                let resp = if method == "GET" {
+                    client.get(url).query(&data).send().await
+                } else {
+                    client.post(url).form(&data).send().await
+                };
+
+                match resp {
+                    Ok(r) => {
+                        let status = r.status().as_u16();
+                        let body = r.text().await.unwrap_or_default();
+                        let text = strip_html_tags(&body);
+                        let truncated = if text.len() > 5000 {
+                            let mut i = 5000;
+                            while i > 0 && !text.is_char_boundary(i) { i -= 1; }
+                            format!("{}...", &text[..i])
+                        } else {
+                            text
+                        };
+                        format!("Form submitted (status {})\n\nResponse:\n{}", status, truncated)
+                    }
+                    Err(e) => format!("[TOOL_ERROR] Form submission failed: {}", e),
+                }
+            }
+            _ => "[TOOL_ERROR] Unknown action. Use: extract, screenshot, fill_form".to_string(),
+        }
+    }
+}
+
+/// Simple CSS selector extraction from HTML.
+/// Supports: tag name, .class, #id, and tag[attr] patterns.
+fn extract_by_selector(html: &str, selector: &str, attribute: Option<&str>) -> Vec<String> {
+    let mut results = Vec::new();
+
+    // Determine what we're looking for
+    let (tag_filter, class_filter, id_filter) = if selector.starts_with('#') {
+        (None, None, Some(&selector[1..]))
+    } else if selector.starts_with('.') {
+        (None, Some(&selector[1..]), None)
+    } else if selector.contains('.') {
+        let parts: Vec<&str> = selector.splitn(2, '.').collect();
+        (Some(parts[0]), Some(parts[1]), None)
+    } else {
+        (Some(selector), None, None)
+    };
+
+    // Simple tag extraction using string scanning
+    // Find all opening tags
+    let mut pos = 0;
+    while pos < html.len() {
+        if let Some(tag_start) = html[pos..].find('<') {
+            let abs_start = pos + tag_start;
+            if abs_start + 1 >= html.len() || html.as_bytes()[abs_start + 1] == b'/' {
+                pos = abs_start + 1;
+                continue;
+            }
+
+            if let Some(tag_end) = html[abs_start..].find('>') {
+                let tag_str = &html[abs_start..abs_start + tag_end + 1];
+                let tag_inner = &tag_str[1..tag_str.len() - 1];
+
+                // Get tag name
+                let tag_name = tag_inner.split_whitespace().next().unwrap_or("");
+                if tag_name.is_empty() || tag_name.starts_with('!') || tag_name.starts_with('?') {
+                    pos = abs_start + tag_end + 1;
+                    continue;
+                }
+
+                let mut matches = true;
+
+                // Check tag name filter
+                if let Some(tf) = tag_filter {
+                    // Handle tag[attr] pattern
+                    let clean_tag = tf.split('[').next().unwrap_or(tf);
+                    if !clean_tag.is_empty() && !tag_name.eq_ignore_ascii_case(clean_tag) {
+                        matches = false;
+                    }
+                }
+
+                // Check class filter
+                if matches {
+                    if let Some(cf) = class_filter {
+                        let has_class = tag_inner.contains(&format!("class=\"{}", cf))
+                            || tag_inner.contains(&format!("class='{}", cf))
+                            || tag_inner.contains(&format!(" {}", cf));
+                        if !has_class {
+                            matches = false;
+                        }
+                    }
+                }
+
+                // Check id filter
+                if matches {
+                    if let Some(idf) = id_filter {
+                        let has_id = tag_inner.contains(&format!("id=\"{}\"", idf))
+                            || tag_inner.contains(&format!("id='{}'", idf));
+                        if !has_id {
+                            matches = false;
+                        }
+                    }
+                }
+
+                if matches {
+                    // Extract content or attribute
+                    if let Some(attr) = attribute {
+                        // Extract attribute value from the tag
+                        let attr_pattern1 = format!("{}=\"", attr);
+                        let attr_pattern2 = format!("{}='", attr);
+                        if let Some(attr_pos) = tag_inner.find(&attr_pattern1) {
+                            let val_start = attr_pos + attr_pattern1.len();
+                            if let Some(val_end) = tag_inner[val_start..].find('"') {
+                                results.push(tag_inner[val_start..val_start + val_end].to_string());
+                            }
+                        } else if let Some(attr_pos) = tag_inner.find(&attr_pattern2) {
+                            let val_start = attr_pos + attr_pattern2.len();
+                            if let Some(val_end) = tag_inner[val_start..].find('\'') {
+                                results.push(tag_inner[val_start..val_start + val_end].to_string());
+                            }
+                        }
+                    } else {
+                        // Extract text content between opening and closing tags
+                        let close_tag = format!("</{}", tag_name);
+                        let content_start = abs_start + tag_end + 1;
+                        if let Some(close_pos) = html[content_start..].to_lowercase().find(&close_tag.to_lowercase()) {
+                            let inner_html = &html[content_start..content_start + close_pos];
+                            let text = strip_html_tags(inner_html).trim().to_string();
+                            if !text.is_empty() {
+                                results.push(text);
+                            }
+                        }
+                    }
+                }
+
+                pos = abs_start + tag_end + 1;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    results
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4201,9 +5353,13 @@ mod tests {
         std::env::remove_var("CONNECT_INSTANCE_ID");
         std::env::remove_var("SLACK_BOT_TOKEN");
         std::env::remove_var("NOTION_API_KEY");
+        std::env::remove_var("DISCORD_WEBHOOK_URL");
+        std::env::remove_var("SPOTIFY_CLIENT_ID");
+        std::env::remove_var("POSTGRES_URL");
         let registry = ToolRegistry::with_builtins();
-        // 19 base + 2 always-on (youtube_transcript, arxiv_search) = 21, +1 github_read_file when http-api
-        let expected = if cfg!(feature = "http-api") { 22 } else { 21 };
+        // 22 base (19 original + 3 always-on: csv_analysis, filesystem, browser)
+        // + 2 http-api only (youtube_transcript, arxiv_search) + 1 github_read_file = 25 when http-api
+        let expected = if cfg!(feature = "http-api") { 25 } else { 22 };
         assert_eq!(registry.len(), expected);
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
@@ -4223,9 +5379,16 @@ mod tests {
         assert!(names.contains(&"file_read"));
         assert!(names.contains(&"file_write"));
         assert!(names.contains(&"file_list"));
-        // Always-on integration tools
-        assert!(names.contains(&"youtube_transcript"));
-        assert!(names.contains(&"arxiv_search"));
+        // http-api only integration tools
+        #[cfg(feature = "http-api")]
+        {
+            assert!(names.contains(&"youtube_transcript"));
+            assert!(names.contains(&"arxiv_search"));
+        }
+        // Always-on new tools
+        assert!(names.contains(&"csv_analysis"));
+        assert!(names.contains(&"filesystem"));
+        assert!(names.contains(&"browser"));
     }
 
     #[test]
@@ -4235,8 +5398,11 @@ mod tests {
         std::env::remove_var("CONNECT_INSTANCE_ID");
         std::env::remove_var("SLACK_BOT_TOKEN");
         std::env::remove_var("NOTION_API_KEY");
+        std::env::remove_var("DISCORD_WEBHOOK_URL");
+        std::env::remove_var("SPOTIFY_CLIENT_ID");
+        std::env::remove_var("POSTGRES_URL");
         let registry = ToolRegistry::with_builtins();
-        assert_eq!(registry.len(), 24); // 21 base + 1 github_read_file + 2 github_write tools
+        assert_eq!(registry.len(), 27); // 24 base + 1 github_read_file + 2 github_write tools
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))

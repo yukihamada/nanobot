@@ -160,6 +160,12 @@ pub fn credit_rate(model: &str) -> CreditRate {
             input_per_1k: 3,
             output_per_1k: 9,
         }
+    } else if model_lower.contains("qwen") {
+        // Qwen3 via Groq: similar to DeepSeek pricing
+        CreditRate {
+            input_per_1k: 2,
+            output_per_1k: 6,
+        }
     } else {
         // Default rate
         CreditRate {

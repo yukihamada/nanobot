@@ -1556,6 +1556,14 @@ pub struct ChatRequest {
     pub multi_model: bool,
     /// Device type for response length optimization: "pc" | "mobile" | "voice"
     pub device: Option<String>,
+    /// LLM parameters from frontend settings
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+    pub top_p: Option<f64>,
+    pub frequency_penalty: Option<f64>,
+    pub presence_penalty: Option<f64>,
+    /// Custom system prompt addition from user settings
+    pub custom_system_prompt: Option<String>,
 }
 
 /// User settings stored in DynamoDB
@@ -1568,6 +1576,20 @@ pub struct UserSettings {
     pub language: Option<String>,
     pub adult_mode: Option<bool>,
     pub age_verified: Option<bool>,
+    pub top_p: Option<f64>,
+    pub frequency_penalty: Option<f64>,
+    pub presence_penalty: Option<f64>,
+    pub custom_system_prompt: Option<String>,
+    pub streaming_enabled: Option<bool>,
+    pub show_thinking: Option<bool>,
+    pub theme: Option<String>,
+    pub ui_language: Option<String>,
+    pub font_size: Option<String>,
+    pub send_method: Option<String>,
+    pub tts_speed: Option<f64>,
+    pub show_token_info: Option<bool>,
+    pub show_timestamps: Option<bool>,
+    pub compact_mode: Option<bool>,
 }
 
 /// Request body for updating settings (all fields optional for partial update)
@@ -1583,6 +1605,20 @@ pub struct UpdateSettingsRequest {
     pub tts_voice: Option<String>,
     pub adult_mode: Option<bool>,
     pub age_verified: Option<bool>,
+    pub top_p: Option<f64>,
+    pub frequency_penalty: Option<f64>,
+    pub presence_penalty: Option<f64>,
+    pub custom_system_prompt: Option<String>,
+    pub streaming_enabled: Option<bool>,
+    pub show_thinking: Option<bool>,
+    pub theme: Option<String>,
+    pub ui_language: Option<String>,
+    pub font_size: Option<String>,
+    pub send_method: Option<String>,
+    pub tts_speed: Option<f64>,
+    pub show_token_info: Option<bool>,
+    pub show_timestamps: Option<bool>,
+    pub compact_mode: Option<bool>,
 }
 
 /// Request body for email registration.
@@ -1813,6 +1849,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/chat/stream", post(handle_chat_stream))
         // Multi-model explore (SSE — all models, progressive)
         .route("/api/v1/chat/explore", post(handle_chat_explore))
+        // Multi-model race (SSE — ranked by completion order, tier support)
+        .route("/api/v1/chat/race", post(handle_chat_race))
         // Memory (read / clear)
         .route("/api/v1/memory", get(handle_get_memory))
         .route("/api/v1/memory", delete(handle_delete_memory))
@@ -1860,6 +1898,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Speech (TTS) — internal + OpenAI-compatible external API
         .route("/api/v1/speech/synthesize", post(handle_speech_synthesize))
         .route("/v1/audio/speech", post(handle_tts_openai_compat))
+        // Voice cloning — upload audio sample, get cloned TTS back
+        .route("/api/v1/voice/clone", post(handle_voice_clone))
         // Phone (Amazon Connect)
         .route("/api/v1/connect/token", post(handle_connect_token))
         .route("/api/v1/connect/transcript/{contact_id}", get(handle_connect_transcript))
@@ -2316,10 +2356,20 @@ async fn handle_chat(
         ""
     };
 
-    let system_prompt = if memory_context.is_empty() {
-        format!("{}\n\n今日の日付: {}{}{}{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, char_instruction)
+    // Custom system prompt from request or user settings
+    let custom_sys = req.custom_system_prompt.as_deref()
+        .or(user_settings.as_ref().and_then(|s| s.custom_system_prompt.as_deref()))
+        .unwrap_or("");
+    let custom_sys_block = if custom_sys.is_empty() {
+        String::new()
     } else {
-        format!("{}\n\n今日の日付: {}{}{}{}\n\n---\n{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, memory_context, char_instruction)
+        format!("\n\n## ユーザーカスタム指示\n{}", custom_sys)
+    };
+
+    let system_prompt = if memory_context.is_empty() {
+        format!("{}\n\n今日の日付: {}{}{}{}{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, custom_sys_block, char_instruction)
+    } else {
+        format!("{}\n\n今日の日付: {}{}{}{}{}\n\n---\n{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, custom_sys_block, memory_context, char_instruction)
     };
     let mut messages = vec![
         Message::system(&system_prompt),
@@ -2344,9 +2394,10 @@ async fn handle_chat(
     } else {
         messages.push(Message::user(&clean_message));
     }
-    let max_tokens = state.config.agents.defaults.max_tokens;
-    let temperature = user_settings.as_ref()
-        .and_then(|s| s.temperature)
+    // Resolve LLM parameters: request > user settings > defaults
+    let max_tokens = req.max_tokens.unwrap_or(state.config.agents.defaults.max_tokens);
+    let temperature = req.temperature
+        .or(user_settings.as_ref().and_then(|s| s.temperature))
         .unwrap_or(state.config.agents.defaults.temperature);
 
     // If user has custom API keys, create per-request provider
@@ -2502,11 +2553,18 @@ async fn handle_chat(
     let mut total_input_tokens: u32 = 0;
     let mut total_output_tokens: u32 = 0;
 
+    // Build extra LLM parameters from request
+    let chat_extra = provider::ChatExtra {
+        top_p: req.top_p.or(user_settings.as_ref().and_then(|s| s.top_p)),
+        frequency_penalty: req.frequency_penalty.or(user_settings.as_ref().and_then(|s| s.frequency_penalty)),
+        presence_penalty: req.presence_penalty.or(user_settings.as_ref().and_then(|s| s.presence_penalty)),
+    };
+
     // LLM call with hard deadline (failover handled by LoadBalancedProvider)
     let deadline = std::time::Duration::from_secs(RESPONSE_DEADLINE_SECS);
     let llm_result = tokio::time::timeout(
         deadline,
-        active_provider.chat(&messages, tools_ref, &model, max_tokens, temperature),
+        active_provider.chat_with_extra(&messages, tools_ref, &model, max_tokens, temperature, &chat_extra),
     ).await;
     let (used_model, first_completion) = match llm_result {
         Ok(Ok(c)) => (model.clone(), Ok(c)),
@@ -4981,10 +5039,20 @@ async fn handle_chat_stream(
         ""
     };
 
-    let stream_system_prompt = if stream_memory.is_empty() {
-        format!("{}\n\n今日の日付: {}{}{}{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, char_instruction)
+    // Custom system prompt from request or user settings
+    let stream_custom_sys = req.custom_system_prompt.as_deref()
+        .or(user_settings.as_ref().and_then(|s| s.custom_system_prompt.as_deref()))
+        .unwrap_or("");
+    let stream_custom_block = if stream_custom_sys.is_empty() {
+        String::new()
     } else {
-        format!("{}\n\n今日の日付: {}{}{}{}\n\n---\n{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_memory, char_instruction)
+        format!("\n\n## ユーザーカスタム指示\n{}", stream_custom_sys)
+    };
+
+    let stream_system_prompt = if stream_memory.is_empty() {
+        format!("{}\n\n今日の日付: {}{}{}{}{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_custom_block, char_instruction)
+    } else {
+        format!("{}\n\n今日の日付: {}{}{}{}{}\n\n---\n{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_custom_block, stream_memory, char_instruction)
     };
     let mut messages = vec![Message::system(&stream_system_prompt)];
 
@@ -5006,10 +5074,17 @@ async fn handle_chat_stream(
     } else {
         messages.push(Message::user(&clean_message));
     }
-    let max_tokens = state.config.agents.defaults.max_tokens;
-    let temperature = user_settings.as_ref()
-        .and_then(|s| s.temperature)
+    let max_tokens = req.max_tokens.unwrap_or(state.config.agents.defaults.max_tokens);
+    let temperature = req.temperature
+        .or(user_settings.as_ref().and_then(|s| s.temperature))
         .unwrap_or(state.config.agents.defaults.temperature);
+
+    // Build extra LLM parameters from request
+    let chat_extra = provider::ChatExtra {
+        top_p: req.top_p.or(user_settings.as_ref().and_then(|s| s.top_p)),
+        frequency_penalty: req.frequency_penalty.or(user_settings.as_ref().and_then(|s| s.frequency_penalty)),
+        presence_penalty: req.presence_penalty.or(user_settings.as_ref().and_then(|s| s.presence_penalty)),
+    };
 
     // Agentic SSE stream: supports multi-iteration tool calling with progress events.
     // Collects all SSE events into a Vec (API Gateway v2 compatible — no async_stream).
@@ -5064,7 +5139,7 @@ async fn handle_chat_stream(
         let deadline = std::time::Duration::from_secs(RESPONSE_DEADLINE_SECS);
         let llm_result = tokio::time::timeout(
             deadline,
-            provider.chat(&messages, tools_ref, &model, max_tokens, temperature),
+            provider.chat_with_extra(&messages, tools_ref, &model, max_tokens, temperature, &chat_extra),
         ).await;
         let (stream_used_model, first_result) = match llm_result {
             Ok(Ok(c)) => (model.clone(), Ok(c)),
@@ -5100,6 +5175,8 @@ async fn handle_chat_stream(
             Ok(completion) => {
                 let mut total_credits_used: i64 = 0;
                 let mut last_remaining: Option<i64> = None;
+                let mut stream_total_input: u32 = completion.usage.prompt_tokens;
+                let mut stream_total_output: u32 = completion.usage.completion_tokens;
 
                 // Deduct credits for first call
                 #[cfg(feature = "dynamodb-backend")]
@@ -5211,6 +5288,8 @@ async fn handle_chat_stream(
 
                     match provider.chat(&conversation, follow_up_tools, &model, max_tokens, temperature).await {
                         Ok(resp) => {
+                            stream_total_input += resp.usage.prompt_tokens;
+                            stream_total_output += resp.usage.completion_tokens;
                             #[cfg(feature = "dynamodb-backend")]
                             {
                                 if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
@@ -5295,6 +5374,7 @@ async fn handle_chat_stream(
                 }
 
                 // Content event (final answer)
+                let stream_cost = crate::provider::pricing::calculate_cost(&stream_used_model, stream_total_input, stream_total_output);
                 events.push(serde_json::json!({
                     "type": "content",
                     "content": response_text,
@@ -5303,6 +5383,10 @@ async fn handle_chat_stream(
                     "credits_used": if total_credits_used > 0 { Some(total_credits_used) } else { None::<i64> },
                     "tools_used": if all_tools_used.is_empty() { None } else { Some(&all_tools_used) },
                     "iterations": iteration,
+                    "model_used": stream_used_model,
+                    "input_tokens": stream_total_input,
+                    "output_tokens": stream_total_output,
+                    "estimated_cost_usd": if stream_cost > 0.0 { Some(stream_cost) } else { None::<f64> },
                 }));
             }
             Err(e) => {
@@ -8325,6 +8409,20 @@ async fn handle_get_settings(
             language: None,
             adult_mode: None,
             age_verified: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            custom_system_prompt: None,
+            streaming_enabled: None,
+            show_thinking: None,
+            theme: None,
+            ui_language: None,
+            font_size: None,
+            send_method: None,
+            tts_speed: None,
+            show_token_info: None,
+            show_timestamps: None,
+            compact_mode: None,
         },
         "session_id": id,
     }))
@@ -8399,7 +8497,26 @@ async fn get_user_settings(
             let language = item.get("language").and_then(|v| v.as_s().ok()).cloned();
             let adult_mode = item.get("adult_mode").and_then(|v| v.as_bool().ok()).copied();
             let age_verified = item.get("age_verified").and_then(|v| v.as_bool().ok()).copied();
-            return UserSettings { preferred_model, temperature, enabled_tools, custom_api_keys, language, adult_mode, age_verified };
+            let top_p = item.get("top_p").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<f64>().ok());
+            let frequency_penalty = item.get("frequency_penalty").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<f64>().ok());
+            let presence_penalty = item.get("presence_penalty").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<f64>().ok());
+            let custom_system_prompt = item.get("custom_system_prompt").and_then(|v| v.as_s().ok()).cloned();
+            let streaming_enabled = item.get("streaming_enabled").and_then(|v| v.as_bool().ok()).copied();
+            let show_thinking = item.get("show_thinking").and_then(|v| v.as_bool().ok()).copied();
+            let theme = item.get("theme").and_then(|v| v.as_s().ok()).cloned();
+            let ui_language = item.get("ui_language").and_then(|v| v.as_s().ok()).cloned();
+            let font_size = item.get("font_size").and_then(|v| v.as_s().ok()).cloned();
+            let send_method = item.get("send_method").and_then(|v| v.as_s().ok()).cloned();
+            let tts_speed = item.get("tts_speed").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<f64>().ok());
+            let show_token_info = item.get("show_token_info").and_then(|v| v.as_bool().ok()).copied();
+            let show_timestamps = item.get("show_timestamps").and_then(|v| v.as_bool().ok()).copied();
+            let compact_mode = item.get("compact_mode").and_then(|v| v.as_bool().ok()).copied();
+            return UserSettings {
+                preferred_model, temperature, enabled_tools, custom_api_keys, language,
+                adult_mode, age_verified, top_p, frequency_penalty, presence_penalty,
+                custom_system_prompt, streaming_enabled, show_thinking, theme, ui_language,
+                font_size, send_method, tts_speed, show_token_info, show_timestamps, compact_mode,
+            };
         }
     }
     // Return defaults
@@ -8415,6 +8532,20 @@ async fn get_user_settings(
         language: None,
         adult_mode: None,
         age_verified: None,
+        top_p: None,
+        frequency_penalty: None,
+        presence_penalty: None,
+        custom_system_prompt: None,
+        streaming_enabled: None,
+        show_thinking: None,
+        theme: None,
+        ui_language: None,
+        font_size: None,
+        send_method: None,
+        tts_speed: None,
+        show_token_info: None,
+        show_timestamps: None,
+        compact_mode: None,
     }
 }
 
@@ -8500,6 +8631,62 @@ async fn save_user_settings(
             update_expr.push("age_verified_at = :avat".to_string());
             expr_values.insert(":avat".to_string(), AttributeValue::S(chrono::Utc::now().to_rfc3339()));
         }
+    }
+    if let Some(top_p) = req.top_p {
+        update_expr.push("top_p = :topp".to_string());
+        expr_values.insert(":topp".to_string(), AttributeValue::N(top_p.to_string()));
+    }
+    if let Some(fp) = req.frequency_penalty {
+        update_expr.push("frequency_penalty = :fp".to_string());
+        expr_values.insert(":fp".to_string(), AttributeValue::N(fp.to_string()));
+    }
+    if let Some(pp) = req.presence_penalty {
+        update_expr.push("presence_penalty = :pp".to_string());
+        expr_values.insert(":pp".to_string(), AttributeValue::N(pp.to_string()));
+    }
+    if let Some(ref csp) = req.custom_system_prompt {
+        update_expr.push("custom_system_prompt = :csp".to_string());
+        expr_values.insert(":csp".to_string(), AttributeValue::S(csp.clone()));
+    }
+    if let Some(se) = req.streaming_enabled {
+        update_expr.push("streaming_enabled = :se".to_string());
+        expr_values.insert(":se".to_string(), AttributeValue::Bool(se));
+    }
+    if let Some(st) = req.show_thinking {
+        update_expr.push("show_thinking = :st".to_string());
+        expr_values.insert(":st".to_string(), AttributeValue::Bool(st));
+    }
+    if let Some(ref theme) = req.theme {
+        update_expr.push("theme = :theme".to_string());
+        expr_values.insert(":theme".to_string(), AttributeValue::S(theme.clone()));
+    }
+    if let Some(ref ui_lang) = req.ui_language {
+        update_expr.push("ui_language = :uilang".to_string());
+        expr_values.insert(":uilang".to_string(), AttributeValue::S(ui_lang.clone()));
+    }
+    if let Some(ref fs) = req.font_size {
+        update_expr.push("font_size = :fs".to_string());
+        expr_values.insert(":fs".to_string(), AttributeValue::S(fs.clone()));
+    }
+    if let Some(ref sm) = req.send_method {
+        update_expr.push("send_method = :sm".to_string());
+        expr_values.insert(":sm".to_string(), AttributeValue::S(sm.clone()));
+    }
+    if let Some(ts) = req.tts_speed {
+        update_expr.push("tts_speed = :tspd".to_string());
+        expr_values.insert(":tspd".to_string(), AttributeValue::N(ts.to_string()));
+    }
+    if let Some(sti) = req.show_token_info {
+        update_expr.push("show_token_info = :sti".to_string());
+        expr_values.insert(":sti".to_string(), AttributeValue::Bool(sti));
+    }
+    if let Some(sts) = req.show_timestamps {
+        update_expr.push("show_timestamps = :sts".to_string());
+        expr_values.insert(":sts".to_string(), AttributeValue::Bool(sts));
+    }
+    if let Some(cm) = req.compact_mode {
+        update_expr.push("compact_mode = :cm".to_string());
+        expr_values.insert(":cm".to_string(), AttributeValue::Bool(cm));
     }
 
     let update_expression = update_expr.join(", ");
@@ -10673,6 +10860,153 @@ async fn handle_speech_synthesize(
     }
 }
 
+// ─── Voice Cloning API ───
+
+/// POST /api/v1/voice/clone — Upload audio sample + text, get cloned voice TTS back
+/// Body: multipart/form-data with fields: audio (blob), text (string to speak), prompt_text (transcript of audio)
+/// Or JSON: { audio_base64, text, prompt_text }
+async fn handle_voice_clone(
+    State(_state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> impl IntoResponse {
+    let api_key = std::env::var("RUNPOD_API_KEY").unwrap_or_default();
+    let endpoint_id = std::env::var("RUNPOD_COSYVOICE_ENDPOINT_ID").unwrap_or_default();
+
+    // Fallback: if no CosyVoice endpoint, use ElevenLabs voice design or return error
+    if api_key.is_empty() || endpoint_id.is_empty() {
+        // Try to use the audio with a default high-quality voice instead
+        let body_json: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+        let text = body_json.get("text").and_then(|v| v.as_str()).unwrap_or("こんにちは、これが私の声です。");
+        let voice = body_json.get("voice").and_then(|v| v.as_str()).unwrap_or("nova");
+
+        // Use OpenAI TTS as fallback demo
+        match try_openai_tts(text, voice, 1.0, Some("自然な日本語で、温かく親しみやすいトーンで話してください。")).await {
+            Ok(bytes) => {
+                return (
+                    StatusCode::OK,
+                    [
+                        (axum::http::header::CONTENT_TYPE, "audio/mpeg"),
+                        (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+                    ],
+                    bytes,
+                );
+            }
+            Err(e) => {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    [
+                        (axum::http::header::CONTENT_TYPE, "application/json"),
+                        (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+                    ],
+                    format!("{{\"error\": \"Voice clone unavailable: {}\"}}", e).into_bytes(),
+                );
+            }
+        }
+    }
+
+    // Parse JSON body
+    let body_json: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+    let audio_b64 = body_json.get("audio_base64").and_then(|v| v.as_str()).unwrap_or("");
+    let text = body_json.get("text").and_then(|v| v.as_str()).unwrap_or("こんにちは、これが私の声です。どう？似てる？");
+    let prompt_text = body_json.get("prompt_text").and_then(|v| v.as_str()).unwrap_or("");
+    let mode = body_json.get("mode").and_then(|v| v.as_str()).unwrap_or("zero_shot");
+
+    if audio_b64.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            [
+                (axum::http::header::CONTENT_TYPE, "application/json"),
+                (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+            ],
+            b"{\"error\": \"audio_base64 is required\"}".to_vec(),
+        );
+    }
+
+    // Call CosyVoice via RunPod
+    let url = format!("https://api.runpod.ai/v2/{}/runsync", endpoint_id);
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&serde_json::json!({
+            "input": {
+                "text": text,
+                "mode": mode,
+                "prompt_text": prompt_text,
+                "prompt_audio": audio_b64,
+                "format": "mp3"
+            }
+        }))
+        .timeout(std::time::Duration::from_secs(120))
+        .send()
+        .await;
+
+    match resp {
+        Ok(r) if r.status().is_success() => {
+            let resp_body: serde_json::Value = r.json().await.unwrap_or_default();
+            let out_b64 = resp_body.get("output")
+                .and_then(|o| o.get("audio_base64").and_then(|v| v.as_str())
+                    .or_else(|| o.as_str()))
+                .unwrap_or("");
+
+            if out_b64.is_empty() {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    [
+                        (axum::http::header::CONTENT_TYPE, "application/json"),
+                        (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+                    ],
+                    format!("{{\"error\": \"No audio in response: {}\"}}", resp_body).into_bytes(),
+                );
+            }
+
+            use base64::Engine as _;
+            match base64::engine::general_purpose::STANDARD.decode(out_b64) {
+                Ok(audio) => {
+                    tracing::info!("Voice clone success: {} bytes", audio.len());
+                    (
+                        StatusCode::OK,
+                        [
+                            (axum::http::header::CONTENT_TYPE, "audio/mpeg"),
+                            (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+                        ],
+                        audio,
+                    )
+                }
+                Err(e) => (
+                    StatusCode::BAD_GATEWAY,
+                    [
+                        (axum::http::header::CONTENT_TYPE, "application/json"),
+                        (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+                    ],
+                    format!("{{\"error\": \"Base64 decode failed: {}\"}}", e).into_bytes(),
+                ),
+            }
+        }
+        Ok(r) => {
+            let status = r.status();
+            let text = r.text().await.unwrap_or_default();
+            (
+                StatusCode::BAD_GATEWAY,
+                [
+                    (axum::http::header::CONTENT_TYPE, "application/json"),
+                    (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+                ],
+                format!("{{\"error\": \"CosyVoice error: {} {}\"}}", status, text).into_bytes(),
+            )
+        }
+        Err(e) => (
+            StatusCode::BAD_GATEWAY,
+            [
+                (axum::http::header::CONTENT_TYPE, "application/json"),
+                (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+            ],
+            format!("{{\"error\": \"RunPod request failed: {}\"}}", e).into_bytes(),
+        ),
+    }
+}
+
 // ─── OpenAI-Compatible TTS API (/v1/audio/speech) ───
 
 /// OpenAI-compatible TTS endpoint: POST /v1/audio/speech
@@ -12611,12 +12945,28 @@ mod agent_routing_tests {
             language: Some("ja".to_string()),
             adult_mode: Some(false),
             age_verified: Some(true),
+            top_p: Some(0.9),
+            frequency_penalty: Some(0.5),
+            presence_penalty: None,
+            custom_system_prompt: Some("Always respond in Japanese".to_string()),
+            streaming_enabled: Some(true),
+            show_thinking: None,
+            theme: Some("dark".to_string()),
+            ui_language: Some("ja".to_string()),
+            font_size: Some("medium".to_string()),
+            send_method: None,
+            tts_speed: Some(1.2),
+            show_token_info: Some(true),
+            show_timestamps: None,
+            compact_mode: None,
         };
         let json = serde_json::to_string(&settings).unwrap();
         let deser: UserSettings = serde_json::from_str(&json).unwrap();
         assert_eq!(deser.preferred_model, Some("gpt-4o".to_string()));
         assert_eq!(deser.temperature, Some(0.7));
         assert_eq!(deser.language, Some("ja".to_string()));
+        assert_eq!(deser.top_p, Some(0.9));
+        assert_eq!(deser.custom_system_prompt, Some("Always respond in Japanese".to_string()));
     }
 
     #[test]
@@ -12629,6 +12979,20 @@ mod agent_routing_tests {
             language: None,
             adult_mode: None,
             age_verified: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            custom_system_prompt: None,
+            streaming_enabled: None,
+            show_thinking: None,
+            theme: None,
+            ui_language: None,
+            font_size: None,
+            send_method: None,
+            tts_speed: None,
+            show_token_info: None,
+            show_timestamps: None,
+            compact_mode: None,
         };
         let json = serde_json::to_string(&settings).unwrap();
         let deser: UserSettings = serde_json::from_str(&json).unwrap();

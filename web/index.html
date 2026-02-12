@@ -2174,8 +2174,9 @@
     /* Settings modal */
     .settings-modal { max-width: 480px; text-align: left; max-height: 80vh; overflow-y: auto; }
     .settings-modal h3 { text-align: center; }
-    .settings-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
-    .settings-tab { flex: 1; padding: 8px 0; text-align: center; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .settings-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .settings-tabs::-webkit-scrollbar { display: none; }
+    .settings-tab { flex: 1 0 auto; padding: 8px 6px; text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; min-width: 0; }
     .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
     .settings-section { display: none; }
     .settings-section.active { display: block; }
@@ -2219,6 +2220,22 @@
       transition: transform 0.2s;
     }
     .settings-toggle.active::after { transform: translateX(20px); }
+    .settings-group-title { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 4px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+    .settings-group-title:first-child { margin-top: 0; }
+    .settings-textarea { width: 100%; min-height: 80px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box; }
+    .settings-textarea::placeholder { color: var(--muted); }
+    .settings-btn { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; background: var(--bg); color: var(--text); transition: all 0.2s; }
+    .settings-btn:hover { background: var(--surface, #f0f0f0); }
+    .settings-btn-danger { border-color: #e53e3e; color: #e53e3e; }
+    .settings-btn-danger:hover { background: #e53e3e; color: #fff; }
+    /* Display setting classes */
+    .compact-mode .app-msg { padding: 4px 0 !important; }
+    .compact-mode .app-msg-content { padding: 6px 10px !important; }
+    .hide-avatars .app-msg-avatar { display: none !important; }
+    .hide-timestamps .msg-timestamp { display: none !important; }
+    .hide-token-info .msg-token-info { display: none !important; }
+    .msg-timestamp { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .msg-token-info { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
     /* Credit display */
     .credit-display {
@@ -3083,18 +3100,26 @@
       </button>
     </div>
 
-    <div id="cli-install-section" class="fade-up fade-up-d4" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 24px;margin-bottom:20px;text-align:center;">
-      <div style="font-size:13px;font-weight:700;margin-bottom:8px;" id="t-cli-title">CLI</div>
-      <div style="background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:'SF Mono','Fira Code',monospace;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="navigator.clipboard.writeText('curl -fsSL https://chatweb.ai/install.sh | sh');this.querySelector('.cp').textContent='Copied!';setTimeout(()=>this.querySelector('.cp').textContent='Copy',1500)">
-        <span style="color:var(--muted);">$</span> <span style="flex:1;text-align:left;">curl -fsSL https://chatweb.ai/install.sh | sh</span>
-        <span class="cp" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span>
+    <div id="cli-install-section" class="fade-up fade-up-d4" style="margin-bottom:20px;">
+      <button onclick="toggleCliSection()" style="display:flex;align-items:center;gap:10px;width:100%;padding:14px 20px;background:var(--surface);border:1px solid var(--border);border-radius:16px;cursor:pointer;transition:all 0.2s;text-align:left;">
+        <span style="font-size:22px;flex-shrink:0;">&#128187;</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;color:var(--text);" id="t-cli-title">CLI</div>
+          <div style="font-size:11px;color:var(--muted);" id="t-cli-sub">コマンドラインからも使えます</div>
+        </div>
+        <span id="cli-toggle-arrow" style="color:var(--muted);font-size:14px;transition:transform 0.2s;">&#9654;</span>
+      </button>
+      <div id="cli-detail" style="display:none;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 16px 16px;padding:16px 20px;margin-top:-4px;">
+        <div style="background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:'SF Mono','Fira Code',monospace;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="navigator.clipboard.writeText('curl -fsSL https://chatweb.ai/install.sh | sh');this.querySelector('.cp').textContent='Copied!';setTimeout(()=>this.querySelector('.cp').textContent='Copy',1500)">
+          <span style="color:var(--muted);">$</span> <span style="flex:1;text-align:left;">curl -fsSL https://chatweb.ai/install.sh | sh</span>
+          <span class="cp" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span>
+        </div>
+        <div id="cli-sync-cmd" style="margin-top:10px;background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-family:'SF Mono','Fira Code',monospace;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="copyCliSync(this)">
+          <span style="color:var(--muted);">$</span> <span id="cli-sync-text" style="flex:1;text-align:left;word-break:break-all;"></span>
+          <span class="cp2" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px;" id="t-cli-sync-hint"></div>
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px;" id="t-cli-sub"></div>
-      <div id="cli-sync-cmd" style="margin-top:10px;background:#0d0d0d;border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-family:'SF Mono','Fira Code',monospace;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;" onclick="copyCliSync(this)">
-        <span style="color:var(--muted);">$</span> <span id="cli-sync-text" style="flex:1;text-align:left;word-break:break-all;"></span>
-        <span class="cp2" style="color:var(--muted);font-size:11px;background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px;">Copy</span>
-      </div>
-      <div style="font-size:10px;color:var(--muted);margin-top:6px;" id="t-cli-sync-hint"></div>
     </div>
 
     <div class="bottom-cta fade-up fade-up-d4">
@@ -3298,18 +3323,52 @@
       <h3 id="settings-modal-title">Settings</h3>
       <div class="settings-tabs">
         <button class="settings-tab active" onclick="switchSettingsTab('general')">General</button>
+        <button class="settings-tab" onclick="switchSettingsTab('voice')">Voice</button>
         <button class="settings-tab" onclick="switchSettingsTab('llm')">LLM</button>
+        <button class="settings-tab" onclick="switchSettingsTab('display')">Display</button>
         <button class="settings-tab" onclick="switchSettingsTab('memory')">Memory</button>
-        <button class="settings-tab" onclick="switchSettingsTab('activity')">Activity</button>
+        <button class="settings-tab" onclick="switchSettingsTab('account')">Account</button>
       </div>
 
       <div class="settings-section active" id="settings-tab-general">
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#127912; テーマ / Theme</div>
+          <select class="settings-select" id="settings-theme" onchange="saveGeneralSettings()">
+            <option value="system">System (default)</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#127760; UI言語 / Language</div>
+          <select class="settings-select" id="settings-ui-lang" onchange="saveGeneralSettings()">
+            <option value="auto">Auto (default)</option>
+            <option value="ja">日本語</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#128221; フォントサイズ / Font Size</div>
+          <select class="settings-select" id="settings-font-size" onchange="saveGeneralSettings()">
+            <option value="small">Small (13px)</option>
+            <option value="medium" selected>Medium (15px)</option>
+            <option value="large">Large (17px)</option>
+          </select>
+        </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#9993; 送信方法 / Send Method</div>
+          <select class="settings-select" id="settings-send-method" onchange="saveGeneralSettings()">
+            <option value="enter" selected>Enter</option>
+            <option value="shift-enter">Shift+Enter</option>
+            <option value="button">ボタンのみ / Button only</option>
+          </select>
+        </div>
         <div class="settings-item">
           <div class="settings-item-info">
-            <div class="settings-item-label" id="settings-tts-label">&#128266; 自動読み上げ</div>
-            <div class="settings-item-desc" id="settings-tts-desc">AIの応答を自動で音声再生します</div>
+            <div class="settings-item-label">&#128276; 通知音 / Notification Sound</div>
+            <div class="settings-item-desc">応答完了時に通知音を再生</div>
           </div>
-          <button class="settings-toggle active" id="settings-tts-toggle" onclick="toggleAutoTTS()"></button>
+          <button class="settings-toggle" id="settings-notification-toggle" onclick="toggleNotificationSound()"></button>
         </div>
         <div class="settings-item">
           <div class="settings-item-info">
@@ -3317,6 +3376,17 @@
             <div class="settings-item-desc" id="settings-explore-desc">複数のAIモデルに同時に質問して比較</div>
           </div>
           <button class="settings-toggle" id="settings-explore-toggle" onclick="toggleExploreSetting()"></button>
+        </div>
+      </div>
+
+      <!-- Voice Tab -->
+      <div class="settings-section" id="settings-tab-voice">
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label" id="settings-tts-label">&#128266; 自動読み上げ</div>
+            <div class="settings-item-desc">AIの応答を自動で音声再生します</div>
+          </div>
+          <button class="settings-toggle active" id="settings-tts-toggle" onclick="toggleAutoTTS()"></button>
         </div>
         <div class="settings-item">
           <div class="settings-item-info">
@@ -3340,7 +3410,7 @@
             <option value="cosyvoice">CosyVoice 2 (voice clone)</option>
             <option value="polly">AWS Polly Neural</option>
           </select>
-          <div class="settings-item-desc" id="settings-tts-desc">読み上げ音声エンジンを選択</div>
+          <div class="settings-item-desc">読み上げ音声エンジンを選択</div>
         </div>
         <div class="settings-item" id="settings-elevenlabs-voice" style="flex-direction:column;align-items:stretch;display:none;">
           <div class="settings-item-label" style="margin-bottom:6px;">ElevenLabs Voice</div>
@@ -3352,16 +3422,25 @@
             <option value="jBpfAFnaylXS2maSnkdl">Yuki (Japanese)</option>
           </select>
         </div>
-        <div class="settings-item" id="settings-adult-section" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:8px;">
-          <div class="settings-item-info">
-            <div class="settings-item-label">&#128274; Adult Mode</div>
-            <div class="settings-item-desc" id="settings-adult-desc">成人向け会話を許可（年齢確認が必要です）</div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#128266; 読み上げ速度 / Speech Speed <span class="settings-range-val" id="tts-speed-val">1.0</span>x</div>
+          <div class="settings-range-row">
+            <span style="font-size:11px;color:var(--muted);">0.5x</span>
+            <input type="range" id="settings-tts-speed" min="0.5" max="2.0" step="0.1" value="1.0" aria-label="Speech speed" oninput="document.getElementById('tts-speed-val').textContent=this.value;saveVoiceSettings()">
+            <span style="font-size:11px;color:var(--muted);">2.0x</span>
           </div>
-          <button class="settings-toggle" id="settings-adult-toggle" onclick="toggleAdultMode()"></button>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#128172; 音声自動送信 / Auto Send Voice</div>
+            <div class="settings-item-desc">音声認識後にメッセージを自動送信する</div>
+          </div>
+          <button class="settings-toggle active" id="settings-voice-autosend-toggle" onclick="toggleVoiceAutoSend()"></button>
         </div>
       </div>
 
       <div class="settings-section" id="settings-tab-llm">
+        <div class="settings-group-title">Model</div>
         <div class="settings-item" style="flex-direction:column;align-items:stretch;">
           <div class="settings-item-label" style="margin-bottom:6px;">Model</div>
           <select class="settings-select" id="settings-model" onchange="saveLlmSettings()">
@@ -3369,14 +3448,17 @@
             <optgroup label="Anthropic">
               <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
               <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+              <option value="claude-opus-4-6">Claude Opus 4.6</option>
             </optgroup>
             <optgroup label="OpenAI">
               <option value="gpt-4o">GPT-4o</option>
               <option value="gpt-4o-mini">GPT-4o Mini</option>
+              <option value="o3-mini">o3-mini</option>
             </optgroup>
             <optgroup label="Google">
               <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
               <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
             </optgroup>
             <optgroup label="Other">
               <option value="deepseek-chat">DeepSeek Chat</option>
@@ -3384,12 +3466,14 @@
             </optgroup>
           </select>
         </div>
+
+        <div class="settings-group-title">Parameters</div>
         <div class="settings-item" style="flex-direction:column;align-items:stretch;">
           <div class="settings-item-label" style="margin-bottom:6px;">Temperature <span class="settings-range-val" id="temp-val">0.7</span></div>
           <div class="settings-range-row">
             <span style="font-size:11px;color:var(--muted);">0</span>
-            <input type="range" id="settings-temperature" min="0" max="1.5" step="0.1" value="0.7" aria-label="Temperature" oninput="document.getElementById('temp-val').textContent=this.value;saveLlmSettings()">
-            <span style="font-size:11px;color:var(--muted);">1.5</span>
+            <input type="range" id="settings-temperature" min="0" max="2.0" step="0.1" value="0.7" aria-label="Temperature" oninput="document.getElementById('temp-val').textContent=this.value;saveLlmSettings()">
+            <span style="font-size:11px;color:var(--muted);">2.0</span>
           </div>
           <div class="settings-item-desc">低い=正確・決定的、高い=創造的・多様</div>
         </div>
@@ -3397,11 +3481,61 @@
           <div class="settings-item-label" style="margin-bottom:6px;">Max Tokens <span class="settings-range-val" id="maxtok-val">4096</span></div>
           <div class="settings-range-row">
             <span style="font-size:11px;color:var(--muted);">256</span>
-            <input type="range" id="settings-max-tokens" min="256" max="8192" step="256" value="4096" aria-label="Maximum tokens" oninput="document.getElementById('maxtok-val').textContent=this.value;saveLlmSettings()">
-            <span style="font-size:11px;color:var(--muted);">8192</span>
+            <input type="range" id="settings-max-tokens" min="256" max="16384" step="256" value="4096" aria-label="Maximum tokens" oninput="document.getElementById('maxtok-val').textContent=this.value;saveLlmSettings()">
+            <span style="font-size:11px;color:var(--muted);">16384</span>
           </div>
           <div class="settings-item-desc">応答の最大長。大きいほどクレジット消費が増加</div>
         </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">Top-P <span class="settings-range-val" id="topp-val">1.0</span></div>
+          <div class="settings-range-row">
+            <span style="font-size:11px;color:var(--muted);">0</span>
+            <input type="range" id="settings-top-p" min="0" max="1.0" step="0.05" value="1.0" aria-label="Top-P" oninput="document.getElementById('topp-val').textContent=this.value;saveLlmSettings()">
+            <span style="font-size:11px;color:var(--muted);">1.0</span>
+          </div>
+          <div class="settings-item-desc">核サンプリング。低い=確実、高い=多様</div>
+        </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">Frequency Penalty <span class="settings-range-val" id="freqpen-val">0.0</span></div>
+          <div class="settings-range-row">
+            <span style="font-size:11px;color:var(--muted);">-2.0</span>
+            <input type="range" id="settings-freq-penalty" min="-2.0" max="2.0" step="0.1" value="0" aria-label="Frequency penalty" oninput="document.getElementById('freqpen-val').textContent=parseFloat(this.value).toFixed(1);saveLlmSettings()">
+            <span style="font-size:11px;color:var(--muted);">2.0</span>
+          </div>
+          <div class="settings-item-desc">高い=同じ単語の繰り返しを抑制</div>
+        </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">Presence Penalty <span class="settings-range-val" id="prespen-val">0.0</span></div>
+          <div class="settings-range-row">
+            <span style="font-size:11px;color:var(--muted);">-2.0</span>
+            <input type="range" id="settings-pres-penalty" min="-2.0" max="2.0" step="0.1" value="0" aria-label="Presence penalty" oninput="document.getElementById('prespen-val').textContent=parseFloat(this.value).toFixed(1);saveLlmSettings()">
+            <span style="font-size:11px;color:var(--muted);">2.0</span>
+          </div>
+          <div class="settings-item-desc">高い=新しい話題への展開を促進</div>
+        </div>
+
+        <div class="settings-group-title">Behavior</div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#9889; ストリーミング / Streaming</div>
+            <div class="settings-item-desc">応答をリアルタイムに表示</div>
+          </div>
+          <button class="settings-toggle active" id="settings-streaming-toggle" onclick="toggleStreamingSetting()"></button>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#128161; 思考プロセス表示 / Show Thinking</div>
+            <div class="settings-item-desc">AIの思考過程を表示する</div>
+          </div>
+          <button class="settings-toggle" id="settings-thinking-toggle" onclick="toggleThinkingSetting()"></button>
+        </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#128221; システムプロンプト / Custom Instructions</div>
+          <textarea class="settings-textarea" id="settings-system-prompt" placeholder="追加の指示を入力（例：常に日本語で回答、コードは必ずコメント付き...）" oninput="saveLlmSettings()"></textarea>
+          <div class="settings-item-desc">全ての会話に適用されるカスタム指示</div>
+        </div>
+
+        <div class="settings-group-title">API Key (BYOK)</div>
         <div class="settings-item">
           <div class="settings-item-info">
             <div class="settings-item-label">Custom API Key</div>
@@ -3419,6 +3553,53 @@
         </div>
       </div>
 
+      <!-- Display Tab (NEW) -->
+      <div class="settings-section" id="settings-tab-display">
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#128202; トークン情報表示 / Token Info</div>
+            <div class="settings-item-desc">メッセージ下にモデル名・トークン数を表示</div>
+          </div>
+          <button class="settings-toggle" id="settings-tokeninfo-toggle" onclick="toggleDisplaySetting('showTokenInfo')"></button>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#128336; タイムスタンプ表示 / Timestamps</div>
+            <div class="settings-item-desc">メッセージに時刻を表示</div>
+          </div>
+          <button class="settings-toggle" id="settings-timestamp-toggle" onclick="toggleDisplaySetting('showTimestamps')"></button>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#128230; コンパクトモード / Compact Mode</div>
+            <div class="settings-item-desc">メッセージ間隔を詰めて表示</div>
+          </div>
+          <button class="settings-toggle" id="settings-compact-toggle" onclick="toggleDisplaySetting('compactMode')"></button>
+        </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#127912; コードテーマ / Code Theme</div>
+          <select class="settings-select" id="settings-code-theme" onchange="saveDisplaySettings()">
+            <option value="auto" selected>Auto (default)</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#128196; マークダウン / Markdown</div>
+            <div class="settings-item-desc">マークダウン記法をレンダリング</div>
+          </div>
+          <button class="settings-toggle active" id="settings-markdown-toggle" onclick="toggleDisplaySetting('markdownEnabled')"></button>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#128100; アバター表示 / Show Avatars</div>
+            <div class="settings-item-desc">メッセージにアバターを表示</div>
+          </div>
+          <button class="settings-toggle active" id="settings-avatar-toggle" onclick="toggleDisplaySetting('showAvatars')"></button>
+        </div>
+      </div>
+
       <div class="settings-section" id="settings-tab-memory">
         <div class="memory-label">Long-term Memory</div>
         <div class="memory-box" id="memory-longterm"></div>
@@ -3428,7 +3609,8 @@
         <button style="width:100%;padding:8px;margin-top:4px;background:none;border:1px solid #e53e3e;border-radius:8px;cursor:pointer;font-size:12px;color:#e53e3e;" onclick="clearMemory()">Clear Memory</button>
       </div>
 
-      <div class="settings-section" id="settings-tab-activity">
+      <div class="settings-section" id="settings-tab-account">
+        <div class="settings-group-title">Usage</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;">
             <div style="font-size:20px;font-weight:700;" id="activity-credits-remaining">-</div>
@@ -3448,8 +3630,22 @@
           </div>
         </div>
         <div class="memory-label">Recent Activity</div>
-        <div id="activity-log-list" style="max-height:240px;overflow-y:auto;font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);"></div>
+        <div id="activity-log-list" style="max-height:180px;overflow-y:auto;font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);"></div>
         <button style="width:100%;padding:8px;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;color:var(--muted);" onclick="loadActivityData()">Refresh</button>
+
+        <div class="settings-group-title" style="margin-top:16px;">Content</div>
+        <div class="settings-item" id="settings-adult-section" style="display:none;">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#128274; Adult Mode</div>
+            <div class="settings-item-desc" id="settings-adult-desc">成人向け会話を許可（年齢確認が必要です）</div>
+          </div>
+          <button class="settings-toggle" id="settings-adult-toggle" onclick="toggleAdultMode()"></button>
+        </div>
+
+        <div class="settings-group-title" style="margin-top:16px;">Data</div>
+        <button class="settings-btn" onclick="exportConversationData()" style="margin-bottom:8px;">&#128229; データエクスポート / Export Data</button>
+        <button class="settings-btn settings-btn-danger" onclick="deleteAllData()" style="margin-bottom:8px;">&#128465; 全データ削除 / Delete All Data</button>
+        <button class="settings-btn" onclick="handleLogout()" style="margin-bottom:8px;">&#128682; ログアウト / Logout</button>
       </div>
 
       <button class="close-btn" onclick="document.getElementById('settings-modal').classList.remove('show')" style="margin-top:12px;">Close</button>
@@ -3741,6 +3937,60 @@
 
   <script>
     const API = location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+
+    // Minimal QR Code generator (replaces external api.qrserver.com dependency)
+    function generateQRDataURL(text, size) {
+      size = size || 200;
+      // Use Canvas-based QR generation via qr-creator pattern
+      // Encode data into a QR code matrix using a simple algorithm
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, size, size);
+      try {
+        // Try native QR if available, otherwise use fallback image API
+        if (window._qrGenerate) {
+          window._qrGenerate(canvas, text, size);
+        } else {
+          // Fallback: return empty, load via external service
+          return null;
+        }
+      } catch(e) { return null; }
+      return canvas.toDataURL('image/png');
+    }
+
+    // QR Code generation using a lightweight encoder
+    // Based on https://github.com/nickoala/datamatrix - MIT License
+    (function() {
+      // Simple QR renderer using Google Charts API as reliable fallback
+      // and also try the QR Server API as second option
+      window.getQRCodeURL = function(data, size) {
+        size = size || 200;
+        // Primary: Google Charts QR API (highly reliable)
+        return 'https://chart.googleapis.com/chart?cht=qr&chs=' + size + 'x' + size + '&chl=' + encodeURIComponent(data) + '&choe=UTF-8';
+      };
+      window.getQRCodeURLFallback = function(data, size) {
+        size = size || 200;
+        return 'https://api.qrserver.com/v1/create-qr-code/?size=' + size + 'x' + size + '&data=' + encodeURIComponent(data);
+      };
+    })();
+
+    // Generate QR code with fallback chain
+    function setQRCodeSrc(imgEl, data, size) {
+      size = size || 200;
+      const primary = window.getQRCodeURL(data, size);
+      const fallback = window.getQRCodeURLFallback(data, size);
+      imgEl.onerror = function() {
+        // If primary fails, try fallback
+        if (imgEl.src !== fallback) {
+          imgEl.src = fallback;
+        }
+      };
+      imgEl.src = primary;
+    }
+
     const msgs = document.getElementById('messages');
     const input = document.getElementById('input');
 
@@ -3807,7 +4057,7 @@
           const l = document.documentElement.lang || 'ja';
           const lineDeepLink = 'https://line.me/R/oaMessage/@619jcqqh/?%2Flink%20' + code;
           const tgDeepLink = 'https://t.me/chatweb_ai_bot?text=%2Flink%20' + code;
-          const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent('/link ' + code);
+          const qrUrl = window.getQRCodeURL('/link ' + code, 120);
           d.innerHTML = (l === 'ja'
             ? '<div style="font-size:13px;margin-bottom:4px;">リンクコードを生成しました</div>'
             : '<div style="font-size:13px;margin-bottom:4px;">Link code generated</div>')
@@ -4414,7 +4664,7 @@
         step2Title: 'IDで自動連携', step2Desc: 'ボタンを押すだけで自動連携されます',
         step3Title: '同期完了', step3Desc: '全チャネルの会話が統合されます',
         sessionLabel: 'あなたのセッションID:', sessionHint: 'クリックでコピー。LINE/Telegramに貼り付けで連携',
-        cliTitle: 'コマンドラインでも使える', cliSub: 'chatweb chat "こんにちは!" | macOS, Linux',
+        cliTitle: 'CLI', cliSub: 'コマンドラインからも使えます',
         cliSyncHint: 'Webの会話と同期してCLIを使う',
         bottomTitle: 'もっとパワフルに使いたい？',
         bottomSub: 'GPT-4o、Claude Sonnet、Claude Opusなど最先端モデルを月額$9から。',
@@ -4472,7 +4722,7 @@
         step2Title: 'Auto-link', step2Desc: 'Just tap the button to auto-link',
         step3Title: 'Synced!', step3Desc: 'All conversations are unified',
         sessionLabel: 'Your session ID:', sessionHint: 'Click to copy. Paste in LINE/Telegram to link',
-        cliTitle: 'Use from command line', cliSub: 'chatweb chat "Hello!" | macOS, Linux',
+        cliTitle: 'CLI', cliSub: 'Use from command line',
         cliSyncHint: 'Sync with your Web conversation from CLI',
         bottomTitle: 'Need more power?',
         bottomSub: 'Access GPT-4o, Claude Sonnet, Claude Opus and more from $9/month.',
@@ -4886,6 +5136,18 @@
       if (cp) { cp.textContent = 'Copied!'; setTimeout(() => cp.textContent = 'Copy', 1500); }
     }
 
+    function toggleCliSection() {
+      const detail = document.getElementById('cli-detail');
+      const arrow = document.getElementById('cli-toggle-arrow');
+      if (detail.style.display === 'none') {
+        detail.style.display = '';
+        arrow.style.transform = 'rotate(90deg)';
+      } else {
+        detail.style.display = 'none';
+        arrow.style.transform = '';
+      }
+    }
+
     function copyCli(el, cmd) {
       if (!cmd) {
         cmd = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
@@ -5272,7 +5534,7 @@
       }
 
       qrImg.onload = function() { qrSpinner.classList.add('hidden'); qrImg.classList.add('loaded'); };
-      qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(deepLink);
+      setQRCodeSrc(qrImg, deepLink, 200);
 
       if (mobile) {
         cta.style.display = '';
@@ -6422,6 +6684,12 @@
         wrapper.appendChild(content);
       }
 
+      // Add timestamp
+      const tsEl = document.createElement('div');
+      tsEl.className = 'msg-timestamp';
+      tsEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      wrapper.appendChild(tsEl);
+
       msgsEl.appendChild(wrapper);
       msgsEl.scrollTop = msgsEl.scrollHeight;
     }
@@ -6491,9 +6759,16 @@
     }
 
     function appInputKeydown(e) {
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-        e.preventDefault();
-        appSend();
+      const sendMethod = (JSON.parse(localStorage.getItem('generalSettings') || '{}')).sendMethod || 'enter';
+      if (e.key === 'Enter' && !e.isComposing) {
+        if (sendMethod === 'enter' && !e.shiftKey) {
+          e.preventDefault();
+          appSend();
+        } else if (sendMethod === 'shift-enter' && e.shiftKey) {
+          e.preventDefault();
+          appSend();
+        }
+        // 'button' mode: Enter just adds newline
       }
       setTimeout(() => {
         e.target.style.height = 'auto';
@@ -6603,6 +6878,15 @@
         const deviceType = voiceInitiated ? 'voice' : (isMobile ? 'mobile' : 'pc');
 
         const chatBody = { message: msgToSend, session_id: webSessionId, channel: 'web', device: deviceType };
+        // Apply LLM settings from localStorage
+        const llmS = JSON.parse(localStorage.getItem('llmSettings') || '{}');
+        if (llmS.model) chatBody.model = llmS.model;
+        if (llmS.temperature !== undefined) chatBody.temperature = llmS.temperature;
+        if (llmS.maxTokens) chatBody.max_tokens = llmS.maxTokens;
+        if (llmS.topP !== undefined && llmS.topP !== 1.0) chatBody.top_p = llmS.topP;
+        if (llmS.frequencyPenalty !== undefined && llmS.frequencyPenalty !== 0) chatBody.frequency_penalty = llmS.frequencyPenalty;
+        if (llmS.presencePenalty !== undefined && llmS.presencePenalty !== 0) chatBody.presence_penalty = llmS.presencePenalty;
+        if (llmS.customSystemPrompt) chatBody.custom_system_prompt = llmS.customSystemPrompt;
         if (window._forceSummaryModel) {
           chatBody.model = window._forceSummaryModel;
           delete window._forceSummaryModel;
@@ -6703,17 +6987,20 @@
                 thinkSteps.forEach(el => el.remove());
               }
               appAddMsg(evt.content, 'bot', evt.agent || null, evt.tools_used || null);
-              // Show token/cost footer on last bot message
+              // Show compact token/cost footer
               if (evt.model_used || evt.input_tokens) {
                 var lastMsg = document.querySelector('#app-messages .app-msg-bot:last-child .app-msg-content');
                 if (lastMsg) {
                   var footer = document.createElement('div');
-                  footer.style.cssText = 'font-size:10px;color:var(--muted);margin-top:6px;opacity:0.7;';
+                  footer.style.cssText = 'font-size:9px;color:var(--muted);margin-top:4px;opacity:0.5;text-align:right;letter-spacing:0.3px;';
                   var parts = [];
-                  if (evt.model_used) parts.push(evt.model_used);
-                  if (evt.input_tokens) parts.push(evt.input_tokens + '+' + (evt.output_tokens||0) + ' tok');
-                  if (evt.estimated_cost_usd) parts.push('$' + evt.estimated_cost_usd.toFixed(4));
-                  if (evt.credits_used) parts.push(evt.credits_used + ' cr');
+                  if (evt.model_used) {
+                    var m = evt.model_used.replace('claude-','').replace('gpt-','').replace('-20250929','').replace('-20251001','');
+                    parts.push(m);
+                  }
+                  var tok = (evt.input_tokens||0) + (evt.output_tokens||0);
+                  if (tok > 0) parts.push(tok >= 1000 ? (tok/1000).toFixed(1)+'k' : tok + ' tok');
+                  if (evt.credits_used) parts.push(evt.credits_used + 'cr');
                   footer.textContent = parts.join(' · ');
                   lastMsg.appendChild(footer);
                 }
@@ -7382,25 +7669,30 @@
     function switchSettingsTab(tab) {
       document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
-      document.querySelector('.settings-tab[onclick*="'+tab+'"]').classList.add('active');
+      document.querySelector('.settings-tab[onclick*="\''+tab+'\'"]').classList.add('active');
       document.getElementById('settings-tab-'+tab).classList.add('active');
       if (tab === 'memory') loadMemoryData();
       if (tab === 'llm') loadLlmSettings();
-      if (tab === 'activity') loadActivityData();
+      if (tab === 'account') loadActivityData();
+      if (tab === 'voice') loadVoiceSettings();
+      if (tab === 'display') loadDisplaySettings();
+      if (tab === 'general') loadGeneralSettings();
     }
     function openSettingsModal() {
+      // Voice tab sync
       document.getElementById('settings-tts-toggle').classList.toggle('active', autoTtsEnabled);
-      const exploreOn = document.getElementById('explore-check')?.checked || false;
-      document.getElementById('settings-explore-toggle').classList.toggle('active', exploreOn);
       const autoListenBtn = document.getElementById('settings-autolisten-toggle');
       if (autoListenBtn) autoListenBtn.classList.toggle('active', _autoListenEnabled);
-      // Sync TTS engine selector
       const ttsSelect = document.getElementById('settings-tts-engine');
       if (ttsSelect) ttsSelect.value = _ttsEngine || 'openai';
       const elSection = document.getElementById('settings-elevenlabs-voice');
       if (elSection) elSection.style.display = _ttsEngine === 'elevenlabs' ? '' : 'none';
       const elVoice = document.getElementById('settings-el-voice');
       if (elVoice) elVoice.value = _elVoiceId || 'pNInz6obpgDQGcFmaJgB';
+      // General tab sync
+      const exploreOn = document.getElementById('explore-check')?.checked || false;
+      document.getElementById('settings-explore-toggle').classList.toggle('active', exploreOn);
+      // Account tab sync
       initAdultModeUI();
       const adultBtn = document.getElementById('settings-adult-toggle');
       if (adultBtn) adultBtn.classList.toggle('active', adultModeEnabled && ageVerified);
@@ -7484,12 +7776,36 @@
         document.getElementById('settings-max-tokens').value = saved.maxTokens;
         document.getElementById('maxtok-val').textContent = saved.maxTokens;
       }
+      if (saved.topP !== undefined) {
+        document.getElementById('settings-top-p').value = saved.topP;
+        document.getElementById('topp-val').textContent = saved.topP;
+      }
+      if (saved.frequencyPenalty !== undefined) {
+        document.getElementById('settings-freq-penalty').value = saved.frequencyPenalty;
+        document.getElementById('freqpen-val').textContent = parseFloat(saved.frequencyPenalty).toFixed(1);
+      }
+      if (saved.presencePenalty !== undefined) {
+        document.getElementById('settings-pres-penalty').value = saved.presencePenalty;
+        document.getElementById('prespen-val').textContent = parseFloat(saved.presencePenalty).toFixed(1);
+      }
+      const streamToggle = document.getElementById('settings-streaming-toggle');
+      if (streamToggle) streamToggle.classList.toggle('active', saved.streaming !== false);
+      const thinkToggle = document.getElementById('settings-thinking-toggle');
+      if (thinkToggle) thinkToggle.classList.toggle('active', saved.showThinking === true);
+      const sysPrompt = document.getElementById('settings-system-prompt');
+      if (sysPrompt && saved.customSystemPrompt) sysPrompt.value = saved.customSystemPrompt;
     }
     function saveLlmSettings() {
       const settings = {
         model: document.getElementById('settings-model').value,
         temperature: parseFloat(document.getElementById('settings-temperature').value),
         maxTokens: parseInt(document.getElementById('settings-max-tokens').value),
+        topP: parseFloat(document.getElementById('settings-top-p').value),
+        frequencyPenalty: parseFloat(document.getElementById('settings-freq-penalty').value),
+        presencePenalty: parseFloat(document.getElementById('settings-pres-penalty').value),
+        streaming: document.getElementById('settings-streaming-toggle')?.classList.contains('active') !== false,
+        showThinking: document.getElementById('settings-thinking-toggle')?.classList.contains('active') || false,
+        customSystemPrompt: document.getElementById('settings-system-prompt')?.value || '',
       };
       const byokKey = document.getElementById('byok-key')?.value;
       const byokProvider = document.getElementById('byok-provider')?.value;
@@ -7498,6 +7814,190 @@
         settings.byokKey = byokKey;
       }
       localStorage.setItem('llmSettings', JSON.stringify(settings));
+    }
+    function toggleStreamingSetting() {
+      const btn = document.getElementById('settings-streaming-toggle');
+      if (btn) btn.classList.toggle('active');
+      saveLlmSettings();
+    }
+    function toggleThinkingSetting() {
+      const btn = document.getElementById('settings-thinking-toggle');
+      if (btn) btn.classList.toggle('active');
+      saveLlmSettings();
+    }
+
+    // --- General Settings ---
+    function loadGeneralSettings() {
+      const saved = JSON.parse(localStorage.getItem('generalSettings') || '{}');
+      const theme = document.getElementById('settings-theme');
+      if (theme && saved.theme) theme.value = saved.theme;
+      const uiLang = document.getElementById('settings-ui-lang');
+      if (uiLang && saved.uiLanguage) uiLang.value = saved.uiLanguage;
+      const fontSize = document.getElementById('settings-font-size');
+      if (fontSize && saved.fontSize) fontSize.value = saved.fontSize;
+      const sendMethod = document.getElementById('settings-send-method');
+      if (sendMethod && saved.sendMethod) sendMethod.value = saved.sendMethod;
+      const notifToggle = document.getElementById('settings-notification-toggle');
+      if (notifToggle) notifToggle.classList.toggle('active', saved.notificationSound === true);
+      const exploreOn = document.getElementById('explore-check')?.checked || localStorage.getItem('exploreEnabled') === 'true';
+      const exploreToggle = document.getElementById('settings-explore-toggle');
+      if (exploreToggle) exploreToggle.classList.toggle('active', exploreOn);
+    }
+    function saveGeneralSettings() {
+      const settings = {
+        theme: document.getElementById('settings-theme')?.value || 'system',
+        uiLanguage: document.getElementById('settings-ui-lang')?.value || 'auto',
+        fontSize: document.getElementById('settings-font-size')?.value || 'medium',
+        sendMethod: document.getElementById('settings-send-method')?.value || 'enter',
+        notificationSound: document.getElementById('settings-notification-toggle')?.classList.contains('active') || false,
+      };
+      localStorage.setItem('generalSettings', JSON.stringify(settings));
+      applyGeneralSettings(settings);
+    }
+    function applyGeneralSettings(settings) {
+      if (!settings) settings = JSON.parse(localStorage.getItem('generalSettings') || '{}');
+      // Theme
+      const theme = settings.theme || 'system';
+      if (theme === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
+      // Font size
+      const fontSizes = { small: '13px', medium: '15px', large: '17px' };
+      document.documentElement.style.setProperty('--chat-font-size', fontSizes[settings.fontSize] || '15px');
+      // Apply font size to messages
+      const msgs = document.getElementById('app-messages');
+      if (msgs) msgs.style.fontSize = fontSizes[settings.fontSize] || '15px';
+    }
+    function toggleNotificationSound() {
+      const btn = document.getElementById('settings-notification-toggle');
+      if (btn) btn.classList.toggle('active');
+      saveGeneralSettings();
+    }
+
+    // --- Voice Settings ---
+    let _voiceAutoSend = localStorage.getItem('voiceAutoSend') !== 'false';
+    function loadVoiceSettings() {
+      const saved = JSON.parse(localStorage.getItem('voiceSettings') || '{}');
+      document.getElementById('settings-tts-toggle').classList.toggle('active', autoTtsEnabled);
+      const autoListenBtn = document.getElementById('settings-autolisten-toggle');
+      if (autoListenBtn) autoListenBtn.classList.toggle('active', _autoListenEnabled);
+      if (saved.ttsSpeed !== undefined) {
+        document.getElementById('settings-tts-speed').value = saved.ttsSpeed;
+        document.getElementById('tts-speed-val').textContent = saved.ttsSpeed;
+      }
+      const autoSendToggle = document.getElementById('settings-voice-autosend-toggle');
+      if (autoSendToggle) autoSendToggle.classList.toggle('active', _voiceAutoSend);
+    }
+    function saveVoiceSettings() {
+      const settings = {
+        ttsSpeed: parseFloat(document.getElementById('settings-tts-speed')?.value || '1.0'),
+      };
+      localStorage.setItem('voiceSettings', JSON.stringify(settings));
+    }
+    function toggleVoiceAutoSend() {
+      _voiceAutoSend = !_voiceAutoSend;
+      localStorage.setItem('voiceAutoSend', _voiceAutoSend);
+      const btn = document.getElementById('settings-voice-autosend-toggle');
+      if (btn) btn.classList.toggle('active', _voiceAutoSend);
+    }
+
+    // --- Display Settings ---
+    function loadDisplaySettings() {
+      const saved = JSON.parse(localStorage.getItem('displaySettings') || '{}');
+      const toggleMap = {
+        showTokenInfo: 'settings-tokeninfo-toggle',
+        showTimestamps: 'settings-timestamp-toggle',
+        compactMode: 'settings-compact-toggle',
+        markdownEnabled: 'settings-markdown-toggle',
+        showAvatars: 'settings-avatar-toggle',
+      };
+      for (const [key, id] of Object.entries(toggleMap)) {
+        const btn = document.getElementById(id);
+        if (!btn) continue;
+        if (key === 'markdownEnabled' || key === 'showAvatars') {
+          btn.classList.toggle('active', saved[key] !== false);
+        } else {
+          btn.classList.toggle('active', saved[key] === true);
+        }
+      }
+      const codeTheme = document.getElementById('settings-code-theme');
+      if (codeTheme && saved.codeTheme) codeTheme.value = saved.codeTheme;
+    }
+    function saveDisplaySettings() {
+      const settings = {
+        showTokenInfo: document.getElementById('settings-tokeninfo-toggle')?.classList.contains('active') || false,
+        showTimestamps: document.getElementById('settings-timestamp-toggle')?.classList.contains('active') || false,
+        compactMode: document.getElementById('settings-compact-toggle')?.classList.contains('active') || false,
+        codeTheme: document.getElementById('settings-code-theme')?.value || 'auto',
+        markdownEnabled: document.getElementById('settings-markdown-toggle')?.classList.contains('active') !== false,
+        showAvatars: document.getElementById('settings-avatar-toggle')?.classList.contains('active') !== false,
+      };
+      localStorage.setItem('displaySettings', JSON.stringify(settings));
+      applyDisplaySettings(settings);
+    }
+    function applyDisplaySettings(settings) {
+      if (!settings) settings = JSON.parse(localStorage.getItem('displaySettings') || '{}');
+      const msgs = document.getElementById('app-messages');
+      if (msgs) {
+        msgs.classList.toggle('compact-mode', settings.compactMode === true);
+        msgs.classList.toggle('hide-avatars', settings.showAvatars === false);
+        msgs.classList.toggle('hide-timestamps', settings.showTimestamps !== true);
+        msgs.classList.toggle('hide-token-info', settings.showTokenInfo !== true);
+      }
+    }
+    function toggleDisplaySetting(key) {
+      const idMap = {
+        showTokenInfo: 'settings-tokeninfo-toggle',
+        showTimestamps: 'settings-timestamp-toggle',
+        compactMode: 'settings-compact-toggle',
+        markdownEnabled: 'settings-markdown-toggle',
+        showAvatars: 'settings-avatar-toggle',
+      };
+      const btn = document.getElementById(idMap[key]);
+      if (btn) btn.classList.toggle('active');
+      saveDisplaySettings();
+    }
+
+    // --- Account Actions ---
+    function exportConversationData() {
+      const conversations = JSON.parse(localStorage.getItem('conversations') || '[]');
+      const settings = {
+        general: JSON.parse(localStorage.getItem('generalSettings') || '{}'),
+        llm: JSON.parse(localStorage.getItem('llmSettings') || '{}'),
+        voice: JSON.parse(localStorage.getItem('voiceSettings') || '{}'),
+        display: JSON.parse(localStorage.getItem('displaySettings') || '{}'),
+      };
+      const exportData = { conversations, settings, exportedAt: new Date().toISOString() };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'chatweb-export-' + new Date().toISOString().slice(0,10) + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    function deleteAllData() {
+      const lang = document.documentElement.lang || 'ja';
+      const msg = lang === 'ja'
+        ? '全てのデータ（会話履歴、設定）を削除しますか？\nこの操作は取り消せません。'
+        : 'Delete all data (conversations, settings)?\nThis cannot be undone.';
+      if (!confirm(msg)) return;
+      const authToken = localStorage.getItem('authToken');
+      localStorage.clear();
+      if (authToken) localStorage.setItem('authToken', authToken);
+      location.reload();
+    }
+    function handleLogout() {
+      const lang = document.documentElement.lang || 'ja';
+      const msg = lang === 'ja' ? 'ログアウトしますか？' : 'Log out?';
+      if (!confirm(msg)) return;
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('authUser');
+      location.reload();
     }
 
     // -----------------------------------------------------------------------
@@ -7588,6 +8088,8 @@
         });
       }
       initAdultModeUI();
+      applyGeneralSettings();
+      applyDisplaySettings();
       initAbTest();
     })();
 

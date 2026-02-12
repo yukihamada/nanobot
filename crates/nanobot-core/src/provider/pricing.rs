@@ -30,6 +30,9 @@ pub const PRICING_TABLE: &[ModelPricing] = &[
     ModelPricing { model: "llama-3.3-70b-versatile", provider: "groq",  input_per_1m: 0.59, output_per_1m: 0.79, context_window: 128_000 },
     // Kimi / Moonshot
     ModelPricing { model: "kimi-k2-0711",     provider: "moonshot",  input_per_1m: 0.60, output_per_1m: 2.40, context_window: 131_072 },
+    ModelPricing { model: "moonshotai/kimi-k2-instruct-0905", provider: "groq", input_per_1m: 1.00, output_per_1m: 3.00, context_window: 131_072 },
+    // Qwen (via Groq)
+    ModelPricing { model: "qwen/qwen3-32b",   provider: "groq",     input_per_1m: 0.50, output_per_1m: 1.50, context_window: 131_072 },
 ];
 
 /// Media generation pricing (per unit).

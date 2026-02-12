@@ -862,23 +862,21 @@
           return;
         }
 
-        // Normal Stripe flow
-        let link = PAYMENT_LINKS[plan];
-        if (link) {
-          if (activeCoupon) {
-            link += (link.includes('?') ? '&' : '?') + 'prefilled_promo_code=' + encodeURIComponent(activeCoupon);
+        // API-based Stripe Checkout
+        fetch('/api/v1/billing/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plan: plan, coupon: activeCoupon }),
+        })
+        .then(r => r.json())
+        .then(d => {
+          if (d.checkout_url) {
+            window.location.href = d.checkout_url;
+          } else {
+            alert(d.error || (lang === 'ja' ? '決済ページの作成に失敗しました' : 'Failed to create checkout'));
           }
-          window.location.href = link;
-        } else {
-          fetch('/api/v1/billing/checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ plan: plan, coupon: activeCoupon }),
-          })
-          .then(r => r.json())
-          .then(d => { if (d.checkout_url) window.location.href = d.checkout_url; })
-          .catch(() => alert('Error creating checkout. Please try again.'));
-        }
+        })
+        .catch(() => alert(lang === 'ja' ? '決済ページの作成に失敗しました。もう一度お試しください。' : 'Error creating checkout. Please try again.'));
       });
     });
 

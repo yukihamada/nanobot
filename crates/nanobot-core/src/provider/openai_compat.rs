@@ -7,7 +7,7 @@ use crate::error::ProviderError;
 use crate::types::{CompletionResponse, FinishReason, Message, TokenUsage, ToolCall};
 use crate::util::http;
 
-use super::LlmProvider;
+use super::{LlmProvider, ChatExtra};
 
 /// OpenAI-compatible provider.
 /// Works with OpenRouter, DeepSeek, Groq, Moonshot, vLLM, and any OpenAI-compatible API.
@@ -114,6 +114,91 @@ impl LlmProvider for OpenAiCompatProvider {
             let num_tools = body.get("tools").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
             tracing::info!("Tools: {} definitions, tool_choice={}", num_tools, tc);
         }
+
+        let response = http::client()
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return Err(ProviderError::Api {
+                status: status.as_u16(),
+                message: text,
+            });
+        }
+
+        let data: serde_json::Value = response.json().await?;
+        parse_openai_response(&data)
+    }
+
+    async fn chat_with_extra(
+        &self,
+        messages: &[Message],
+        tools: Option<&[serde_json::Value]>,
+        model: &str,
+        max_tokens: u32,
+        temperature: f64,
+        extra: &ChatExtra,
+    ) -> Result<CompletionResponse, ProviderError> {
+        let url = format!("{}/chat/completions", self.api_base);
+        let model_name = self.normalize_model(model);
+
+        let msgs: Vec<serde_json::Value> = messages
+            .iter()
+            .map(|m| {
+                let mut msg = json!({
+                    "role": m.role,
+                    "content": m.content.as_deref().unwrap_or(""),
+                });
+                if let Some(ref tc) = m.tool_calls {
+                    msg["tool_calls"] = json!(tc);
+                }
+                if let Some(ref id) = m.tool_call_id {
+                    msg["tool_call_id"] = json!(id);
+                }
+                if let Some(ref name) = m.name {
+                    msg["name"] = json!(name);
+                }
+                msg
+            })
+            .collect();
+
+        let mut body = json!({
+            "model": model_name,
+            "messages": msgs,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        });
+
+        // Apply extra parameters
+        if let Some(top_p) = extra.top_p {
+            body["top_p"] = json!(top_p);
+        }
+        if let Some(fp) = extra.frequency_penalty {
+            body["frequency_penalty"] = json!(fp);
+        }
+        if let Some(pp) = extra.presence_penalty {
+            body["presence_penalty"] = json!(pp);
+        }
+
+        if let Some(tools) = tools {
+            if !tools.is_empty() {
+                body["tools"] = json!(tools);
+                let has_tool_results = messages.iter().any(|m| m.role == crate::types::Role::Tool);
+                body["tool_choice"] = if has_tool_results {
+                    json!("auto")
+                } else {
+                    json!("required")
+                };
+            }
+        }
+
+        debug!("OpenAI-compat request (with extra) to {} with model {}", url, model_name);
 
         let response = http::client()
             .post(&url)

@@ -12,6 +12,14 @@ use async_trait::async_trait;
 use crate::error::ProviderError;
 use crate::types::{CompletionResponse, Message};
 
+/// Extra LLM parameters beyond temperature/max_tokens.
+#[derive(Debug, Clone, Default)]
+pub struct ChatExtra {
+    pub top_p: Option<f64>,
+    pub frequency_penalty: Option<f64>,
+    pub presence_penalty: Option<f64>,
+}
+
 /// Trait for LLM providers.
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
@@ -24,6 +32,20 @@ pub trait LlmProvider: Send + Sync {
         max_tokens: u32,
         temperature: f64,
     ) -> Result<CompletionResponse, ProviderError>;
+
+    /// Send a chat completion request with extra parameters.
+    /// Default implementation ignores extra params and delegates to chat().
+    async fn chat_with_extra(
+        &self,
+        messages: &[Message],
+        tools: Option<&[serde_json::Value]>,
+        model: &str,
+        max_tokens: u32,
+        temperature: f64,
+        _extra: &ChatExtra,
+    ) -> Result<CompletionResponse, ProviderError> {
+        self.chat(messages, tools, model, max_tokens, temperature).await
+    }
 
     /// Get the default model for this provider.
     fn default_model(&self) -> &str;
@@ -101,14 +123,23 @@ impl LoadBalancedProvider {
         // Gemini keys (check both GEMINI_API_KEY and GOOGLE_API_KEY)
         for key in Self::read_keys_multi(&["GEMINI_API_KEY", "GOOGLE_API_KEY"]) {
             providers.push(Arc::new(gemini::GeminiProvider::new(
-                key, None, "gemini-2.0-flash".to_string(),
+                key, None, "gemini-2.5-flash".to_string(),
             )));
         }
 
-        // Groq keys (fast inference)
+        // Groq keys (fast inference) — register multiple models per key
         for key in Self::read_keys("GROQ_API_KEY") {
+            // Primary: llama (groq family)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key, Some("https://api.groq.com/openai/v1".to_string()), "llama-3.3-70b-versatile".to_string(),
+                key.clone(), Some("https://api.groq.com/openai/v1".to_string()), "llama-3.3-70b-versatile".to_string(),
+            )));
+            // Kimi K2 via Groq (kimi family)
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key.clone(), Some("https://api.groq.com/openai/v1".to_string()), "moonshotai/kimi-k2-instruct-0905".to_string(),
+            )));
+            // Qwen3 via Groq (qwen family)
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key, Some("https://api.groq.com/openai/v1".to_string()), "qwen/qwen3-32b".to_string(),
             )));
         }
 
@@ -171,13 +202,17 @@ impl LoadBalancedProvider {
         let req_is_gemini = req_lower.contains("gemini");
         let req_is_groq = req_lower.contains("llama") || req_lower.contains("mixtral") || req_lower.contains("groq");
         let req_is_deepseek = req_lower.contains("deepseek");
+        let req_is_kimi = req_lower.contains("kimi") || req_lower.contains("moonshot");
+        let req_is_qwen = req_lower.contains("qwen");
 
         let prov_is_claude = prov_default.contains("claude") || prov_default.contains("anthropic");
         let prov_is_gemini = prov_default.contains("gemini");
         let prov_is_groq = prov_default.contains("llama") || prov_default.contains("mixtral") || prov_default.contains("groq");
         let prov_is_deepseek = prov_default.contains("deepseek");
+        let prov_is_kimi = prov_default.contains("kimi") || prov_default.contains("moonshot");
+        let prov_is_qwen = prov_default.contains("qwen");
         let prov_is_openrouter = prov_default.contains("openrouter");
-        let prov_is_gpt = !prov_is_claude && !prov_is_gemini && !prov_is_groq && !prov_is_deepseek && !prov_is_openrouter;
+        let prov_is_gpt = !prov_is_claude && !prov_is_gemini && !prov_is_groq && !prov_is_deepseek && !prov_is_kimi && !prov_is_qwen && !prov_is_openrouter;
 
         // Same family → use requested model as-is
         if (req_is_claude && prov_is_claude)
@@ -185,6 +220,8 @@ impl LoadBalancedProvider {
             || (req_is_gemini && prov_is_gemini)
             || (req_is_groq && prov_is_groq)
             || (req_is_deepseek && prov_is_deepseek)
+            || (req_is_kimi && prov_is_kimi)
+            || (req_is_qwen && prov_is_qwen)
         {
             return requested_model.to_string();
         }
@@ -221,6 +258,10 @@ impl LoadBalancedProvider {
                     default.contains("claude") || default.contains("anthropic")
                 } else if model_lower.contains("gemini") {
                     default.contains("gemini")
+                } else if model_lower.contains("kimi") || model_lower.contains("moonshot") {
+                    default.contains("kimi") || default.contains("moonshot")
+                } else if model_lower.contains("qwen") {
+                    default.contains("qwen")
                 } else if model_lower.contains("llama") || model_lower.contains("mixtral") || model_lower.contains("groq") {
                     default.contains("llama") || default.contains("mixtral") || default.contains("groq")
                 } else if model_lower.contains("deepseek") {
@@ -257,6 +298,7 @@ impl LoadBalancedProvider {
                 else if default.contains("gemini") { "gemini" }
                 else if default.contains("llama") || default.contains("groq") { "groq" }
                 else if default.contains("kimi") || default.contains("moonshot") { "kimi" }
+                else if default.contains("qwen") { "qwen" }
                 else if default.contains("openrouter") { continue } // skip openrouter for parallel
                 else { "openai" };
             if seen_families.insert(family) {
@@ -405,6 +447,127 @@ impl LoadBalancedProvider {
         }
         results
     }
+
+    /// Race mode: run all providers in parallel and return ALL results ranked by completion order.
+    /// Each result includes a 1-based rank (1 = fastest / winner).
+    /// Timeout: 10 seconds per model; timed-out models are excluded.
+    pub async fn chat_race(
+        &self,
+        messages: &[Message],
+        tools: Option<&[serde_json::Value]>,
+        max_tokens: u32,
+        temperature: f64,
+    ) -> Vec<RaceResult> {
+        let parallel_models = self.available_parallel_models();
+        let rank_counter = Arc::new(AtomicUsize::new(1));
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<RaceResult>(parallel_models.len() + 1);
+        let msgs = messages.to_vec();
+        let tools_owned: Option<Vec<serde_json::Value>> = tools.map(|t| t.to_vec());
+
+        for (model_name, idx) in &parallel_models {
+            let provider = self.providers[*idx].clone();
+            let model = model_name.clone();
+            let msgs = msgs.clone();
+            let tools = tools_owned.clone();
+            let tx = tx.clone();
+            let rank_counter = rank_counter.clone();
+            tokio::spawn(async move {
+                let start = std::time::Instant::now();
+                let tools_ref = tools.as_deref();
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(10),
+                    provider.chat(&msgs, tools_ref, &model, max_tokens, temperature),
+                ).await {
+                    Ok(Ok(resp)) => {
+                        let elapsed = start.elapsed().as_millis() as u64;
+                        let rank = rank_counter.fetch_add(1, Ordering::SeqCst);
+                        tracing::info!("Race: {} finished rank={} in {}ms", model, rank, elapsed);
+                        let _ = tx.send(RaceResult {
+                            model: model.clone(),
+                            response: resp.content.unwrap_or_default(),
+                            response_time_ms: elapsed,
+                            input_tokens: resp.usage.prompt_tokens,
+                            output_tokens: resp.usage.completion_tokens,
+                            rank,
+                            is_fallback: false,
+                        }).await;
+                    }
+                    Ok(Err(e)) => {
+                        tracing::warn!("Race: {} failed: {}", model, e);
+                    }
+                    Err(_) => {
+                        tracing::warn!("Race: {} timed out (10s)", model);
+                    }
+                }
+            });
+        }
+
+        // Also run local fallback if available
+        #[cfg(feature = "local-fallback")]
+        {
+            if let Some(local_provider) = local::LocalProvider::from_env() {
+                let msgs = msgs.clone();
+                let tx = tx.clone();
+                let rank_counter = rank_counter.clone();
+                tokio::spawn(async move {
+                    let start = std::time::Instant::now();
+                    match local_provider.chat(&msgs, None, "local-qwen3-0.6b", max_tokens.min(512), temperature).await {
+                        Ok(resp) => {
+                            let elapsed = start.elapsed().as_millis() as u64;
+                            let rank = rank_counter.fetch_add(1, Ordering::SeqCst);
+                            let _ = tx.send(RaceResult {
+                                model: "local-qwen3-0.6b".to_string(),
+                                response: resp.content.unwrap_or_default(),
+                                response_time_ms: elapsed,
+                                input_tokens: resp.usage.prompt_tokens,
+                                output_tokens: resp.usage.completion_tokens,
+                                rank,
+                                is_fallback: true,
+                            }).await;
+                        }
+                        Err(e) => {
+                            tracing::warn!("Race: local fallback failed: {}", e);
+                        }
+                    }
+                });
+            }
+        }
+
+        drop(tx);
+
+        let mut results = Vec::new();
+        while let Some(result) = rx.recv().await {
+            results.push(result);
+        }
+        // Sort by rank (completion order)
+        results.sort_by_key(|r| r.rank);
+        results
+    }
+
+    /// Get a specific provider for a single-model tier request.
+    /// Returns (provider, model_name) or None if not found.
+    pub fn get_tier_model(&self, tier: &str) -> Option<(Arc<dyn LlmProvider>, String)> {
+        let target_model = match tier {
+            "economy" => "gemini-2.5-flash",
+            "normal" => "moonshotai/kimi-k2-instruct-0905",
+            "powerful" => "claude-sonnet-4-5-20250929",
+            _ => return None,
+        };
+        let target_lower = target_model.to_lowercase();
+        for (i, p) in self.providers.iter().enumerate() {
+            if p.default_model().to_lowercase() == target_lower {
+                return Some((self.providers[i].clone(), target_model.to_string()));
+            }
+        }
+        // Fallback: try partial match
+        for (i, p) in self.providers.iter().enumerate() {
+            let d = p.default_model().to_lowercase();
+            if target_lower.contains(&d) || d.contains(&target_lower) {
+                return Some((self.providers[i].clone(), target_model.to_string()));
+            }
+        }
+        None
+    }
 }
 
 /// Result from a single model in explore mode.
@@ -415,6 +578,18 @@ pub struct ExploreResult {
     pub response_time_ms: u64,
     pub input_tokens: u32,
     pub output_tokens: u32,
+    pub is_fallback: bool,
+}
+
+/// Result from a single model in race mode (ranked by completion order).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RaceResult {
+    pub model: String,
+    pub response: String,
+    pub response_time_ms: u64,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub rank: usize,
     pub is_fallback: bool,
 }
 

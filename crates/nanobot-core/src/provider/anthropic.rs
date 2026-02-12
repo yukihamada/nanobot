@@ -7,7 +7,7 @@ use crate::error::ProviderError;
 use crate::types::{CompletionResponse, FinishReason, Message, Role, TokenUsage, ToolCall};
 use crate::util::http;
 
-use super::LlmProvider;
+use super::{LlmProvider, ChatExtra};
 
 /// Native Anthropic Messages API provider.
 pub struct AnthropicProvider {
@@ -179,6 +179,71 @@ impl LlmProvider for AnthropicProvider {
         }
 
         debug!("Anthropic request to {} with model {}", url, model_name);
+
+        let response = http::client()
+            .post(&url)
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return Err(ProviderError::Api {
+                status: status.as_u16(),
+                message: text,
+            });
+        }
+
+        let data: serde_json::Value = response.json().await?;
+        self.parse_response(&data)
+    }
+
+    async fn chat_with_extra(
+        &self,
+        messages: &[Message],
+        tools: Option<&[serde_json::Value]>,
+        model: &str,
+        max_tokens: u32,
+        temperature: f64,
+        extra: &ChatExtra,
+    ) -> Result<CompletionResponse, ProviderError> {
+        let url = format!("{}/v1/messages", self.api_base);
+        let model_name = self.normalize_model(model);
+        let (system_prompt, msgs) = self.convert_messages(messages);
+
+        let mut body = json!({
+            "model": model_name,
+            "messages": msgs,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        });
+
+        // Anthropic supports top_p but not frequency/presence penalty
+        if let Some(top_p) = extra.top_p {
+            body["top_p"] = json!(top_p);
+        }
+
+        if let Some(system) = &system_prompt {
+            body["system"] = json!(system);
+        }
+
+        if let Some(tools) = tools {
+            if !tools.is_empty() {
+                body["tools"] = json!(self.convert_tools(tools));
+                let has_tool_results = messages.iter().any(|m| m.role == crate::types::Role::Tool);
+                body["tool_choice"] = if has_tool_results {
+                    json!({"type": "auto"})
+                } else {
+                    json!({"type": "any"})
+                };
+            }
+        }
+
+        debug!("Anthropic request (with extra) to {} with model {}", url, model_name);
 
         let response = http::client()
             .post(&url)
