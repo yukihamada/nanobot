@@ -48,6 +48,24 @@ impl LocalProvider {
         })
     }
 
+    /// Check if the local model is loaded in memory.
+    pub fn is_loaded() -> bool {
+        MODEL.get().is_some()
+    }
+
+    /// Check if a local model is configured (env vars set).
+    pub fn is_configured() -> bool {
+        std::env::var("LOCAL_MODEL_URL")
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Estimate memory usage of the loaded model in MB.
+    /// Qwen3-0.6B Q4_K_M is approximately 350-400 MB.
+    pub fn estimated_memory_mb() -> u64 {
+        if Self::is_loaded() { 350 } else { 0 }
+    }
+
     /// Download a file from URL to /tmp if not already cached.
     async fn download_to_tmp(url: &str, filename: &str) -> Result<PathBuf, ProviderError> {
         let path = PathBuf::from("/tmp").join(filename);

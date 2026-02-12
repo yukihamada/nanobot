@@ -16,7 +16,7 @@
 **Multi-model LLM runtime** with MCP tools, voice I/O, and **14+ channel integrations** --
 all in a single Rust binary that cold-starts in under 50 ms on AWS Lambda.
 
-[Homepage](https://teai.io) &bull; [Live Demo](https://chatweb.ai) &bull; [API Docs](https://chatweb.ai/docs) &bull; [Playground](https://chatweb.ai/playground) &bull; [Status](https://chatweb.ai/status)
+[Live Demo](https://chatweb.ai) &bull; [API Docs](https://chatweb.ai/docs) &bull; [Playground](https://chatweb.ai/playground) &bull; [Status](https://chatweb.ai/status)
 
 </div>
 
@@ -561,7 +561,6 @@ Single-table design with composite keys (`pk` + `sk`):
 
 | Product | Description | Link |
 |---------|-------------|------|
-| **teai.io** | Developer platform and API | [teai.io](https://teai.io) |
 | **chatweb.ai** | Consumer AI assistant (Web, LINE, Telegram) | [chatweb.ai](https://chatweb.ai) |
 | **ElioChat** | Offline-capable iOS AI companion | [App Store](https://apps.apple.com/app/eliochat/id6742071881) |
 

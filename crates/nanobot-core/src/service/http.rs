@@ -1568,6 +1568,8 @@ pub struct ChatRequest {
     pub presence_penalty: Option<f64>,
     /// Custom system prompt addition from user settings
     pub custom_system_prompt: Option<String>,
+    /// Inference mode: "local" (on-device only), "cloud" (remote only), "auto" (default: cloud with local fallback)
+    pub mode: Option<String>,
 }
 
 /// User settings stored in DynamoDB
@@ -1730,6 +1732,9 @@ pub struct ChatResponse {
     /// Estimated cost in USD for this request
     #[serde(skip_serializing_if = "Option::is_none")]
     pub estimated_cost_usd: Option<f64>,
+    /// Inference mode used: "local", "cloud", or "auto"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
 }
 
 /// Response body for errors.
@@ -1962,6 +1967,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/llms.txt", get(handle_llms_txt))
         .route("/llms-full.txt", get(handle_llms_full_txt))
         .route("/.well-known/ai-plugin.json", get(handle_ai_plugin))
+        // Local model status (Wisbee integration)
+        .route("/api/v1/local/status", get(handle_local_status))
         // Health
         .route("/health", get(handle_health))
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1MB max body
@@ -1989,6 +1996,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                         "https://api.chatweb.ai".parse().unwrap(),
                         "https://teai.io".parse().unwrap(),
                         "https://api.teai.io".parse().unwrap(),
+                        "https://wisbee.ai".parse().unwrap(),
+                        "https://api.wisbee.ai".parse().unwrap(),
                     ];
                     // Add custom BASE_URL to CORS if set
                     if let Ok(base) = std::env::var("BASE_URL") {
@@ -2037,11 +2046,122 @@ async fn handle_chat(
             input_tokens: None,
             output_tokens: None,
             estimated_cost_usd: None,
+            mode: None,
         });
     }
 
     let chat_start = std::time::Instant::now();
-    info!("Chat request: session={}, msg_len={}", req.session_id, req.message.len());
+
+    // Resolve inference mode: request field > host-based default > "auto"
+    let chat_host = headers.get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let is_wisbee = chat_host.contains("wisbee.ai");
+    let resolved_mode = match req.mode.as_deref() {
+        Some("local") => "local",
+        Some("cloud") => "cloud",
+        Some("auto") => "auto",
+        None | Some(_) => {
+            // wisbee.ai hosts default to local mode
+            if is_wisbee { "local" } else { "auto" }
+        }
+    };
+    info!("Chat request: session={}, msg_len={}, mode={}, host={}", req.session_id, req.message.len(), resolved_mode, chat_host);
+
+    // --- Local mode: route directly to LocalProvider, no cloud ---
+    #[cfg(feature = "local-fallback")]
+    if resolved_mode == "local" {
+        use crate::provider::local::LocalProvider;
+        match LocalProvider::from_env() {
+            Some(local_provider) => {
+                let messages = vec![
+                    Message::system("You are a helpful local AI assistant (Qwen3-0.6B). Respond concisely."),
+                    Message::user(&req.message),
+                ];
+                match local_provider.chat(&messages, None, "local-qwen3-0.6b", req.max_tokens.unwrap_or(512).min(512), req.temperature.unwrap_or(0.6)).await {
+                    Ok(resp) => {
+                        // Save to session
+                        let session_key = req.session_id.clone();
+                        {
+                            let mut sessions = state.sessions.lock().await;
+                            let session = sessions.get_or_create(&session_key);
+                            session.add_message_from_channel("user", &req.message, "local");
+                            session.add_message_from_channel("assistant", resp.content.as_deref().unwrap_or(""), "local");
+                            sessions.save_by_key(&session_key);
+                        }
+                        return Json(ChatResponse {
+                            response: resp.content.unwrap_or_default(),
+                            session_id: req.session_id,
+                            agent: Some("local".to_string()),
+                            tools_used: None,
+                            credits_used: Some(0),
+                            credits_remaining: None,
+                            model_used: Some("local-qwen3-0.6b".to_string()),
+                            models_consulted: None,
+                            action: None,
+                            input_tokens: Some(resp.usage.prompt_tokens),
+                            output_tokens: Some(resp.usage.completion_tokens),
+                            estimated_cost_usd: Some(0.0),
+                            mode: Some("local".to_string()),
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!("Local mode inference failed: {}", e);
+                        return Json(ChatResponse {
+                            response: format!("Local model error: {}. Please check LOCAL_MODEL_URL configuration.", e),
+                            session_id: req.session_id,
+                            agent: None,
+                            tools_used: None,
+                            credits_used: None,
+                            credits_remaining: None,
+                            model_used: None,
+                            models_consulted: None,
+                            action: None,
+                            input_tokens: None,
+                            output_tokens: None,
+                            estimated_cost_usd: None,
+                            mode: Some("local".to_string()),
+                        });
+                    }
+                }
+            }
+            None => {
+                return Json(ChatResponse {
+                    response: "Local mode requested but local model is not configured. Set LOCAL_MODEL_URL environment variable.".to_string(),
+                    session_id: req.session_id,
+                    agent: None,
+                    tools_used: None,
+                    credits_used: None,
+                    credits_remaining: None,
+                    model_used: None,
+                    models_consulted: None,
+                    action: None,
+                    input_tokens: None,
+                    output_tokens: None,
+                    estimated_cost_usd: None,
+                    mode: Some("local".to_string()),
+                });
+            }
+        }
+    }
+    #[cfg(not(feature = "local-fallback"))]
+    if resolved_mode == "local" {
+        return Json(ChatResponse {
+            response: "Local mode is not available. This build does not include the local-fallback feature.".to_string(),
+            session_id: req.session_id,
+            agent: None,
+            tools_used: None,
+            credits_used: None,
+            credits_remaining: None,
+            model_used: None,
+            models_consulted: None,
+            action: None,
+            input_tokens: None,
+            output_tokens: None,
+            estimated_cost_usd: None,
+            mode: Some("local".to_string()),
+        });
+    }
 
     // Resolve unified session key
     let session_key = {
@@ -2109,6 +2229,7 @@ async fn handle_chat(
                     input_tokens: None,
                     output_tokens: None,
                     estimated_cost_usd: None,
+                    mode: None,
                 });
             }
             super::commands::CommandResult::NotACommand => { /* fall through to LLM */ }
@@ -2131,6 +2252,7 @@ async fn handle_chat(
                 input_tokens: None,
                 output_tokens: None,
                 estimated_cost_usd: None,
+                mode: None,
             });
         }
     };
@@ -2182,6 +2304,7 @@ async fn handle_chat(
                     input_tokens: None,
                     output_tokens: None,
                     estimated_cost_usd: None,
+                    mode: None,
                 });
             }
         }
@@ -2232,6 +2355,7 @@ async fn handle_chat(
             input_tokens: None,
             output_tokens: None,
             estimated_cost_usd: None,
+            mode: None,
         });
     }
     // Decrement on exit via drop guard
@@ -2261,9 +2385,7 @@ async fn handle_chat(
     let memory_context = parallel_memory;
 
     // Detect teai.io host for developer-focused prompt context
-    let chat_host = headers.get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+    // (chat_host already resolved above for mode detection)
     let is_teai = chat_host.contains("teai.io");
 
     let base_prompt = if is_teai {
@@ -2485,6 +2607,7 @@ async fn handle_chat(
                         input_tokens: None,
                         output_tokens: None,
                         estimated_cost_usd: None,
+                        mode: None,
                     });
                 }
             }
@@ -2542,6 +2665,7 @@ async fn handle_chat(
                         input_tokens: None,
                         output_tokens: None,
                         estimated_cost_usd: None,
+                        mode: None,
                     });
                 }
                 Err(e) => {
@@ -2991,6 +3115,7 @@ async fn handle_chat(
         input_tokens: if total_input_tokens > 0 { Some(total_input_tokens) } else { None },
         output_tokens: if total_output_tokens > 0 { Some(total_output_tokens) } else { None },
         estimated_cost_usd: if estimated_cost > 0.0 { Some(estimated_cost) } else { None },
+        mode: Some(resolved_mode.to_string()),
     })
 }
 
@@ -4930,6 +5055,61 @@ async fn handle_chat_stream(
         }
     }
 
+    // Resolve inference mode for streaming endpoint (same logic as handle_chat)
+    let stream_host = headers.get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let is_wisbee_stream = stream_host.contains("wisbee.ai");
+    let stream_mode = match req.mode.as_deref() {
+        Some("local") => "local",
+        Some("cloud") => "cloud",
+        Some("auto") => "auto",
+        None | Some(_) => if is_wisbee_stream { "local" } else { "auto" },
+    };
+
+    // Local mode: run inference locally and return as SSE
+    #[cfg(feature = "local-fallback")]
+    if stream_mode == "local" {
+        use crate::provider::local::LocalProvider;
+        let result = match LocalProvider::from_env() {
+            Some(local_provider) => {
+                let messages = vec![
+                    Message::system("You are a helpful local AI assistant (Qwen3-0.6B). Respond concisely."),
+                    Message::user(&req.message),
+                ];
+                local_provider.chat(&messages, None, "local-qwen3-0.6b", req.max_tokens.unwrap_or(512).min(512), req.temperature.unwrap_or(0.6)).await
+            }
+            None => Err(crate::error::ProviderError::Other("Local model not configured".to_string())),
+        };
+        let event_stream = stream::once(async move {
+            match result {
+                Ok(resp) => Ok::<_, Infallible>(Event::default().data(
+                    serde_json::json!({
+                        "type": "done",
+                        "content": resp.content.unwrap_or_default(),
+                        "model": "local-qwen3-0.6b",
+                        "mode": "local",
+                        "input_tokens": resp.usage.prompt_tokens,
+                        "output_tokens": resp.usage.completion_tokens,
+                    }).to_string()
+                )),
+                Err(e) => Ok::<_, Infallible>(Event::default().data(
+                    serde_json::json!({"type": "error", "content": format!("Local model error: {}", e), "mode": "local"}).to_string()
+                )),
+            }
+        });
+        return Sse::new(event_stream).into_response();
+    }
+    #[cfg(not(feature = "local-fallback"))]
+    if stream_mode == "local" {
+        let event_stream = stream::once(async {
+            Ok::<_, Infallible>(Event::default().data(
+                serde_json::json!({"type": "error", "content": "Local mode not available in this build", "mode": "local"}).to_string()
+            ))
+        });
+        return Sse::new(event_stream).into_response();
+    }
+
     let provider = match state.get_provider() {
         Some(p) => p.clone(),
         None => {
@@ -4947,9 +5127,6 @@ async fn handle_chat_stream(
     info!("Stream agent: {} (score={}) for message", agent.id, agent_score);
 
     // Build messages — agent-specific + host-aware system prompt + memory + meta context
-    let stream_host = headers.get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
     let is_teai = stream_host.contains("teai.io");
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let base_prompt = if is_teai {
@@ -7893,6 +8070,43 @@ async fn handle_health() -> impl IntoResponse {
         status: "ok".to_string(),
         version: crate::VERSION.to_string(),
     })
+}
+
+/// GET /api/v1/local/status — Local model status for Wisbee integration
+async fn handle_local_status() -> impl IntoResponse {
+    #[derive(Serialize)]
+    struct LocalStatus {
+        available: bool,
+        model: &'static str,
+        loaded: bool,
+        memory_usage_mb: u64,
+        capabilities: Vec<&'static str>,
+    }
+
+    #[cfg(feature = "local-fallback")]
+    {
+        use crate::provider::local::LocalProvider;
+        let configured = LocalProvider::is_configured();
+        let loaded = LocalProvider::is_loaded();
+        let memory = LocalProvider::estimated_memory_mb();
+        Json(LocalStatus {
+            available: configured,
+            model: "Qwen3-0.6B-Instruct",
+            loaded,
+            memory_usage_mb: memory,
+            capabilities: vec!["text-generation", "japanese", "english"],
+        })
+    }
+    #[cfg(not(feature = "local-fallback"))]
+    {
+        Json(LocalStatus {
+            available: false,
+            model: "Qwen3-0.6B-Instruct",
+            loaded: false,
+            memory_usage_mb: 0,
+            capabilities: vec!["text-generation", "japanese", "english"],
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -12962,6 +13176,7 @@ mod agent_routing_tests {
             input_tokens: Some(100),
             output_tokens: Some(20),
             estimated_cost_usd: Some(0.001),
+            mode: None,
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"credits_used\":5"));
@@ -12987,6 +13202,7 @@ mod agent_routing_tests {
             input_tokens: None,
             output_tokens: None,
             estimated_cost_usd: None,
+            mode: None,
         };
         let json = serde_json::to_string(&resp).unwrap();
         // Only response and session_id should be present
@@ -13016,6 +13232,7 @@ mod agent_routing_tests {
             input_tokens: Some(500),
             output_tokens: Some(150),
             estimated_cost_usd: Some(0.005),
+            mode: None,
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("web_search"));
