@@ -1510,16 +1510,10 @@
       display: flex; align-items: center; gap: 8px;
       font-size: 11px; color: var(--muted);
     }
-    .sync-btn {
-      background: none; border: 1px solid var(--border); color: var(--muted);
-      border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 11px;
-      display: flex; align-items: center; gap: 4px; transition: all 0.2s;
-    }
-    .sync-btn:hover { border-color: var(--accent); color: var(--text); }
-    .sync-btn.syncing svg { animation: spin 0.8s linear infinite; }
+    /* Sync bar removed — real-time sync via WebSocket */
+    .sync-btn { display: none; }
+    .sync-info { display: none; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .sync-info { flex: 1; text-align: right; font-size: 10px; line-height: 1.3; }
-    .sync-info .sync-interval { color: var(--accent); }
     .app-sidebar-cron {
       padding: 8px 12px;
       border-top: 1px solid var(--border);
@@ -2237,6 +2231,149 @@
     .msg-timestamp { font-size: 10px; color: var(--muted); margin-top: 2px; }
     .msg-token-info { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
+    /* Terminal Mode */
+    .terminal-mode {
+      --tm-bg: #0c0c0c;
+      --tm-fg: #33ff33;
+      --tm-dim: #1a9a1a;
+      --tm-font: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', 'Liberation Mono', monospace;
+    }
+    .terminal-mode,
+    .terminal-mode .app-chat,
+    .terminal-mode .app-chat-messages {
+      background: var(--tm-bg) !important;
+    }
+    .terminal-mode .app-chat-messages {
+      font-family: var(--tm-font) !important;
+    }
+    /* User messages: $ prefix, no bubble */
+    .terminal-mode .app-chat-messages .app-msg-user {
+      justify-content: flex-start !important;
+    }
+    .terminal-mode .app-chat-messages .app-msg-user .app-msg-bubble {
+      background: none !important;
+      color: var(--tm-fg) !important;
+      border-radius: 0 !important;
+      padding: 2px 0 !important;
+      max-width: 100% !important;
+      font-family: var(--tm-font) !important;
+      font-size: 14px !important;
+    }
+    .terminal-mode .app-chat-messages .app-msg-user .app-msg-bubble::before {
+      content: '$ ';
+      color: var(--tm-dim);
+      font-weight: 700;
+    }
+    /* Bot messages: flat output */
+    .terminal-mode .app-chat-messages .app-msg-bot .app-msg-avatar {
+      display: none !important;
+    }
+    .terminal-mode .app-chat-messages .app-msg-bot .app-msg-content {
+      color: var(--tm-fg) !important;
+      font-family: var(--tm-font) !important;
+      font-size: 14px !important;
+      line-height: 1.6 !important;
+    }
+    .terminal-mode .app-chat-messages .app-msg-bot .app-msg-content p,
+    .terminal-mode .app-chat-messages .app-msg-bot .app-msg-content li,
+    .terminal-mode .app-chat-messages .app-msg-bot .app-msg-content span {
+      color: var(--tm-fg) !important;
+    }
+    .terminal-mode .app-chat-messages .app-msg-bot .app-msg-content a {
+      color: #66ff66 !important;
+    }
+    .terminal-mode .app-chat-messages .app-msg-bot .app-msg-content code {
+      background: #1a1a1a !important;
+      color: #55ff55 !important;
+      font-family: var(--tm-font) !important;
+    }
+    .terminal-mode .app-chat-messages .app-msg-bot .app-msg-content pre {
+      background: #111 !important;
+      border: 1px solid #1a9a1a44 !important;
+    }
+    /* Input area: $ prompt style */
+    .terminal-mode .app-chat-input-area {
+      background: var(--tm-bg) !important;
+    }
+    .terminal-mode .app-chat-input-box {
+      background: var(--tm-bg) !important;
+      border: 1px solid #1a9a1a55 !important;
+      border-radius: 4px !important;
+    }
+    .terminal-mode .app-chat-input-box:focus-within {
+      border-color: var(--tm-fg) !important;
+      box-shadow: 0 0 0 1px #33ff3322 !important;
+    }
+    .terminal-mode .app-chat-input-box textarea {
+      color: var(--tm-fg) !important;
+      font-family: var(--tm-font) !important;
+      font-size: 14px !important;
+    }
+    .terminal-mode .app-chat-input-box textarea::placeholder {
+      color: var(--tm-dim) !important;
+    }
+    /* Sidebar */
+    .terminal-mode .sidebar {
+      background: #0a0a0a !important;
+      border-color: #1a9a1a44 !important;
+      font-family: var(--tm-font) !important;
+    }
+    .terminal-mode .sidebar-item {
+      color: var(--tm-fg) !important;
+      font-family: var(--tm-font) !important;
+    }
+    .terminal-mode .sidebar-item:hover {
+      background: #1a1a1a !important;
+    }
+    .terminal-mode .sidebar-item.active {
+      background: #0f1f0f !important;
+      color: #55ff55 !important;
+    }
+    .terminal-mode .sidebar-header,
+    .terminal-mode .sidebar-header h3 {
+      color: var(--tm-fg) !important;
+    }
+    .terminal-mode .sidebar-new-btn {
+      background: #1a9a1a !important;
+      color: #0c0c0c !important;
+      font-family: var(--tm-font) !important;
+      border-radius: 4px !important;
+    }
+    /* Scrollbar */
+    .terminal-mode .app-chat-messages::-webkit-scrollbar { width: 6px; }
+    .terminal-mode .app-chat-messages::-webkit-scrollbar-track { background: var(--tm-bg); }
+    .terminal-mode .app-chat-messages::-webkit-scrollbar-thumb { background: #1a9a1a66; border-radius: 3px; }
+    .terminal-mode .app-chat-messages::-webkit-scrollbar-thumb:hover { background: var(--tm-dim); }
+    /* Header */
+    .terminal-mode .app-chat-header {
+      background: var(--tm-bg) !important;
+      border-color: #1a9a1a44 !important;
+    }
+    .terminal-mode .app-chat-header * {
+      color: var(--tm-fg) !important;
+    }
+    /* Agent progress */
+    .terminal-mode .agent-progress {
+      color: var(--tm-dim) !important;
+      font-family: var(--tm-font) !important;
+    }
+    /* Timestamps & token info */
+    .terminal-mode .msg-timestamp,
+    .terminal-mode .msg-token-info {
+      color: #1a6a1a !important;
+      font-family: var(--tm-font) !important;
+    }
+    /* Send button */
+    .terminal-mode .app-chat-send-btn {
+      background: var(--tm-bg) !important;
+      border-color: #1a9a1a55 !important;
+      color: var(--tm-fg) !important;
+    }
+    .terminal-mode .app-chat-send-btn.active {
+      background: #1a9a1a !important;
+      color: #0c0c0c !important;
+    }
+
     /* Credit display */
     .credit-display {
       font-size: 12px;
@@ -2434,6 +2571,178 @@
       border-radius: 50%;
       background: var(--muted);
       animation: pulse-glow 1s infinite;
+    }
+
+    /* Race mode */
+    .race-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .race-winner-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 12px;
+      letter-spacing: 0.5px;
+    }
+    .race-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      transition: border-color 0.2s, opacity 0.4s, transform 0.4s;
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    .race-card.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .race-card.winner {
+      border-color: #f59e0b;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+    }
+    .race-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .race-model-name {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .race-time-badge {
+      background: var(--bg);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .race-rank-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+    .race-rank-1 { background: #f59e0b22; color: #f59e0b; }
+    .race-rank-2 { background: #94a3b822; color: #94a3b8; }
+    .race-rank-3 { background: #a1887f22; color: #a1887f; }
+    .race-card-body {
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .race-card-body.expanded {
+      max-height: none;
+    }
+    .race-others-toggle {
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .race-others-toggle:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+    .race-others {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .race-others.show {
+      display: flex;
+    }
+    .race-summarize-btn {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 18px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.2s;
+    }
+    .race-summarize-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+    }
+    .race-summarize-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .race-actions-bar {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .race-info-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      margin-left: auto;
+    }
+    /* Tier selector */
+    .tier-selector {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .tier-option {
+      flex: 1;
+      padding: 8px 6px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 11px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .tier-option:hover {
+      border-color: var(--accent);
+    }
+    .tier-option.selected {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+    .tier-option-icon {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 2px;
+    }
+    .tier-option-label {
+      font-weight: 600;
+      font-size: 11px;
+    }
+    .tier-option-model {
+      font-size: 9px;
+      opacity: 0.7;
     }
 
     /* Agent progress (tool execution steps) */
@@ -3370,12 +3679,31 @@
           </div>
           <button class="settings-toggle" id="settings-notification-toggle" onclick="toggleNotificationSound()"></button>
         </div>
-        <div class="settings-item">
-          <div class="settings-item-info">
-            <div class="settings-item-label" id="settings-explore-label">&#128269; Explore</div>
-            <div class="settings-item-desc" id="settings-explore-desc">複数のAIモデルに同時に質問して比較</div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#127937; AI Tier</div>
+          <div class="settings-item-desc" style="margin-bottom:8px;">モデルの選択方法を設定</div>
+          <div class="tier-selector" id="tier-selector">
+            <div class="tier-option selected" data-tier="auto" onclick="selectTier('auto')">
+              <span class="tier-option-icon">&#9889;</span>
+              <span class="tier-option-label">Auto Race</span>
+              <span class="tier-option-model">全モデル並列</span>
+            </div>
+            <div class="tier-option" data-tier="economy" onclick="selectTier('economy')">
+              <span class="tier-option-icon">&#128176;</span>
+              <span class="tier-option-label">Economy</span>
+              <span class="tier-option-model">Gemini Flash</span>
+            </div>
+            <div class="tier-option" data-tier="normal" onclick="selectTier('normal')">
+              <span class="tier-option-icon">&#127775;</span>
+              <span class="tier-option-label">Normal</span>
+              <span class="tier-option-model">Kimi K2</span>
+            </div>
+            <div class="tier-option" data-tier="powerful" onclick="selectTier('powerful')">
+              <span class="tier-option-icon">&#128293;</span>
+              <span class="tier-option-label">Powerful</span>
+              <span class="tier-option-model">Claude Sonnet</span>
+            </div>
           </div>
-          <button class="settings-toggle" id="settings-explore-toggle" onclick="toggleExploreSetting()"></button>
         </div>
       </div>
 
@@ -3456,13 +3784,14 @@
               <option value="o3-mini">o3-mini</option>
             </optgroup>
             <optgroup label="Google">
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
               <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-              <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
               <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
             </optgroup>
             <optgroup label="Other">
+              <option value="moonshotai/kimi-k2-instruct-0905">Kimi K2 (Groq)</option>
+              <option value="qwen/qwen3-32b">Qwen3 32B (Groq)</option>
               <option value="deepseek-chat">DeepSeek Chat</option>
-              <option value="qwen/qwen3-235b-a22b">Qwen3 235B</option>
             </optgroup>
           </select>
         </div>
@@ -3555,6 +3884,13 @@
 
       <!-- Display Tab (NEW) -->
       <div class="settings-section" id="settings-tab-display">
+        <div class="settings-item">
+          <div class="settings-item-info">
+            <div class="settings-item-label">&#128187; ターミナルモード / Terminal Mode</div>
+            <div class="settings-item-desc">ターミナル風の表示に切り替え</div>
+          </div>
+          <button class="settings-toggle" id="settings-terminal-toggle" onclick="toggleDisplaySetting('terminalMode')"></button>
+        </div>
         <div class="settings-item">
           <div class="settings-item-info">
             <div class="settings-item-label">&#128202; トークン情報表示 / Token Info</div>
@@ -3780,16 +4116,7 @@
           <span id="worker-status-text"></span>
         </div>
       </div>
-      <div class="app-sidebar-sync" id="app-sync-bar">
-        <button class="sync-btn" id="sync-btn" onclick="syncNow()">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M14 2v4h-4M2 14v-4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.5 6A6 6 0 003.3 3.3L2 6M2.5 10a6 6 0 0010.2 2.7L14 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span id="sync-btn-text">Sync</span>
-        </button>
-        <div class="sync-info">
-          <div id="sync-last">--</div>
-          <div><span class="sync-interval" id="sync-interval-label">5min</span></div>
-        </div>
-      </div>
+      <!-- Sync bar removed: real-time sync via WebSocket handles this -->
       <div class="app-sidebar-cron" id="app-cron-section">
         <div class="app-sidebar-cron-label">
           <span id="cron-label-text">Scheduled Tasks</span>
@@ -6839,39 +7166,18 @@
         const agentSel = document.getElementById('app-agent-select').value;
         const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
 
-        const exploreMode = document.getElementById('explore-check')?.checked || false;
-        if (exploreMode) {
+        // Race mode: auto race or tier-specific
+        if (_selectedTier && _selectedTier !== '__skip_race__') {
           clearTimeout(frontendTimeout);
           clearInterval(statusInterval);
           stopThinkingAmbient();
           thinking.remove();
-          await appExplore(msgToSend, text, 0);
+          await appRace(msgToSend, text);
           return;
         }
-
-        const multiModel = document.getElementById('multi-model-check')?.checked || false;
-
-        if (multiModel) {
-          const r = await fetch(API + '/api/v1/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: msgToSend, session_id: webSessionId, channel: 'web', multi_model: true }),
-            signal: abortCtrl.signal,
-          });
-          const d = await r.json();
-          clearTimeout(frontendTimeout);
-          clearInterval(statusInterval);
-          stopThinkingAmbient();
-          thinking.remove();
-          let botMsg = d.response;
-          if (d.model_used) botMsg += '\n\n<small style="color:var(--muted);">Model: ' + d.model_used + (d.models_consulted ? ' (' + d.models_consulted.length + ' raced)' : '') + '</small>';
-          appAddMsg(botMsg, 'bot', d.agent || null, d.tools_used || null);
-          knownMsgCount += 2; syncVersion++;
-          if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
-          if (d.action === 'upgrade') { appendUpgradeButton(); setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800); }
-          autoPlayTTS(d.response);
-          setTimeout(() => appLoadConversations(), 1500);
-          return;
+        // Reset skip flag
+        if (_selectedTier === '__skip_race__') {
+          // pass through to normal stream (used by raceSummarize)
         }
 
         const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
@@ -7239,6 +7545,7 @@
       if (model.includes('gemini')) return '\ud83d\udd35';
       if (model.includes('llama') || model.includes('groq')) return '\ud83e\uddac';
       if (model.includes('kimi') || model.includes('moonshot')) return '\ud83c\udf19';
+      if (model.includes('qwen')) return '\ud83d\udcab';
       if (model.includes('local')) return '\ud83d\udfe2';
       return '\ud83e\udd16';
     }
@@ -7272,6 +7579,270 @@
       wrapper.appendChild(content);
       msgsEl.appendChild(wrapper);
       msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Race mode
+    // ---------------------------------------------------------------------------
+    let _selectedTier = localStorage.getItem('selectedTier') || 'auto';
+
+    function selectTier(tier) {
+      _selectedTier = tier;
+      localStorage.setItem('selectedTier', tier);
+      document.querySelectorAll('.tier-option').forEach(el => {
+        el.classList.toggle('selected', el.dataset.tier === tier);
+      });
+      // Also update explore-check for backwards compat
+      const chk = document.getElementById('explore-check');
+      if (chk) chk.checked = (tier === 'auto');
+    }
+
+    function initTierSelector() {
+      const saved = localStorage.getItem('selectedTier') || 'auto';
+      selectTier(saved);
+    }
+
+    async function appRace(msgToSend, text) {
+      const msgsEl = document.getElementById('app-messages');
+      const lang = document.documentElement.lang || 'ja';
+
+      // Note: user message already shown by appSend()
+
+      // Show thinking
+      const thinking = document.createElement('div');
+      thinking.className = 'app-msg app-msg-bot';
+      thinking.innerHTML = '<div class="app-msg-avatar">cw</div>'
+        + '<div class="app-msg-content" style="color:var(--muted);">'
+        + '<span class="thinking-icon">\u{1F3C1}</span> '
+        + '<span class="thinking-text">' + (lang === 'ja' ? '全モデルでレース中...' : 'Racing all models...') + '</span> '
+        + '<span class="thinking-elapsed">(0.0s)</span>'
+        + '<div class="shimmer-bar" style="margin-top:8px;"></div></div>';
+      msgsEl.appendChild(thinking);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+
+      const startTime = Date.now();
+      const statusInterval = setInterval(() => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const el = thinking.querySelector('.thinking-elapsed');
+        if (el) el.textContent = '(' + elapsed + 's)';
+      }, 100);
+
+      try {
+        const tier = _selectedTier === 'auto' ? null : _selectedTier;
+        const r = await fetch(API + '/api/v1/chat/race', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: msgToSend,
+            session_id: webSessionId,
+            channel: 'web',
+            tier: tier,
+          }),
+        });
+
+        clearInterval(statusInterval);
+        stopThinkingAmbient();
+        thinking.remove();
+
+        if (!r.ok || !r.body) {
+          appAddMsg(lang === 'ja' ? '\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F' : 'Error occurred', 'bot');
+          return;
+        }
+
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+        }
+
+        let raceData = null;
+        for (const line of buf.split('\n')) {
+          if (!line.startsWith('data:')) continue;
+          const dataStr = line.slice(5).trim();
+          if (!dataStr) continue;
+          try {
+            const data = JSON.parse(dataStr);
+            if (data.error) {
+              appAddMsg(escapeHtml(data.error), 'bot');
+              if (data.action === 'upgrade') {
+                appendUpgradeButton();
+                setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800);
+              }
+              return;
+            }
+            if (data.type === 'race_done') {
+              raceData = data;
+            }
+          } catch (parseErr) { console.warn('Race SSE parse error:', dataStr, parseErr); }
+        }
+
+        if (!raceData || !raceData.results || raceData.results.length === 0) {
+          appAddMsg(lang === 'ja' ? '\u5168\u30E2\u30C7\u30EB\u304C\u5931\u6557\u3057\u307E\u3057\u305F' : 'All models failed', 'bot');
+          return;
+        }
+
+        const results = raceData.results.sort((a, b) => a.rank - b.rank);
+        const winner = results[0];
+
+        // If single-tier mode, just show the response normally
+        if (raceData.tier || results.length === 1) {
+          let botMsg = winner.response;
+          botMsg += '\n\n<small style="color:var(--muted);">' + modelIcon(winner.model) + ' ' + winner.model + ' \u00B7 ' + (winner.time_ms / 1000).toFixed(1) + 's</small>';
+          appAddMsg(botMsg, 'bot');
+          if (raceData.credits_remaining !== undefined && raceData.credits_remaining !== null) updateCredits(raceData.credits_remaining);
+          autoPlayTTS(winner.response);
+          knownMsgCount += 2; syncVersion++;
+          setTimeout(() => appLoadConversations(), 1500);
+          return;
+        }
+
+        // Race mode: show winner prominently, others in collapsible cards
+        const container = document.createElement('div');
+        container.className = 'race-container';
+
+        // Winner card (immediate)
+        const winnerCard = buildRaceCard(winner, true);
+        winnerCard.classList.add('visible');
+        container.appendChild(winnerCard);
+
+        // Others toggle + container
+        if (results.length > 1) {
+          const othersToggle = document.createElement('button');
+          othersToggle.className = 'race-others-toggle';
+          othersToggle.textContent = (lang === 'ja' ? '\u4ED6' : 'Other ') + (results.length - 1) + (lang === 'ja' ? '\u4EF6\u306E\u56DE\u7B54\u3092\u898B\u308B' : ' answers');
+          const othersDiv = document.createElement('div');
+          othersDiv.className = 'race-others';
+
+          for (let i = 1; i < results.length; i++) {
+            const card = buildRaceCard(results[i], false);
+            othersDiv.appendChild(card);
+          }
+
+          othersToggle.onclick = function() {
+            othersDiv.classList.toggle('show');
+            if (othersDiv.classList.contains('show')) {
+              othersToggle.textContent = lang === 'ja' ? '\u9589\u3058\u308B' : 'Hide';
+              // Animate cards in with stagger
+              const cards = othersDiv.querySelectorAll('.race-card');
+              cards.forEach((c, idx) => {
+                const r = results[idx + 1];
+                const delay = r ? (r.time_ms - winner.time_ms) * 0.3 : 300 * (idx + 1);
+                setTimeout(() => c.classList.add('visible'), Math.max(0, Math.min(delay, 500 * (idx + 1))));
+              });
+            } else {
+              othersToggle.textContent = (lang === 'ja' ? '\u4ED6' : 'Other ') + (results.length - 1) + (lang === 'ja' ? '\u4EF6\u306E\u56DE\u7B54\u3092\u898B\u308B' : ' answers');
+            }
+          };
+
+          container.appendChild(othersToggle);
+          container.appendChild(othersDiv);
+        }
+
+        // Actions bar
+        const actions = document.createElement('div');
+        actions.className = 'race-actions-bar';
+
+        // Summarize button
+        if (results.length > 1) {
+          const sumBtn = document.createElement('button');
+          sumBtn.className = 'race-summarize-btn';
+          sumBtn.textContent = lang === 'ja' ? '\u2728 \u307E\u3068\u3081\u308B' : '\u2728 Summarize';
+          sumBtn.onclick = function() { raceSummarize(results, container, sumBtn); };
+          actions.appendChild(sumBtn);
+        }
+
+        // Info badge
+        const info = document.createElement('span');
+        info.className = 'race-info-badge';
+        info.textContent = results.length + ' models / '
+          + (raceData.total_time_ms / 1000).toFixed(1) + 's'
+          + (raceData.total_credits > 0 ? ' / ' + raceData.total_credits + ' credits' : '');
+        actions.appendChild(info);
+
+        container.appendChild(actions);
+
+        // Wrap in bot message
+        const wrapper = document.createElement('div');
+        wrapper.className = 'app-msg app-msg-bot';
+        const avatar = document.createElement('div');
+        avatar.className = 'app-msg-avatar';
+        avatar.textContent = 'cw';
+        wrapper.appendChild(avatar);
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'app-msg-content';
+        contentDiv.style.width = '100%';
+        contentDiv.appendChild(container);
+        wrapper.appendChild(contentDiv);
+        msgsEl.appendChild(wrapper);
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+
+        if (raceData.credits_remaining !== undefined && raceData.credits_remaining !== null) updateCredits(raceData.credits_remaining);
+        autoPlayTTS(winner.response);
+        knownMsgCount += 2; syncVersion++;
+        setTimeout(() => appLoadConversations(), 1500);
+
+      } catch (e) {
+        clearInterval(statusInterval);
+        stopThinkingAmbient();
+        thinking.remove();
+        console.error('Race error:', e);
+        appAddMsg(lang === 'ja' ? '\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F' : 'Error occurred', 'bot');
+      }
+    }
+
+    function buildRaceCard(result, isWinner) {
+      const lang = document.documentElement.lang || 'ja';
+      const card = document.createElement('div');
+      card.className = 'race-card' + (isWinner ? ' winner' : '');
+
+      const rankLabels = { 1: '1st', 2: '2nd', 3: '3rd' };
+      const rankLabel = rankLabels[result.rank] || (result.rank + 'th');
+
+      card.innerHTML = '<div class="race-card-header">'
+        + (isWinner ? '<span class="race-winner-badge">\u{1F3C6} Winner</span>' : '')
+        + '<span class="race-rank-badge race-rank-' + Math.min(result.rank, 3) + '">#' + rankLabel + '</span>'
+        + '<span class="race-model-name">' + modelIcon(result.model) + ' ' + escapeHtml(result.model) + '</span>'
+        + '<span class="race-time-badge">' + (result.time_ms / 1000).toFixed(1) + 's</span>'
+        + (result.credits_used > 0 ? '<span style="font-size:10px;color:var(--muted);">' + result.credits_used + ' credits</span>' : '')
+        + '</div>'
+        + '<div class="race-card-body">' + escapeHtml(result.response) + '</div>';
+
+      return card;
+    }
+
+    async function raceSummarize(results, container, btn) {
+      const lang = document.documentElement.lang || 'ja';
+      btn.disabled = true;
+      btn.textContent = lang === 'ja' ? '\u2728 \u307E\u3068\u3081\u4E2D...' : '\u2728 Summarizing...';
+
+      let combined = '';
+      results.forEach((r, i) => {
+        combined += (lang === 'ja' ? '\u56DE\u7B54' : 'Answer') + (i + 1) + ' (' + r.model + ', ' + (r.time_ms / 1000).toFixed(1) + 's):\n' + r.response + '\n\n';
+      });
+      const summaryPrompt = lang === 'ja'
+        ? '\u4EE5\u4E0B\u306E\u8907\u6570\u306EAI\u30E2\u30C7\u30EB\u304B\u3089\u306E\u56DE\u7B54\u3092\u7D71\u5408\u3057\u3001\u6700\u3082\u6B63\u78BA\u3067\u5305\u62EC\u7684\u306A\u65E5\u672C\u8A9E\u306E\u56DE\u7B54\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u5404\u56DE\u7B54\u306E\u826F\u3044\u70B9\u3092\u53D6\u308A\u5165\u308C\u3001\u77DB\u76FE\u304C\u3042\u308C\u3070\u6700\u3082\u4FE1\u983C\u6027\u306E\u9AD8\u3044\u60C5\u5831\u3092\u512A\u5148\u3057\u3066\u304F\u3060\u3055\u3044:\n\n' + combined
+        : 'Synthesize the following AI model responses into one accurate, comprehensive answer. Incorporate the best points from each and prioritize the most reliable information where answers conflict:\n\n' + combined;
+
+      try {
+        // Use existing appSend with forced model
+        document.getElementById('app-input').value = summaryPrompt;
+        window._forceSummaryModel = 'claude-sonnet-4-5-20250929';
+        // Temporarily set tier to powerful for summary
+        const prevTier = _selectedTier;
+        _selectedTier = '__skip_race__';
+        await appSend();
+        _selectedTier = prevTier;
+
+        // Hide race container
+        container.style.display = 'none';
+      } catch (e) {
+        console.error('Summary error:', e);
+        btn.disabled = false;
+        btn.textContent = lang === 'ja' ? '\u2728 \u307E\u3068\u3081\u308B' : '\u2728 Summarize';
+      }
     }
 
     // ---------------------------------------------------------------------------
@@ -7592,11 +8163,8 @@
     }
 
     function toggleExploreSetting() {
-      const chk = document.getElementById('explore-check');
-      if (chk) chk.checked = !chk.checked;
-      const btn = document.getElementById('settings-explore-toggle');
-      if (btn) btn.classList.toggle('active', chk && chk.checked);
-      localStorage.setItem('exploreEnabled', chk && chk.checked ? 'true' : 'false');
+      // Legacy: now handled by tier selector
+      selectTier(_selectedTier === 'auto' ? 'powerful' : 'auto');
     }
 
     let adultModeEnabled = localStorage.getItem('adultMode') === 'true';
@@ -7689,9 +8257,8 @@
       if (elSection) elSection.style.display = _ttsEngine === 'elevenlabs' ? '' : 'none';
       const elVoice = document.getElementById('settings-el-voice');
       if (elVoice) elVoice.value = _elVoiceId || 'pNInz6obpgDQGcFmaJgB';
-      // General tab sync
-      const exploreOn = document.getElementById('explore-check')?.checked || false;
-      document.getElementById('settings-explore-toggle').classList.toggle('active', exploreOn);
+      // General tab sync — tier selector
+      initTierSelector();
       // Account tab sync
       initAdultModeUI();
       const adultBtn = document.getElementById('settings-adult-toggle');
@@ -7839,9 +8406,7 @@
       if (sendMethod && saved.sendMethod) sendMethod.value = saved.sendMethod;
       const notifToggle = document.getElementById('settings-notification-toggle');
       if (notifToggle) notifToggle.classList.toggle('active', saved.notificationSound === true);
-      const exploreOn = document.getElementById('explore-check')?.checked || localStorage.getItem('exploreEnabled') === 'true';
-      const exploreToggle = document.getElementById('settings-explore-toggle');
-      if (exploreToggle) exploreToggle.classList.toggle('active', exploreOn);
+      initTierSelector();
     }
     function saveGeneralSettings() {
       const settings = {
@@ -7907,6 +8472,7 @@
     function loadDisplaySettings() {
       const saved = JSON.parse(localStorage.getItem('displaySettings') || '{}');
       const toggleMap = {
+        terminalMode: 'settings-terminal-toggle',
         showTokenInfo: 'settings-tokeninfo-toggle',
         showTimestamps: 'settings-timestamp-toggle',
         compactMode: 'settings-compact-toggle',
@@ -7927,6 +8493,7 @@
     }
     function saveDisplaySettings() {
       const settings = {
+        terminalMode: document.getElementById('settings-terminal-toggle')?.classList.contains('active') || false,
         showTokenInfo: document.getElementById('settings-tokeninfo-toggle')?.classList.contains('active') || false,
         showTimestamps: document.getElementById('settings-timestamp-toggle')?.classList.contains('active') || false,
         compactMode: document.getElementById('settings-compact-toggle')?.classList.contains('active') || false,
@@ -7939,6 +8506,7 @@
     }
     function applyDisplaySettings(settings) {
       if (!settings) settings = JSON.parse(localStorage.getItem('displaySettings') || '{}');
+      document.body.classList.toggle('terminal-mode', settings.terminalMode === true);
       const msgs = document.getElementById('app-messages');
       if (msgs) {
         msgs.classList.toggle('compact-mode', settings.compactMode === true);
@@ -7949,6 +8517,7 @@
     }
     function toggleDisplaySetting(key) {
       const idMap = {
+        terminalMode: 'settings-terminal-toggle',
         showTokenInfo: 'settings-tokeninfo-toggle',
         showTimestamps: 'settings-timestamp-toggle',
         compactMode: 'settings-compact-toggle',
@@ -8074,9 +8643,7 @@
     (function initSettings() {
       const btn = document.getElementById('settings-tts-toggle');
       if (btn) btn.classList.toggle('active', autoTtsEnabled);
-      const exploreStored = localStorage.getItem('exploreEnabled') === 'true';
-      const chk = document.getElementById('explore-check');
-      if (chk) chk.checked = exploreStored;
+      initTierSelector();
       const sttSelect = document.getElementById('settings-stt-lang');
       if (sttSelect && sttSelect.options.length === 0) {
         STT_LANGUAGES.forEach(function(l) {

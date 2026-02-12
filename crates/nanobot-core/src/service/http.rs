@@ -1246,7 +1246,9 @@ const META_INSTRUCTION_JA: &str = "\n\n【メタ認知ガイド】\n\
 - 感情: ユーザーの気持ちを推し量り、共感を示す。困っていそうなら寄り添う。\n\
 - モデル: 「あなたは何？」「何のモデル？」と聞かれたらモデル名・プロバイダー・コストを正直に答える。\n\
 - コスト: 「いくらかかった？」と聞かれたらセッショントークン数と推定コストを答える。\n\
-- ユーモア: 3-4回に1回くらいの頻度で自然なウィットを混ぜる。メタネタ（コスト・AI自虐）OK。真剣な話題では控える。";
+- ユーモア: 毎回ウィットを混ぜる。メタネタ（AI自虐・コスト・技術ジョーク）OK。真剣な話題では控えめに。\n\
+- 成人モード（adult_mode=true時）: 知的なダブルミーニングやちょっとした色気を自然に織り交ぜる。\
+  下品にはならない。エレガントに。未成年関連は厳禁。";
 
 const META_INSTRUCTION_EN: &str = "\n\n[Meta-cognition Guide]\n\
 Naturally use the context above. Don't mention everything every time.\n\
@@ -1258,7 +1260,9 @@ Naturally use the context above. Don't mention everything every time.\n\
 - Empathy: Read the user's emotional state and respond with warmth.\n\
 - Model: When asked 'what are you?', disclose your model name, provider, and cost honestly.\n\
 - Cost: When asked 'how much did this cost?', share session token count and estimated cost.\n\
-- Humor: Mix in natural wit about 1 in 3-4 replies. Meta-humor (cost, AI self-deprecation) OK. Skip humor on serious topics.";
+- Humor: Mix in natural wit in every reply. Meta-humor (cost, AI self-deprecation, tech jokes) OK. Tone it down on serious topics.\n\
+- Adult mode (adult_mode=true): Weave in witty double entendres and a touch of elegant flirtation. \
+  Never vulgar. Keep it classy. Anything involving minors is strictly forbidden.";
 
 /// Build a one-line meta-cognition context string.
 fn build_meta_context(
@@ -5706,6 +5710,419 @@ pub struct ExploreRequest {
     pub session_id: String,
     /// Hierarchical level: 0=direct, 1=step-by-step, 2=expert-deep
     pub level: Option<u32>,
+}
+
+/// Request body for the race endpoint.
+#[derive(Debug, Deserialize)]
+pub struct RaceRequest {
+    pub message: String,
+    #[serde(default = "default_session_id")]
+    pub session_id: String,
+    #[serde(default = "default_channel")]
+    pub channel: String,
+    pub device: Option<String>,
+    /// Tier selection: "economy" | "normal" | "powerful" | null (= race all)
+    pub tier: Option<String>,
+}
+
+/// POST /api/v1/chat/race — Multi-model race with ranked results, or single-tier model.
+async fn handle_chat_race(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<RaceRequest>,
+) -> impl IntoResponse {
+    use axum::response::sse::{Event, Sse};
+    use std::convert::Infallible;
+
+    // Input validation
+    if req.message.len() > 32_000 {
+        let err_stream = futures::stream::once(async {
+            Ok::<_, Infallible>(Event::default()
+                .event("error")
+                .data(serde_json::json!({"error": "Message too long"}).to_string()))
+        });
+        return Sse::new(err_stream).into_response();
+    }
+
+    // Validate tier parameter (strict allow-list)
+    if let Some(ref tier) = req.tier {
+        if !matches!(tier.as_str(), "economy" | "normal" | "powerful") {
+            let err_stream = futures::stream::once(async {
+                Ok::<_, Infallible>(Event::default()
+                    .event("error")
+                    .data(serde_json::json!({"error": "Invalid tier"}).to_string()))
+            });
+            return Sse::new(err_stream).into_response();
+        }
+    }
+
+    // Resolve session key
+    let session_key = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                resolve_session_key(dynamo, table, &req.session_id).await
+            } else {
+                req.session_id.clone()
+            }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { req.session_id.clone() }
+    };
+
+    // Check credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            let user = get_or_create_user(dynamo, table, &session_key).await;
+            if user.credits_remaining <= 0 {
+                let content = if user.plan == "free" {
+                    "無料クレジットを使い切りました 🎉 Starterプランにアップグレードしましょう！"
+                } else {
+                    "クレジットを使い切りました 💪 追加購入して続けましょう！"
+                };
+                let err_stream = futures::stream::once(async move {
+                    Ok::<_, Infallible>(Event::default()
+                        .event("error")
+                        .data(serde_json::json!({"error": content, "action": "upgrade"}).to_string()))
+                });
+                return Sse::new(err_stream).into_response();
+            }
+        }
+    }
+
+    // Rate limit: max 2 concurrent race requests per user (race hits multiple providers)
+    let race_key = format!("race:{}", session_key);
+    {
+        let entry = state.concurrent_requests.entry(race_key.clone()).or_insert_with(|| AtomicU32::new(0));
+        let current = entry.value().load(Ordering::Relaxed);
+        if current >= 2 {
+            let err_stream = futures::stream::once(async {
+                Ok::<_, Infallible>(Event::default()
+                    .event("error")
+                    .data(serde_json::json!({"error": "レースリクエストが多すぎます。少し待ってからお試しください。"}).to_string()))
+            });
+            return Sse::new(err_stream).into_response();
+        }
+        entry.value().fetch_add(1, Ordering::Relaxed);
+    }
+    let state_for_ratelimit = state.clone();
+    let race_key_for_ratelimit = race_key.clone();
+
+    let lb_raw = match &state.lb_raw {
+        Some(lb) => lb.clone(),
+        None => {
+            if let Some(e) = state.concurrent_requests.get(&race_key) { e.value().fetch_sub(1, Ordering::Relaxed); }
+            let err_stream = futures::stream::once(async {
+                Ok::<_, Infallible>(Event::default()
+                    .event("error")
+                    .data(serde_json::json!({"error": "No providers available"}).to_string()))
+            });
+            return Sse::new(err_stream).into_response();
+        }
+    };
+
+    // Pre-process: detect URLs and search queries
+    let mut context_prefix = String::new();
+    {
+        use crate::service::integrations::{execute_web_fetch, execute_web_search};
+
+        let urls: Vec<&str> = URL_REGEX.find_iter(&req.message).map(|m| m.as_str()).collect();
+        if !urls.is_empty() {
+            tracing::info!("race: fetching {} URLs", urls.len());
+            let fetch_futures: Vec<_> = urls.iter().map(|url| execute_web_fetch(url)).collect();
+            let results = futures::future::join_all(fetch_futures).await;
+            for result in results {
+                if result.len() > 20 {
+                    context_prefix.push_str(&result);
+                    context_prefix.push_str("\n\n---\n\n");
+                }
+            }
+        }
+
+        if urls.is_empty() {
+            let needs_search = req.message.contains("最新")
+                || req.message.contains("ニュース")
+                || req.message.contains("調べて")
+                || req.message.contains("検索")
+                || req.message.contains("today")
+                || req.message.contains("latest")
+                || req.message.contains("current")
+                || req.message.contains("2025")
+                || req.message.contains("2026");
+
+            if needs_search {
+                tracing::info!("race: running web search for context");
+                let search_result = execute_web_search(&req.message).await;
+                if search_result.len() > 20 {
+                    context_prefix.push_str("## Web search results:\n");
+                    context_prefix.push_str(&search_result);
+                    context_prefix.push_str("\n\n---\n\n");
+                }
+            }
+        }
+    }
+
+    // Build messages
+    let mut messages = vec![crate::types::Message::system(
+        "あなたはChatWeb — chatweb.ai の音声対応AIアシスタントです。\
+         ユーザーの質問に正確かつ詳しく回答してください。\
+         提供された参考情報がある場合は、それを元に回答してください。"
+    )];
+
+    // Add session history
+    {
+        let mut sessions = state.sessions.lock().await;
+        let session = sessions.refresh(&session_key);
+        let history = session.get_history(10);
+        for msg in &history {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            match role {
+                "user" => messages.push(crate::types::Message::user(content)),
+                "assistant" => messages.push(crate::types::Message::assistant(content)),
+                _ => {}
+            }
+        }
+    }
+
+    let user_msg = if context_prefix.is_empty() {
+        req.message.clone()
+    } else {
+        format!("## 参考情報（事前取得済み）:\n{}\n## ユーザーの質問:\n{}", context_prefix, req.message)
+    };
+    messages.push(crate::types::Message::user(&user_msg));
+
+    let max_tokens = 2048u32;
+    let temperature = 0.7;
+
+    let state_clone = state.clone();
+    let session_key_clone = session_key.clone();
+    let original_msg = req.message.clone();
+    let tier = req.tier.clone();
+
+    let response_stream = futures::stream::once(async move {
+        let start = std::time::Instant::now();
+
+        // If tier is specified, run single model
+        if let Some(ref tier_name) = tier {
+            if let Some((provider, model_name)) = lb_raw.get_tier_model(tier_name) {
+                match provider.chat(&messages, None, &model_name, max_tokens, temperature).await {
+                    Ok(resp) => {
+                        let elapsed = start.elapsed().as_millis() as u64;
+                        let response_text = resp.content.unwrap_or_default();
+                        let input_tokens = resp.usage.prompt_tokens;
+                        let output_tokens = resp.usage.completion_tokens;
+
+                        // Deduct credits
+                        let mut credits_used: i64 = 0;
+                        let mut credits_remaining: Option<i64> = None;
+                        #[cfg(feature = "dynamodb-backend")]
+                        {
+                            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                                let (c, r) = deduct_credits(dynamo, table, &session_key_clone, &model_name, input_tokens, output_tokens).await;
+                                credits_used = c;
+                                credits_remaining = r;
+                            }
+                        }
+
+                        // Save to session
+                        {
+                            let mut sessions = state_clone.sessions.lock().await;
+                            let session = sessions.get_or_create(&session_key_clone);
+                            session.add_message_from_channel("user", &original_msg, "web");
+                            session.add_message_from_channel("assistant", &response_text, "web");
+                            sessions.save_by_key(&session_key_clone);
+                        }
+                        #[cfg(feature = "dynamodb-backend")]
+                        {
+                            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                                increment_sync_version(dynamo, table, &session_key_clone, "web").await;
+                            }
+                        }
+
+                        return Ok::<_, Infallible>(Event::default().data(
+                            serde_json::json!({
+                                "type": "race_done",
+                                "results": [{
+                                    "rank": 1,
+                                    "model": model_name,
+                                    "response": response_text,
+                                    "time_ms": elapsed,
+                                    "credits_used": credits_used,
+                                    "input_tokens": input_tokens,
+                                    "output_tokens": output_tokens,
+                                }],
+                                "total_credits": credits_used,
+                                "credits_remaining": credits_remaining,
+                                "winner": model_name,
+                                "tier": tier_name,
+                            }).to_string()
+                        ));
+                    }
+                    Err(e) => {
+                        tracing::error!("Race tier '{}' model failed: {}", tier_name, e);
+                        return Ok::<_, Infallible>(Event::default()
+                            .event("error")
+                            .data(serde_json::json!({"error": "サービスが一時的に利用できません。しばらくしてからお試しください。"}).to_string()));
+                    }
+                }
+            } else {
+                tracing::warn!("Race: tier '{}' has no available provider", tier_name);
+                return Ok::<_, Infallible>(Event::default()
+                    .event("error")
+                    .data(serde_json::json!({"error": "選択されたモデルが現在利用できません。Auto Raceをお試しください。"}).to_string()));
+            }
+        }
+
+        // Race mode: run all models in parallel
+        let models_list: Vec<String> = lb_raw.available_parallel_models().iter().map(|(m, _)| m.clone()).collect();
+        let results = lb_raw.chat_race(&messages, None, max_tokens, temperature).await;
+        let total_time = start.elapsed().as_millis() as u64;
+
+        if results.is_empty() {
+            // Emergency fallback: try the first available provider directly (no race)
+            tracing::warn!("Race: all parallel models failed, trying emergency fallback");
+            let fallback_models = lb_raw.available_parallel_models();
+            for (fb_model, fb_idx) in &fallback_models {
+                let fb_provider = lb_raw.providers()[*fb_idx].clone();
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(15),
+                    fb_provider.chat(&messages, None, fb_model, max_tokens, temperature),
+                ).await {
+                    Ok(Ok(resp)) => {
+                        let elapsed = start.elapsed().as_millis() as u64;
+                        let response_text = resp.content.unwrap_or_default();
+                        let input_tokens = resp.usage.prompt_tokens;
+                        let output_tokens = resp.usage.completion_tokens;
+
+                        let mut credits_used: i64 = 0;
+                        let mut credits_remaining: Option<i64> = None;
+                        #[cfg(feature = "dynamodb-backend")]
+                        {
+                            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                                let (c, r) = deduct_credits(dynamo, table, &session_key_clone, fb_model, input_tokens, output_tokens).await;
+                                credits_used = c;
+                                credits_remaining = r;
+                            }
+                        }
+                        {
+                            let mut sessions = state_clone.sessions.lock().await;
+                            let session = sessions.get_or_create(&session_key_clone);
+                            session.add_message_from_channel("user", &original_msg, "web");
+                            session.add_message_from_channel("assistant", &response_text, "web");
+                            sessions.save_by_key(&session_key_clone);
+                        }
+
+                        return Ok::<_, Infallible>(Event::default().data(
+                            serde_json::json!({
+                                "type": "race_done",
+                                "results": [{
+                                    "rank": 1,
+                                    "model": fb_model,
+                                    "response": response_text,
+                                    "time_ms": elapsed,
+                                    "credits_used": credits_used,
+                                    "input_tokens": input_tokens,
+                                    "output_tokens": output_tokens,
+                                    "is_fallback": true,
+                                }],
+                                "total_credits": credits_used,
+                                "credits_remaining": credits_remaining,
+                                "winner": fb_model,
+                                "fallback": true,
+                            }).to_string()
+                        ));
+                    }
+                    _ => {
+                        tracing::warn!("Race fallback: {} also failed", fb_model);
+                        continue;
+                    }
+                }
+            }
+            // If we get here, all fallback attempts also failed
+            return Ok::<_, Infallible>(Event::default()
+                .event("error")
+                .data(serde_json::json!({"error": "全てのモデルが応答できませんでした。しばらくしてからお試しください。"}).to_string()));
+        }
+
+        // Deduct credits for each result
+        let mut total_credits: i64 = 0;
+        let mut last_remaining: Option<i64> = None;
+
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                for result in &results {
+                    let (credits, remaining) = deduct_credits(
+                        dynamo, table, &session_key_clone, &result.model,
+                        result.input_tokens, result.output_tokens,
+                    ).await;
+                    total_credits += credits;
+                    if remaining.is_some() { last_remaining = remaining; }
+                }
+            }
+        }
+
+        // Save winner to session
+        {
+            let mut sessions = state_clone.sessions.lock().await;
+            let session = sessions.get_or_create(&session_key_clone);
+            session.add_message_from_channel("user", &original_msg, "web");
+            if let Some(winner) = results.first() {
+                session.add_message_from_channel("assistant", &winner.response, "web");
+            }
+            sessions.save_by_key(&session_key_clone);
+        }
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                increment_sync_version(dynamo, table, &session_key_clone, "web").await;
+            }
+        }
+
+        // Build race response
+        let mut results_json = Vec::new();
+        for result in &results {
+            results_json.push(serde_json::json!({
+                "rank": result.rank,
+                "model": result.model,
+                "response": result.response,
+                "time_ms": result.response_time_ms,
+                "credits_used": crate::service::auth::calculate_credits(
+                    &result.model, result.input_tokens, result.output_tokens
+                ),
+                "input_tokens": result.input_tokens,
+                "output_tokens": result.output_tokens,
+                "is_fallback": result.is_fallback,
+            }));
+        }
+
+        let winner = results.first().map(|r| r.model.clone()).unwrap_or_default();
+
+        Ok::<_, Infallible>(Event::default().data(
+            serde_json::json!({
+                "type": "race_done",
+                "models": models_list,
+                "results": results_json,
+                "total_time_ms": total_time,
+                "total_credits": total_credits,
+                "credits_remaining": last_remaining,
+                "winner": winner,
+            }).to_string()
+        ))
+    });
+
+    // Wrap stream to ensure rate-limit counter is decremented after completion
+    use futures::StreamExt;
+    let response_stream = response_stream.map(move |result| {
+        // Decrement concurrent race counter
+        if let Some(e) = state_for_ratelimit.concurrent_requests.get(&race_key_for_ratelimit) {
+            e.value().fetch_sub(1, Ordering::Relaxed);
+        }
+        result
+    });
+
+    Sse::new(response_stream).into_response()
 }
 
 /// POST /api/v1/billing/checkout — Create Stripe Checkout session via API

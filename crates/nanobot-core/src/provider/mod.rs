@@ -102,6 +102,11 @@ impl LoadBalancedProvider {
         }
     }
 
+    /// Access the underlying providers list (for emergency fallback).
+    pub fn providers(&self) -> &[Arc<dyn LlmProvider>] {
+        &self.providers
+    }
+
     /// Create from environment variables. Reads comma-separated API keys.
     pub fn from_env() -> Option<Self> {
         let mut providers: Vec<Arc<dyn LlmProvider>> = Vec::new();
@@ -547,23 +552,27 @@ impl LoadBalancedProvider {
     /// Get a specific provider for a single-model tier request.
     /// Returns (provider, model_name) or None if not found.
     pub fn get_tier_model(&self, tier: &str) -> Option<(Arc<dyn LlmProvider>, String)> {
-        let target_model = match tier {
-            "economy" => "gemini-2.5-flash",
-            "normal" => "moonshotai/kimi-k2-instruct-0905",
-            "powerful" => "claude-sonnet-4-5-20250929",
+        // Each tier has a fallback chain: primary → secondary → tertiary
+        let candidates: &[&str] = match tier {
+            "economy"  => &["gemini-2.5-flash", "qwen/qwen3-32b", "llama-3.3-70b-versatile"],
+            "normal"   => &["moonshotai/kimi-k2-instruct-0905", "llama-3.3-70b-versatile", "gemini-2.5-flash"],
+            "powerful" => &["claude-sonnet-4-5-20250929", "gpt-4o", "gemini-2.5-flash"],
             _ => return None,
         };
-        let target_lower = target_model.to_lowercase();
-        for (i, p) in self.providers.iter().enumerate() {
-            if p.default_model().to_lowercase() == target_lower {
-                return Some((self.providers[i].clone(), target_model.to_string()));
+        for candidate in candidates {
+            let target_lower = candidate.to_lowercase();
+            // Exact match first
+            for (i, p) in self.providers.iter().enumerate() {
+                if p.default_model().to_lowercase() == target_lower {
+                    return Some((self.providers[i].clone(), candidate.to_string()));
+                }
             }
-        }
-        // Fallback: try partial match
-        for (i, p) in self.providers.iter().enumerate() {
-            let d = p.default_model().to_lowercase();
-            if target_lower.contains(&d) || d.contains(&target_lower) {
-                return Some((self.providers[i].clone(), target_model.to_string()));
+            // Partial match
+            for (i, p) in self.providers.iter().enumerate() {
+                let d = p.default_model().to_lowercase();
+                if target_lower.contains(&d) || d.contains(&target_lower) {
+                    return Some((self.providers[i].clone(), candidate.to_string()));
+                }
             }
         }
         None
