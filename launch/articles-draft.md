@@ -14,7 +14,12 @@
 
 Last year, I was juggling four different AI API keys -- OpenAI, Anthropic, Google, and DeepSeek. Each had its own SDK, authentication flow, rate limits, and error handling. I wanted one interface to rule them all: send a message, get the best response, and let the platform handle model selection, tool calling, and failover.
 
-So I built [teai.io](https://teai.io) (and its consumer-facing sibling [chatweb.ai](https://chatweb.ai)) -- a multi-model AI agent platform written entirely in Rust. It runs on a single AWS Lambda function, serves 14+ channels, and handles everything from web search to voice synthesis. Here's what I learned building it.
+So I built **nanobot** -- a multi-model AI agent platform written entirely in Rust. It powers two products:
+
+- **[teai.io](https://teai.io)** -- Developer-focused AI agent platform with REST API, multi-model orchestration, and tool calling
+- **[chatweb.ai](https://chatweb.ai)** -- Consumer AI assistant with voice-first UX across LINE, Telegram, and Web
+
+Both run on a single AWS Lambda function, serve 14+ channels, and handle everything from web search to voice synthesis. Here's what I learned building it.
 
 ### Architecture: One Lambda to Serve Them All
 
@@ -195,9 +200,13 @@ When you configure models as `openai/gpt-4o` internally (to distinguish provider
 
 ### Try It
 
-- **chatweb.ai** -- Voice-first AI assistant for LINE, Telegram, and Web (Japanese-first, bilingual)
-- **teai.io** -- Developer-focused AI agent platform with REST API
-- **GitHub** -- [github.com/yukihamada/nanobot](https://github.com/yukihamada/nanobot) (source code, MIT license)
+[![GitHub stars](https://img.shields.io/github/stars/yukihamada/nanobot?style=social)](https://github.com/yukihamada/nanobot) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/yukihamada/nanobot/blob/main/LICENSE)
+
+| Product | Use Case | Link |
+|---------|----------|------|
+| **teai.io** | Developer API -- build AI agents with REST endpoints | [teai.io](https://teai.io) |
+| **chatweb.ai** | Consumer assistant -- voice-first AI on LINE, Telegram, Web | [chatweb.ai](https://chatweb.ai) |
+| **GitHub** | Source code (MIT license) | [yukihamada/nanobot](https://github.com/yukihamada/nanobot) |
 
 Quick test:
 
@@ -220,11 +229,16 @@ If you're building AI agents in Rust, I'd love to compare notes. The ecosystem i
 
 **Tags**: Rust, AI, AWS, Lambda, LINE
 
+[![GitHub stars](https://img.shields.io/github/stars/yukihamada/nanobot?style=social)](https://github.com/yukihamada/nanobot) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/yukihamada/nanobot/blob/main/LICENSE) [![Rust](https://img.shields.io/badge/Built_with-Rust-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+
 ---
 
 ### はじめに
 
-[chatweb.ai](https://chatweb.ai) と [teai.io](https://teai.io) というAIプラットフォームをRustで開発しました。chatweb.aiは音声ファーストのAIアシスタント(LINE/Telegram/Web対応)、teai.ioは開発者向けのAIエージェントプラットフォーム(REST API)です。
+**nanobot** というAIエージェント基盤をRustで開発し、2つのプロダクトとして展開しています:
+
+- **[chatweb.ai](https://chatweb.ai)** -- 音声ファーストのAIアシスタント（LINE/Telegram/Web対応、日本語最優先）
+- **[teai.io](https://teai.io)** -- 開発者向けAIエージェントプラットフォーム（REST API、マルチモデル、ツール実行）
 
 なぜRustでAIプラットフォームを作ったのか。理由はシンプルです:
 
@@ -375,6 +389,23 @@ chatweb.ai の特徴は音声ファーストであることです:
 
 Push-to-talk ボタンを押して話すと、音声がテキストに変換され、AIの応答が音声で返ってきます。料理中やジョギング中にAIと会話できる体験を目指しました。
 
+### LINE 連携のユースケース
+
+日本のユーザーにとって LINE は生活インフラです。chatweb.ai の LINE Bot（[@619jcqqh](https://line.me/R/ti/p/@619jcqqh)）では以下のような使い方ができます:
+
+- **通勤中の情報収集**: 「今日の為替は？」→ Web検索ツールで最新データを取得、200字以内で回答
+- **買い物リスト**: 「冷蔵庫にあるものでカレーの材料リスト作って」→ 前回の会話を記憶しているので文脈を理解
+- **翻訳**: 英語のメールをそのまま転送 → 自然な日本語に翻訳して返答
+- **チャネル連携**: Web で始めた会話を LINE で続行。`/link` コマンドで QR コード不要の即時連携
+
+```
+# LINE で /link を送信 → 6桁コードが返る
+# Web チャットで /link ABC123 を送信 → 連携完了
+# 以降、同じ会話がどちらからでもアクセス可能
+```
+
+LINE の200字制限に最適化された応答を返すため、同じ質問でもWeb版とは異なるフォーマットで回答します。絵文字を適度に使い、箇条書きで簡潔に。
+
 ### ハマりポイント
 
 Rust で AI プラットフォームを作る際に踏んだ地雷をまとめます。
@@ -436,9 +467,12 @@ Rust x Lambda は AI プラットフォームに最適な組み合わせです:
 
 試してみてください:
 
-- **chatweb.ai** -- 音声ファースト AI アシスタント (LINE/Telegram/Web)
-- **teai.io** -- 開発者向け AI エージェント (REST API)
-- **GitHub** -- [github.com/yukihamada/nanobot](https://github.com/yukihamada/nanobot)
+| プロダクト | 用途 | リンク |
+|-----------|------|--------|
+| **teai.io** | 開発者向け API -- マルチモデル、ツール実行、SSEストリーミング | [teai.io](https://teai.io) |
+| **chatweb.ai** | 音声ファースト AI -- LINE、Telegram、Web で使える | [chatweb.ai](https://chatweb.ai) |
+| **LINE Bot** | 友だち追加して即利用可能 | [@619jcqqh](https://line.me/R/ti/p/@619jcqqh) |
+| **GitHub** | ソースコード（MIT ライセンス） | [yukihamada/nanobot](https://github.com/yukihamada/nanobot) |
 
 ```bash
 # API を試す

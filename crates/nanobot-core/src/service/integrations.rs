@@ -520,6 +520,7 @@ fn github_client_no_auth() -> reqwest::Client {
         .unwrap_or_default()
 }
 
+#[cfg(feature = "http-api")]
 fn github_client(token: &str) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))

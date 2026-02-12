@@ -16,7 +16,7 @@
 **Multi-model LLM runtime** with MCP tools, voice I/O, and **14+ channel integrations** --
 all in a single Rust binary that cold-starts in under 50 ms on AWS Lambda.
 
-[Live Demo](https://chatweb.ai) &bull; [API Docs](https://chatweb.ai/docs) &bull; [Playground](https://chatweb.ai/playground) &bull; [Status](https://chatweb.ai/status)
+[Live Demo](https://chatweb.ai) &bull; [Developer API](https://teai.io) &bull; [API Docs](https://chatweb.ai/docs) &bull; [Playground](https://chatweb.ai/playground) &bull; [Status](https://chatweb.ai/status)
 
 </div>
 
@@ -166,22 +166,24 @@ flowchart LR
 ### Try the API (no signup required)
 
 ```bash
-# Simple chat
-curl -X POST https://chatweb.ai/api/v1/chat \
+# Simple chat (via teai.io developer API)
+curl -X POST https://teai.io/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Explain quantum computing in 3 sentences", "session_id": "demo"}'
 
 # SSE streaming
-curl -N https://chatweb.ai/api/v1/chat/stream \
+curl -N https://teai.io/api/v1/chat/stream \
   -H "Content-Type: application/json" \
   -d '{"message": "Write a haiku about Rust", "session_id": "demo"}'
 
 # Text-to-speech
-curl -X POST https://chatweb.ai/api/v1/speech/synthesize \
+curl -X POST https://teai.io/api/v1/speech/synthesize \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello from nanobot!", "voice": "nova"}' \
   --output speech.mp3
 ```
+
+> **Note:** Both `teai.io` (developer-focused) and `chatweb.ai` (consumer-focused) share the same API. Use whichever domain suits your use case.
 
 ### Run Locally
 
@@ -561,6 +563,7 @@ Single-table design with composite keys (`pk` + `sk`):
 
 | Product | Description | Link |
 |---------|-------------|------|
+| **teai.io** | Developer-focused AI agent platform & API | [teai.io](https://teai.io) |
 | **chatweb.ai** | Consumer AI assistant (Web, LINE, Telegram) | [chatweb.ai](https://chatweb.ai) |
 | **ElioChat** | Offline-capable iOS AI companion | [App Store](https://apps.apple.com/app/eliochat/id6742071881) |
 
