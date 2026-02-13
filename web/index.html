@@ -6954,15 +6954,39 @@
           const isUser = el.classList.contains('app-msg-user');
           const content = el.querySelector('.app-msg-content, .app-msg-bubble');
           if (content) {
-            const prefix = isUser ? 'Q: ' : 'A: ';
-            texts.push(prefix + content.textContent.trim().substring(0, 100));
+            const txt = content.textContent.trim();
+            if (txt.length > 0) {
+              const prefix = isUser ? 'Q: ' : 'A: ';
+              texts.push(prefix + txt.substring(0, 80));
+            }
           }
         });
-        prevSummary = texts.join(' / ').substring(0, 200);
-        if (texts.join(' / ').length > 200) prevSummary += '...';
+        if (texts.length > 0) {
+          const joined = texts.join(' / ');
+          prevSummary = joined.substring(0, 200);
+          if (joined.length > 200) prevSummary += '...';
+        }
       }
 
-      // Reset UI immediately (works even without auth)
+      // Stop sync polling for old session
+      stopPolling();
+
+      // Finalize current conversation before clearing (fire-and-forget)
+      if (authToken) {
+        finalizeCurrentConversation().catch(function(){});
+      }
+
+      // Reset all state
+      knownMsgCount = 0;
+      syncVersion = 0;
+      _lastSyncTimestamp = null;
+      appCurrentConvId = null;
+
+      // Generate new session ID immediately
+      webSessionId = 'web:' + crypto.randomUUID();
+      localStorage.setItem('webSessionId', webSessionId);
+
+      // Reset UI
       msgsEl.innerHTML = '';
       const l = document.documentElement.lang || 'ja';
       const empty = document.createElement('div');
@@ -6976,20 +7000,14 @@
         + '<div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;"><a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a><a href="/pricing" style="color:var(--muted);text-decoration:none;">Pricing</a></div>';
       msgsEl.appendChild(empty);
       appRenderSuggestions(prevSummary);
-      knownMsgCount = 0;
-      syncVersion = 0;
-      _lastSyncTimestamp = null;
-      appCurrentConvId = null;
       document.getElementById('app-sidebar').classList.remove('open');
 
-      // Generate new session ID locally (works without auth)
-      webSessionId = 'web:' + crypto.randomUUID();
-      localStorage.setItem('webSessionId', webSessionId);
+      // Restart polling with new session ID
+      startPolling();
 
       // If authenticated, also create server-side conversation
       if (authToken) {
         try {
-          await finalizeCurrentConversation();
           const r = await fetch(API + '/api/v1/conversations', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + authToken },
@@ -6999,6 +7017,9 @@
             webSessionId = d.session_id;
             localStorage.setItem('webSessionId', webSessionId);
             appCurrentConvId = d.conversation_id || null;
+            // Restart polling with server session ID
+            stopPolling();
+            startPolling();
             appLoadConversations();
           }
         } catch(e) { /* ignore */ }
@@ -8706,15 +8727,39 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
-    function deleteAllData() {
+    async function deleteAllData() {
       const lang = document.documentElement.lang || 'ja';
       const msg = lang === 'ja'
         ? '全てのデータ（会話履歴、設定）を削除しますか？\nこの操作は取り消せません。'
         : 'Delete all data (conversations, settings)?\nThis cannot be undone.';
       if (!confirm(msg)) return;
-      const authToken = localStorage.getItem('authToken');
+
+      // Delete server-side conversations if authenticated
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        try {
+          const r = await fetch(API + '/api/v1/conversations', {
+            headers: { 'Authorization': 'Bearer ' + token },
+          });
+          const d = await r.json();
+          const convs = d.conversations || [];
+          for (const conv of convs) {
+            await fetch(API + '/api/v1/conversations/' + encodeURIComponent(conv.id), {
+              method: 'DELETE',
+              headers: { 'Authorization': 'Bearer ' + token },
+            }).catch(function(){});
+          }
+        } catch(e) { /* best-effort */ }
+      }
+
+      // Stop polling
+      stopPolling();
+
+      // Clear all local data
       localStorage.clear();
-      if (authToken) localStorage.setItem('authToken', authToken);
+      if (token) localStorage.setItem('authToken', token);
+
+      // Force full reload
       location.reload();
     }
     function handleLogout() {
