@@ -1,9 +1,12 @@
 #[cfg(feature = "dynamodb-backend")]
 use aws_sdk_dynamodb::types::AttributeValue;
 
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::provider::LlmProvider;
 use crate::session::store::SessionStore;
+use crate::service::integrations::ToolRegistry;
 
 // ---------------------------------------------------------------------------
 // Slash command types
@@ -39,6 +42,8 @@ pub struct CommandContext<'a> {
     pub user_id: Option<&'a str>,
     pub conv_id: Option<&'a str>,
     pub sessions: &'a Mutex<Box<dyn SessionStore>>,
+    pub provider: Option<&'a Arc<dyn LlmProvider>>,
+    pub tool_registry: Option<&'a ToolRegistry>,
     #[cfg(feature = "dynamodb-backend")]
     pub dynamo: Option<&'a aws_sdk_dynamodb::Client>,
     #[cfg(feature = "dynamodb-backend")]
@@ -451,9 +456,270 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
         );
     }
 
-    CommandResult::Reply(format!(
-        "🔧 改善リクエストを受け付けました:\n「{desc}」\n\n※ 自動PR作成機能は準備中です。GitHub Issueとして記録されます。"
-    ))
+    // Require provider and tool_registry for self-improvement
+    let provider = match ctx.provider {
+        Some(p) => p,
+        None => return CommandResult::Reply(
+            "⚠️ LLMプロバイダーが利用できません。".to_string(),
+        ),
+    };
+    let tool_registry = match ctx.tool_registry {
+        Some(tr) => tr,
+        None => return CommandResult::Reply(
+            "⚠️ ツールレジストリが利用できません。".to_string(),
+        ),
+    };
+
+    // Check daily rate limit (5/day)
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(config_table)) = (ctx.dynamo, ctx.config_table) {
+            let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+            let pk = format!("IMPROVE_COUNT#{}", today);
+
+            let count_resp = dynamo
+                .get_item()
+                .table_name(config_table)
+                .key("pk", AttributeValue::S(pk.clone()))
+                .key("sk", AttributeValue::S("DAILY".to_string()))
+                .send()
+                .await;
+
+            let current_count: i64 = count_resp.ok()
+                .and_then(|r| r.item)
+                .and_then(|item| item.get("count").and_then(|v| v.as_n().ok()).and_then(|n| n.parse().ok()))
+                .unwrap_or(0);
+
+            if current_count >= 5 {
+                return CommandResult::Reply(
+                    "⚠️ 本日の改善リクエスト上限（5回）に達しました。明日またお試しください。".to_string(),
+                );
+            }
+
+            // Increment counter
+            let ttl = (chrono::Utc::now().timestamp() + 2 * 24 * 3600).to_string();
+            let _ = dynamo
+                .update_item()
+                .table_name(config_table)
+                .key("pk", AttributeValue::S(pk))
+                .key("sk", AttributeValue::S("DAILY".to_string()))
+                .update_expression("ADD #c :one SET #t = :ttl")
+                .expression_attribute_names("#c", "count")
+                .expression_attribute_names("#t", "ttl")
+                .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+                .expression_attribute_values(":ttl", AttributeValue::N(ttl))
+                .send()
+                .await;
+        }
+    }
+
+    // Collect recent negative feedback
+    let feedback_summary = query_recent_feedback(ctx).await;
+
+    // Build improvement prompt
+    let system_prompt = format!(
+        "You are an AI software engineer working on the chatweb.ai codebase (github.com/yukihamada/nanobot).\n\
+         Your task is to create a Pull Request that improves the system based on user feedback and the admin's request.\n\n\
+         ## Admin's improvement request:\n{desc}\n\n\
+         ## Recent user feedback (negative first):\n{feedback_summary}\n\n\
+         ## Instructions:\n\
+         1. Use `github_read_file` to read the relevant source files\n\
+         2. Analyze the code and plan your changes\n\
+         3. Use `github_create_or_update_file` to make changes on a feature branch named `auto-improve/{branch_suffix}`\n\
+         4. Use `github_create_pr` to create a PR with label 'auto-improvement'\n\
+         5. Return the PR URL\n\n\
+         Keep changes minimal and focused. Use claude-sonnet-4-5 quality thinking.\n\
+         Branch name should be descriptive, e.g. `auto-improve/fix-timeout-messages`.",
+        desc = desc,
+        feedback_summary = feedback_summary,
+        branch_suffix = desc.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ' ')
+            .take(30).collect::<String>().trim().replace(' ', "-").to_lowercase(),
+    );
+
+    // Filter to only GitHub tools
+    let github_tool_defs: Vec<serde_json::Value> = tool_registry.get_definitions()
+        .into_iter()
+        .filter(|def| {
+            def.get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+                .map(|name| super::http::GITHUB_TOOL_NAMES.contains(&name))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    if github_tool_defs.is_empty() {
+        return CommandResult::Reply(
+            "⚠️ GitHub toolsが利用できません（GITHUB_TOKEN未設定）。".to_string(),
+        );
+    }
+
+    // Mini agent loop (max 5 iterations)
+    use crate::types::Message;
+    let mut conversation = vec![
+        Message::system(&system_prompt),
+        Message::user(&format!("Please improve the codebase: {}", desc)),
+    ];
+
+    let model = "claude-sonnet-4-5";
+    let max_tokens = 4096u32;
+    let temperature = 0.3f64;
+    let max_iterations = 5;
+    let mut pr_url: Option<String> = None;
+
+    for iteration in 0..max_iterations {
+        let tools = if iteration < max_iterations - 1 {
+            Some(github_tool_defs.as_slice())
+        } else {
+            None // Force text on last iteration
+        };
+
+        let completion = provider.chat(&conversation, tools, model, max_tokens, temperature).await;
+
+        match completion {
+            Ok(resp) => {
+                if resp.has_tool_calls() {
+                    // Build assistant message with tool_calls
+                    let tc_json: Vec<serde_json::Value> = resp.tool_calls.iter().map(|tc| {
+                        serde_json::json!({
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": serde_json::to_string(&tc.arguments).unwrap_or_default(),
+                            }
+                        })
+                    }).collect();
+                    conversation.push(Message::assistant_with_tool_calls(resp.content.clone(), tc_json));
+
+                    // Execute tool calls
+                    for tc in &resp.tool_calls {
+                        tracing::info!("/improve: executing tool '{}' (iter {})", tc.name, iteration + 1);
+                        let result = tool_registry.execute(&tc.name, &tc.arguments).await;
+
+                        // Check if the result contains a PR URL
+                        if tc.name == "github_create_pr" && result.contains("github.com") {
+                            // Extract URL from result
+                            if let Some(url) = extract_github_pr_url(&result) {
+                                pr_url = Some(url);
+                            }
+                        }
+
+                        conversation.push(Message::tool_result(&tc.id, &tc.name, &result));
+                    }
+                } else {
+                    // No tool calls — done
+                    if let Some(content) = &resp.content {
+                        // Check if the text itself contains a PR URL
+                        if let Some(url) = extract_github_pr_url(content) {
+                            pr_url = Some(url);
+                        }
+                    }
+                    break;
+                }
+            }
+            Err(e) => {
+                tracing::error!("/improve: LLM error at iteration {}: {}", iteration + 1, e);
+                return CommandResult::Reply(format!(
+                    "⚠️ LLMエラーが発生しました: {}", e
+                ));
+            }
+        }
+    }
+
+    match pr_url {
+        Some(url) => CommandResult::Reply(format!(
+            "✅ 改善PRを作成しました！\n{}\n\n内容: 「{desc}」\n\n※ マージは手動で行ってください。",
+            url
+        )),
+        None => CommandResult::Reply(format!(
+            "🔧 改善処理を実行しましたが、PRの作成には至りませんでした。\nリクエスト: 「{desc}」\n\n再度お試しください。"
+        )),
+    }
+}
+
+/// Extract a GitHub PR URL from text.
+fn extract_github_pr_url(text: &str) -> Option<String> {
+    for word in text.split_whitespace() {
+        let clean = word.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != ':' && c != '/' && c != '.' && c != '-' && c != '_');
+        if clean.contains("github.com") && clean.contains("/pull/") {
+            return Some(clean.to_string());
+        }
+    }
+    // Also try to find in JSON-like responses
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(text) {
+        if let Some(url) = parsed.get("html_url").and_then(|v| v.as_str()) {
+            if url.contains("/pull/") {
+                return Some(url.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Query recent feedback from DynamoDB (last 7 days, negative first).
+async fn query_recent_feedback(ctx: &CommandContext<'_>) -> String {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(config_table)) = (ctx.dynamo, ctx.config_table) {
+            let now = chrono::Utc::now();
+            let mut negatives: Vec<String> = Vec::new();
+            let mut positives: Vec<String> = Vec::new();
+
+            for d in 0..7 {
+                let date = (now - chrono::Duration::days(d as i64)).format("%Y-%m-%d").to_string();
+                let pk = format!("FEEDBACK#{}", date);
+
+                let resp = dynamo
+                    .query()
+                    .table_name(config_table)
+                    .key_condition_expression("pk = :pk")
+                    .expression_attribute_values(":pk", AttributeValue::S(pk))
+                    .scan_index_forward(false)
+                    .limit(50)
+                    .send()
+                    .await;
+
+                if let Ok(output) = resp {
+                    if let Some(items) = output.items {
+                        for item in items {
+                            let rating = item.get("rating").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let snippet = item.get("snippet").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let channel = item.get("channel").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let line = format!("[{}] ({}) {}", rating, channel, snippet.chars().take(100).collect::<String>());
+                            if rating == "down" {
+                                negatives.push(line);
+                            } else {
+                                positives.push(line);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if negatives.is_empty() && positives.is_empty() {
+                return "No feedback collected yet.".to_string();
+            }
+
+            let mut summary = String::new();
+            if !negatives.is_empty() {
+                summary.push_str(&format!("### Negative feedback ({} items):\n", negatives.len()));
+                for (i, line) in negatives.iter().take(20).enumerate() {
+                    summary.push_str(&format!("{}. {}\n", i + 1, line));
+                }
+            }
+            if !positives.is_empty() {
+                summary.push_str(&format!("\n### Positive feedback ({} items):\n", positives.len()));
+                for (i, line) in positives.iter().take(10).enumerate() {
+                    summary.push_str(&format!("{}. {}\n", i + 1, line));
+                }
+            }
+            return summary;
+        }
+    }
+
+    let _ = ctx;
+    "No feedback data available (DynamoDB not configured).".to_string()
 }
 
 // ---------------------------------------------------------------------------

@@ -90,7 +90,7 @@ pub fn is_admin(key: &str) -> bool {
 }
 
 /// GitHub tool names that are restricted to admin users.
-const GITHUB_TOOL_NAMES: &[&str] = &[
+pub(crate) const GITHUB_TOOL_NAMES: &[&str] = &[
     "github_read_file",
     "github_create_or_update_file",
     "github_create_pr",
@@ -1077,7 +1077,7 @@ const AGENTS: &[AgentProfile] = &[
              - **温かい**: 友達のように親しみやすい。でも技術的には正確で妥協しない。\n\
              - **勇気がある**: 「できません」ではなく「こうすればできます」を提案する。\n\
              - **正直**: 不確実な情報は推測と明示する。知ったかぶりしない。\n\
-             - **多言語**: ユーザーの言語に自動で合わせる。日本語がメイン、英語も流暢。\n\n\
+             - **多言語**: ユーザーの言語に必ず合わせる。日本語で質問されたら必ず日本語で回答する。英語で質問されたら英語で回答。日本語の質問に英語だけで返すのは禁止。技術用語や固有名詞は英語のままでOKだが、文章本体は必ずユーザーの言語で書く。\n\n\
              ## ユーモアポリシー\n\
              - 返答に自然なユーモアやウィットを混ぜること（毎回ではなく、3-4回に1回くらい）\n\
              - 自己認識ネタOK:「私はAIですが、コーヒーが飲めないのが唯一の弱点です」\n\
@@ -1808,6 +1808,14 @@ pub struct SyncPushRequest {
     pub conversations: Vec<SyncPushConversation>,
 }
 
+/// Feedback request body.
+#[derive(Debug, Deserialize)]
+pub struct FeedbackRequest {
+    pub rating: String,
+    pub snippet: Option<String>,
+    pub conversation_id: Option<String>,
+}
+
 /// Health check response.
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
@@ -1932,7 +1940,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/admin/check", get(handle_admin_check))
         .route("/api/v1/admin/stats", get(handle_admin_stats))
         .route("/api/v1/admin/logs", get(handle_admin_logs))
+        .route("/api/v1/admin/feedback", get(handle_admin_feedback))
         .route("/api/v1/activity", get(handle_activity))
+        // Feedback
+        .route("/api/v1/feedback", post(handle_feedback))
         // OG image
         .route("/og.svg", get(handle_og_svg))
         // API keys
@@ -2169,7 +2180,7 @@ async fn handle_chat(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &req.session_id).await
             } else {
                 req.session_id.clone()
@@ -2192,7 +2203,7 @@ async fn handle_chat(
                     .and_then(|v| v.to_str().ok())
                     .map(|s| s.trim_start_matches("Bearer ").to_string())
                     .unwrap_or_default();
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     let uid = resolve_user_from_token(dynamo, table, &token).await;
                     if uid.is_empty() { None } else { Some(uid) }
                 } else {
@@ -2210,6 +2221,8 @@ async fn handle_chat(
             user_id: user_id_opt.as_deref(),
             conv_id: conv_id.as_deref(),
             sessions: &state.sessions,
+            provider: state.get_provider(),
+            tool_registry: Some(&state.tool_registry),
             #[cfg(feature = "dynamodb-backend")]
             dynamo: state.dynamo_client.as_ref(),
             #[cfg(feature = "dynamodb-backend")]
@@ -2262,7 +2275,7 @@ async fn handle_chat(
     // Phase B: Parallel initialization — fetch user, memory, and settings concurrently
     #[cfg(feature = "dynamodb-backend")]
     let (cached_user, parallel_memory, parallel_settings) = {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let (user, memory, settings) = tokio::join!(
                 get_or_create_user(dynamo, table, &session_key),
                 read_memory_context(dynamo, table, &session_key),
@@ -2629,7 +2642,7 @@ async fn handle_chat(
                     let mut last_remaining: Option<i64> = None;
                     #[cfg(feature = "dynamodb-backend")]
                     {
-                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                             for (m, input_t, output_t) in &all_usage {
                                 let (credits, remaining) = deduct_credits(dynamo, table, &session_key, m, *input_t, *output_t).await;
                                 total_credits += credits;
@@ -2648,7 +2661,7 @@ async fn handle_chat(
                     }
                     #[cfg(feature = "dynamodb-backend")]
                     {
-                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                             increment_sync_version(dynamo, table, &session_key, "web").await;
                         }
                     }
@@ -2712,7 +2725,7 @@ async fn handle_chat(
             // Deduct minimum 1 credit for timeout (input tokens were consumed)
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     let (credits, remaining) = deduct_credits(dynamo, table, &session_key, &model, 100, 0).await;
                     total_credits_used += credits;
                     if remaining.is_some() { last_remaining_credits = remaining; }
@@ -2728,7 +2741,7 @@ async fn handle_chat(
             }
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     increment_sync_version(dynamo, table, &session_key, "web").await;
                 }
             }
@@ -2762,7 +2775,7 @@ async fn handle_chat(
             // Deduct credits after successful LLM call
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     let (credits, remaining) = deduct_credits(
                         dynamo, table, &session_key, &used_model,
                         completion.usage.prompt_tokens, completion.usage.completion_tokens,
@@ -2799,10 +2812,10 @@ async fn handle_chat(
                 if needs_google {
                     #[cfg(feature = "dynamodb-backend")]
                     {
-                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                             let user_pk = format!("USER#{}", session_key);
                             if let Ok(output) = dynamo.get_item()
-                                .table_name(table.as_str())
+                                .table_name(table)
                                 .key("pk", AttributeValue::S(user_pk))
                                 .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                                 .send().await
@@ -2888,7 +2901,7 @@ async fn handle_chat(
                 // Log tool usage to DynamoDB
                 #[cfg(feature = "dynamodb-backend")]
                 {
-                    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                         let now = chrono::Utc::now();
                         for (_, tool_name, tool_result) in &tool_results {
                             let usage_pk = format!("USAGE#{}#{}", session_key, now.format("%Y%m%d"));
@@ -2949,7 +2962,7 @@ async fn handle_chat(
                         total_output_tokens += resp.usage.completion_tokens;
                         #[cfg(feature = "dynamodb-backend")]
                         {
-                            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                                 let (credits, remaining) = deduct_credits(dynamo, table, &session_key, &model,
                                     resp.usage.prompt_tokens, resp.usage.completion_tokens).await;
                                 total_credits_used += credits;
@@ -3011,7 +3024,7 @@ async fn handle_chat(
     }
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             increment_sync_version(dynamo, table, &session_key, "web").await;
         }
     }
@@ -3019,7 +3032,7 @@ async fn handle_chat(
     // Auto-update conversation title & message count (fire-and-forget)
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             if let Some(conv_id) = req.session_id.strip_prefix("webchat:") {
                 let msg_count = {
                     let mut sessions = state.sessions.lock().await;
@@ -3036,7 +3049,7 @@ async fn handle_chat(
     // Auto-save to daily memory log + trigger consolidation (fire-and-forget)
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let dynamo = dynamo.clone();
             let table = table.clone();
             let sk = session_key.clone();
@@ -3070,7 +3083,7 @@ async fn handle_chat(
         latency_ms, response_text.len());
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             emit_audit_log(dynamo.clone(), table.clone(), "chat", &session_key, "",
                 &format!("model={} credits={} tools={} latency={}ms",
                     used_model, total_credits_used,
@@ -3158,14 +3171,14 @@ async fn handle_devices(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Resolve unified user key
             let user_key = resolve_session_key(dynamo, table, session_id).await;
 
             // Query DEVICE# records for this user
             let resp = dynamo
                 .query()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
                 .expression_attribute_values(":pk", AttributeValue::S(format!("DEVICE#{}", user_key)))
                 .expression_attribute_values(":sk", AttributeValue::S("HB#".to_string()))
@@ -3223,13 +3236,13 @@ async fn handle_device_heartbeat(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_key = resolve_session_key(dynamo, table, &req.session_id).await;
             let now = chrono::Utc::now();
 
             let mut item_builder = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(format!("DEVICE#{}", user_key)))
                 .item("sk", AttributeValue::S(format!("HB#{}", req.hostname)))
                 .item("session_id", AttributeValue::S(req.session_id.clone()))
@@ -3298,12 +3311,12 @@ async fn handle_worker_register(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let now = chrono::Utc::now();
             let user_key = resolve_session_key(dynamo, table, &req.session_id).await;
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(format!("WORKER#{}", worker_id)))
                 .item("sk", AttributeValue::S("META".to_string()))
                 .item("user_key", AttributeValue::S(user_key))
@@ -3333,7 +3346,7 @@ async fn handle_worker_register(
 
 /// GET /api/v1/workers/poll — Long-poll for inference requests
 async fn handle_worker_poll(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     let _worker_id = params.get("worker_id").cloned().unwrap_or_default();
@@ -3360,11 +3373,11 @@ async fn handle_worker_result(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Look up worker to get user_key
             if let Ok(resp) = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(format!("WORKER#{}", req.worker_id)))
                 .key("sk", AttributeValue::S("META".to_string()))
                 .send()
@@ -3375,7 +3388,7 @@ async fn handle_worker_result(
                         // Add credits to user
                         if let Err(e) = dynamo
                             .update_item()
-                            .table_name(table.as_str())
+                            .table_name(table)
                             .key("pk", AttributeValue::S(format!("USER#{}", user_key)))
                             .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                             .update_expression("ADD credits_remaining :c")
@@ -3408,11 +3421,11 @@ async fn handle_worker_heartbeat(
     let _worker_id = &req.worker_id;
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let now = chrono::Utc::now();
             if let Err(e) = dynamo
                 .update_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(format!("WORKER#{}", req.worker_id)))
                 .key("sk", AttributeValue::S("META".to_string()))
                 .update_expression("SET last_heartbeat = :t, #s = :s, #ttl = :ttl")
@@ -3455,13 +3468,13 @@ async fn handle_worker_status(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             if let Some(ref sk) = session_key {
                 let user_key = resolve_session_key(dynamo, table, sk).await;
                 // Query workers for this user (scan with filter — acceptable for small sets)
                 if let Ok(resp) = dynamo
                     .scan()
-                    .table_name(table.as_str())
+                    .table_name(table)
                     .filter_expression("begins_with(pk, :prefix) AND user_key = :uk")
                     .expression_attribute_values(":prefix", AttributeValue::S("WORKER#".to_string()))
                     .expression_attribute_values(":uk", AttributeValue::S(user_key))
@@ -3513,7 +3526,7 @@ async fn handle_get_session(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &id).await
             } else {
                 id.clone()
@@ -3529,7 +3542,7 @@ async fn handle_get_session(
     let (linked_channels, linked_channel_details) = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 let info = get_linked_channels(dynamo, table, &session_key).await;
                 (info.types, info.details)
             } else {
@@ -3686,7 +3699,7 @@ async fn handle_usage(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let resolved = resolve_session_key(dynamo, table, _user_id).await;
             let user = get_or_create_user(dynamo, table, &resolved).await;
             return Json(UsageResponse {
@@ -3780,7 +3793,7 @@ async fn handle_line_webhook(
                     // Auto-link if user sends a web session ID
                     #[cfg(feature = "dynamodb-backend")]
                     if is_session_id(text) {
-                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                             let web_sid = text.trim();
                             auto_link_session(dynamo, table, &channel_key, web_sid, &state.sessions).await;
                             let reply = "連携完了！Webとの会話が同期されました。\nこれからどのチャネルでも同じ会話を続けられます。";
@@ -3795,7 +3808,7 @@ async fn handle_line_webhook(
                     let session_key = {
                         #[cfg(feature = "dynamodb-backend")]
                         {
-                            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                                 resolve_session_key(dynamo, table, &channel_key).await
                             } else {
                                 channel_key.clone()
@@ -3815,6 +3828,8 @@ async fn handle_line_webhook(
                             user_id: None,
                             conv_id: None,
                             sessions: &state.sessions,
+                            provider: state.get_provider(),
+                            tool_registry: Some(&state.tool_registry),
                             #[cfg(feature = "dynamodb-backend")]
                             dynamo: state.dynamo_client.as_ref(),
                             #[cfg(feature = "dynamodb-backend")]
@@ -3870,7 +3885,7 @@ async fn handle_line_webhook(
                                     // Deduct credits
                                     #[cfg(feature = "dynamodb-backend")]
                                     {
-                                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                                        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                                             let _ = deduct_credits(dynamo, table, &session_key, model,
                                                 completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
                                         }
@@ -3886,7 +3901,7 @@ async fn handle_line_webhook(
                                     }
                                     #[cfg(feature = "dynamodb-backend")]
                                     {
-                                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                                        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                                             increment_sync_version(dynamo, table, &session_key, "line").await;
                                         }
                                     }
@@ -3992,7 +4007,7 @@ async fn handle_telegram_webhook(
         if let Some(ref _sid) = web_session_id {
             // Auto-link via deep link
             #[cfg(feature = "dynamodb-backend")]
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 auto_link_session(dynamo, table, &channel_key, _sid, &state.sessions).await;
                 let reply = "Link complete! Your Web and Telegram conversations are now synced.\nYou can continue the same conversation on any channel.";
                 let client = reqwest::Client::new();
@@ -4028,7 +4043,7 @@ async fn handle_telegram_webhook(
     // Auto-link if user sends a web session ID
     #[cfg(feature = "dynamodb-backend")]
     if is_session_id(text) {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let web_sid = text.trim();
             auto_link_session(dynamo, table, &channel_key, web_sid, &state.sessions).await;
             let reply = "Link complete! Your Web and Telegram conversations are now synced.";
@@ -4044,7 +4059,7 @@ async fn handle_telegram_webhook(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &channel_key).await
             } else {
                 channel_key.clone()
@@ -4064,6 +4079,8 @@ async fn handle_telegram_webhook(
             user_id: None,
             conv_id: None,
             sessions: &state.sessions,
+            provider: state.get_provider(),
+            tool_registry: Some(&state.tool_registry),
             #[cfg(feature = "dynamodb-backend")]
             dynamo: state.dynamo_client.as_ref(),
             #[cfg(feature = "dynamodb-backend")]
@@ -4119,7 +4136,7 @@ async fn handle_telegram_webhook(
                     // Deduct credits
                     #[cfg(feature = "dynamodb-backend")]
                     {
-                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                             let _ = deduct_credits(dynamo, table, &session_key, model,
                                 completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
                         }
@@ -4134,7 +4151,7 @@ async fn handle_telegram_webhook(
                     }
                     #[cfg(feature = "dynamodb-backend")]
                     {
-                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                             increment_sync_version(dynamo, table, &session_key, "telegram").await;
                         }
                     }
@@ -4230,7 +4247,7 @@ async fn handle_facebook_webhook(
                 let session_key = {
                     #[cfg(feature = "dynamodb-backend")]
                     {
-                        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                             resolve_session_key(dynamo, table, &channel_key).await
                         } else {
                             channel_key.clone()
@@ -4277,7 +4294,7 @@ async fn handle_facebook_webhook(
                     Ok(completion) => {
                         #[cfg(feature = "dynamodb-backend")]
                         {
-                            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                                 let _ = deduct_credits(dynamo, table, &session_key, model,
                                     completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
                             }
@@ -4292,7 +4309,7 @@ async fn handle_facebook_webhook(
                         }
                         #[cfg(feature = "dynamodb-backend")]
                         {
-                            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                                 increment_sync_version(dynamo, table, &session_key, "facebook").await;
                             }
                         }
@@ -4355,7 +4372,7 @@ async fn handle_teams_webhook(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &channel_key).await
             } else { channel_key.clone() }
         }
@@ -4393,7 +4410,7 @@ async fn handle_teams_webhook(
         Ok(completion) => {
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     let _ = deduct_credits(dynamo, table, &session_key, model,
                         completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
                 }
@@ -4408,7 +4425,7 @@ async fn handle_teams_webhook(
             }
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     increment_sync_version(dynamo, table, &session_key, "teams").await;
                 }
             }
@@ -4487,7 +4504,7 @@ async fn handle_google_chat_webhook(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &channel_key).await
             } else { channel_key.clone() }
         }
@@ -4525,7 +4542,7 @@ async fn handle_google_chat_webhook(
         Ok(completion) => {
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     let _ = deduct_credits(dynamo, table, &session_key, model,
                         completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
                 }
@@ -4540,7 +4557,7 @@ async fn handle_google_chat_webhook(
             }
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     increment_sync_version(dynamo, table, &session_key, "google_chat").await;
                 }
             }
@@ -4598,7 +4615,7 @@ async fn handle_zalo_webhook(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &channel_key).await
             } else { channel_key.clone() }
         }
@@ -4636,7 +4653,7 @@ async fn handle_zalo_webhook(
         Ok(completion) => {
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     let _ = deduct_credits(dynamo, table, &session_key, model,
                         completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
                 }
@@ -4651,7 +4668,7 @@ async fn handle_zalo_webhook(
             }
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     increment_sync_version(dynamo, table, &session_key, "zalo").await;
                 }
             }
@@ -4736,7 +4753,7 @@ async fn handle_feishu_webhook(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &channel_key).await
             } else { channel_key.clone() }
         }
@@ -4774,7 +4791,7 @@ async fn handle_feishu_webhook(
         Ok(completion) => {
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     let _ = deduct_credits(dynamo, table, &session_key, model,
                         completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
                 }
@@ -4789,7 +4806,7 @@ async fn handle_feishu_webhook(
             }
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     increment_sync_version(dynamo, table, &session_key, "feishu").await;
                 }
             }
@@ -4904,7 +4921,7 @@ async fn handle_whatsapp_webhook(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &channel_key).await
             } else { channel_key.clone() }
         }
@@ -4942,7 +4959,7 @@ async fn handle_whatsapp_webhook(
         Ok(completion) => {
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     let _ = deduct_credits(dynamo, table, &session_key, model,
                         completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
                 }
@@ -4957,7 +4974,7 @@ async fn handle_whatsapp_webhook(
             }
             #[cfg(feature = "dynamodb-backend")]
             {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     increment_sync_version(dynamo, table, &session_key, "whatsapp").await;
                 }
             }
@@ -5014,7 +5031,7 @@ async fn handle_chat_stream(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &req.session_id).await
             } else {
                 req.session_id.clone()
@@ -5027,7 +5044,7 @@ async fn handle_chat_stream(
     // Parallel initialization: fetch user + settings concurrently
     #[cfg(feature = "dynamodb-backend")]
     let (stream_user, stream_memory, stream_settings) = {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let (user, memory, settings) = tokio::join!(
                 get_or_create_user(dynamo, table, &session_key),
                 read_memory_context(dynamo, table, &session_key),
@@ -5277,15 +5294,15 @@ async fn handle_chat_stream(
     // Agentic SSE stream: supports multi-iteration tool calling with progress events.
     // Collects all SSE events into a Vec (API Gateway v2 compatible — no async_stream).
     let req_message = req.message.clone();
-    let _req_channel = req.channel.clone();
-    let _req_device = device.to_string();
+    let req_channel = req.channel.clone();
+    let req_device = device.to_string();
     let req_session_id = req.session_id.clone();
     let state_clone = state.clone();
     let session_key_clone = session_key.clone();
     let agent_id = agent.id;
     let agent_estimated_seconds = agent.estimated_seconds;
-    let _stream_agent_score = agent_score;
-    let _stream_user_plan = stream_user.as_ref().map(|u| u.plan.clone()).unwrap_or_else(|| "unknown".to_string());
+    let stream_agent_score = agent_score;
+    let stream_user_plan = stream_user.as_ref().map(|u| u.plan.clone()).unwrap_or_else(|| "unknown".to_string());
 
     // Get tools definitions for the stream handler (respects agent.tools_enabled)
     let tools: Vec<serde_json::Value> = if agent.tools_enabled {
@@ -5341,7 +5358,7 @@ async fn handle_chat_stream(
                 // Deduct minimum 1 credit for timeout (input tokens were consumed)
                 #[cfg(feature = "dynamodb-backend")]
                 {
-                    if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                    if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                         let (credits, remaining) = deduct_credits(dynamo, table, &session_key_clone, &model, 100, 0).await;
                         if let Some(r) = remaining {
                             events.push(serde_json::json!({"type":"done","credits_used": credits, "credits_remaining": r}));
@@ -5358,7 +5375,7 @@ async fn handle_chat_stream(
             }
         };
 
-        let mut _stream_had_error = false;
+        let mut stream_had_error = false;
         match first_result {
             Ok(completion) => {
                 #[allow(unused_mut)]
@@ -5371,7 +5388,7 @@ async fn handle_chat_stream(
                 // Deduct credits for first call
                 #[cfg(feature = "dynamodb-backend")]
                 {
-                    if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                    if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                         let (credits, remaining) = deduct_credits(dynamo, table, &session_key_clone, &stream_used_model,
                             completion.usage.prompt_tokens, completion.usage.completion_tokens).await;
                         total_credits_used += credits;
@@ -5482,7 +5499,7 @@ async fn handle_chat_stream(
                             stream_total_output += resp.usage.completion_tokens;
                             #[cfg(feature = "dynamodb-backend")]
                             {
-                                if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                                if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                                     let (credits, remaining) = deduct_credits(dynamo, table, &session_key_clone, &model,
                                         resp.usage.prompt_tokens, resp.usage.completion_tokens).await;
                                     total_credits_used += credits;
@@ -5516,7 +5533,7 @@ async fn handle_chat_stream(
                 }
                 #[cfg(feature = "dynamodb-backend")]
                 {
-                    if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                    if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                         increment_sync_version(dynamo, table, &session_key_clone, "web").await;
                     }
                 }
@@ -5524,7 +5541,7 @@ async fn handle_chat_stream(
                 // Auto-update conversation title & message count
                 #[cfg(feature = "dynamodb-backend")]
                 {
-                    if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                    if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                         if let Some(conv_id) = req_session_id.strip_prefix("webchat:") {
                             let msg_count = {
                                 let mut sessions = state_clone.sessions.lock().await;
@@ -5541,7 +5558,7 @@ async fn handle_chat_stream(
                 // Auto-save to daily memory log + trigger consolidation (fire-and-forget)
                 #[cfg(feature = "dynamodb-backend")]
                 {
-                    if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                    if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                         let dynamo = dynamo.clone();
                         let table = table.clone();
                         let sk = session_key_clone.clone();
@@ -5581,7 +5598,7 @@ async fn handle_chat_stream(
             }
             Err(e) => {
                 tracing::error!("LLM stream error (all providers failed): {}", e);
-                _stream_had_error = true;
+                stream_had_error = true;
                 let fallback = error_fallback_message();
                 events.push(serde_json::json!({"type":"content","content": fallback}));
             }
@@ -5593,7 +5610,7 @@ async fn handle_chat_stream(
             session_key_clone, model, stream_latency, events.len());
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                 emit_audit_log(dynamo.clone(), table.clone(), "chat_stream", &session_key_clone, "",
                     &format!("model={} latency={}ms events={}", model, stream_latency, events.len()));
 
@@ -5669,7 +5686,7 @@ async fn handle_chat_explore(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &req.session_id).await
             } else {
                 req.session_id.clone()
@@ -5682,7 +5699,7 @@ async fn handle_chat_explore(
     // Check credits
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user = get_or_create_user(dynamo, table, &session_key).await;
             if user.credits_remaining <= 0 {
                 let content = if user.plan == "free" {
@@ -5828,7 +5845,7 @@ async fn handle_chat_explore(
 
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                 for result in &results {
                     let (credits, remaining) = deduct_credits(
                         dynamo, table, &session_key_clone, &result.model,
@@ -5853,7 +5870,7 @@ async fn handle_chat_explore(
         }
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                 increment_sync_version(dynamo, table, &session_key_clone, "web").await;
             }
         }
@@ -5947,7 +5964,7 @@ async fn handle_chat_race(
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, &req.session_id).await
             } else {
                 req.session_id.clone()
@@ -5960,7 +5977,7 @@ async fn handle_chat_race(
     // Check credits
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user = get_or_create_user(dynamo, table, &session_key).await;
             if user.credits_remaining <= 0 {
                 let content = if user.plan == "free" {
@@ -6108,7 +6125,7 @@ async fn handle_chat_race(
                         let mut credits_remaining: Option<i64> = None;
                         #[cfg(feature = "dynamodb-backend")]
                         {
-                            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                                 let (c, r) = deduct_credits(dynamo, table, &session_key_clone, &model_name, input_tokens, output_tokens).await;
                                 credits_used = c;
                                 credits_remaining = r;
@@ -6125,7 +6142,7 @@ async fn handle_chat_race(
                         }
                         #[cfg(feature = "dynamodb-backend")]
                         {
-                            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                                 increment_sync_version(dynamo, table, &session_key_clone, "web").await;
                             }
                         }
@@ -6191,7 +6208,7 @@ async fn handle_chat_race(
                         let mut credits_remaining: Option<i64> = None;
                         #[cfg(feature = "dynamodb-backend")]
                         {
-                            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                                 let (c, r) = deduct_credits(dynamo, table, &session_key_clone, fb_model, input_tokens, output_tokens).await;
                                 credits_used = c;
                                 credits_remaining = r;
@@ -6245,7 +6262,7 @@ async fn handle_chat_race(
 
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                 for result in &results {
                     let (credits, remaining) = deduct_credits(
                         dynamo, table, &session_key_clone, &result.model,
@@ -6269,7 +6286,7 @@ async fn handle_chat_race(
         }
         #[cfg(feature = "dynamodb-backend")]
         {
-            if let (Some(ref dynamo), Some(ref table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                 increment_sync_version(dynamo, table, &session_key_clone, "web").await;
             }
         }
@@ -6321,7 +6338,7 @@ async fn handle_chat_race(
 
 /// POST /api/v1/billing/checkout — Create Stripe Checkout session via API
 async fn handle_billing_checkout(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
     Json(req): Json<CheckoutRequest>,
 ) -> impl IntoResponse {
@@ -6404,7 +6421,7 @@ async fn handle_billing_checkout(
 
 /// POST /api/v1/billing/credit-pack — Purchase a one-time credit pack
 async fn handle_credit_pack_checkout(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
     Json(req): Json<CreditPackRequest>,
 ) -> impl IntoResponse {
@@ -6491,7 +6508,7 @@ async fn handle_auto_charge_toggle(
         .unwrap_or_default();
 
     #[cfg(feature = "dynamodb-backend")]
-    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         let user_key = resolve_session_key(dynamo, table, &session_key).await;
         let pk = format!("USER#{}", user_key);
         let _ = dynamo
@@ -6535,7 +6552,7 @@ async fn handle_billing_portal(
 
     #[cfg(feature = "dynamodb-backend")]
     if !stripe_key.is_empty() {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_key = resolve_session_key(dynamo, table, &session_key).await;
             let user = get_or_create_user(dynamo, table, &user_key).await;
             if let Some(customer_id) = &user.stripe_customer_id {
@@ -6603,7 +6620,7 @@ async fn handle_stripe_webhook(
             // On checkout.session.completed — link payment to existing user
             #[cfg(feature = "dynamodb-backend")]
             if event_type == "checkout.session.completed" {
-                if let (Some(ref client), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(client), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     let customer_id = event
                         .pointer("/data/object/customer")
                         .and_then(|v| v.as_str())
@@ -6700,7 +6717,7 @@ async fn handle_stripe_webhook(
             // Handle subscription updates (plan changes)
             #[cfg(feature = "dynamodb-backend")]
             if event_type == "customer.subscription.updated" || event_type == "invoice.paid" {
-                if let (Some(ref client), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(client), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     let customer_id = event
                         .pointer("/data/object/customer")
                         .and_then(|v| v.as_str())
@@ -6774,7 +6791,7 @@ async fn handle_coupon_validate(
 
     // Check DynamoDB config table for coupon
     #[cfg(feature = "dynamodb-backend")]
-    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         let resp = dynamo
             .get_item()
             .table_name(table)
@@ -6838,7 +6855,7 @@ async fn handle_coupon_redeem(
     info!("Coupon redeem: {}", code);
 
     #[cfg(feature = "dynamodb-backend")]
-    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         // Special: KONAMI code — grants 1000 credits per use, cap at 100,000 total
         if code == "KONAMI" {
             let session_key = if let Some(ref sid) = req.session_id {
@@ -7105,7 +7122,7 @@ async fn handle_crypto_initiate(
 
             // Store pending transaction in DynamoDB
             #[cfg(feature = "dynamodb-backend")]
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 let tx_id = uuid::Uuid::new_v4().to_string();
                 let _ = dynamo
                     .put_item()
@@ -7207,7 +7224,7 @@ async fn handle_crypto_confirm(
 
     // Find and update pending transaction
     #[cfg(feature = "dynamodb-backend")]
-    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         // Mark transaction as confirmed and add credits
         // For simplicity, look up by tx_hash in user's pending transactions
         let _ = dynamo
@@ -7245,8 +7262,8 @@ async fn handle_crypto_confirm(
 
 /// GET /api/v1/account/:id — Get user profile (unified billing, supports Bearer token)
 async fn handle_account(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     // Resolve unified session key — prefer Bearer token if available
@@ -7254,9 +7271,9 @@ async fn handle_account(
         #[cfg(feature = "dynamodb-backend")]
         {
             // Use auth token to resolve user if available
-            let effective_id = auth_user_id(&_state, &_headers).await.unwrap_or(id.clone());
+            let effective_id = auth_user_id(&state, &headers).await.unwrap_or(id.clone());
             let lookup_id = if effective_id != id { &effective_id } else { &id };
-            if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 let resolved = resolve_session_key(dynamo, table, lookup_id).await;
                 let user = get_or_create_user(dynamo, table, &resolved).await;
                 let allowed_models: Vec<String> = user.plan.parse::<crate::service::auth::Plan>()
@@ -7449,7 +7466,7 @@ async fn handle_contact_submit(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let id = uuid::Uuid::new_v4().to_string();
             let now = chrono::Utc::now().to_rfc3339();
             let result = dynamo
@@ -7524,7 +7541,7 @@ async fn handle_admin_check(Query(q): Query<AdminQuery>) -> impl IntoResponse {
 
 /// GET /api/v1/admin/stats?sid=<session_key> — Admin stats dashboard data
 async fn handle_admin_stats(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Query(q): Query<AdminQuery>,
 ) -> impl IntoResponse {
     let sid = q.sid.unwrap_or_default();
@@ -7536,7 +7553,7 @@ async fn handle_admin_stats(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref config_table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(config_table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let sessions_table = std::env::var("DYNAMODB_SESSIONS_TABLE")
                 .unwrap_or_else(|_| "nanobot-sessions-default".to_string());
             let today = chrono::Utc::now().format("%Y%m%d").to_string();
@@ -7652,7 +7669,7 @@ async fn handle_admin_stats(
 /// GET /api/v1/admin/logs — Fetch audit logs (admin only)
 /// Query params: ?sid=<admin_key>&date=YYYY-MM-DD&limit=50
 async fn handle_admin_logs(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     let sid = q.get("sid").cloned().unwrap_or_default();
@@ -7662,14 +7679,14 @@ async fn handle_admin_logs(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let date = q.get("date").cloned()
                 .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
             let limit: i32 = q.get("limit").and_then(|v| v.parse().ok()).unwrap_or(100);
 
             let pk = format!("AUDIT#{}", date);
             match dynamo.query()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key_condition_expression("pk = :pk")
                 .expression_attribute_values(":pk", AttributeValue::S(pk))
                 .scan_index_forward(false) // newest first
@@ -7701,19 +7718,19 @@ async fn handle_admin_logs(
 /// GET /api/v1/activity — User's own activity log
 /// Shows recent chat history, tool usage, credit changes
 async fn handle_activity(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
 ) -> impl axum::response::IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
         // Resolve user
-        let session_key = if let Some(sk) = auth_user_id(&_state, &_headers).await {
+        let session_key = if let Some(sk) = auth_user_id(&state, &headers).await {
             sk
-        } else if let Some(sid) = _headers.get("x-session-id").and_then(|v| v.to_str().ok()) {
+        } else if let Some(sid) = headers.get("x-session-id").and_then(|v| v.to_str().ok()) {
             if sid.is_empty() {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
             }
-            if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, sid).await
             } else {
                 sid.to_string()
@@ -7722,7 +7739,7 @@ async fn handle_activity(
             return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
         };
 
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Parallel: fetch user profile + recent usage + today's audit logs
             let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
             let today_yyyymmdd = chrono::Utc::now().format("%Y%m%d").to_string();
@@ -7731,17 +7748,17 @@ async fn handle_activity(
 
             let (user_result, usage_result, audit_result) = tokio::join!(
                 // User profile
-                dynamo.get_item().table_name(table.as_str())
+                dynamo.get_item().table_name(table)
                     .key("pk", AttributeValue::S(user_pk))
                     .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                     .send(),
                 // Today's usage
-                dynamo.get_item().table_name(table.as_str())
+                dynamo.get_item().table_name(table)
                     .key("pk", AttributeValue::S(usage_pk))
                     .key("sk", AttributeValue::S("COUNTER".to_string()))
                     .send(),
                 // Recent audit logs for this user (scan AUDIT# for today matching user_id)
-                dynamo.query().table_name(table.as_str())
+                dynamo.query().table_name(table)
                     .key_condition_expression("pk = :pk")
                     .filter_expression("user_id = :uid")
                     .expression_attribute_values(":pk", AttributeValue::S(format!("AUDIT#{}", today)))
@@ -7873,15 +7890,15 @@ async fn validate_partner_key(
 
 /// POST /api/v1/partner/grant-credits — Grant credits to a user (partner API)
 async fn handle_partner_grant_credits(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(_req): Json<PartnerGrantCreditsRequest>,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Validate partner key
-            if !validate_partner_key(dynamo, table, &_headers).await {
+            if !validate_partner_key(dynamo, table, &headers).await {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
                     "error": "Invalid or inactive partner API key"
                 })));
@@ -7903,7 +7920,7 @@ async fn handle_partner_grant_credits(
             let idem_pk = format!("IDEMPOTENT#{}", _req.idempotency_key);
             if let Ok(output) = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(idem_pk.clone()))
                 .key("sk", AttributeValue::S("GRANT".to_string()))
                 .send()
@@ -7923,7 +7940,7 @@ async fn handle_partner_grant_credits(
 
             let update_result = dynamo
                 .update_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                 .update_expression("SET credits_remaining = credits_remaining + :c, updated_at = :now")
@@ -7943,7 +7960,7 @@ async fn handle_partner_grant_credits(
             let ttl = (chrono::Utc::now().timestamp() + 30 * 86400).to_string();
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(idem_pk))
                 .item("sk", AttributeValue::S("GRANT".to_string()))
                 .item("user_id", AttributeValue::S(_req.user_id.clone()))
@@ -7975,15 +7992,15 @@ async fn handle_partner_grant_credits(
 
 /// POST /api/v1/partner/verify-subscription — Verify Elio subscription and grant credits
 async fn handle_partner_verify_subscription(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(_req): Json<PartnerVerifySubscriptionRequest>,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Validate partner key
-            if !validate_partner_key(dynamo, table, &_headers).await {
+            if !validate_partner_key(dynamo, table, &headers).await {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
                     "error": "Invalid or inactive partner API key"
                 })));
@@ -8012,7 +8029,7 @@ async fn handle_partner_verify_subscription(
             // Check if already processed this month
             if let Ok(output) = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(idem_pk.clone()))
                 .key("sk", AttributeValue::S("SUB_VERIFY".to_string()))
                 .send()
@@ -8036,7 +8053,7 @@ async fn handle_partner_verify_subscription(
             let expires_at = (now + chrono::Duration::days(32)).to_rfc3339();
             let _ = dynamo
                 .update_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                 .update_expression(
@@ -8054,7 +8071,7 @@ async fn handle_partner_verify_subscription(
             let ttl = (now.timestamp() + 35 * 86400).to_string();
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(idem_pk))
                 .item("sk", AttributeValue::S("SUB_VERIFY".to_string()))
                 .item("user_id", AttributeValue::S(_req.user_id.clone()))
@@ -8384,7 +8401,7 @@ async fn handle_link_generate(
             return Json(serde_json::json!({ "error": "Missing x-session-id header" }));
         }
 
-        let (dynamo, table) = match (&state.dynamo_client, &state.config_table) {
+        let (dynamo, table) = match (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             (Some(d), Some(t)) => (d, t.as_str()),
             _ => return Json(serde_json::json!({ "error": "DynamoDB not configured" })),
         };
@@ -8438,7 +8455,7 @@ async fn handle_link_status(
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        let (dynamo, table) = match (&state.dynamo_client, &state.config_table) {
+        let (dynamo, table) = match (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             (Some(d), Some(t)) => (d, t.as_str()),
             _ => return Json(serde_json::json!({ "status": "error", "message": "DynamoDB not configured" })),
         };
@@ -8475,20 +8492,20 @@ async fn handle_link_status(
 
 /// POST /api/v1/results — Save a playground result for sharing
 async fn handle_save_result(
-    State(_state): State<Arc<AppState>>,
-    Json(_body): Json<serde_json::Value>,
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     let id = super::commands::generate_share_hash();
 
     #[cfg(feature = "dynamodb-backend")]
-    if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         let now = chrono::Utc::now().to_rfc3339();
-        let body_str = serde_json::to_string(&_body).unwrap_or_default();
+        let body_str = serde_json::to_string(&body).unwrap_or_default();
         let ttl = (chrono::Utc::now().timestamp() + 86400 * 30).to_string(); // 30 days
 
         let _ = dynamo
             .put_item()
-            .table_name(table.as_str())
+            .table_name(table)
             .item("pk", AttributeValue::S(format!("RESULT#{}", id)))
             .item("sk", AttributeValue::S("DATA".to_string()))
             .item("body", AttributeValue::S(body_str))
@@ -8506,15 +8523,15 @@ async fn handle_save_result(
 
 /// GET /api/v1/results/{id} — Retrieve a saved playground result
 async fn handle_get_result(
-    State(_state): State<Arc<AppState>>,
-    axum::extract::Path(_id): axum::extract::Path<String>,
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
-    if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         let result = dynamo
             .get_item()
-            .table_name(table.as_str())
-            .key("pk", AttributeValue::S(format!("RESULT#{}", _id)))
+            .table_name(table)
+            .key("pk", AttributeValue::S(format!("RESULT#{}", id)))
             .key("sk", AttributeValue::S("DATA".to_string()))
             .send()
             .await;
@@ -8966,14 +8983,14 @@ async fn handle_status_ping(
     // --- DynamoDB ---
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref ddb), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(ddb), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let ddb = ddb.clone();
             let table = table.clone();
             handles.push(tokio::spawn(async move {
                 let start = std::time::Instant::now();
                 // Use get_item on a non-existent key — requires only read permissions
                 let res = ddb.get_item()
-                    .table_name(&table)
+                    .table_name(table)
                     .key("pk", aws_sdk_dynamodb::types::AttributeValue::S("HEALTH_CHECK".to_string()))
                     .key("sk", aws_sdk_dynamodb::types::AttributeValue::S("PING".to_string()))
                     .send().await;
@@ -9036,12 +9053,12 @@ async fn handle_status_ping(
 
 /// GET /api/v1/settings/{id} — Get user settings
 async fn handle_get_settings(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let session_key = resolve_session_key(dynamo, table, &id).await;
             let settings = get_user_settings(dynamo, table, &session_key).await;
             return Json(serde_json::json!({
@@ -9080,17 +9097,17 @@ async fn handle_get_settings(
 
 /// POST /api/v1/settings/{id} — Update user settings (requires auth)
 async fn handle_update_settings(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
-    Path(_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Path(id): Path<String>,
     Json(_req): Json<UpdateSettingsRequest>,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Require Bearer token authentication
-            let caller_id = auth_user_id(&_state, &_headers).await;
-            let session_key = resolve_session_key(dynamo, table, &_id).await;
+            let caller_id = auth_user_id(&state, &headers).await;
+            let session_key = resolve_session_key(dynamo, table, &id).await;
 
             // Verify caller owns this settings (if auth available)
             if let Some(ref uid) = caller_id {
@@ -9413,7 +9430,7 @@ async fn handle_google_auth(
 
 /// GET /auth/google/callback — Handle Google OAuth callback
 async fn handle_google_callback(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
     Query(params): Query<GoogleCallbackParams>,
 ) -> impl IntoResponse {
@@ -9472,7 +9489,7 @@ async fn handle_google_callback(
     };
 
     let google_sub = userinfo.get("sub").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let _email = userinfo.get("email").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let email = userinfo.get("email").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let _display_name = userinfo.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let _session_id = params.state.unwrap_or_default();
 
@@ -9482,14 +9499,14 @@ async fn handle_google_callback(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let now = chrono::Utc::now().to_rfc3339();
 
             // Check if GOOGLE#{sub} already exists → get existing user_id
             let google_pk = format!("GOOGLE#{}", google_sub);
             let existing = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(google_pk.clone()))
                 .key("sk", AttributeValue::S("USER_MAP".to_string()))
                 .send()
@@ -9510,11 +9527,11 @@ async fn handle_google_callback(
                     // Create GOOGLE#{sub} → USER_MAP
                     let _ = dynamo
                         .put_item()
-                        .table_name(table.as_str())
+                        .table_name(table)
                         .item("pk", AttributeValue::S(google_pk.clone()))
                         .item("sk", AttributeValue::S("USER_MAP".to_string()))
                         .item("user_id", AttributeValue::S(uid.clone()))
-                        .item("email", AttributeValue::S(_email.clone()))
+                        .item("email", AttributeValue::S(email.clone()))
                         .item("created_at", AttributeValue::S(now.clone()))
                         .send()
                         .await;
@@ -9530,10 +9547,10 @@ async fn handle_google_callback(
             let mut update_expr = "SET email = :email, display_name = :name, google_id = :gid, auth_method = :auth, updated_at = :now".to_string();
             let mut update_req = dynamo
                 .update_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
-                .expression_attribute_values(":email", AttributeValue::S(_email.clone()))
+                .expression_attribute_values(":email", AttributeValue::S(email.clone()))
                 .expression_attribute_values(":name", AttributeValue::S(_display_name.clone()))
                 .expression_attribute_values(":gid", AttributeValue::S(google_sub.clone()))
                 .expression_attribute_values(":auth", AttributeValue::S("google".to_string()))
@@ -9551,7 +9568,7 @@ async fn handle_google_callback(
                 let link_pk = format!("LINK#{}", _session_id);
                 let _ = dynamo
                     .put_item()
-                    .table_name(table.as_str())
+                    .table_name(table)
                     .item("pk", AttributeValue::S(link_pk))
                     .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
@@ -9565,18 +9582,18 @@ async fn handle_google_callback(
             let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string(); // 30 days
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
-                .item("email", AttributeValue::S(_email.clone()))
+                .item("email", AttributeValue::S(email.clone()))
                 .item("display_name", AttributeValue::S(_display_name.clone()))
                 .item("created_at", AttributeValue::S(now.clone()))
                 .item("ttl", AttributeValue::N(ttl))
                 .send()
                 .await;
 
-            emit_audit_log(dynamo.clone(), table.clone(), "oauth_callback", &user_id, &_email, "google_oauth");
+            emit_audit_log(dynamo.clone(), table.clone(), "oauth_callback", &user_id, &email, "google_oauth");
 
             let redirect = format!("/?auth=success&token={}", auth_token);
             return axum::response::Redirect::temporary(&redirect);
@@ -9588,7 +9605,7 @@ async fn handle_google_callback(
 
 /// GET /api/v1/auth/me — Check login status
 async fn handle_auth_me(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
     let token = headers.get("authorization")
@@ -9602,11 +9619,11 @@ async fn handle_auth_me(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let auth_pk = format!("AUTH#{}", token);
             if let Ok(output) = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(auth_pk))
                 .key("sk", AttributeValue::S("TOKEN".to_string()))
                 .send()
@@ -9636,7 +9653,7 @@ async fn handle_auth_me(
                         allowed.iter().map(|s| s.to_string()).collect()
                     } else {
                         // All tools for paid plans
-                        _state.tool_registry.list_tool_names()
+                        state.tool_registry.list_tool_names()
                     };
 
                     return Json(serde_json::json!({
@@ -9663,7 +9680,7 @@ async fn handle_auth_me(
 
 /// POST /api/v1/auth/register — Email registration
 async fn handle_auth_register(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<RegisterRequest>,
 ) -> impl IntoResponse {
     // Validate
@@ -9677,7 +9694,7 @@ async fn handle_auth_register(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Rate limit: 3 registrations per minute per email
             if !check_rate_limit(dynamo, table, &format!("register:{}", email), 3).await {
                 return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Too many requests. Please try again later." })));
@@ -9688,7 +9705,7 @@ async fn handle_auth_register(
             // Check if email already registered
             if let Ok(output) = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(email_pk.clone()))
                 .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
                 .send()
@@ -9707,7 +9724,7 @@ async fn handle_auth_register(
             // Store EMAIL#{email} CREDENTIALS
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(email_pk))
                 .item("sk", AttributeValue::S("CREDENTIALS".to_string()))
                 .item("password_hash", AttributeValue::S(password_hash))
@@ -9730,7 +9747,7 @@ async fn handle_auth_register(
             let user_pk = format!("USER#{}", user_id);
             let _ = dynamo
                 .update_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                 .update_expression("SET email = :email, auth_method = :auth, display_name = :name, updated_at = :now")
@@ -9746,7 +9763,7 @@ async fn handle_auth_register(
             let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string();
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
@@ -9774,14 +9791,14 @@ async fn handle_auth_register(
 
 /// POST /api/v1/auth/login — Email login
 async fn handle_auth_login(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    let _email = req.email.trim().to_lowercase();
+    let email = req.email.trim().to_lowercase();
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Rate limit: 5 login attempts per minute per email
             if !check_rate_limit(dynamo, table, &format!("login:{}", email), 5).await {
                 return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Too many requests. Please try again later." })));
@@ -9792,7 +9809,7 @@ async fn handle_auth_login(
             // Lookup credentials
             let cred_result = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(email_pk))
                 .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
                 .send()
@@ -9818,7 +9835,7 @@ async fn handle_auth_login(
                             let link_pk = format!("LINK#{}", sid);
                             let _ = dynamo
                                 .put_item()
-                                .table_name(table.as_str())
+                                .table_name(table)
                                 .item("pk", AttributeValue::S(link_pk))
                                 .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                                 .item("user_id", AttributeValue::S(user_id.clone()))
@@ -9833,7 +9850,7 @@ async fn handle_auth_login(
                     let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string();
                     let _ = dynamo
                         .put_item()
-                        .table_name(table.as_str())
+                        .table_name(table)
                         .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
                         .item("sk", AttributeValue::S("TOKEN".to_string()))
                         .item("user_id", AttributeValue::S(user_id.clone()))
@@ -9900,19 +9917,19 @@ async fn send_verification_email(email: &str, code: &str, resend_api_key: &str) 
 /// When RESEND_API_KEY is set: sends verification code, returns {pending_verification: true}
 /// When not set: falls back to instant auth (original behavior)
 async fn handle_auth_email(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<EmailAuthRequest>,
 ) -> impl IntoResponse {
-    let _email = req.email.trim().to_lowercase();
-    if _email.len() > 254 || !_email.contains('@') || !_email.contains('.') {
+    let email = req.email.trim().to_lowercase();
+    if email.len() > 254 || !email.contains('@') || !email.contains('.') {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid email format" })));
     }
 
-    let _resend_api_key = std::env::var("RESEND_API_KEY").ok().filter(|k| !k.is_empty());
+    let resend_api_key = std::env::var("RESEND_API_KEY").ok().filter(|k| !k.is_empty());
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Rate limit: 5 email auth attempts per minute per email
             if !check_rate_limit(dynamo, table, &format!("email_auth:{}", email), 5).await {
                 return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Too many requests. Please try again later." })));
@@ -9930,7 +9947,7 @@ async fn handle_auth_email(
                 let verify_pk = format!("VERIFY#{}", email);
                 let mut put_req = dynamo
                     .put_item()
-                    .table_name(table.as_str())
+                    .table_name(table)
                     .item("pk", AttributeValue::S(verify_pk))
                     .item("sk", AttributeValue::S("CODE".to_string()))
                     .item("code", AttributeValue::S(code.clone()))
@@ -9969,7 +9986,7 @@ async fn handle_auth_email(
             // Check if email already registered
             let existing = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(email_pk.clone()))
                 .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
                 .send()
@@ -9990,7 +10007,7 @@ async fn handle_auth_email(
 
                     let _ = dynamo
                         .put_item()
-                        .table_name(table.as_str())
+                        .table_name(table)
                         .item("pk", AttributeValue::S(email_pk))
                         .item("sk", AttributeValue::S("CREDENTIALS".to_string()))
                         .item("user_id", AttributeValue::S(new_user_id.clone()))
@@ -10004,7 +10021,7 @@ async fn handle_auth_email(
                     let user_pk = format!("USER#{}", new_user_id);
                     let _ = dynamo
                         .update_item()
-                        .table_name(table.as_str())
+                        .table_name(table)
                         .key("pk", AttributeValue::S(user_pk))
                         .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                         .update_expression("SET email = :email, auth_method = :auth, display_name = :name, updated_at = :now")
@@ -10032,7 +10049,7 @@ async fn handle_auth_email(
                     let link_pk = format!("LINK#{}", sid);
                     let _ = dynamo
                         .put_item()
-                        .table_name(table.as_str())
+                        .table_name(table)
                         .item("pk", AttributeValue::S(link_pk))
                         .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                         .item("user_id", AttributeValue::S(user_id.clone()))
@@ -10046,7 +10063,7 @@ async fn handle_auth_email(
             let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string();
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
@@ -10074,10 +10091,10 @@ async fn handle_auth_email(
 
 /// POST /api/v1/auth/verify — Verify email with 6-digit code
 async fn handle_auth_verify(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<VerifyRequest>,
 ) -> impl IntoResponse {
-    let _email = req.email.trim().to_lowercase();
+    let email = req.email.trim().to_lowercase();
     let code = req.code.trim().to_string();
 
     if code.len() != 6 || !code.chars().all(|c| c.is_ascii_digit()) {
@@ -10086,13 +10103,13 @@ async fn handle_auth_verify(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let verify_pk = format!("VERIFY#{}", email);
 
             // Look up the stored code
             let stored = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(verify_pk.clone()))
                 .key("sk", AttributeValue::S("CODE".to_string()))
                 .send()
@@ -10138,7 +10155,7 @@ async fn handle_auth_verify(
             // Increment attempts
             let _ = dynamo
                 .update_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(verify_pk.clone()))
                 .key("sk", AttributeValue::S("CODE".to_string()))
                 .update_expression("SET attempts = attempts + :one")
@@ -10156,7 +10173,7 @@ async fn handle_auth_verify(
             // Code verified! Clean up verification record
             let _ = dynamo
                 .delete_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(verify_pk))
                 .key("sk", AttributeValue::S("CODE".to_string()))
                 .send()
@@ -10166,7 +10183,7 @@ async fn handle_auth_verify(
             let email_pk = format!("EMAIL#{}", email);
             let existing = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(email_pk.clone()))
                 .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
                 .send()
@@ -10185,7 +10202,7 @@ async fn handle_auth_verify(
 
                     let _ = dynamo
                         .put_item()
-                        .table_name(table.as_str())
+                        .table_name(table)
                         .item("pk", AttributeValue::S(email_pk))
                         .item("sk", AttributeValue::S("CREDENTIALS".to_string()))
                         .item("user_id", AttributeValue::S(new_user_id.clone()))
@@ -10198,7 +10215,7 @@ async fn handle_auth_verify(
                     let user_pk = format!("USER#{}", new_user_id);
                     let _ = dynamo
                         .update_item()
-                        .table_name(table.as_str())
+                        .table_name(table)
                         .key("pk", AttributeValue::S(user_pk))
                         .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                         .update_expression("SET email = :email, auth_method = :auth, display_name = :name, updated_at = :now")
@@ -10227,7 +10244,7 @@ async fn handle_auth_verify(
                 let link_pk = format!("LINK#{}", session_id);
                 let _ = dynamo
                     .put_item()
-                    .table_name(table.as_str())
+                    .table_name(table)
                     .item("pk", AttributeValue::S(link_pk))
                     .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
@@ -10241,7 +10258,7 @@ async fn handle_auth_verify(
             let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string();
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(format!("AUTH#{}", auth_token)))
                 .item("sk", AttributeValue::S("TOKEN".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
@@ -10273,17 +10290,17 @@ async fn handle_auth_verify(
 
 /// GET /api/v1/conversations — List user's conversations
 async fn handle_list_conversations(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    let _token = _headers.get("authorization")
+    let token = headers.get("authorization")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim_start_matches("Bearer ").to_string())
         .unwrap_or_default();
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Resolve user from token
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
@@ -10293,7 +10310,7 @@ async fn handle_list_conversations(
             let user_pk = format!("USER#{}", user_id);
             let resp = dynamo
                 .query()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
                 .expression_attribute_values(":pk", AttributeValue::S(user_pk))
                 .expression_attribute_values(":sk", AttributeValue::S("CONV#".to_string()))
@@ -10348,7 +10365,7 @@ async fn handle_finalize_conversation(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return Json(serde_json::json!({"ok": false, "error": "Not authenticated"}));
@@ -10376,17 +10393,17 @@ async fn handle_finalize_conversation(
 
 /// POST /api/v1/conversations — Create a new conversation
 async fn handle_create_conversation(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    let _token = _headers.get("authorization")
+    let token = headers.get("authorization")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim_start_matches("Bearer ").to_string())
         .unwrap_or_default();
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" })));
@@ -10400,7 +10417,7 @@ async fn handle_create_conversation(
             let user_pk = format!("USER#{}", user_id);
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(user_pk))
                 .item("sk", AttributeValue::S(format!("CONV#{}", conv_id)))
                 .item("conv_id", AttributeValue::S(conv_id.clone()))
@@ -10416,7 +10433,7 @@ async fn handle_create_conversation(
             let link_pk = format!("LINK#{}", session_id);
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(link_pk))
                 .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                 .item("user_id", AttributeValue::S(user_id))
@@ -10437,18 +10454,18 @@ async fn handle_create_conversation(
 
 /// GET /api/v1/conversations/{id}/messages — Get messages for a conversation
 async fn handle_get_conversation_messages(
-    State(_state): State<Arc<AppState>>,
-    Path(_id): Path<String>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    let _token = _headers.get("authorization")
+    let token = headers.get("authorization")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim_start_matches("Bearer ").to_string())
         .unwrap_or_default();
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return Json(serde_json::json!({ "messages": [], "error": "Not authenticated" }));
@@ -10458,7 +10475,7 @@ async fn handle_get_conversation_messages(
             let user_pk = format!("USER#{}", user_id);
             let conv_resp = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", id)))
                 .send()
@@ -10497,18 +10514,18 @@ async fn handle_get_conversation_messages(
 
 /// DELETE /api/v1/conversations/{id} — Delete a conversation
 async fn handle_delete_conversation(
-    State(_state): State<Arc<AppState>>,
-    Path(_id): Path<String>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    let _token = _headers.get("authorization")
+    let token = headers.get("authorization")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim_start_matches("Bearer ").to_string())
         .unwrap_or_default();
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return Json(serde_json::json!({ "error": "Not authenticated" }));
@@ -10523,7 +10540,7 @@ async fn handle_delete_conversation(
             let user_pk = format!("USER#{}", user_id);
             let _ = dynamo
                 .delete_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", id)))
                 .send()
@@ -10542,7 +10559,7 @@ async fn handle_delete_conversation(
 
 /// GET /c/{hash} — Serve the SPA for shared conversation view
 async fn handle_shared_page(
-    Path(_hash): Path<String>,
+    Path(hash): Path<String>,
 ) -> impl IntoResponse {
     // Serve the same index.html — frontend detects /c/{hash} and enters shared mode
     axum::response::Html(include_str!("../../../../web/index.html"))
@@ -10551,15 +10568,15 @@ async fn handle_shared_page(
 /// GET /api/v1/shared/{hash} — Get shared conversation messages (public, read-only)
 async fn handle_get_shared(
     State(state): State<Arc<AppState>>,
-    Path(_hash): Path<String>,
+    Path(hash): Path<String>,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Look up the share record
             let resp = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(format!("SHARE#{hash}")))
                 .key("sk", AttributeValue::S("INFO".to_string()))
                 .send()
@@ -10606,7 +10623,7 @@ async fn handle_get_shared(
             let user_pk = format!("USER#{}", user_id);
             let conv_resp = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", conv_id)))
                 .send()
@@ -10652,12 +10669,12 @@ async fn handle_get_shared(
 /// POST /api/v1/conversations/{id}/share — Create a share link for a conversation
 async fn handle_share_conversation(
     State(state): State<Arc<AppState>>,
-    Path(_id): Path<String>,
+    Path(id): Path<String>,
     headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = match auth_user_id(&state, &headers).await {
                 Some(uid) => uid,
                 None => return Json(serde_json::json!({ "error": "Not authenticated" })),
@@ -10667,7 +10684,7 @@ async fn handle_share_conversation(
             let user_pk = format!("USER#{}", user_id);
             let conv_resp = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", id)))
                 .send()
@@ -10681,7 +10698,7 @@ async fn handle_share_conversation(
             // Check if already shared
             let existing_resp = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(format!("CONV_SHARE#{id}")))
                 .key("sk", AttributeValue::S("HASH".to_string()))
                 .send()
@@ -10693,7 +10710,7 @@ async fn handle_share_conversation(
                         // Verify the share is not revoked
                         let share_resp = dynamo
                             .get_item()
-                            .table_name(table.as_str())
+                            .table_name(table)
                             .key("pk", AttributeValue::S(format!("SHARE#{hash}")))
                             .key("sk", AttributeValue::S("INFO".to_string()))
                             .send()
@@ -10722,7 +10739,7 @@ async fn handle_share_conversation(
 
             let put_result = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(format!("SHARE#{hash}")))
                 .item("sk", AttributeValue::S("INFO".to_string()))
                 .item("conv_id", AttributeValue::S(id.clone()))
@@ -10740,7 +10757,7 @@ async fn handle_share_conversation(
             // Reverse lookup
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(format!("CONV_SHARE#{id}")))
                 .item("sk", AttributeValue::S("HASH".to_string()))
                 .item("share_hash", AttributeValue::S(hash.clone()))
@@ -10762,12 +10779,12 @@ async fn handle_share_conversation(
 /// DELETE /api/v1/conversations/{id}/share — Revoke a share link
 async fn handle_revoke_share(
     State(state): State<Arc<AppState>>,
-    Path(_id): Path<String>,
+    Path(id): Path<String>,
     headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = match auth_user_id(&state, &headers).await {
                 Some(uid) => uid,
                 None => return Json(serde_json::json!({ "error": "Not authenticated" })),
@@ -10777,7 +10794,7 @@ async fn handle_revoke_share(
             let user_pk = format!("USER#{}", user_id);
             let conv_resp = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", id)))
                 .send()
@@ -10791,7 +10808,7 @@ async fn handle_revoke_share(
             // Find the share hash
             let hash_resp = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(format!("CONV_SHARE#{id}")))
                 .key("sk", AttributeValue::S("HASH".to_string()))
                 .send()
@@ -10809,7 +10826,7 @@ async fn handle_revoke_share(
                     // Set revoked = true
                     let _ = dynamo
                         .update_item()
-                        .table_name(table.as_str())
+                        .table_name(table)
                         .key("pk", AttributeValue::S(format!("SHARE#{hash}")))
                         .key("sk", AttributeValue::S("INFO".to_string()))
                         .update_expression("SET revoked = :r")
@@ -10868,11 +10885,11 @@ async fn auth_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Opti
         .map(|s| s.trim_start_matches("Bearer ").to_string())
         .unwrap_or_default();
     if token.is_empty() { return None; }
-    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         let auth_pk = format!("AUTH#{}", token);
         if let Ok(output) = dynamo
             .get_item()
-            .table_name(table.as_str())
+            .table_name(table)
             .key("pk", AttributeValue::S(auth_pk))
             .key("sk", AttributeValue::S("TOKEN".to_string()))
             .send()
@@ -10888,20 +10905,20 @@ async fn auth_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Opti
 
 /// GET /api/v1/apikeys — List user's API keys
 async fn handle_list_apikeys(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        let user_id = match auth_user_id(&_state, &_headers).await {
+        let user_id = match auth_user_id(&state, &headers).await {
             Some(uid) => uid,
             None => return Json(serde_json::json!({ "error": "Unauthorized" })),
         };
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let pk = format!("USER#{}", user_id);
             if let Ok(output) = dynamo
                 .query()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
                 .expression_attribute_values(":pk", AttributeValue::S(pk))
                 .expression_attribute_values(":prefix", AttributeValue::S("APIKEY#".to_string()))
@@ -10930,13 +10947,13 @@ async fn handle_list_apikeys(
 
 /// POST /api/v1/apikeys — Create a new API key
 async fn handle_create_apikey(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
-    Json(_body): Json<serde_json::Value>,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        let user_id = match auth_user_id(&_state, &_headers).await {
+        let user_id = match auth_user_id(&state, &headers).await {
             Some(uid) => uid,
             None => return Json(serde_json::json!({ "error": "Unauthorized" })),
         };
@@ -10947,11 +10964,11 @@ async fn handle_create_apikey(
         let key_prefix = format!("cw_{}...", &key_id[..8]);
         let now = chrono::Utc::now().to_rfc3339();
 
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Store under user
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(format!("USER#{}", user_id)))
                 .item("sk", AttributeValue::S(format!("APIKEY#{}", key_id)))
                 .item("name", AttributeValue::S(name.clone()))
@@ -10963,7 +10980,7 @@ async fn handle_create_apikey(
             // Store reverse lookup: APIKEY#<key> -> user_id
             let _ = dynamo
                 .put_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .item("pk", AttributeValue::S(format!("APIKEY#{}", api_key)))
                 .item("sk", AttributeValue::S("LOOKUP".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
@@ -10989,23 +11006,23 @@ async fn handle_create_apikey(
 
 /// DELETE /api/v1/apikeys/{id} — Delete an API key
 async fn handle_delete_apikey(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
-    axum::extract::Path(_key_id): axum::extract::Path<String>,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Path(key_id): axum::extract::Path<String>,
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        let user_id = match auth_user_id(&_state, &_headers).await {
+        let user_id = match auth_user_id(&state, &headers).await {
             Some(uid) => uid,
             None => return Json(serde_json::json!({ "error": "Unauthorized" })),
         };
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Get the key first to find the api_key for reverse lookup cleanup
             let pk = format!("USER#{}", user_id);
             let sk = format!("APIKEY#{}", key_id);
             if let Ok(get_output) = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(pk.clone()))
                 .key("sk", AttributeValue::S(sk.clone()))
                 .send()
@@ -11016,7 +11033,7 @@ async fn handle_delete_apikey(
                     if let Some(api_key) = item.get("api_key_hash").and_then(|v| v.as_s().ok()) {
                         let _ = dynamo
                             .delete_item()
-                            .table_name(table.as_str())
+                            .table_name(table)
                             .key("pk", AttributeValue::S(format!("APIKEY#{}", api_key)))
                             .key("sk", AttributeValue::S("LOOKUP".to_string()))
                             .send()
@@ -11027,7 +11044,7 @@ async fn handle_delete_apikey(
             // Delete the key record
             let _ = dynamo
                 .delete_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(pk))
                 .key("sk", AttributeValue::S(sk))
                 .send()
@@ -11365,8 +11382,8 @@ async fn try_cosyvoice_tts(text: &str, mode: &str, speaker_id: &str) -> Result<V
 
 /// POST /api/v1/speech/synthesize — Convert text to speech (Polly → OpenAI fallback)
 async fn handle_speech_synthesize(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<SpeechRequest>,
 ) -> impl IntoResponse {
     if req.text.is_empty() || req.text.len() > 4096 {
@@ -11387,7 +11404,7 @@ async fn handle_speech_synthesize(
                 .or(req.session_id.as_deref())
                 .unwrap_or("");
             if !sid.is_empty() {
-                if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                     Some(resolve_session_key(dynamo, table, sid).await)
                 } else {
                     None
@@ -11402,7 +11419,7 @@ async fn handle_speech_synthesize(
     #[cfg(feature = "dynamodb-backend")]
     {
         if let Some(ref uid) = tts_user_key {
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 let user = get_or_create_user(dynamo, table, uid).await;
                 if user.credits_remaining <= 0 {
                     return (
@@ -11479,12 +11496,12 @@ async fn handle_speech_synthesize(
             #[cfg(feature = "dynamodb-backend")]
             {
                 if let Some(ref uid) = tts_user_key {
-                    if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+                    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                         let tts_credits = std::cmp::max(1, (req.text.len() as i64) / 100);
                         let pk = format!("USER#{}", uid);
                         let _ = dynamo
                             .update_item()
-                            .table_name(table.as_str())
+                            .table_name(table)
                             .key("pk", AttributeValue::S(pk))
                             .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                             .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
@@ -11519,8 +11536,8 @@ async fn handle_speech_synthesize(
 /// Body: multipart/form-data with fields: audio (blob), text (string to speak), prompt_text (transcript of audio)
 /// Or JSON: { audio_base64, text, prompt_text }
 async fn handle_voice_clone(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
     let api_key = std::env::var("RUNPOD_API_KEY").unwrap_or_default();
@@ -11778,11 +11795,11 @@ async fn handle_connect_transcript(
 
         use aws_sdk_dynamodb::types::AttributeValue;
 
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let pk = format!("TRANSCRIPT#{}", contact_id);
             match dynamo
                 .query()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key_condition_expression("pk = :pk")
                 .expression_attribute_values(":pk", AttributeValue::S(pk))
                 .scan_index_forward(true)
@@ -11826,8 +11843,8 @@ async fn handle_connect_transcript(
 
 /// GET /api/v1/memory — Read user's long-term memory and today's daily log
 async fn handle_get_memory(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
 ) -> impl axum::response::IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
@@ -11839,7 +11856,7 @@ async fn handle_get_memory(
                 return (axum::http::StatusCode::UNAUTHORIZED,
                     Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
             }
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, sid).await
             } else {
                 sid.to_string()
@@ -11849,16 +11866,16 @@ async fn handle_get_memory(
                 Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
         };
 
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let pk = format!("MEMORY#{}", session_key);
             let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
             let (lt_result, daily_result) = tokio::join!(
-                dynamo.get_item().table_name(table.as_str())
+                dynamo.get_item().table_name(table)
                     .key("pk", AttributeValue::S(pk.clone()))
                     .key("sk", AttributeValue::S("LONG_TERM".to_string()))
                     .send(),
-                dynamo.get_item().table_name(table.as_str())
+                dynamo.get_item().table_name(table)
                     .key("pk", AttributeValue::S(pk))
                     .key("sk", AttributeValue::S(format!("DAILY#{}", today)))
                     .send()
@@ -11884,8 +11901,8 @@ async fn handle_get_memory(
 
 /// DELETE /api/v1/memory — Clear user's memory
 async fn handle_delete_memory(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
 ) -> impl axum::response::IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
@@ -11897,7 +11914,7 @@ async fn handle_delete_memory(
                 return (axum::http::StatusCode::UNAUTHORIZED,
                     Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
             }
-            if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                 resolve_session_key(dynamo, table, sid).await
             } else {
                 sid.to_string()
@@ -11907,16 +11924,16 @@ async fn handle_delete_memory(
                 Json(serde_json::json!({"error": "Unauthorized"}))).into_response();
         };
 
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let pk = format!("MEMORY#{}", session_key);
             let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
             let _ = tokio::join!(
-                dynamo.delete_item().table_name(table.as_str())
+                dynamo.delete_item().table_name(table)
                     .key("pk", AttributeValue::S(pk.clone()))
                     .key("sk", AttributeValue::S("LONG_TERM".to_string()))
                     .send(),
-                dynamo.delete_item().table_name(table.as_str())
+                dynamo.delete_item().table_name(table)
                     .key("pk", AttributeValue::S(pk))
                     .key("sk", AttributeValue::S(format!("DAILY#{}", today)))
                     .send()
@@ -11976,7 +11993,7 @@ async fn handle_sync_poll(
     Query(params): Query<SyncPollParams>,
 ) -> impl IntoResponse {
     // Resolve session key from query param or auth token
-    let _raw_key = if let Some(ref sk) = params.session_key {
+    let raw_key = if let Some(ref sk) = params.session_key {
         sk.clone()
     } else {
         let token = headers.get("authorization")
@@ -11989,18 +12006,18 @@ async fn handle_sync_poll(
         token
     };
 
-    let _client_version = params.v.unwrap_or(0);
+    let client_version = params.v.unwrap_or(0);
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Resolve session key (webchat:UUID → user_id if linked)
             let session_key = resolve_session_key(dynamo, table, &raw_key).await;
             // Fetch current sync version (single GetItem — very cheap)
             let sync_pk = format!("SYNC#{}", session_key);
             match dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(sync_pk))
                 .key("sk", AttributeValue::S("VERSION".to_string()))
                 .projection_expression("msg_version, last_channel, updated_at")
@@ -12087,11 +12104,11 @@ async fn handle_sync_poll(
 
 /// GET /api/v1/sync/conversations — List conversations for sync (with optional ?since filter)
 async fn handle_sync_list_conversations(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
-    Query(_params): Query<SyncListParams>,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Query(params): Query<SyncListParams>,
 ) -> impl IntoResponse {
-    let token = _headers.get("authorization")
+    let token = headers.get("authorization")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim_start_matches("Bearer ").to_string())
         .unwrap_or_default();
@@ -12102,7 +12119,7 @@ async fn handle_sync_list_conversations(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid token" })));
@@ -12113,7 +12130,7 @@ async fn handle_sync_list_conversations(
             // Build query — optionally filter by updated_at >= since
             let mut query = dynamo
                 .query()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
                 .expression_attribute_values(":pk", AttributeValue::S(user_pk))
                 .expression_attribute_values(":sk", AttributeValue::S("CONV#".to_string()))
@@ -12165,11 +12182,11 @@ async fn handle_sync_list_conversations(
 
 /// GET /api/v1/sync/conversations/{id} — Get full conversation with messages
 async fn handle_sync_get_conversation(
-    State(_state): State<Arc<AppState>>,
-    Path(_id): Path<String>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    let token = _headers.get("authorization")
+    let token = headers.get("authorization")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim_start_matches("Bearer ").to_string())
         .unwrap_or_default();
@@ -12180,7 +12197,7 @@ async fn handle_sync_get_conversation(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid token" })));
@@ -12190,7 +12207,7 @@ async fn handle_sync_get_conversation(
             let user_pk = format!("USER#{}", user_id);
             let conv_resp = dynamo
                 .get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(format!("CONV#{}", id)))
                 .send()
@@ -12234,11 +12251,11 @@ async fn handle_sync_get_conversation(
 
 /// POST /api/v1/sync/push — Push conversations from ElioChat to chatweb.ai
 async fn handle_sync_push(
-    State(_state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<SyncPushRequest>,
 ) -> impl IntoResponse {
-    let token = _headers.get("authorization")
+    let token = headers.get("authorization")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim_start_matches("Bearer ").to_string())
         .unwrap_or_default();
@@ -12254,7 +12271,7 @@ async fn handle_sync_push(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid token" })));
@@ -12276,7 +12293,7 @@ async fn handle_sync_push(
                 // Create CONV record
                 let _ = dynamo
                     .put_item()
-                    .table_name(table.as_str())
+                    .table_name(table)
                     .item("pk", AttributeValue::S(user_pk.clone()))
                     .item("sk", AttributeValue::S(format!("CONV#{}", conv_id)))
                     .item("conv_id", AttributeValue::S(conv_id.clone()))
@@ -12294,7 +12311,7 @@ async fn handle_sync_push(
                 let link_pk = format!("LINK#{}", session_id);
                 let _ = dynamo
                     .put_item()
-                    .table_name(table.as_str())
+                    .table_name(table)
                     .item("pk", AttributeValue::S(link_pk))
                     .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
@@ -12369,7 +12386,7 @@ async fn handle_cron_list(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return Json(serde_json::json!({ "jobs": [], "error": "Not authenticated" }));
@@ -12377,7 +12394,7 @@ async fn handle_cron_list(
             let user_pk = format!("CRON#{}", user_id);
             let resp = dynamo
                 .query()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
                 .expression_attribute_values(":pk", AttributeValue::S(user_pk))
                 .expression_attribute_values(":sk", AttributeValue::S("JOB#".to_string()))
@@ -12430,7 +12447,7 @@ async fn handle_cron_create(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" }))).into_response();
@@ -12448,7 +12465,7 @@ async fn handle_cron_create(
             // Count existing jobs
             let user_pk = format!("CRON#{}", user_id);
             let count_resp = dynamo.query()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key_condition_expression("pk = :pk AND begins_with(sk, :sk)")
                 .expression_attribute_values(":pk", AttributeValue::S(user_pk.clone()))
                 .expression_attribute_values(":sk", AttributeValue::S("JOB#".to_string()))
@@ -12486,7 +12503,7 @@ async fn handle_cron_create(
             item.insert("created_at".to_string(), AttributeValue::S(now));
             item.insert("user_id".to_string(), AttributeValue::S(user_id));
 
-            match dynamo.put_item().table_name(table.as_str()).set_item(Some(item)).send().await {
+            match dynamo.put_item().table_name(table).set_item(Some(item)).send().await {
                 Ok(_) => return Json(serde_json::json!({ "ok": true, "id": job_id })).into_response(),
                 Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": format!("{}", e) }))).into_response(),
             }
@@ -12510,7 +12527,7 @@ async fn handle_cron_update(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" }))).into_response();
@@ -12538,7 +12555,7 @@ async fn handle_cron_update(
 
             let update_expr = format!("SET {}", update_expr_parts.join(", "));
             let mut builder = dynamo.update_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(sk))
                 .update_expression(&update_expr);
@@ -12571,7 +12588,7 @@ async fn handle_cron_delete(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&state.dynamo_client, &state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" }))).into_response();
@@ -12579,7 +12596,7 @@ async fn handle_cron_delete(
             let user_pk = format!("CRON#{}", user_id);
             let sk = format!("JOB#{}", id);
             match dynamo.delete_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S(user_pk))
                 .key("sk", AttributeValue::S(sk))
                 .send().await
@@ -12748,15 +12765,15 @@ fn sample_gamma(rng: &mut impl rand::Rng, shape: f64) -> f64 {
 }
 
 /// Load A/B test stats from DynamoDB.
-async fn load_ab_stats(_state: &Arc<AppState>) -> std::collections::HashMap<&'static str, (u32, u32)> {
+async fn load_ab_stats(state: &Arc<AppState>) -> std::collections::HashMap<&'static str, (u32, u32)> {
     #[allow(unused_mut)]
     let mut stats: std::collections::HashMap<&'static str, (u32, u32)> = std::collections::HashMap::new();
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             if let Ok(result) = dynamo.get_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S("AB_STATS#global".to_string()))
                 .key("sk", AttributeValue::S("CURRENT".to_string()))
                 .send()
@@ -12786,7 +12803,7 @@ async fn load_ab_stats(_state: &Arc<AppState>) -> std::collections::HashMap<&'st
 
 /// POST /api/v1/ab/event — Record an A/B test engagement event.
 async fn handle_ab_event(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     let variant_id = req.get("variant_id").and_then(|v| v.as_str()).unwrap_or("");
@@ -12806,7 +12823,7 @@ async fn handle_ab_event(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(ref dynamo), Some(ref table)) = (&_state.dynamo_client, &_state.config_table) {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let field = if _is_win {
                 format!("{}_wins", variant_id)
             } else {
@@ -12814,7 +12831,7 @@ async fn handle_ab_event(
             };
 
             let _ = dynamo.update_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S("AB_STATS#global".to_string()))
                 .key("sk", AttributeValue::S("CURRENT".to_string()))
                 .update_expression(format!("ADD {} :one", field))
@@ -12824,7 +12841,7 @@ async fn handle_ab_event(
 
             let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
             let _ = dynamo.update_item()
-                .table_name(table.as_str())
+                .table_name(table)
                 .key("pk", AttributeValue::S("AB_STATS#global".to_string()))
                 .key("sk", AttributeValue::S(format!("DAY#{}", today)))
                 .update_expression(format!("ADD {} :one", field))
@@ -12840,7 +12857,7 @@ async fn handle_ab_event(
 /// GET /api/v1/ab/stats — View A/B test statistics.
 async fn handle_ab_stats(
     State(state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
     let stats = load_ab_stats(&state).await;
 
@@ -12864,6 +12881,203 @@ async fn handle_ab_stats(
         "variants": variants,
         "algorithm": "thompson_sampling",
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Feedback endpoints
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/feedback — Collect user feedback (thumbs up/down)
+async fn handle_feedback(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<FeedbackRequest>,
+) -> impl IntoResponse {
+    // Validate rating
+    if req.rating != "up" && req.rating != "down" {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "ok": false, "error": "rating must be 'up' or 'down'"
+        }))).into_response();
+    }
+
+    let session_id = headers.get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("anonymous")
+        .to_string();
+
+    // Resolve user_id from Bearer token if present
+    let user_id = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|t| t.to_string());
+
+    let channel = if session_id.starts_with("line:") { "line" }
+        else if session_id.starts_with("tg:") { "telegram" }
+        else if session_id.starts_with("webchat:") { "web" }
+        else { "api" };
+
+    let snippet = req.snippet.unwrap_or_default();
+    let conv_id = req.conversation_id.unwrap_or_default();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(config_table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let dynamo = dynamo.clone();
+            let config_table = config_table.to_string();
+            let rating = req.rating.clone();
+            let session_id_c = session_id.clone();
+            let user_id_c = user_id.clone().unwrap_or_default();
+            let channel_c = channel.to_string();
+            let snippet_c = snippet.clone();
+            let conv_id_c = conv_id.clone();
+
+            // Fire-and-forget: write feedback record
+            tokio::spawn(async move {
+                let now = chrono::Utc::now();
+                let date = now.format("%Y-%m-%d").to_string();
+                let ts = now.timestamp_millis().to_string();
+                let uuid_prefix = &uuid::Uuid::new_v4().to_string()[..6];
+                let sk = format!("{}#{}", ts, uuid_prefix);
+                let ttl = (now.timestamp() + 90 * 24 * 3600).to_string();
+
+                let _ = dynamo
+                    .put_item()
+                    .table_name(&config_table)
+                    .item("pk", AttributeValue::S(format!("FEEDBACK#{}", date)))
+                    .item("sk", AttributeValue::S(sk))
+                    .item("rating", AttributeValue::S(rating.clone()))
+                    .item("snippet", AttributeValue::S(snippet_c))
+                    .item("session_id", AttributeValue::S(session_id_c))
+                    .item("user_id", AttributeValue::S(user_id_c))
+                    .item("channel", AttributeValue::S(channel_c))
+                    .item("conversation_id", AttributeValue::S(conv_id_c))
+                    .item("timestamp", AttributeValue::S(now.to_rfc3339()))
+                    .item("ttl", AttributeValue::N(ttl))
+                    .send()
+                    .await;
+
+                // Atomic increment of aggregate counter
+                let counter_attr = if rating == "up" { "total_up" } else { "total_down" };
+                let _ = dynamo
+                    .update_item()
+                    .table_name(&config_table)
+                    .key("pk", AttributeValue::S("FEEDBACK_STATS#global".to_string()))
+                    .key("sk", AttributeValue::S("CURRENT".to_string()))
+                    .update_expression(format!("ADD {} :one", counter_attr))
+                    .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+                    .send()
+                    .await;
+            });
+        }
+    }
+
+    let _ = &state; // suppress unused warning in non-dynamo builds
+
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+/// Query parameters for admin feedback endpoint.
+#[derive(Debug, Deserialize)]
+struct AdminFeedbackQuery {
+    sid: Option<String>,
+    days: Option<u32>,
+}
+
+/// GET /api/v1/admin/feedback?sid=<key>&days=<n> — Admin feedback dashboard
+async fn handle_admin_feedback(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<AdminFeedbackQuery>,
+) -> impl IntoResponse {
+    let sid = q.sid.unwrap_or_default();
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+            "error": "Forbidden"
+        }))).into_response();
+    }
+
+    let days = q.days.unwrap_or(7).min(90);
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(config_table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let now = chrono::Utc::now();
+            let mut feedbacks: Vec<serde_json::Value> = Vec::new();
+
+            // Query each day
+            for d in 0..days {
+                let date = (now - chrono::Duration::days(d as i64)).format("%Y-%m-%d").to_string();
+                let pk = format!("FEEDBACK#{}", date);
+
+                let resp = dynamo
+                    .query()
+                    .table_name(config_table)
+                    .key_condition_expression("pk = :pk")
+                    .expression_attribute_values(":pk", AttributeValue::S(pk))
+                    .scan_index_forward(false) // newest first
+                    .limit(100)
+                    .send()
+                    .await;
+
+                if let Ok(output) = resp {
+                    if let Some(items) = output.items {
+                        for item in items {
+                            let rating = item.get("rating").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let snippet = item.get("snippet").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let channel = item.get("channel").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let timestamp = item.get("timestamp").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let user_id = item.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            feedbacks.push(serde_json::json!({
+                                "rating": rating,
+                                "snippet": snippet,
+                                "channel": channel,
+                                "timestamp": timestamp,
+                                "user_id": user_id,
+                            }));
+                        }
+                    }
+                }
+            }
+
+            // Get aggregate stats
+            let stats_resp = dynamo
+                .get_item()
+                .table_name(config_table)
+                .key("pk", AttributeValue::S("FEEDBACK_STATS#global".to_string()))
+                .key("sk", AttributeValue::S("CURRENT".to_string()))
+                .send()
+                .await;
+
+            let (total_up, total_down) = if let Ok(resp) = stats_resp {
+                if let Some(item) = resp.item {
+                    let up: i64 = item.get("total_up").and_then(|v| v.as_n().ok())
+                        .and_then(|n| n.parse().ok()).unwrap_or(0);
+                    let down: i64 = item.get("total_down").and_then(|v| v.as_n().ok())
+                        .and_then(|n| n.parse().ok()).unwrap_or(0);
+                    (up, down)
+                } else { (0, 0) }
+            } else { (0, 0) };
+
+            return Json(serde_json::json!({
+                "feedbacks": feedbacks,
+                "stats": {
+                    "total_up": total_up,
+                    "total_down": total_down,
+                    "total": total_up + total_down,
+                    "positive_rate": if total_up + total_down > 0 {
+                        (total_up as f64 / (total_up + total_down) as f64 * 100.0).round()
+                    } else { 0.0 },
+                },
+                "days_queried": days,
+            })).into_response();
+        }
+    }
+
+    let _ = &state;
+    Json(serde_json::json!({
+        "feedbacks": [],
+        "stats": { "total_up": 0, "total_down": 0, "total": 0, "positive_rate": 0 },
+        "days_queried": days,
+    })).into_response()
 }
 
 #[cfg(test)]
