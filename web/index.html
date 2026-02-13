@@ -377,50 +377,48 @@
     .ch-bar-btn svg { width: 14px; height: 14px; }
 
     /* Channel cards (larger CTA) */
-    .channel-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 28px; transition: all 0.3s ease; }
+    .channel-cards { display: flex; gap: 8px; margin-bottom: 16px; justify-content: center; flex-wrap: wrap; transition: all 0.3s ease; }
     .channel-card {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-      padding: 20px; cursor: pointer; transition: all 0.25s; text-decoration: none; color: var(--text);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 8px 14px; cursor: pointer; transition: all 0.25s; text-decoration: none; color: var(--text);
+      display: inline-flex; align-items: center; gap: 8px;
     }
-    .channel-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+    .channel-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     .channel-card.line-card { border-color: rgba(6,199,85,0.3); }
     .channel-card.line-card:hover { border-color: var(--line); }
     .channel-card.tg-card { border-color: rgba(42,171,238,0.3); }
     .channel-card.tg-card:hover { border-color: var(--tg); }
-    .channel-card .cc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .channel-card .cc-header { display: flex; align-items: center; gap: 6px; margin-bottom: 0; }
     .channel-card .cc-icon {
-      width: 36px; height: 36px; border-radius: 10px; display: flex;
+      width: 24px; height: 24px; border-radius: 6px; display: flex;
       align-items: center; justify-content: center; flex-shrink: 0;
     }
+    .channel-card .cc-icon svg { width: 14px; height: 14px; }
     .channel-card.line-card .cc-icon { background: var(--line); }
     .channel-card.tg-card .cc-icon { background: var(--tg); }
-    .channel-card .cc-name { font-size: 15px; font-weight: 700; }
-    .channel-card .cc-desc { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+    .channel-card .cc-name { font-size: 12px; font-weight: 700; }
+    .channel-card .cc-desc { display: none; }
     .channel-card .cc-action {
-      display: inline-flex; align-items: center; gap: 4px;
-      font-size: 13px; font-weight: 600; color: #fff;
-      padding: 8px 16px; border-radius: 8px;
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 11px; font-weight: 600; color: #fff;
+      padding: 4px 10px; border-radius: 6px;
     }
     .channel-card.line-card .cc-action { background: var(--line); }
     .channel-card.tg-card .cc-action { background: var(--tg); }
     .channel-card .cc-connected {
-      display: none; font-size: 12px; color: var(--green); font-weight: 600;
-      margin-top: 6px;
+      display: none; font-size: 10px; color: var(--green); font-weight: 600;
     }
-    .channel-card.connected .cc-connected { display: flex; align-items: center; gap: 4px; }
+    .channel-card.connected .cc-connected { display: flex; align-items: center; gap: 3px; }
     .channel-card.connected .cc-action { display: none; }
     .channel-card.connected { pointer-events: none; opacity: 0.7; border-color: var(--green) !important; }
     .channel-card.connected:hover { transform: none; box-shadow: none; }
     /* Compact mode: when at least 1 channel is linked */
-    .channel-cards.has-linked { grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
-    .channel-cards.has-linked .channel-card { padding: 10px; border-radius: 10px; }
-    .channel-cards.has-linked .channel-card .cc-header { margin-bottom: 0; }
-    .channel-cards.has-linked .channel-card .cc-icon { width: 24px; height: 24px; border-radius: 6px; }
-    .channel-cards.has-linked .channel-card .cc-icon svg { width: 14px; height: 14px; }
-    .channel-cards.has-linked .channel-card .cc-name { font-size: 11px; }
-    .channel-cards.has-linked .channel-card .cc-desc { display: none; }
-    .channel-cards.has-linked .channel-card .cc-action { font-size: 10px; padding: 4px 8px; border-radius: 6px; }
-    .channel-cards.has-linked .channel-card .cc-connected { font-size: 10px; margin-top: 4px; }
+    .channel-cards.has-linked .channel-card { padding: 6px 10px; }
+    .channel-cards.has-linked .channel-card .cc-icon { width: 20px; height: 20px; border-radius: 5px; }
+    .channel-cards.has-linked .channel-card .cc-icon svg { width: 12px; height: 12px; }
+    .channel-cards.has-linked .channel-card .cc-name { font-size: 10px; }
+    .channel-cards.has-linked .channel-card .cc-action { font-size: 9px; padding: 3px 6px; border-radius: 5px; }
+    .channel-cards.has-linked .channel-card .cc-connected { font-size: 9px; }
 
     /* Tools badge */
     .tools-count { font-size: 11px; color: var(--muted); text-align: center; margin-top: -20px; margin-bottom: 20px; }
@@ -6660,8 +6658,23 @@
       setTimeout(function() { fetchTTS(ttsText); }, 200);
     }
 
-    function appRenderSuggestions() {
+    function appRenderSuggestions(prevSummary) {
       const l = document.documentElement.lang || 'ja';
+      const container = document.getElementById('app-suggestions');
+      container.innerHTML = '';
+
+      // If there's a previous conversation summary, show it and generate contextual suggestions
+      if (prevSummary) {
+        const summaryCard = document.createElement('div');
+        summaryCard.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--muted);line-height:1.5;max-width:480px;text-align:left;';
+        summaryCard.innerHTML = '<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;opacity:0.7;">' + (l === 'ja' ? '前の会話' : 'Previous chat') + '</div>' + escapeHtml(prevSummary);
+        container.appendChild(summaryCard);
+
+        // Generate contextual follow-up suggestions via LLM (fire-and-forget)
+        generateContextualSuggestions(prevSummary, container);
+        return;
+      }
+
       const suggestions = l === 'ja' ? [
         'ポートフォリオサイトを作って',
         '領収書を整理してCSVにして',
@@ -6673,8 +6686,6 @@
         'Research competitor updates',
         'Plan dinner from my fridge',
       ];
-      const container = document.getElementById('app-suggestions');
-      container.innerHTML = '';
       suggestions.forEach(s => {
         const btn = document.createElement('div');
         btn.className = 'app-chat-suggestion';
@@ -6682,6 +6693,56 @@
         btn.onclick = () => { document.getElementById('app-input').value = s; appSend(); };
         container.appendChild(btn);
       });
+    }
+
+    async function generateContextualSuggestions(summary, container) {
+      const l = document.documentElement.lang || 'ja';
+      // Show placeholder suggestions immediately
+      const placeholders = l === 'ja'
+        ? ['続きを深掘りする', '別の角度から聞く', '関連トピックを探す']
+        : ['Dive deeper', 'Ask from another angle', 'Explore related topics'];
+      const placeholderEls = [];
+      placeholders.forEach(s => {
+        const btn = document.createElement('div');
+        btn.className = 'app-chat-suggestion';
+        btn.textContent = s;
+        btn.style.opacity = '0.5';
+        btn.onclick = () => { document.getElementById('app-input').value = s; appSend(); };
+        container.appendChild(btn);
+        placeholderEls.push(btn);
+      });
+
+      // Ask LLM for contextual suggestions (best-effort, non-blocking)
+      try {
+        const prompt = l === 'ja'
+          ? 'この会話の要約を元に、ユーザーが次に聞きそうな質問を3つ、短く日本語で提案してください。JSON配列で返してください。例: ["質問1","質問2","質問3"]\n\n会話要約: ' + summary
+          : 'Based on this conversation summary, suggest 3 short follow-up questions the user might ask. Return as JSON array. Example: ["Q1","Q2","Q3"]\n\nSummary: ' + summary;
+        const hdrs = { 'Content-Type': 'application/json', 'x-session-id': webSessionId };
+        if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
+        const r = await fetch(API + '/api/v1/chat', {
+          method: 'POST',
+          headers: hdrs,
+          body: JSON.stringify({ message: prompt, session_id: 'suggestion:' + crypto.randomUUID(), channel: 'web' }),
+        });
+        const d = await r.json();
+        if (d.response) {
+          // Try to extract JSON array from response
+          const match = d.response.match(/\[[\s\S]*?\]/);
+          if (match) {
+            const suggestions = JSON.parse(match[0]);
+            if (Array.isArray(suggestions) && suggestions.length > 0) {
+              placeholderEls.forEach(el => el.remove());
+              suggestions.slice(0, 4).forEach(s => {
+                const btn = document.createElement('div');
+                btn.className = 'app-chat-suggestion';
+                btn.textContent = s;
+                btn.onclick = () => { document.getElementById('app-input').value = s; appSend(); };
+                container.appendChild(btn);
+              });
+            }
+          }
+        }
+      } catch(e) { /* keep placeholders */ }
     }
 
     async function appLoadConversations() {
@@ -6883,8 +6944,25 @@
     }
 
     async function appNewConversation() {
-      // Reset UI immediately (works even without auth)
+      // Collect previous conversation summary before clearing
       const msgsEl = document.getElementById('app-messages');
+      let prevSummary = '';
+      const msgEls = msgsEl.querySelectorAll('.app-msg');
+      if (msgEls.length > 0) {
+        const texts = [];
+        msgEls.forEach(el => {
+          const isUser = el.classList.contains('app-msg-user');
+          const content = el.querySelector('.app-msg-content, .app-msg-bubble');
+          if (content) {
+            const prefix = isUser ? 'Q: ' : 'A: ';
+            texts.push(prefix + content.textContent.trim().substring(0, 100));
+          }
+        });
+        prevSummary = texts.join(' / ').substring(0, 200);
+        if (texts.join(' / ').length > 200) prevSummary += '...';
+      }
+
+      // Reset UI immediately (works even without auth)
       msgsEl.innerHTML = '';
       const l = document.documentElement.lang || 'ja';
       const empty = document.createElement('div');
@@ -6897,7 +6975,7 @@
         + '<div class="app-chat-suggestions" id="app-suggestions"></div>'
         + '<div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;"><a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a><a href="/pricing" style="color:var(--muted);text-decoration:none;">Pricing</a></div>';
       msgsEl.appendChild(empty);
-      appRenderSuggestions();
+      appRenderSuggestions(prevSummary);
       knownMsgCount = 0;
       syncVersion = 0;
       _lastSyncTimestamp = null;
