@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>teai.io - AI for Developers</title>
+  <meta name="description" content="Simple, powerful AI API. 1000 free credits to start. Pay as you grow.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #09090b;
+      color: #fafafa;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      text-align: center;
+      animation: fadeIn 0.5s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    h1 {
+      font-size: 48px;
+      font-weight: 900;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #10b981, #34d399);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      font-size: 18px;
+      color: #a1a1aa;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+    .cta {
+      display: inline-block;
+      padding: 16px 48px;
+      font-size: 18px;
+      font-weight: 700;
+      background: #10b981;
+      color: #fff;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      margin-bottom: 48px;
+    }
+    .cta:hover {
+      background: #34d399;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(16,185,129,0.3);
+    }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+    .feature {
+      padding: 16px;
+      background: #18181b;
+      border-radius: 8px;
+      border: 1px solid #27272a;
+    }
+    .feature-icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    .feature-text {
+      font-size: 13px;
+      color: #a1a1aa;
+    }
+    .pricing {
+      padding: 24px;
+      background: linear-gradient(135deg, #18181b, #1e1e24);
+      border-radius: 12px;
+      border: 1px solid #27272a;
+    }
+    .price {
+      font-size: 14px;
+      color: #a1a1aa;
+      line-height: 1.8;
+    }
+    .highlight {
+      color: #10b981;
+      font-weight: 600;
+    }
+    .footer {
+      margin-top: 32px;
+      font-size: 12px;
+      color: #52525b;
+    }
+    .footer a {
+      color: #10b981;
+      text-decoration: none;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>teai.io</h1>
+    <p class="subtitle">
+      Simple AI API for developers<br>
+      Start with 1000 free credits • Pay as you grow
+    </p>
+
+    <a href="/" class="cta">Start Chat →</a>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">⚡️</div>
+        <div class="feature-text">Multi-Model</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔧</div>
+        <div class="feature-text">REST API</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🌐</div>
+        <div class="feature-text">Web Tools</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">💬</div>
+        <div class="feature-text">Chat UI</div>
+      </div>
+    </div>
+
+    <div class="pricing">
+      <div class="price">
+        <span class="highlight">1000 credits free</span> on signup<br>
+        Then charge as you need<br>
+        <br>
+        Same features as chatweb.ai<br>
+        Email auth only • Simple pricing
+      </div>
+    </div>
+
+    <div class="footer">
+      <a href="/pricing.html">Pricing</a> •
+      <a href="/docs.html">API Docs</a> •
+      <a href="/status.html">Status</a> •
+      <a href="https://chatweb.ai">chatweb.ai</a>
+    </div>
+  </div>
+</body>
+</html>

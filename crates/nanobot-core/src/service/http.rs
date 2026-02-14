@@ -739,7 +739,12 @@ async fn get_or_create_user(
 
     // Create new user profile (free plan)
     let now = chrono::Utc::now().to_rfc3339();
-    let free_credits = crate::service::auth::Plan::Free.monthly_credits();
+
+    // Initial credits: default 100, or INITIAL_CREDITS env var (teai.io = 1000)
+    let free_credits = std::env::var("INITIAL_CREDITS")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or_else(|| crate::service::auth::Plan::Free.monthly_credits());
 
     let _ = dynamo
         .put_item()
@@ -7740,8 +7745,8 @@ async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
         // Serve API docs for api.chatweb.ai / api.teai.io
         axum::response::Html(include_str!("../../../../web/api-docs.html"))
     } else if host.contains("teai.io") {
-        // Serve teai.io developer-focused landing page
-        axum::response::Html(include_str!("../../../../web/teai-index.html"))
+        // Serve teai.io simple landing page (email auth only, 1000 initial credits)
+        axum::response::Html(include_str!("../../../../web/teai-index-simple.html"))
     } else {
         axum::response::Html(include_str!("../../../../web/index.html"))
     }

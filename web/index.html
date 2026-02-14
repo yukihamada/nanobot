@@ -4270,6 +4270,18 @@
 
   <script>
     const API = location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+    const IS_TEAI = location.hostname.includes('teai.io');
+
+    // Hide Google OAuth for teai.io (email auth only)
+    if (IS_TEAI) {
+      // Wait for DOM ready, then hide Google button and divider
+      setTimeout(function() {
+        var googleBtn = document.querySelector('.auth-google-btn');
+        if (googleBtn) googleBtn.style.display = 'none';
+        var dividers = document.querySelectorAll('.auth-divider');
+        if (dividers.length > 0) dividers[dividers.length - 1].style.display = 'none';
+      }, 0);
+    }
 
     // QR Code: local generation (instant, no external API)
     function generateQRDataURL(text, size) {
