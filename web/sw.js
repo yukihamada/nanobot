@@ -17,14 +17,32 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+
+  const url = new URL(e.request.url);
+
+  // API requests: network-first with fast timeout
+  if (url.pathname.startsWith('/api/')) {
+    e.respondWith(
+      Promise.race([
+        fetch(e.request),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+      ]).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Static assets: stale-while-revalidate
   e.respondWith(
-    fetch(e.request).then(r => {
-      if (r.ok && e.request.url.startsWith(self.location.origin)) {
-        const clone = r.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
-      }
-      return r;
-    }).catch(() => caches.match(e.request))
+    caches.match(e.request).then(cached => {
+      const fetchPromise = fetch(e.request).then(r => {
+        if (r.ok && e.request.url.startsWith(self.location.origin)) {
+          const clone = r.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return r;
+      });
+      return cached || fetchPromise;
+    })
   );
 });
 

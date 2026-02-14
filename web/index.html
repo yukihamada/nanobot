@@ -29,6 +29,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="chatweb.ai">
   <link rel="manifest" href="/manifest.json">
+
+  <!-- Resource hints for faster API calls -->
+  <link rel="dns-prefetch" href="https://api.chatweb.ai">
+  <link rel="preconnect" href="https://api.chatweb.ai" crossorigin>
+  <link rel="dns-prefetch" href="https://api.groq.com">
+  <link rel="dns-prefetch" href="https://api.openai.com">
+  <link rel="dns-prefetch" href="https://api.elevenlabs.io">
+
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -4629,6 +4637,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: msgToSend, session_id: webSessionId, language: lang2 || 'ja' }),
           signal: abortCtrl.signal,
+          priority: 'high',
         });
         const d = await r.json();
         clearTimeout(frontendTimeout);
@@ -7828,6 +7837,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(chatBody),
           signal: abortCtrl.signal,
+          priority: 'high',
         });
 
         if (!r.ok || !r.body) {
