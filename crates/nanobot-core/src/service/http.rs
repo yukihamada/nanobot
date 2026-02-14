@@ -81,6 +81,15 @@ pub fn get_base_url() -> String {
     std::env::var("BASE_URL").unwrap_or_else(|_| "https://chatweb.ai".to_string())
 }
 
+/// Get effective host from headers, checking X-Forwarded-Host first (for edge proxies like teai.io),
+/// then falling back to the Host header.
+fn effective_host(headers: &axum::http::HeaderMap) -> &str {
+    headers.get("x-forwarded-host")
+        .or_else(|| headers.get("host"))
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+}
+
 /// Check if a session key, user ID, or email is an admin.
 /// Reads from ADMIN_SESSION_KEYS environment variable (comma-separated).
 /// Supports both session keys (e.g. "webchat:xxx") and emails (e.g. "user@example.com").
@@ -1723,6 +1732,12 @@ pub struct UserSettings {
     pub show_token_info: Option<bool>,
     pub show_timestamps: Option<bool>,
     pub compact_mode: Option<bool>,
+    // Voice and onboarding settings
+    pub preferred_voice: Option<String>,
+    pub preferred_tts_provider: Option<String>,
+    pub ai_nickname: Option<String>,
+    pub user_nickname: Option<String>,
+    pub onboarding_completed: Option<bool>,
 }
 
 /// Request body for updating settings (all fields optional for partial update)
@@ -1752,6 +1767,12 @@ pub struct UpdateSettingsRequest {
     pub show_token_info: Option<bool>,
     pub show_timestamps: Option<bool>,
     pub compact_mode: Option<bool>,
+    // Voice and onboarding settings
+    pub preferred_voice: Option<String>,
+    pub preferred_tts_provider: Option<String>,
+    pub ai_nickname: Option<String>,
+    pub user_nickname: Option<String>,
+    pub onboarding_completed: Option<bool>,
 }
 
 /// Request body for email registration.
@@ -2204,9 +2225,7 @@ async fn handle_chat(
     let chat_start = std::time::Instant::now();
 
     // Resolve inference mode: request field > host-based default > "auto"
-    let chat_host = headers.get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+    let chat_host = effective_host(&headers);
     let is_wisbee = chat_host.contains("wisbee.ai");
     let resolved_mode = match req.mode.as_deref() {
         Some("local") => "local",
@@ -5271,9 +5290,7 @@ async fn handle_chat_stream(
     }
 
     // Resolve inference mode for streaming endpoint (same logic as handle_chat)
-    let stream_host = headers.get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+    let stream_host = effective_host(&headers);
     let is_wisbee_stream = stream_host.contains("wisbee.ai");
     let stream_mode = match req.mode.as_deref() {
         Some("local") => "local",
@@ -5569,12 +5586,22 @@ async fn handle_chat_stream(
 
         let tools_ref = if tools.is_empty() { None } else { Some(&tools[..]) };
 
-        // LLM call with hard deadline (failover handled by LoadBalancedProvider)
+        // LLM call with hard deadline — using streaming to send content_chunk events in real-time
         let deadline = std::time::Duration::from_secs(RESPONSE_DEADLINE_SECS);
+        let (chunk_tx, mut chunk_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let tx_for_chunks = tx.clone();
+        let chunk_forwarder = tokio::spawn(async move {
+            while let Some(chunk) = chunk_rx.recv().await {
+                let _ = tx_for_chunks.unbounded_send(Ok(Event::default().data(
+                    serde_json::json!({"type":"content_chunk","text":chunk}).to_string()
+                )));
+            }
+        });
         let llm_result = tokio::time::timeout(
             deadline,
-            provider.chat_with_extra(&messages, tools_ref, &model, max_tokens, temperature, &chat_extra),
+            provider.chat_stream(&messages, tools_ref, &model, max_tokens, temperature, &chat_extra, chunk_tx),
         ).await;
+        let _ = chunk_forwarder.await;
         let (stream_used_model, first_result) = match llm_result {
             Ok(Ok(c)) => (model.clone(), Ok(c)),
             Ok(Err(e)) => {
@@ -5715,14 +5742,24 @@ async fn handle_chat_stream(
                     }));
                     event_count += 1;
 
-                    // Follow-up LLM call: pass tools if more iterations remain
+                    // Follow-up LLM call: pass tools if more iterations remain, stream text on final iteration
                     let follow_up_tools = if iteration < max_iterations {
                         Some(&tools[..])
                     } else {
                         None
                     };
 
-                    match provider.chat(&conversation, follow_up_tools, &model, max_tokens, temperature).await {
+                    let (fu_chunk_tx, mut fu_chunk_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+                    let tx_for_fu = tx.clone();
+                    let fu_forwarder = tokio::spawn(async move {
+                        while let Some(chunk) = fu_chunk_rx.recv().await {
+                            let _ = tx_for_fu.unbounded_send(Ok(Event::default().data(
+                                serde_json::json!({"type":"content_chunk","text":chunk}).to_string()
+                            )));
+                        }
+                    });
+
+                    match provider.chat_stream(&conversation, follow_up_tools, &model, max_tokens, temperature, &chat_extra, fu_chunk_tx).await {
                         Ok(resp) => {
                             stream_total_input += resp.usage.prompt_tokens;
                             stream_total_output += resp.usage.completion_tokens;
@@ -5754,6 +5791,7 @@ async fn handle_chat_stream(
                             break;
                         }
                     }
+                    let _ = fu_forwarder.await;
                 }
 
                 let mut response_text = current.content.unwrap_or_default();
@@ -7182,7 +7220,10 @@ async fn handle_coupon_redeem(
 
         let resolved_user = resolve_session_key(dynamo, table, &session_key).await;
 
-        // 3. Check if already redeemed (prevent double-use)
+        // 3. Check redemption count (enforce per-user limit)
+        let uses_per_user = coupon_item.get("uses_per_user").and_then(|v| v.as_n().ok())
+            .and_then(|n| n.parse::<i64>().ok()).unwrap_or(1);
+
         let redeem_check = dynamo
             .get_item()
             .table_name(table)
@@ -7191,13 +7232,22 @@ async fn handle_coupon_redeem(
             .send()
             .await;
 
-        if let Ok(ref output) = redeem_check {
-            if output.item.is_some() {
-                return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({
-                    "error": "Coupon already redeemed",
-                    "error_ja": "このクーポンは既に使用済みです"
-                }))).into_response();
+        let current_count = if let Ok(ref output) = redeem_check {
+            if let Some(ref item) = output.item {
+                item.get("count").and_then(|v| v.as_n().ok())
+                    .and_then(|n| n.parse::<i64>().ok()).unwrap_or(0)
+            } else {
+                0
             }
+        } else {
+            0
+        };
+
+        if current_count >= uses_per_user {
+            return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": format!("Coupon redemption limit reached ({}/{})", current_count, uses_per_user),
+                "error_ja": format!("クーポン使用上限に達しました ({}/{}回)", current_count, uses_per_user)
+            }))).into_response();
         }
 
         // 4. Extract coupon benefits
@@ -7232,21 +7282,43 @@ async fn handle_coupon_redeem(
             .send()
             .await;
 
-        // 6. Record redemption (prevent re-use)
+        // 6. Record redemption (increment count)
         let ttl = (chrono::Utc::now() + chrono::Duration::days(grant_days + 30)).timestamp();
-        let _ = dynamo
-            .put_item()
-            .table_name(table)
-            .item("pk", AttributeValue::S(format!("REDEEM#{}#{}", resolved_user, code)))
-            .item("sk", AttributeValue::S("INFO".to_string()))
-            .item("user_id", AttributeValue::S(resolved_user.clone()))
-            .item("code", AttributeValue::S(code.clone()))
-            .item("grant_credits", AttributeValue::N(grant_credits.to_string()))
-            .item("grant_plan", AttributeValue::S(grant_plan.clone()))
-            .item("redeemed_at", AttributeValue::S(now.clone()))
-            .item("ttl", AttributeValue::N(ttl.to_string()))
-            .send()
-            .await;
+        let new_count = current_count + 1;
+
+        if current_count == 0 {
+            // First redemption - create record
+            let _ = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("REDEEM#{}#{}", resolved_user, code)))
+                .item("sk", AttributeValue::S("INFO".to_string()))
+                .item("user_id", AttributeValue::S(resolved_user.clone()))
+                .item("code", AttributeValue::S(code.clone()))
+                .item("count", AttributeValue::N("1".to_string()))
+                .item("grant_credits", AttributeValue::N(grant_credits.to_string()))
+                .item("grant_plan", AttributeValue::S(grant_plan.clone()))
+                .item("first_redeemed_at", AttributeValue::S(now.clone()))
+                .item("last_redeemed_at", AttributeValue::S(now.clone()))
+                .item("ttl", AttributeValue::N(ttl.to_string()))
+                .send()
+                .await;
+        } else {
+            // Subsequent redemption - increment count
+            let _ = dynamo
+                .update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("REDEEM#{}#{}", resolved_user, code)))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .update_expression("ADD #count :one SET last_redeemed_at = :now, #ttl = :ttl")
+                .expression_attribute_names("#count", "count")
+                .expression_attribute_names("#ttl", "ttl")
+                .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+                .expression_attribute_values(":now", AttributeValue::S(now.clone()))
+                .expression_attribute_values(":ttl", AttributeValue::N(ttl.to_string()))
+                .send()
+                .await;
+        }
 
         // 7. Log audit
         emit_audit_log(dynamo.clone(), table.clone(), "coupon_redeemed", &resolved_user, "",
@@ -7264,8 +7336,11 @@ async fn handle_coupon_redeem(
             "expires_at": expires_at,
             "credits_remaining": user.credits_remaining,
             "plan": user.plan,
-            "message": "Coupon redeemed successfully!",
-            "message_ja": format!("クーポン適用完了！{}クレジット付与、{}日間{}プラン", grant_credits, grant_days, grant_plan),
+            "redemption_count": new_count,
+            "redemption_limit": uses_per_user,
+            "remaining_uses": uses_per_user - new_count,
+            "message": format!("Coupon redeemed successfully! ({}/{})", new_count, uses_per_user),
+            "message_ja": format!("クーポン適用完了！{}クレジット付与（{}/{}回目）", grant_credits, new_count, uses_per_user),
         })).into_response();
     }
 
@@ -7837,17 +7912,14 @@ async fn handle_integrations(
 
 /// GET / — Root landing page (host-based routing)
 async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
-    let host = headers.get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+    let host = effective_host(&headers);
 
     if host.starts_with("api.") {
         // Serve API docs for api.chatweb.ai / api.teai.io
         axum::response::Html(include_str!("../../../../web/api-docs.html"))
-    } else if host.contains("teai.io") {
-        // Serve teai.io simple landing page (email auth only, 1000 initial credits)
-        axum::response::Html(include_str!("../../../../web/teai-index-simple.html"))
     } else {
+        // Serve full chat UI for all domains (chatweb.ai, teai.io, etc.)
+        // Frontend detects IS_TEAI via location.hostname for domain-specific behavior
         axum::response::Html(include_str!("../../../../web/index.html"))
     }
 }
@@ -7858,15 +7930,13 @@ async fn handle_pricing_api() -> impl IntoResponse {
     Json(serde_json::json!({
         "models": PRICING_TABLE,
         "media": MEDIA_PRICING,
-        "updated_at": "2025-06-01",
+        "updated_at": "2026-02-14",
     }))
 }
 
 /// GET /pricing — Pricing page (host-based routing)
 async fn handle_pricing(headers: axum::http::HeaderMap) -> impl IntoResponse {
-    let host = headers.get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+    let host = effective_host(&headers);
     if host.contains("teai.io") {
         axum::response::Html(include_str!("../../../../web/teai-pricing.html"))
     } else {
@@ -8767,9 +8837,7 @@ async fn handle_activity(
 
 /// GET /og.svg — OGP image (host-based routing)
 async fn handle_og_svg(headers: axum::http::HeaderMap) -> impl IntoResponse {
-    let host = headers.get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+    let host = effective_host(&headers);
     let svg = if host.contains("teai.io") {
         include_str!("../../../../web/og-teai.svg")
     } else {
@@ -10045,6 +10113,11 @@ async fn handle_get_settings(
             show_token_info: None,
             show_timestamps: None,
             compact_mode: None,
+            preferred_voice: None,
+            preferred_tts_provider: None,
+            ai_nickname: None,
+            user_nickname: None,
+            onboarding_completed: None,
         },
         "session_id": id,
     }))
@@ -10133,11 +10206,17 @@ async fn get_user_settings(
             let show_token_info = item.get("show_token_info").and_then(|v| v.as_bool().ok()).copied();
             let show_timestamps = item.get("show_timestamps").and_then(|v| v.as_bool().ok()).copied();
             let compact_mode = item.get("compact_mode").and_then(|v| v.as_bool().ok()).copied();
+            let preferred_voice = item.get("preferred_voice").and_then(|v| v.as_s().ok()).cloned();
+            let preferred_tts_provider = item.get("preferred_tts_provider").and_then(|v| v.as_s().ok()).cloned();
+            let ai_nickname = item.get("ai_nickname").and_then(|v| v.as_s().ok()).cloned();
+            let user_nickname = item.get("user_nickname").and_then(|v| v.as_s().ok()).cloned();
+            let onboarding_completed = item.get("onboarding_completed").and_then(|v| v.as_bool().ok()).copied();
             return UserSettings {
                 preferred_model, temperature, enabled_tools, custom_api_keys, language,
                 adult_mode, age_verified, top_p, frequency_penalty, presence_penalty,
                 custom_system_prompt, streaming_enabled, show_thinking, theme, ui_language,
                 font_size, send_method, tts_speed, show_token_info, show_timestamps, compact_mode,
+                preferred_voice, preferred_tts_provider, ai_nickname, user_nickname, onboarding_completed,
             };
         }
     }
@@ -10168,6 +10247,11 @@ async fn get_user_settings(
         show_token_info: None,
         show_timestamps: None,
         compact_mode: None,
+        preferred_voice: None,
+        preferred_tts_provider: None,
+        ai_nickname: None,
+        user_nickname: None,
+        onboarding_completed: None,
     }
 }
 
@@ -10311,6 +10395,26 @@ async fn save_user_settings(
         update_expr.push("compact_mode = :cm".to_string());
         expr_values.insert(":cm".to_string(), AttributeValue::Bool(cm));
     }
+    if let Some(ref pv) = req.preferred_voice {
+        update_expr.push("preferred_voice = :pv".to_string());
+        expr_values.insert(":pv".to_string(), AttributeValue::S(pv.clone()));
+    }
+    if let Some(ref ptp) = req.preferred_tts_provider {
+        update_expr.push("preferred_tts_provider = :ptp".to_string());
+        expr_values.insert(":ptp".to_string(), AttributeValue::S(ptp.clone()));
+    }
+    if let Some(ref ain) = req.ai_nickname {
+        update_expr.push("ai_nickname = :ain".to_string());
+        expr_values.insert(":ain".to_string(), AttributeValue::S(ain.clone()));
+    }
+    if let Some(ref un) = req.user_nickname {
+        update_expr.push("user_nickname = :un".to_string());
+        expr_values.insert(":un".to_string(), AttributeValue::S(un.clone()));
+    }
+    if let Some(oc) = req.onboarding_completed {
+        update_expr.push("onboarding_completed = :oc".to_string());
+        expr_values.insert(":oc".to_string(), AttributeValue::Bool(oc));
+    }
 
     let update_expression = update_expr.join(", ");
     let _ = dynamo
@@ -10365,9 +10469,7 @@ async fn handle_google_auth(
     if client_id.is_empty() {
         return axum::response::Redirect::temporary("/?auth=error&reason=google_not_configured");
     }
-    let host = headers.get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+    let host = effective_host(&headers);
     let redirect_uri = if host.contains("teai.io") {
         "https://teai.io/auth/google/callback"
     } else {
@@ -10391,9 +10493,7 @@ async fn handle_google_callback(
 ) -> impl IntoResponse {
     let client_id = std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default();
     let client_secret = std::env::var("GOOGLE_CLIENT_SECRET").unwrap_or_default();
-    let host = headers.get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+    let host = effective_host(&headers);
     let redirect_uri = if host.contains("teai.io") {
         "https://teai.io/auth/google/callback"
     } else {
@@ -12235,6 +12335,83 @@ async fn try_polly_tts(text: &str) -> Option<Vec<u8>> {
     }
 }
 
+/// QWEN3-TTS API — Alibaba Cloud's high-quality multilingual TTS with voice cloning
+async fn try_qwen_tts(text: &str, voice: &str, _speed: f64) -> Result<Vec<u8>, String> {
+    let api_key = std::env::var("DASHSCOPE_API_KEY")
+        .map_err(|_| "No DASHSCOPE_API_KEY".to_string())?;
+
+    if api_key.is_empty() {
+        return Err("Empty DASHSCOPE_API_KEY".to_string());
+    }
+
+    // Detect Japanese text for language selection
+    let is_ja = text.chars().any(|c| {
+        ('\u{3040}'..='\u{309F}').contains(&c) || // hiragana
+        ('\u{30A0}'..='\u{30FF}').contains(&c) || // katakana
+        ('\u{4E00}'..='\u{9FFF}').contains(&c)    // CJK
+    });
+
+    let language_type = if is_ja { "Japanese" } else { "English" };
+
+    // Map common voice names to QWEN voices
+    // For Japanese: prefer feminine voices like Cherry, Serena
+    let qwen_voice = if voice.is_empty() || voice == "alloy" || voice == "nova" {
+        if is_ja { "Cherry" } else { "Cherry" }
+    } else {
+        voice
+    };
+
+    let client = reqwest::Client::new();
+
+    // Non-streaming mode: returns a URL valid for 24 hours
+    let resp = client
+        .post("https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "model": "qwen3-tts-flash",
+            "input": {
+                "text": text,
+                "voice": qwen_voice,
+                "language_type": language_type,
+            },
+            "stream": false,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("QWEN TTS request failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("QWEN TTS error: {} {}", status, body));
+    }
+
+    let json: serde_json::Value = resp.json().await
+        .map_err(|e| format!("Failed to parse QWEN response: {}", e))?;
+
+    // Extract audio URL from response
+    let audio_url = json["output"]["audio_url"]
+        .as_str()
+        .ok_or_else(|| format!("No audio_url in response: {:?}", json))?;
+
+    // Download audio from the URL
+    let audio_resp = client
+        .get(audio_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to download audio: {}", e))?;
+
+    if audio_resp.status().is_success() {
+        let audio = audio_resp.bytes().await
+            .map_err(|e| format!("Failed to read audio bytes: {}", e))?
+            .to_vec();
+        Ok(audio)
+    } else {
+        Err(format!("Audio download failed: {}", audio_resp.status()))
+    }
+}
+
 /// OpenAI TTS API — uses gpt-4o-mini-tts for natural, steerable voice
 async fn try_openai_tts(text: &str, voice: &str, speed: f64, instructions: Option<&str>) -> Result<Vec<u8>, String> {
     let api_key = std::env::var("OPENAI_API_KEY")
@@ -12550,22 +12727,51 @@ async fn handle_speech_synthesize(
             }
             Err(e) => tracing::warn!("TTS: CosyVoice failed: {}", e),
         }
-    }
-
-    // Auto fallback chain: OpenAI → Polly
-    if audio_bytes.is_none() && force_engine != Some("polly") && force_engine != Some("elevenlabs") && force_engine != Some("sbv2") && force_engine != Some("cosyvoice") {
-        match try_openai_tts(&req.text, &req.voice, req.speed, req.instructions.as_deref()).await {
+    } else if force_engine == Some("qwen") {
+        match try_qwen_tts(&req.text, &req.voice, req.speed).await {
             Ok(bytes) => {
-                tracing::info!("TTS: gpt-4o-mini-tts success, {} bytes", bytes.len());
+                tracing::info!("TTS: QWEN3 success, {} bytes", bytes.len());
                 audio_bytes = Some(bytes);
             }
-            Err(e) => tracing::warn!("TTS: OpenAI failed ({}), trying Polly...", e),
+            Err(e) => tracing::warn!("TTS: QWEN3 failed: {}", e),
+        }
+    }
+
+    // Auto fallback chain: QWEN (for Japanese) → OpenAI → Polly
+    if audio_bytes.is_none() && force_engine != Some("polly") && force_engine != Some("elevenlabs") && force_engine != Some("sbv2") && force_engine != Some("cosyvoice") && force_engine != Some("qwen") {
+        // Detect Japanese text
+        let is_ja = req.text.chars().any(|c| {
+            ('\u{3040}'..='\u{309F}').contains(&c) || // hiragana
+            ('\u{30A0}'..='\u{30FF}').contains(&c) || // katakana
+            ('\u{4E00}'..='\u{9FFF}').contains(&c)    // CJK
+        });
+
+        // Try QWEN first for Japanese text (if API key is available)
+        if is_ja && std::env::var("DASHSCOPE_API_KEY").is_ok() {
+            match try_qwen_tts(&req.text, &req.voice, req.speed).await {
+                Ok(bytes) => {
+                    tracing::info!("TTS: QWEN3 auto-fallback success, {} bytes", bytes.len());
+                    audio_bytes = Some(bytes);
+                }
+                Err(e) => tracing::warn!("TTS: QWEN3 failed ({}), trying OpenAI...", e),
+            }
+        }
+
+        // OpenAI fallback if QWEN failed or not Japanese
+        if audio_bytes.is_none() {
+            match try_openai_tts(&req.text, &req.voice, req.speed, req.instructions.as_deref()).await {
+                Ok(bytes) => {
+                    tracing::info!("TTS: gpt-4o-mini-tts success, {} bytes", bytes.len());
+                    audio_bytes = Some(bytes);
+                }
+                Err(e) => tracing::warn!("TTS: OpenAI failed ({}), trying Polly...", e),
+            }
         }
     }
 
     // Polly fallback
     #[cfg(feature = "dynamodb-backend")]
-    if audio_bytes.is_none() && force_engine != Some("openai") && force_engine != Some("elevenlabs") && force_engine != Some("sbv2") {
+    if audio_bytes.is_none() && force_engine != Some("openai") && force_engine != Some("elevenlabs") && force_engine != Some("sbv2") && force_engine != Some("qwen") {
         audio_bytes = try_polly_tts(&req.text).await;
     }
 
@@ -14920,6 +15126,11 @@ mod agent_routing_tests {
             show_token_info: Some(true),
             show_timestamps: None,
             compact_mode: None,
+            preferred_voice: None,
+            preferred_tts_provider: None,
+            ai_nickname: None,
+            user_nickname: None,
+            onboarding_completed: None,
         };
         let json = serde_json::to_string(&settings).unwrap();
         let deser: UserSettings = serde_json::from_str(&json).unwrap();
@@ -14954,6 +15165,11 @@ mod agent_routing_tests {
             show_token_info: None,
             show_timestamps: None,
             compact_mode: None,
+            preferred_voice: None,
+            preferred_tts_provider: None,
+            ai_nickname: None,
+            user_nickname: None,
+            onboarding_completed: None,
         };
         let json = serde_json::to_string(&settings).unwrap();
         let deser: UserSettings = serde_json::from_str(&json).unwrap();

@@ -129,25 +129,58 @@ pub fn credit_rate(model: &str) -> CreditRate {
             output_per_1k: 0,
         };
     }
-    if model_lower.contains("gpt-4o-mini") || model_lower.contains("gemini-flash") {
+    if model_lower.contains("gpt-4.1-nano") || model_lower.contains("gpt-4o-mini") || model_lower.contains("gemini-flash") {
         CreditRate {
             input_per_1k: 1,
             output_per_1k: 3,
         }
-    } else if model_lower.contains("gpt-4o") {
+    } else if model_lower.contains("gpt-4.1-mini") {
+        // GPT-4.1-mini: $0.40/$1.60 per 1M
+        CreditRate {
+            input_per_1k: 1,
+            output_per_1k: 4,
+        }
+    } else if model_lower.contains("o3-mini") || model_lower.contains("o4-mini") {
+        // o3-mini / o4-mini: $1.10/$4.40 per 1M
+        CreditRate {
+            input_per_1k: 2,
+            output_per_1k: 8,
+        }
+    } else if model_lower.contains("gpt-4.1") || model_lower.contains("gpt-4o") {
+        // GPT-4.1: $2/$8, GPT-4o: $2.50/$10 per 1M
         CreditRate {
             input_per_1k: 5,
             output_per_1k: 15,
         }
+    } else if model_lower.contains("gemini") && model_lower.contains("pro") {
+        // Gemini 2.5 Pro: $1.25/$10 per 1M
+        CreditRate {
+            input_per_1k: 3,
+            output_per_1k: 15,
+        }
+    } else if model_lower.contains("claude") && model_lower.contains("haiku") {
+        // Claude Haiku 4.5: $1/$5 per 1M
+        CreditRate {
+            input_per_1k: 2,
+            output_per_1k: 8,
+        }
     } else if model_lower.contains("claude") && model_lower.contains("sonnet") {
+        // Claude Sonnet 4.5: $3/$15 per 1M
         CreditRate {
             input_per_1k: 6,
             output_per_1k: 18,
         }
     } else if model_lower.contains("claude") && model_lower.contains("opus") {
+        // Claude Opus 4.5/4.6: $5/$25 per 1M
         CreditRate {
-            input_per_1k: 30,
-            output_per_1k: 90,
+            input_per_1k: 10,
+            output_per_1k: 38,
+        }
+    } else if model_lower.contains("deepseek") {
+        // DeepSeek V3: $0.28/$0.42 per 1M
+        CreditRate {
+            input_per_1k: 1,
+            output_per_1k: 1,
         }
     } else if model_lower.contains("llama") || model_lower.contains("mixtral") || model_lower.contains("groq") {
         // Groq: fast inference, low cost
@@ -161,7 +194,7 @@ pub fn credit_rate(model: &str) -> CreditRate {
             output_per_1k: 9,
         }
     } else if model_lower.contains("qwen") {
-        // Qwen3 via Groq: similar to DeepSeek pricing
+        // Qwen3 via Groq
         CreditRate {
             input_per_1k: 2,
             output_per_1k: 6,
@@ -250,9 +283,9 @@ mod tests {
         let credits = calculate_credits("gpt-4o-mini", 1000, 1000);
         assert_eq!(credits, 4); // 1 + 3
 
-        // Claude Opus: 30 input, 90 output per 1K tokens
+        // Claude Opus: 10 input, 38 output per 1K tokens
         let credits = calculate_credits("claude-opus", 2000, 500);
-        assert_eq!(credits, 105); // 60 + 45
+        assert_eq!(credits, 39); // 20 + 19
 
         // GPT-4o: 5 input, 15 output per 1K tokens
         let credits = calculate_credits("gpt-4o", 10_000, 2000);

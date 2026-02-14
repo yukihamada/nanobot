@@ -18,13 +18,17 @@ pub const PRICING_TABLE: &[ModelPricing] = &[
     ModelPricing { model: "gpt-4.1",         provider: "openai",    input_per_1m: 2.00,  output_per_1m: 8.00,  context_window: 1_048_576 },
     ModelPricing { model: "gpt-4.1-mini",    provider: "openai",    input_per_1m: 0.40,  output_per_1m: 1.60,  context_window: 1_048_576 },
     ModelPricing { model: "gpt-4.1-nano",    provider: "openai",    input_per_1m: 0.10,  output_per_1m: 0.40,  context_window: 1_048_576 },
+    ModelPricing { model: "o3-mini",         provider: "openai",    input_per_1m: 1.10,  output_per_1m: 4.40,  context_window: 200_000 },
+    ModelPricing { model: "o4-mini",         provider: "openai",    input_per_1m: 1.10,  output_per_1m: 4.40,  context_window: 200_000 },
     // Anthropic
     ModelPricing { model: "claude-sonnet-4-5-20250929", provider: "anthropic", input_per_1m: 3.00,  output_per_1m: 15.00, context_window: 200_000 },
-    ModelPricing { model: "claude-haiku-3-5",  provider: "anthropic", input_per_1m: 1.00,  output_per_1m: 5.00,  context_window: 200_000 },
+    ModelPricing { model: "claude-haiku-4-5-20251001",  provider: "anthropic", input_per_1m: 1.00,  output_per_1m: 5.00,  context_window: 200_000 },
     ModelPricing { model: "claude-opus-4-5",   provider: "anthropic", input_per_1m: 5.00,  output_per_1m: 25.00, context_window: 200_000 },
+    ModelPricing { model: "claude-opus-4-6",   provider: "anthropic", input_per_1m: 5.00,  output_per_1m: 25.00, context_window: 200_000 },
     // Google
     ModelPricing { model: "gemini-2.5-flash",      provider: "google", input_per_1m: 0.15, output_per_1m: 0.60, context_window: 1_048_576 },
     ModelPricing { model: "gemini-2.5-flash-lite",  provider: "google", input_per_1m: 0.10, output_per_1m: 0.40, context_window: 1_048_576 },
+    ModelPricing { model: "gemini-2.5-pro",         provider: "google", input_per_1m: 1.25, output_per_1m: 10.00, context_window: 1_048_576 },
     ModelPricing { model: "gemini-2.0-flash",       provider: "google", input_per_1m: 0.10, output_per_1m: 0.40, context_window: 1_048_576 },
     // Groq (fast inference)
     ModelPricing { model: "llama-3.3-70b-versatile", provider: "groq",  input_per_1m: 0.59, output_per_1m: 0.79, context_window: 128_000 },
@@ -33,6 +37,8 @@ pub const PRICING_TABLE: &[ModelPricing] = &[
     ModelPricing { model: "moonshotai/kimi-k2-instruct-0905", provider: "groq", input_per_1m: 1.00, output_per_1m: 3.00, context_window: 131_072 },
     // Qwen (via Groq)
     ModelPricing { model: "qwen/qwen3-32b",   provider: "groq",     input_per_1m: 0.50, output_per_1m: 1.50, context_window: 131_072 },
+    // DeepSeek
+    ModelPricing { model: "deepseek-chat",    provider: "deepseek",  input_per_1m: 0.28, output_per_1m: 0.42, context_window: 128_000 },
 ];
 
 /// Media generation pricing (per unit).

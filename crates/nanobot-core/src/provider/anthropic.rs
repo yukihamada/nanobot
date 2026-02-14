@@ -267,6 +267,150 @@ impl LlmProvider for AnthropicProvider {
         self.parse_response(&data)
     }
 
+    async fn chat_stream(
+        &self,
+        messages: &[Message],
+        tools: Option<&[serde_json::Value]>,
+        model: &str,
+        max_tokens: u32,
+        temperature: f64,
+        extra: &ChatExtra,
+        chunk_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    ) -> Result<CompletionResponse, ProviderError> {
+        use futures::StreamExt;
+
+        let url = format!("{}/v1/messages", self.api_base);
+        let model_name = self.normalize_model(model);
+        let (system_prompt, msgs) = self.convert_messages(messages);
+
+        let mut body = json!({
+            "model": model_name, "messages": msgs,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "stream": true,
+        });
+        if let Some(top_p) = extra.top_p { body["top_p"] = json!(top_p); }
+        if let Some(system) = &system_prompt { body["system"] = json!(system); }
+        if let Some(tools) = tools {
+            if !tools.is_empty() {
+                body["tools"] = json!(self.convert_tools(tools));
+                let has_tool_results = messages.iter().any(|m| m.role == Role::Tool);
+                body["tool_choice"] = if has_tool_results { json!({"type": "auto"}) } else { json!({"type": "any"}) };
+            }
+        }
+
+        let response = http::client()
+            .post(&url)
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return Err(ProviderError::Api { status: status.as_u16(), message: text });
+        }
+
+        let mut content = String::new();
+        let mut finish_reason = FinishReason::Stop;
+        let mut tool_calls: Vec<ToolCall> = Vec::new();
+        let mut current_tool: Option<(String, String, String)> = None; // (id, name, input_json)
+        let mut usage = TokenUsage::default();
+
+        let mut stream = response.bytes_stream();
+        let mut buf = String::new();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| ProviderError::Other(format!("Stream read error: {}", e)))?;
+            buf.push_str(&String::from_utf8_lossy(&chunk));
+
+            while let Some(pos) = buf.find('\n') {
+                let line = buf[..pos].trim().to_string();
+                buf = buf[pos + 1..].to_string();
+
+                if !line.starts_with("data:") { continue; }
+                let data = line[5..].trim();
+                if data.is_empty() { continue; }
+
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
+                    let event_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+                    match event_type {
+                        "message_start" => {
+                            if let Some(u) = parsed.get("message").and_then(|m| m.get("usage")) {
+                                usage.prompt_tokens = u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            }
+                        }
+                        "content_block_start" => {
+                            if let Some(cb) = parsed.get("content_block") {
+                                let cb_type = cb.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                                if cb_type == "tool_use" {
+                                    let id = cb.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    let name = cb.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    current_tool = Some((id, name, String::new()));
+                                }
+                            }
+                        }
+                        "content_block_delta" => {
+                            if let Some(delta) = parsed.get("delta") {
+                                let delta_type = delta.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                                if delta_type == "text_delta" {
+                                    if let Some(text) = delta.get("text").and_then(|v| v.as_str()) {
+                                        content.push_str(text);
+                                        let _ = chunk_tx.send(text.to_string());
+                                    }
+                                } else if delta_type == "input_json_delta" {
+                                    if let Some(json_str) = delta.get("partial_json").and_then(|v| v.as_str()) {
+                                        if let Some(ref mut tool) = current_tool {
+                                            tool.2.push_str(json_str);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        "content_block_stop" => {
+                            if let Some((id, name, args_str)) = current_tool.take() {
+                                let arguments: HashMap<String, serde_json::Value> =
+                                    serde_json::from_str(&args_str).unwrap_or_else(|_| {
+                                        let mut m = HashMap::new();
+                                        m.insert("raw".to_string(), serde_json::Value::String(args_str));
+                                        m
+                                    });
+                                tool_calls.push(ToolCall { id, name, arguments });
+                            }
+                        }
+                        "message_delta" => {
+                            if let Some(delta) = parsed.get("delta") {
+                                if let Some(sr) = delta.get("stop_reason").and_then(|v| v.as_str()) {
+                                    finish_reason = match sr {
+                                        "end_turn" | "stop" => FinishReason::Stop,
+                                        "tool_use" => FinishReason::ToolCalls,
+                                        "max_tokens" => FinishReason::Length,
+                                        _ => FinishReason::Stop,
+                                    };
+                                }
+                            }
+                            if let Some(u) = parsed.get("usage") {
+                                usage.completion_tokens = u.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                usage.total_tokens = usage.prompt_tokens + usage.completion_tokens;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        Ok(CompletionResponse {
+            content: if content.is_empty() { None } else { Some(content) },
+            tool_calls,
+            finish_reason,
+            usage,
+        })
+    }
+
     fn default_model(&self) -> &str {
         &self.default_model
     }

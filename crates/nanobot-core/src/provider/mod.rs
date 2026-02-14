@@ -47,6 +47,26 @@ pub trait LlmProvider: Send + Sync {
         self.chat(messages, tools, model, max_tokens, temperature).await
     }
 
+    /// Stream a chat completion, sending content deltas through `chunk_tx`.
+    /// Returns the full CompletionResponse (with accumulated content + tool_calls).
+    /// Default: falls back to non-streaming chat_with_extra and sends full content as one chunk.
+    async fn chat_stream(
+        &self,
+        messages: &[Message],
+        tools: Option<&[serde_json::Value]>,
+        model: &str,
+        max_tokens: u32,
+        temperature: f64,
+        extra: &ChatExtra,
+        chunk_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    ) -> Result<CompletionResponse, ProviderError> {
+        let resp = self.chat_with_extra(messages, tools, model, max_tokens, temperature, extra).await?;
+        if let Some(ref content) = resp.content {
+            let _ = chunk_tx.send(content.clone());
+        }
+        Ok(resp)
+    }
+
     /// Get the default model for this provider.
     fn default_model(&self) -> &str;
 }
@@ -697,6 +717,54 @@ impl LlmProvider for LoadBalancedProvider {
         }
 
         Err(ProviderError::Other("All providers failed".to_string()))
+    }
+
+    async fn chat_stream(
+        &self,
+        messages: &[Message],
+        tools: Option<&[serde_json::Value]>,
+        model: &str,
+        max_tokens: u32,
+        temperature: f64,
+        extra: &ChatExtra,
+        chunk_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    ) -> Result<CompletionResponse, ProviderError> {
+        let total = self.providers.len();
+        if total == 0 {
+            return Err(ProviderError::Other("No providers configured".to_string()));
+        }
+
+        // Sequential failover for streaming (can't race — each provider writes to the same chunk_tx)
+        let start = self.counter.load(Ordering::Relaxed);
+        let mut last_err = String::new();
+
+        for i in 0..total {
+            let idx = (start + i) % total;
+            let provider = &*self.providers[idx];
+            let converted_model = Self::convert_model_for_provider(provider, model);
+
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                provider.chat_stream(messages, tools, &converted_model, max_tokens, temperature, extra, chunk_tx.clone()),
+            ).await {
+                Ok(Ok(resp)) => {
+                    if i > 0 {
+                        tracing::info!("Stream failover succeeded with provider #{} model {}", idx, converted_model);
+                    }
+                    return Ok(resp);
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!("Stream provider #{} ({}) failed: {}, trying next", idx, converted_model, e);
+                    last_err = format!("{}", e);
+                }
+                Err(_) => {
+                    tracing::warn!("Stream provider #{} ({}) timed out (10s), trying next", idx, converted_model);
+                    last_err = "timeout".to_string();
+                }
+            }
+        }
+
+        Err(ProviderError::Other(format!("All {} stream providers failed: {}", total, last_err)))
     }
 
     fn default_model(&self) -> &str {

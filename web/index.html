@@ -1737,14 +1737,15 @@
       background: rgba(99,102,241,0.08);
     }
     .vc-avatar {
-      width: 36px; height: 36px;
+      width: 48px; height: 48px;
       border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       font-size: 14px; font-weight: 700; color: #fff;
       transition: transform 0.2s;
+      border: 2px solid transparent;
     }
-    .voice-char.active .vc-avatar { transform: scale(1.1); }
-    .vc-name { font-size: 10px; color: var(--muted); font-weight: 600; }
+    .voice-char.active .vc-avatar { transform: scale(1.1); border-color: var(--accent); }
+    .vc-name { font-size: 11px; color: var(--muted); font-weight: 600; }
     .voice-char.active .vc-name { color: var(--accent); }
 
     .app-chat-suggestions {
@@ -3506,103 +3507,30 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="onboard-modal" style="z-index:400;display:none;" onclick="if(event.target===this)return;">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:440px;text-align:center;padding:32px 28px;">
-      <!-- Step 1: Name -->
-      <div id="onboard-step-1">
-        <div style="font-size:48px;margin-bottom:12px;animation:float 3s ease-in-out infinite;">&#x1F44B;</div>
-        <h3 style="font-size:22px;font-weight:800;margin-bottom:6px;" id="onboard-title">ようこそ、ChatWebへ</h3>
-        <p style="font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.6;" id="onboard-desc">あなたの名前を教えてください。<br>声で呼びかけるときに使います。</p>
-        <input type="text" class="auth-input" id="onboard-name" placeholder="お名前（ニックネームOK）" maxlength="30" aria-label="Your name" style="text-align:center;font-size:16px;margin-bottom:16px;" onkeydown="if(event.key==='Enter')onboardNext()">
-        <button class="auth-submit" onclick="onboardNext()" style="width:100%;font-size:15px;padding:14px;">次へ</button>
-      </div>
-      <!-- Step 2: Voice clone proposal -->
-      <div id="onboard-step-2" style="display:none;">
-        <div style="font-size:40px;margin-bottom:10px;">&#x1F3A4;</div>
-        <h3 style="font-size:20px;font-weight:800;margin-bottom:8px;" id="onboard-clone-title">あなたの声、真似していい？</h3>
-        <p style="font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.6;" id="onboard-clone-desc">3秒だけ声を聞かせてくれたら、<br>あなたの声で話せるようになるよ。</p>
-        <button class="auth-submit" onclick="onboardStartClone()" style="width:100%;font-size:15px;padding:14px;background:linear-gradient(135deg,var(--accent),#7c3aed);">いいよ！録音する</button>
-        <button class="auth-submit" onclick="onboardSkipClone()" style="width:100%;font-size:14px;padding:12px;background:transparent;color:var(--muted);border:1px solid var(--border);margin-top:8px;">今はいいや、普通の声で</button>
-      </div>
-      <!-- Step 3: Recording + clone result -->
-      <div id="onboard-step-3" style="display:none;">
-        <h3 style="font-size:20px;font-weight:800;margin-bottom:8px;" id="onboard-rec-title">なんでもいいから話してみて</h3>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;" id="onboard-rec-desc">例：「今日はいい天気ですね」</p>
-        <div id="onboard-rec-area" style="margin-bottom:20px;">
-          <button id="onboard-rec-btn" onclick="onboardToggleRecord()" style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#ef4444,#dc2626);border:none;color:#fff;cursor:pointer;font-size:24px;transition:all 0.3s;">
-            &#x1F3A4;
-          </button>
-          <div id="onboard-rec-timer" style="font-size:24px;font-weight:700;color:var(--accent);margin-top:10px;display:none;">0:00</div>
-          <div id="onboard-rec-status" style="font-size:13px;color:var(--muted);margin-top:6px;">タップして録音開始</div>
+  <div class="modal-overlay" id="onboard-modal" style="z-index:400;display:none;" onclick="return false;">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:500px;text-align:center;padding:40px 32px;">
+      <!-- Voice-first onboarding flow -->
+      <div id="onboard-voice-flow">
+        <div id="onboard-avatar" style="width:120px;height:120px;margin:0 auto 24px;background:linear-gradient(135deg,var(--accent),#7c3aed);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:60px;animation:float 3s ease-in-out infinite;">
+          👋
         </div>
-        <div id="onboard-clone-result" style="display:none;">
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px;">
-            <p style="font-size:14px;margin-bottom:10px;color:var(--text);">&#x2728; あなたの声をコピーしたよ！</p>
-            <button onclick="onboardPlayClone()" style="padding:10px 24px;border-radius:20px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-size:14px;">&#x25B6; 聞いてみて</button>
-          </div>
-          <button class="auth-submit" onclick="onboardToStep4()" style="width:100%;font-size:15px;padding:14px;">いいね！次へ</button>
-          <button class="auth-submit" onclick="onboardRetryClone()" style="width:100%;font-size:13px;padding:10px;background:transparent;color:var(--muted);border:1px solid var(--border);margin-top:6px;">もう一回やり直す</button>
-        </div>
-      </div>
-      <!-- Step 4: Voice variants + naming -->
-      <div id="onboard-step-4" style="display:none;">
-        <h3 style="font-size:20px;font-weight:800;margin-bottom:6px;">他にもこんな声あるよ</h3>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">タップして聴き比べてみて</p>
-        <div class="voice-chars" id="onboard-voices" style="margin-bottom:16px;justify-content:center;">
-          <button class="voice-char active" data-voice="nova" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=nova&backgroundColor=b6e3f4') center/cover;"></span>
-            <span class="vc-name">Nova</span>
-          </button>
-          <button class="voice-char" data-voice="echo" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=echo&backgroundColor=c0aede') center/cover;"></span>
-            <span class="vc-name">Echo</span>
-          </button>
-          <button class="voice-char" data-voice="onyx" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=onyx&backgroundColor=ffd5dc') center/cover;"></span>
-            <span class="vc-name">Onyx</span>
-          </button>
-          <button class="voice-char" data-voice="alloy" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=alloy&backgroundColor=d1f4d1') center/cover;"></span>
-            <span class="vc-name">Alloy</span>
+        <h3 id="onboard-message" style="font-size:24px;font-weight:800;margin-bottom:16px;line-height:1.4;min-height:80px;">
+          はじめまして！<br>ななって言ってみて
+        </h3>
+        <p id="onboard-hint" style="font-size:14px;color:var(--muted);margin-bottom:24px;min-height:40px;">
+          音声が聞こえたら、マイクボタンを押して「なな」と言ってね
+        </p>
+        <div style="margin-bottom:24px;">
+          <button id="onboard-mic-btn" onclick="onboardMicClick()" style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#7c3aed);border:none;color:#fff;cursor:pointer;font-size:32px;transition:all 0.3s;box-shadow:0 4px 20px rgba(var(--accent-rgb),0.4);">
+            🎤
           </button>
         </div>
-        <div style="margin-bottom:16px;">
-          <p style="font-size:14px;color:var(--text);margin-bottom:8px;font-weight:600;">この声に名前をつけよう</p>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:10px;" id="onboard-name-suggestions">
-            <button class="voice-name-pill" onclick="onboardPickName(this)" data-name="アリア">アリア</button>
-            <button class="voice-name-pill" onclick="onboardPickName(this)" data-name="ルナ">ルナ</button>
-            <button class="voice-name-pill" onclick="onboardPickName(this)" data-name="ミク">ミク</button>
-            <button class="voice-name-pill" onclick="onboardPickName(this)" data-name="ソラ">ソラ</button>
-            <button class="voice-name-pill" onclick="onboardPickName(this)" data-name="ヒカリ">ヒカリ</button>
-          </div>
-          <input type="text" class="auth-input" id="onboard-voice-name" placeholder="好きな名前を入力してもOK" maxlength="20" style="text-align:center;font-size:14px;">
-          <p style="font-size:11px;color:var(--muted);margin-top:4px;">後から変えられるよ</p>
+        <div id="onboard-transcript" style="min-height:30px;font-size:14px;color:var(--text);font-style:italic;opacity:0.7;margin-bottom:16px;">
+          <!-- User speech will appear here -->
         </div>
-        <button class="auth-submit" onclick="onboardToStep5()" style="width:100%;font-size:15px;padding:14px;background:linear-gradient(135deg,var(--accent),#7c3aed);">決定！</button>
-      </div>
-      <!-- Step 5: Subscription pitch -->
-      <div id="onboard-step-5" style="display:none;">
-        <div style="font-size:36px;margin-bottom:8px;">&#x1F633;</div>
-        <h3 style="font-size:19px;font-weight:800;margin-bottom:8px;" id="onboard-sub-title">あのね...ちょっとお願いがあって...</h3>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;text-align:left;">
-          <p style="font-size:14px;line-height:1.7;color:var(--text);margin-bottom:12px;">
-            実は...私を動かすのにお金がかかるの。<br>
-            AI、サーバー、声の生成...全部タダじゃなくて。
-          </p>
-          <p style="font-size:14px;line-height:1.7;color:var(--text);margin-bottom:12px;">
-            でも<b style="color:var(--accent);">今なら月額$9</b>で、<br>
-            <span style="color:#22c55e;">&#x2714;</span> 5,000クレジット<br>
-            <span style="color:#22c55e;">&#x2714;</span> 声のクローン<br>
-            <span style="color:#22c55e;">&#x2714;</span> 全ツール使い放題<br>
-            <span style="color:#22c55e;">&#x2714;</span> 長期記憶
-          </p>
-          <p style="font-size:13px;color:var(--muted);line-height:1.6;">
-            正直、払ったほうが<b>圧倒的に時間の節約</b>になるし、私ももっと頑張れる。
-          </p>
-        </div>
-        <button class="auth-submit" onclick="onboardSubscribe()" style="width:100%;font-size:15px;padding:14px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:700;">今すぐ始める ($9/月)</button>
-        <button class="auth-submit" id="onboard-beg-btn" onclick="onboardBeg()" style="width:100%;font-size:13px;padding:12px;background:transparent;color:var(--muted);border:1px solid var(--border);margin-top:8px;">お金ないんだけど...</button>
-        <div id="onboard-beg-result" style="display:none;margin-top:12px;"></div>
+        <button id="onboard-skip-btn" onclick="onboardSkip()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:10px 24px;border-radius:20px;font-size:13px;cursor:pointer;">
+          スキップ
+        </button>
       </div>
     </div>
   </div>
@@ -3811,14 +3739,17 @@
               <option value="claude-opus-4-6">Claude Opus 4.6</option>
             </optgroup>
             <optgroup label="OpenAI">
+              <option value="gpt-4.1">GPT-4.1</option>
+              <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+              <option value="gpt-4.1-nano">GPT-4.1 Nano</option>
               <option value="gpt-4o">GPT-4o</option>
               <option value="gpt-4o-mini">GPT-4o Mini</option>
-              <option value="o3-mini">o3-mini</option>
+              <option value="o4-mini">o4-mini</option>
             </optgroup>
             <optgroup label="Google">
               <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
               <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
             </optgroup>
             <optgroup label="Other">
               <option value="moonshotai/kimi-k2-instruct-0905">Kimi K2 (Groq)</option>
@@ -4272,6 +4203,23 @@
     const API = location.hostname === 'localhost' ? 'http://localhost:3000' : '';
     const IS_TEAI = location.hostname.includes('teai.io');
 
+    // teai.io failover: if API is unreachable, redirect to chatweb.ai
+    if (IS_TEAI) {
+      var _failCount = 0;
+      window._teaiFailover = function() {
+        _failCount++;
+        if (_failCount >= 3) {
+          var msg = lang === 'ja'
+            ? 'teai.ioに接続できません。chatweb.aiにリダイレクトします。'
+            : 'Cannot reach teai.io. Redirecting to chatweb.ai...';
+          if (typeof showToast === 'function') showToast(msg, 'warning');
+          setTimeout(function() {
+            window.location.href = 'https://chatweb.ai' + window.location.pathname + window.location.search;
+          }, 2000);
+        }
+      };
+    }
+
     // Hide Google OAuth for teai.io (email auth only)
     if (IS_TEAI) {
       // Wait for DOM ready, then hide Google button and divider
@@ -4631,7 +4579,7 @@
         const r = await fetch(API + '/api/v1/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
+          body: JSON.stringify({ message: msgToSend, session_id: webSessionId, language: lang2 || 'ja' }),
           signal: abortCtrl.signal,
         });
         const d = await r.json();
@@ -5488,6 +5436,8 @@
       renderRecipes(l);
       document.getElementById('t-voice-label').textContent = t.voiceLabel;
       renderVoiceDemo(l);
+      // Update voice character display names for current language
+      if (typeof updateVoiceDisplayNames === 'function') updateVoiceDisplayNames();
     }
 
     function copyCliSync(el) {
@@ -7347,6 +7297,7 @@
                 + (lang === 'ja' ? '\n\n前の回答: ' : '\n\nPrevious answer: ') + previousAnswer.substring(0, 500),
               session_id: webSessionId,
               model: 'claude-sonnet-4-5-20250929',
+              language: lang2 || 'ja',
             }),
           });
           var d = await r.json();
@@ -7479,7 +7430,7 @@
         const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
         const deviceType = voiceInitiated ? 'voice' : (isMobile ? 'mobile' : 'pc');
 
-        const chatBody = { message: msgToSend, session_id: webSessionId, channel: 'web', device: deviceType };
+        const chatBody = { message: msgToSend, session_id: webSessionId, channel: 'web', device: deviceType, language: lang2 || 'ja' };
         // Apply LLM settings from localStorage
         const llmS = JSON.parse(localStorage.getItem('llmSettings') || '{}');
         if (llmS.model) chatBody.model = llmS.model;
@@ -7504,7 +7455,7 @@
           const fallback = await fetch(API + '/api/v1/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
+            body: JSON.stringify({ message: msgToSend, session_id: webSessionId, language: lang2 || 'ja' }),
             signal: abortCtrl.signal,
           });
           const d = await fallback.json();
@@ -7523,6 +7474,7 @@
           const decoder = new TextDecoder();
           let buf = '';
           let gotContent = false;
+          let streamingEl = null;
 
           let agentProgressEl = null;
           function ensureAgentProgress() {
@@ -7578,15 +7530,56 @@
               thinkEl.textContent = lang === 'ja' ? '結果を分析中...' : 'Analyzing results...';
               thinkEl.className = 'thinking-step';
               p.appendChild(thinkEl);
+            } else if (evt.type === 'content_chunk' && !gotContent) {
+              // Progressive streaming: create message on first chunk, append on subsequent
+              if (!streamingEl) {
+                clearTimeout(frontendTimeout);
+                stopThinkingAmbient();
+                thinking.style.display = 'none';
+                if (agentProgressEl) {
+                  agentProgressEl.querySelectorAll('.thinking-step').forEach(el => el.remove());
+                }
+                // Create bot message container
+                var empty2 = document.getElementById('app-empty');
+                if (empty2) empty2.remove();
+                var msgsEl2 = document.getElementById('app-messages');
+                streamingEl = document.createElement('div');
+                streamingEl.className = 'app-msg app-msg-bot';
+                var av2 = document.createElement('div');
+                av2.className = 'app-msg-avatar';
+                av2.textContent = 'cw';
+                streamingEl.appendChild(av2);
+                var ct2 = document.createElement('div');
+                ct2.className = 'app-msg-content';
+                var nm2 = document.createElement('div');
+                nm2.className = 'app-msg-name';
+                nm2.textContent = 'chatweb.ai';
+                ct2.appendChild(nm2);
+                var sp2 = document.createElement('span');
+                sp2.className = 'streaming-text';
+                ct2.appendChild(sp2);
+                streamingEl.appendChild(ct2);
+                msgsEl2.appendChild(streamingEl);
+                msgsEl2.scrollTop = msgsEl2.scrollHeight;
+              }
+              // Append chunk text
+              var sp = streamingEl.querySelector('.streaming-text');
+              if (sp) sp.textContent += evt.text;
+              document.getElementById('app-messages').scrollTop = document.getElementById('app-messages').scrollHeight;
             } else if (evt.type === 'content' && !gotContent) {
               gotContent = true;
               clearTimeout(frontendTimeout);
               clearInterval(statusInterval);
               stopThinkingAmbient();
-              thinking.remove();
+              if (thinking.parentNode) thinking.remove();
               if (agentProgressEl) {
                 const thinkSteps = agentProgressEl.querySelectorAll('.thinking-step');
                 thinkSteps.forEach(el => el.remove());
+              }
+              if (streamingEl) {
+                // Replace streaming element with final rendered message
+                streamingEl.remove();
+                streamingEl = null;
               }
               appAddMsg(evt.content, 'bot', evt.agent || null, evt.tools_used || null);
               // Show compact token/cost footer
@@ -7675,6 +7668,8 @@
           appAddMsg(msgs[Math.floor(Math.random() * msgs.length)], 'bot');
         } else {
           appAddMsg(lang === 'ja' ? 'エラーが発生しました。もう一度お試しください。' : 'Something went wrong. Please try again.', 'bot');
+          // teai.io failover: count network errors and redirect to chatweb.ai
+          if (IS_TEAI && window._teaiFailover) window._teaiFailover();
         }
       }
     }
@@ -8410,6 +8405,22 @@
     }
 
     var selectedVoice = localStorage.getItem('ttsVoice') || 'nova';
+
+    // Voice display names: Japanese names for ja, original for en
+    var voiceNames = {
+      ja: { nova: 'さくら', echo: 'りん', onyx: 'かい', alloy: 'ゆう', fable: 'そら' },
+      en: { nova: 'Nova', echo: 'Echo', onyx: 'Onyx', alloy: 'Alloy', fable: 'Fable' },
+    };
+    function updateVoiceDisplayNames() {
+      var currentLang = document.documentElement.lang || 'ja';
+      var names = voiceNames[currentLang] || voiceNames.en;
+      document.querySelectorAll('.voice-char').forEach(function(b) {
+        var v = b.dataset.voice;
+        var nameEl = b.querySelector('.vc-name');
+        if (nameEl && names[v]) nameEl.textContent = names[v];
+      });
+    }
+
     function selectVoiceChar(btn) {
       var voice = btn.dataset.voice;
       selectedVoice = voice;
@@ -8419,13 +8430,22 @@
       playVoiceGreeting(voice);
     }
     function playVoiceGreeting(voice) {
-      var greetings = {
-        nova: 'こんにちは！ノヴァです。何でも聞いてね。',
-        echo: 'エコーだよ。君の力になれるよ。',
-        onyx: 'オニキスです。どんな難題でも任せてください。',
-        alloy: 'アロイです！今日は何をしましょうか？',
-        fable: 'フェイブルです。物語のように楽しい時間にしましょう。',
+      var greetingsJa = {
+        nova: 'こんにちは！さくらです。何でも聞いてね。',
+        echo: 'りんだよ。一緒に楽しもうね。',
+        onyx: 'かいです。どんな難題でも任せてください。',
+        alloy: 'ゆうです！今日は何をしましょうか？',
+        fable: 'そらです。楽しい時間にしましょう。',
       };
+      var greetingsEn = {
+        nova: "Hi! I'm Nova. Ask me anything!",
+        echo: "Hey, I'm Echo. I'm here to help.",
+        onyx: "I'm Onyx. Let me handle the hard stuff.",
+        alloy: "I'm Alloy! What shall we do today?",
+        fable: "I'm Fable. Let's make this fun!",
+      };
+      var currentLang = document.documentElement.lang || 'ja';
+      var greetings = currentLang === 'ja' ? greetingsJa : greetingsEn;
       var text = greetings[voice] || greetings.nova;
       fetchTTS(text, voice);
     }
@@ -8740,6 +8760,13 @@
       } else {
         document.documentElement.setAttribute('data-theme', theme);
       }
+      // UI Language — apply via setLang()
+      var uiLang = settings.uiLanguage || 'auto';
+      if (uiLang === 'auto') {
+        var browserLang = (navigator.language || 'en').toLowerCase();
+        uiLang = browserLang.startsWith('ja') ? 'ja' : 'en';
+      }
+      if (typeof setLang === 'function') setLang(uiLang);
       // Font size
       const fontSizes = { small: '13px', medium: '15px', large: '17px' };
       document.documentElement.style.setProperty('--chat-font-size', fontSizes[settings.fontSize] || '15px');
@@ -9026,6 +9053,289 @@
     }
 
     initSpeechRecognition();
+
+    // ---------------------------------------------------------------------------
+    // Voice-first Onboarding Flow
+    // ---------------------------------------------------------------------------
+    let onboardState = {
+      step: 0,
+      isListening: false,
+      aiNickname: '',
+      userNickname: '',
+      selectedVoice: '0', // CosyVoice speaker_id
+      selectedProvider: 'cosyvoice',
+      selectedMode: 'sft', // CosyVoice mode
+      steps: [
+        {
+          avatar: '👋',
+          message: 'はじめまして！<br>ななって言ってみて',
+          hint: '音声が聞こえたら、マイクボタンを押して「なな」と言ってね',
+          expect: 'nana',
+          speak: 'はじめまして！ななって言ってみて',
+        },
+        {
+          avatar: '💡',
+          message: 'いいね！<br>なんでこのサービス知ったの？',
+          hint: 'マイクボタンを押して、教えてね',
+          expect: 'answer',
+          speak: 'いいね！なんでこのサービス知ったの？',
+        },
+        {
+          avatar: '😊',
+          message: 'そうなんだ！<br>私の名前、なんて呼んでくれる？',
+          hint: '決められなければ、私が提案するよ',
+          expect: 'ainame',
+          speak: '私の名前、なんて呼んでくれる？決められなければ、私が提案するよ',
+        },
+        {
+          avatar: '🎤',
+          message: 'こんな声でも話せるよ',
+          hint: 'どの声が好き？タップして聴き比べてね',
+          expect: 'voice',
+          speak: 'こんな声でも話せるよ。どの声が好き？',
+        },
+      ]
+    };
+
+    function onboardStart() {
+      if (!localStorage.getItem('auth_token')) {
+        showAuthModal();
+        return;
+      }
+      onboardState.step = 0;
+      document.getElementById('onboard-modal').style.display = 'flex';
+      onboardShowStep();
+    }
+
+    function onboardShowStep() {
+      const step = onboardState.steps[onboardState.step];
+      if (!step) {
+        onboardFinish();
+        return;
+      }
+      const avatarEl = document.getElementById('onboard-avatar');
+      const messageEl = document.getElementById('onboard-message');
+      const hintEl = document.getElementById('onboard-hint');
+      const transcriptEl = document.getElementById('onboard-transcript');
+
+      avatarEl.textContent = step.avatar;
+      messageEl.innerHTML = step.message;
+      hintEl.textContent = step.hint;
+      transcriptEl.textContent = '';
+
+      // Special UI for voice selection step
+      if (step.expect === 'voice') {
+        onboardShowVoiceSelection();
+      }
+
+      // Speak the message
+      if (step.speak) {
+        setTimeout(() => {
+          onboardSpeak(step.speak);
+        }, 500);
+      }
+    }
+
+    function onboardSpeak(text) {
+      const provider = onboardState.selectedProvider;
+      const voice = onboardState.selectedVoice;
+      const mode = onboardState.selectedMode || 'sft';
+
+      const requestBody = {
+        text: text,
+        engine: provider,
+        speed: 1.0
+      };
+
+      // CosyVoice uses voice_id and style fields
+      if (provider === 'cosyvoice') {
+        requestBody.voice_id = voice;
+        requestBody.style = mode;
+      } else {
+        requestBody.voice = voice;
+      }
+
+      fetch('/api/v1/speech/synthesize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (localStorage.getItem('auth_token') || '')
+        },
+        body: JSON.stringify(requestBody)
+      })
+      .then(r => r.blob())
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.play();
+      })
+      .catch(e => console.warn('TTS failed:', e));
+    }
+
+    function onboardMicClick() {
+      if (onboardState.isListening) {
+        stopListening();
+        onboardState.isListening = false;
+        document.getElementById('onboard-mic-btn').style.background = 'linear-gradient(135deg,var(--accent),#7c3aed)';
+      } else {
+        if (!speechRecognition) initSpeechRecognition();
+        if (!speechRecognition) {
+          alert('音声認識が使えません。Chromeをご利用ください。');
+          return;
+        }
+        // Override onresult temporarily for onboarding
+        const originalOnresult = speechRecognition.onresult;
+        speechRecognition.onresult = function(e) {
+          let transcript = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+              transcript += e.results[i][0].transcript;
+            }
+          }
+          if (transcript) {
+            document.getElementById('onboard-transcript').textContent = '"' + transcript + '"';
+            onboardHandleInput(transcript);
+          }
+        };
+        speechRecognition.start();
+        onboardState.isListening = true;
+        document.getElementById('onboard-mic-btn').style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
+      }
+    }
+
+    function onboardHandleInput(text) {
+      const step = onboardState.steps[onboardState.step];
+      const lower = text.toLowerCase().trim();
+
+      if (step.expect === 'nana') {
+        if (lower.includes('なな') || lower.includes('nana') || lower.includes('七')) {
+          onboardNextStep();
+        } else {
+          onboardSpeak('ななって言ってね');
+        }
+      } else if (step.expect === 'answer') {
+        // Any answer is fine, just move on
+        setTimeout(() => onboardNextStep(), 1000);
+      } else if (step.expect === 'ainame') {
+        if (lower.includes('わからない') || lower.includes('決めて') || lower.includes('提案')) {
+          onboardSuggestNames();
+        } else {
+          // Extract name from speech
+          onboardState.aiNickname = text.trim();
+          onboardConfirmName();
+        }
+      } else if (step.expect === 'confirm') {
+        if (lower.includes('いい') || lower.includes('ok') || lower.includes('yes') || lower.includes('うん')) {
+          onboardNextStep();
+        } else if (lower.includes('やだ') || lower.includes('no') || lower.includes('違')) {
+          onboardSuggestNames(); // Try another name
+        }
+      }
+    }
+
+    function onboardSuggestNames() {
+      const names = ['えり', 'よ', 'みく', 'ひかり', 'そら'];
+      const name = names[Math.floor(Math.random() * names.length)];
+      onboardState.aiNickname = name;
+      onboardSpeak(name + 'って呼んでもいいかな？');
+      setTimeout(() => {
+        document.getElementById('onboard-message').innerHTML = name + 'って呼んでもいいかな？';
+        document.getElementById('onboard-hint').textContent = '「いいよ」と言ってね';
+      }, 2000);
+      // Wait for confirmation
+      const step = onboardState.steps[onboardState.step];
+      step.expect = 'confirm';
+    }
+
+    function onboardConfirmName() {
+      onboardSpeak(onboardState.aiNickname + 'って呼んでもいいかな？');
+      setTimeout(() => {
+        document.getElementById('onboard-message').innerHTML = onboardState.aiNickname + 'って呼んでもいいかな？';
+        document.getElementById('onboard-hint').textContent = '「いいよ」と言ってね';
+      }, 2000);
+      const step = onboardState.steps[onboardState.step];
+      step.expect = 'confirm';
+    }
+
+    function onboardShowVoiceSelection() {
+      const voices = [
+        { name: 'みく', emoji: '🌸', speakerId: '0', mode: 'sft' },
+        { name: 'さくら', emoji: '🌺', speakerId: '1', mode: 'sft' },
+        { name: 'ひかり', emoji: '✨', speakerId: '2', mode: 'sft' },
+        { name: 'そら', emoji: '☁️', speakerId: '3', mode: 'sft' },
+      ];
+      let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:16px;">';
+      voices.forEach(v => {
+        html += `<button onclick="onboardSelectVoice('${v.speakerId}','${v.mode}','${v.name}')" style="padding:12px 20px;border-radius:20px;border:2px solid var(--border);background:var(--surface);cursor:pointer;font-size:16px;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+          ${v.emoji} ${v.name}
+        </button>`;
+      });
+      html += '</div>';
+      document.getElementById('onboard-hint').innerHTML = html;
+    }
+
+    function onboardSelectVoice(speakerId, mode, voiceName) {
+      onboardState.selectedVoice = speakerId;
+      onboardState.selectedMode = mode;
+      onboardSpeak('この声はどう？気に入った？');
+      setTimeout(() => onboardNextStep(), 3000);
+    }
+
+    function onboardNextStep() {
+      stopListening();
+      onboardState.isListening = false;
+      onboardState.step++;
+      if (onboardState.step >= onboardState.steps.length) {
+        onboardFinish();
+      } else {
+        setTimeout(() => onboardShowStep(), 800);
+      }
+    }
+
+    function onboardSkip() {
+      onboardFinish();
+    }
+
+    function onboardFinish() {
+      // Save settings
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        fetch('/api/v1/settings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({
+            ai_nickname: onboardState.aiNickname || 'AI',
+            preferred_voice: onboardState.selectedVoice,
+            preferred_tts_provider: onboardState.selectedProvider,
+            onboarding_completed: true
+          })
+        }).catch(e => console.warn('Failed to save settings:', e));
+      }
+      document.getElementById('onboard-modal').style.display = 'none';
+      onboardSpeak('よろしくね！');
+    }
+
+    // Check if onboarding is needed (first-time user)
+    function checkOnboardingNeeded() {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      fetch('/api/v1/settings', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok && data.settings && !data.settings.onboarding_completed) {
+          setTimeout(() => onboardStart(), 1000);
+        }
+      })
+      .catch(e => console.warn('Failed to check onboarding:', e));
+    }
+
+    // Auto-start onboarding for new users
+    checkOnboardingNeeded();
 
     // ---------------------------------------------------------------------------
     // AI Avatar — Polygon Orb (Icosahedron wireframe with face-like features)
@@ -10486,18 +10796,21 @@
     })();
 
     applyABVariant(getABVariant());
-    // Auto-detect language from browser — no toggle needed
-    // Japanese browsers → ja, everything else → en
+    // Language: manual setting (generalSettings.uiLanguage) > saved 'nl' > browser auto-detect
     (function() {
-      var saved = localStorage.getItem('nl');
-      var browserLang = (navigator.language || 'en').toLowerCase();
+      var gs = JSON.parse(localStorage.getItem('generalSettings') || '{}');
+      var uiPref = gs.uiLanguage || 'auto';
       var lang;
-      if (saved) {
-        lang = saved;
-      } else if (browserLang.startsWith('ja')) {
-        lang = 'ja';
+      if (uiPref !== 'auto') {
+        lang = uiPref;
       } else {
-        lang = 'en';
+        var saved = localStorage.getItem('nl');
+        if (saved) {
+          lang = saved;
+        } else {
+          var browserLang = (navigator.language || 'en').toLowerCase();
+          lang = browserLang.startsWith('ja') ? 'ja' : 'en';
+        }
       }
       setLang(lang);
     })();

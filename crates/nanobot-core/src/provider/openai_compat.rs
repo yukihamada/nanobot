@@ -221,6 +221,153 @@ impl LlmProvider for OpenAiCompatProvider {
         parse_openai_response(&data)
     }
 
+    async fn chat_stream(
+        &self,
+        messages: &[Message],
+        tools: Option<&[serde_json::Value]>,
+        model: &str,
+        max_tokens: u32,
+        temperature: f64,
+        extra: &ChatExtra,
+        chunk_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    ) -> Result<CompletionResponse, ProviderError> {
+        use futures::StreamExt;
+
+        let url = format!("{}/chat/completions", self.api_base);
+        let model_name = self.normalize_model(model);
+
+        let msgs: Vec<serde_json::Value> = messages
+            .iter()
+            .map(|m| {
+                let mut msg = json!({"role": m.role, "content": m.content.as_deref().unwrap_or("")});
+                if let Some(ref tc) = m.tool_calls { msg["tool_calls"] = json!(tc); }
+                if let Some(ref id) = m.tool_call_id { msg["tool_call_id"] = json!(id); }
+                if let Some(ref name) = m.name { msg["name"] = json!(name); }
+                msg
+            })
+            .collect();
+
+        let mut body = json!({
+            "model": model_name, "messages": msgs,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "stream": true, "stream_options": {"include_usage": true},
+        });
+        if let Some(top_p) = extra.top_p { body["top_p"] = json!(top_p); }
+        if let Some(fp) = extra.frequency_penalty { body["frequency_penalty"] = json!(fp); }
+        if let Some(pp) = extra.presence_penalty { body["presence_penalty"] = json!(pp); }
+        if let Some(tools) = tools {
+            if !tools.is_empty() {
+                body["tools"] = json!(tools);
+                let has_tool_results = messages.iter().any(|m| m.role == crate::types::Role::Tool);
+                body["tool_choice"] = if has_tool_results { json!("auto") } else { json!("required") };
+            }
+        }
+
+        let response = http::client()
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return Err(ProviderError::Api { status: status.as_u16(), message: text });
+        }
+
+        // Parse SSE stream
+        let mut content = String::new();
+        let mut finish_reason = FinishReason::Stop;
+        let mut tool_calls_map: std::collections::BTreeMap<usize, (String, String, String)> = std::collections::BTreeMap::new(); // index -> (id, name, args)
+        let mut usage = TokenUsage::default();
+
+        let mut stream = response.bytes_stream();
+        let mut buf = String::new();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| ProviderError::Other(format!("Stream read error: {}", e)))?;
+            buf.push_str(&String::from_utf8_lossy(&chunk));
+
+            // Process complete lines
+            while let Some(pos) = buf.find('\n') {
+                let line = buf[..pos].trim().to_string();
+                buf = buf[pos + 1..].to_string();
+
+                if !line.starts_with("data:") { continue; }
+                let data = line[5..].trim();
+                if data == "[DONE]" { continue; }
+
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
+                    // Usage info (from stream_options.include_usage)
+                    if let Some(u) = parsed.get("usage") {
+                        usage.prompt_tokens = u.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        usage.completion_tokens = u.get("completion_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        usage.total_tokens = u.get("total_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                    }
+
+                    if let Some(choice) = parsed.get("choices").and_then(|c| c.get(0)) {
+                        // Finish reason
+                        if let Some(fr) = choice.get("finish_reason").and_then(|v| v.as_str()) {
+                            finish_reason = match fr {
+                                "stop" => FinishReason::Stop,
+                                "tool_calls" => FinishReason::ToolCalls,
+                                "length" => FinishReason::Length,
+                                _ => FinishReason::Stop,
+                            };
+                        }
+
+                        if let Some(delta) = choice.get("delta") {
+                            // Content delta
+                            if let Some(text) = delta.get("content").and_then(|v| v.as_str()) {
+                                content.push_str(text);
+                                let _ = chunk_tx.send(text.to_string());
+                            }
+
+                            // Tool call deltas
+                            if let Some(tcs) = delta.get("tool_calls").and_then(|v| v.as_array()) {
+                                for tc in tcs {
+                                    let idx = tc.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                    let entry = tool_calls_map.entry(idx).or_insert_with(|| (String::new(), String::new(), String::new()));
+                                    if let Some(id) = tc.get("id").and_then(|v| v.as_str()) {
+                                        entry.0 = id.to_string();
+                                    }
+                                    if let Some(f) = tc.get("function") {
+                                        if let Some(name) = f.get("name").and_then(|v| v.as_str()) {
+                                            entry.1 = name.to_string();
+                                        }
+                                        if let Some(args) = f.get("arguments").and_then(|v| v.as_str()) {
+                                            entry.2.push_str(args);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Build tool_calls from accumulated data
+        let tool_calls: Vec<ToolCall> = tool_calls_map.into_values().map(|(id, name, args_str)| {
+            let arguments: HashMap<String, serde_json::Value> =
+                serde_json::from_str(&args_str).unwrap_or_else(|_| {
+                    let mut m = HashMap::new();
+                    m.insert("raw".to_string(), serde_json::Value::String(args_str));
+                    m
+                });
+            ToolCall { id, name, arguments }
+        }).collect();
+
+        Ok(CompletionResponse {
+            content: if content.is_empty() { None } else { Some(content) },
+            tool_calls,
+            finish_reason,
+            usage,
+        })
+    }
+
     fn default_model(&self) -> &str {
         &self.default_model
     }

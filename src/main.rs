@@ -185,31 +185,41 @@ fn get_cli_session_id() -> Result<String> {
 }
 
 /// Chat with chatweb.ai API directly — no config or API key needed.
+/// Uses SSE streaming for real-time responses with tool progress.
 async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -> Result<()> {
     let session_id = if let Some(ref sid) = sync {
-        // Use the provided session ID directly (sync with Web/LINE/Telegram)
         sid.clone()
     } else {
         get_cli_session_id()?
     };
 
+    // Load auth token if available
+    let auth_token = load_auth_token();
+
+    // Derive streaming URL from api_url
+    let stream_url = api_url.replace("/api/v1/chat", "/api/v1/chat/stream");
+
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(12))
+        .timeout(std::time::Duration::from_secs(90))
         .build()
         .unwrap_or_default();
 
     if message.is_empty() {
         // Interactive mode
-        println!("{} chatweb.ai CLI (Ctrl+C to exit)", nanobot_core::LOGO);
-        println!("  Session: {}", session_id);
+        println!("\x1b[1;36m{} chatweb.ai\x1b[0m \x1b[2mv{}\x1b[0m", nanobot_core::LOGO, nanobot_core::VERSION);
+        println!("\x1b[2m  Session: {}\x1b[0m", session_id);
         if sync.is_some() {
-            println!("  Synced with Web session");
+            println!("\x1b[32m  Synced with Web session\x1b[0m");
         }
+        if auth_token.is_some() {
+            println!("\x1b[32m  Authenticated\x1b[0m");
+        }
+        println!("\x1b[2m  Type /help for commands, Ctrl+C to exit\x1b[0m");
         println!();
 
         loop {
             use std::io::Write;
-            print!("You: ");
+            print!("\x1b[1;33mYou:\x1b[0m ");
             std::io::stdout().flush()?;
 
             let mut input = String::new();
@@ -221,21 +231,28 @@ async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -
                 continue;
             }
 
-            match chat_api(&client, &api_url, input, &session_id).await {
-                Ok(resp) => println!("\n{} {}\n", nanobot_core::LOGO, resp),
-                Err(e) => eprintln!("Error: {}", e),
+            println!();
+            match chat_api_stream(&client, &stream_url, &api_url, input, &session_id, auth_token.as_deref()).await {
+                Ok(()) => println!(),
+                Err(e) => eprintln!("\x1b[31mError: {}\x1b[0m\n", e),
             }
         }
     } else {
         // Single message mode
         let msg = message.join(" ");
-        match chat_api(&client, &api_url, &msg, &session_id).await {
-            Ok(resp) => println!("{}", resp),
-            Err(e) => eprintln!("Error: {}", e),
+        match chat_api_stream(&client, &stream_url, &api_url, &msg, &session_id, auth_token.as_deref()).await {
+            Ok(()) => {}
+            Err(e) => eprintln!("\x1b[31mError: {}\x1b[0m", e),
         }
     }
 
     Ok(())
+}
+
+/// Load auth token from ~/.nanobot/auth_token if available.
+fn load_auth_token() -> Option<String> {
+    let token_path = config::get_data_dir().join("auth_token");
+    std::fs::read_to_string(token_path).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
 /// Link CLI session with a Web/LINE/Telegram session.
@@ -298,25 +315,199 @@ async fn cmd_link(session_id: Option<String>) -> Result<()> {
     Ok(())
 }
 
-async fn chat_api(client: &reqwest::Client, api_url: &str, message: &str, session_id: &str) -> Result<String> {
-    let resp = match client
-        .post(api_url)
-        .json(&serde_json::json!({
-            "message": message,
-            "session_id": session_id,
-        }))
-        .send()
-        .await
-    {
+/// Stream a chat response via SSE, displaying progress and content in real-time.
+/// Falls back to non-streaming API if SSE fails.
+async fn chat_api_stream(
+    client: &reqwest::Client,
+    stream_url: &str,
+    fallback_url: &str,
+    message: &str,
+    session_id: &str,
+    auth_token: Option<&str>,
+) -> Result<()> {
+    use std::io::Write;
+
+    let body = serde_json::json!({
+        "message": message,
+        "session_id": session_id,
+        "channel": "cli",
+        "language": "ja",
+    });
+
+    let mut req = client.post(stream_url).json(&body);
+    if let Some(token) = auth_token {
+        req = req.header("Authorization", format!("Bearer {}", token));
+    }
+
+    let mut resp = match req.send().await {
+        Ok(r) if r.status().is_success() => r,
+        Ok(r) => {
+            // SSE failed, try non-streaming fallback
+            let status = r.status();
+            tracing::debug!("Stream returned {}, falling back to non-stream", status);
+            return chat_api_fallback(client, fallback_url, message, session_id, auth_token).await;
+        }
+        Err(e) if e.is_timeout() => {
+            println!("\x1b[2m考えすぎちゃった...もう一回聞いてくれる？\x1b[0m");
+            return Ok(());
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    let mut buf = String::new();
+    let mut got_content = false;
+    let mut printed_prefix = false;
+
+    while let Some(chunk) = resp.chunk().await? {
+        let text = String::from_utf8_lossy(&chunk);
+        buf.push_str(&text);
+
+        while let Some(newline_pos) = buf.find('\n') {
+            let line = buf[..newline_pos].to_string();
+            buf = buf[newline_pos + 1..].to_string();
+
+            if !line.starts_with("data:") {
+                continue;
+            }
+            let data = line[5..].trim();
+            if data.is_empty() {
+                continue;
+            }
+
+            let parsed: serde_json::Value = match serde_json::from_str(data) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            // Handle both single events and JSON arrays
+            let events: Vec<&serde_json::Value> = if parsed.is_array() {
+                parsed.as_array().unwrap().iter().collect()
+            } else {
+                vec![&parsed]
+            };
+
+            for evt in events {
+                let evt_type = evt["type"].as_str().unwrap_or("");
+                match evt_type {
+                    "tool_start" => {
+                        let tool = evt["tool"].as_str().unwrap_or("tool");
+                        println!("\x1b[2;35m  ⚡ {}...\x1b[0m", tool);
+                    }
+                    "tool_result" => {
+                        let tool = evt["tool"].as_str().unwrap_or("tool");
+                        let ok = evt["success"].as_bool().unwrap_or(true);
+                        let summary = evt["summary"].as_str().or_else(|| evt["result"].as_str());
+                        if ok {
+                            if let Some(s) = summary {
+                                println!("\x1b[32m  ✓ {}: {}\x1b[0m", tool, truncate_str(s, 60));
+                            } else {
+                                println!("\x1b[32m  ✓ {}\x1b[0m", tool);
+                            }
+                        } else {
+                            println!("\x1b[31m  ✗ {}\x1b[0m", tool);
+                        }
+                    }
+                    "thinking" => {
+                        let thought = evt["content"].as_str().unwrap_or("");
+                        if !thought.is_empty() {
+                            println!("\x1b[2;34m  💭 {}\x1b[0m", truncate_str(thought, 80));
+                        }
+                    }
+                    "content_chunk" => {
+                        if !printed_prefix {
+                            print!("\x1b[1;36m{}\x1b[0m ", nanobot_core::LOGO);
+                            printed_prefix = true;
+                        }
+                        let chunk_text = evt["text"].as_str().unwrap_or("");
+                        print!("{}", chunk_text);
+                        std::io::stdout().flush()?;
+                        got_content = true;
+                    }
+                    "content" => {
+                        if !got_content {
+                            let content = evt["content"].as_str().unwrap_or("");
+                            if !content.is_empty() {
+                                println!("\x1b[1;36m{}\x1b[0m {}", nanobot_core::LOGO, content);
+                                got_content = true;
+                            }
+                        } else {
+                            // Streaming already printed content, just add newline
+                            println!();
+                        }
+                        // Show credits if available
+                        if let Some(remaining) = evt["credits_remaining"].as_i64() {
+                            println!("\x1b[2m  Credits: {}\x1b[0m", remaining);
+                        }
+                    }
+                    "error" => {
+                        let msg = evt["content"].as_str().unwrap_or("Unknown error");
+                        println!("\x1b[31m  Error: {}\x1b[0m", msg);
+                        if evt["action"].as_str() == Some("upgrade") {
+                            println!("\x1b[33m  → Upgrade at https://chatweb.ai/pricing\x1b[0m");
+                        }
+                    }
+                    "start" | "done" => {}
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    if !got_content {
+        println!("\x1b[2mレスポンスを受信できませんでした。\x1b[0m");
+    }
+
+    Ok(())
+}
+
+/// Non-streaming fallback for when SSE is unavailable.
+async fn chat_api_fallback(
+    client: &reqwest::Client,
+    api_url: &str,
+    message: &str,
+    session_id: &str,
+    auth_token: Option<&str>,
+) -> Result<()> {
+    let body = serde_json::json!({
+        "message": message,
+        "session_id": session_id,
+        "channel": "cli",
+        "language": "ja",
+    });
+
+    let mut req = client.post(api_url).json(&body);
+    if let Some(token) = auth_token {
+        req = req.header("Authorization", format!("Bearer {}", token));
+    }
+
+    let resp = match req.send().await {
         Ok(r) => r,
         Err(e) if e.is_timeout() => {
-            return Ok("ごめんね、ちょっと考えすぎちゃった...もう一回聞いてくれる？".to_string());
+            println!("\x1b[2m考えすぎちゃった...もう一回聞いてくれる？\x1b[0m");
+            return Ok(());
         }
         Err(e) => return Err(e.into()),
     };
 
     let body: serde_json::Value = resp.json().await?;
-    Ok(body["response"].as_str().unwrap_or("No response").to_string())
+    let response = body["response"].as_str().unwrap_or("No response");
+    println!("\x1b[1;36m{}\x1b[0m {}", nanobot_core::LOGO, response);
+
+    if let Some(remaining) = body["credits_remaining"].as_i64() {
+        println!("\x1b[2m  Credits: {}\x1b[0m", remaining);
+    }
+
+    Ok(())
+}
+
+/// Truncate a string to max length, adding "..." if truncated.
+fn truncate_str(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let truncated: String = s.chars().take(max - 3).collect();
+        format!("{}...", truncated)
+    }
 }
 
 /// Run background daemon that sends heartbeats to chatweb.ai.

@@ -58,7 +58,10 @@ export default {
 
 function proxyHeaders(request) {
   const h = new Headers(request.headers);
+  // Preserve original Host so Lambda can detect teai.io
+  const originalHost = request.headers.get('host') || '';
   h.delete('host');
+  h.set('X-Forwarded-Host', originalHost);
   h.set('X-Forwarded-For', request.headers.get('cf-connecting-ip') || '');
   h.set('X-Edge-Region', request.cf?.colo || 'unknown');
   return h;
