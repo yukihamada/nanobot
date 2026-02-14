@@ -298,6 +298,75 @@ fn detect_language(text: &str) -> &'static str {
     if has_ja { "ja" } else if text.is_ascii() { "en" } else { "other" }
 }
 
+/// Auto-translate response to Japanese if the user's UI language is "ja" but the
+/// response contains zero Japanese characters.  Fallback chain:
+/// current provider → Kimi K2 (OpenAI-compat) → Claude (Anthropic).
+async fn maybe_translate_to_japanese(
+    text: &str,
+    provider: Option<&Arc<dyn LlmProvider>>,
+) -> Option<String> {
+    // Skip empty or already-Japanese text
+    if text.is_empty() || detect_language(text) == "ja" {
+        return None;
+    }
+
+    let translate_prompt = format!(
+        "以下のテキストを自然な日本語に翻訳してください。翻訳文のみを出力し、余計な説明は不要です。\n\n{}",
+        text
+    );
+    let msgs = vec![crate::types::Message::user(translate_prompt.clone())];
+
+    // 1) Try current provider
+    if let Some(p) = provider {
+        if let Ok(resp) = p.chat(&msgs, None, p.default_model(), 2048, 0.3).await {
+            if let Some(translated) = resp.content {
+                let t = translated.trim().to_string();
+                if !t.is_empty() && detect_language(&t) == "ja" {
+                    info!("Auto-translated response to Japanese via current provider");
+                    return Some(t);
+                }
+            }
+        }
+    }
+
+    // 2) Try Kimi K2 via OpenAI-compat
+    let kimi_key = std::env::var("KIMI_API_KEY").or_else(|_| std::env::var("MOONSHOT_API_KEY")).ok();
+    if let Some(key) = kimi_key {
+        let kimi = crate::provider::openai_compat::OpenAiCompatProvider::new(
+            key,
+            Some("https://api.moonshot.cn/v1".to_string()),
+            "kimi-k2".to_string(),
+        );
+        if let Ok(resp) = kimi.chat(&msgs, None, "kimi-k2", 2048, 0.3).await {
+            if let Some(translated) = resp.content {
+                let t = translated.trim().to_string();
+                if !t.is_empty() && detect_language(&t) == "ja" {
+                    info!("Auto-translated response to Japanese via Kimi K2");
+                    return Some(t);
+                }
+            }
+        }
+    }
+
+    // 3) Try Claude (Anthropic)
+    let claude_key = std::env::var("ANTHROPIC_API_KEY").ok();
+    if let Some(key) = claude_key {
+        let claude = crate::provider::anthropic::AnthropicProvider::new(key, None, "claude-sonnet-4-5-20250929".to_string());
+        if let Ok(resp) = claude.chat(&msgs, None, "claude-sonnet-4-5-20250929", 2048, 0.3).await {
+            if let Some(translated) = resp.content {
+                let t = translated.trim().to_string();
+                if !t.is_empty() && detect_language(&t) == "ja" {
+                    info!("Auto-translated response to Japanese via Claude");
+                    return Some(t);
+                }
+            }
+        }
+    }
+
+    tracing::warn!("Auto-translation to Japanese failed for all providers");
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Rate limiting (DynamoDB-based, per email per minute)
 // ---------------------------------------------------------------------------
@@ -1626,6 +1695,8 @@ pub struct ChatRequest {
     pub custom_system_prompt: Option<String>,
     /// Inference mode: "local" (on-device only), "cloud" (remote only), "auto" (default: cloud with local fallback)
     pub mode: Option<String>,
+    /// UI language from frontend (e.g. "ja", "en") — used for auto-translation
+    pub language: Option<String>,
 }
 
 /// User settings stored in DynamoDB
@@ -3172,6 +3243,15 @@ async fn handle_chat(
         }
     }
 
+    // Auto-translate to Japanese if UI language is "ja" but response has no Japanese
+    let mut response_text = response_text;
+    if req.language.as_deref() == Some("ja") && detect_language(&response_text) != "ja" {
+        let translate_provider = state.lb_provider.clone().or_else(|| state.provider.clone());
+        if let Some(translated) = maybe_translate_to_japanese(&response_text, translate_provider.as_ref()).await {
+            response_text = translated;
+        }
+    }
+
     // Use remaining credits from deduct_credits (no extra DynamoDB call needed)
     let remaining_credits: Option<i64> = last_remaining_credits;
 
@@ -3621,6 +3701,7 @@ async fn handle_list_sessions(
 async fn handle_get_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     // Resolve unified session key for linked channels
     let session_key = {
@@ -3658,12 +3739,22 @@ async fn handle_get_session(
     let mut sessions = state.sessions.lock().await;
     // Force reload from storage to get latest messages from all channels
     let session = sessions.refresh(&session_key);
-    let history = session.get_full_history(100);
+
+    // Support ?limit=all for full history (no truncation)
+    let limit = params.get("limit")
+        .and_then(|v| if v == "all" { Some(usize::MAX) } else { v.parse().ok() })
+        .unwrap_or(100);
+
+    let history = session.get_full_history(limit);
+    let is_summarized = session.messages.len() > 16; // Matches get_history_with_summary threshold
+
     Json(serde_json::json!({
         "key": id,
         "resolved_key": session_key,
         "messages": history,
         "message_count": history.len(),
+        "total_message_count": session.messages.len(),
+        "is_summarized": is_summarized,
         "linked_channels": linked_channels,
         "linked_channel_details": linked_channel_details,
     }))
@@ -5418,6 +5509,7 @@ async fn handle_chat_stream(
     let req_channel = req.channel.clone();
     let req_device = device.to_string();
     let req_session_id = req.session_id.clone();
+    let req_language = req.language.clone();
     let state_clone = state.clone();
     let session_key_clone = session_key.clone();
     let agent_id = agent.id;
@@ -5664,7 +5756,15 @@ async fn handle_chat_stream(
                     }
                 }
 
-                let response_text = current.content.unwrap_or_default();
+                let mut response_text = current.content.unwrap_or_default();
+
+                // Auto-translate to Japanese if UI language is "ja" but response has no Japanese
+                if req_language.as_deref() == Some("ja") && detect_language(&response_text) != "ja" {
+                    let translate_provider = state_clone.lb_provider.clone().or_else(|| state_clone.provider.clone());
+                    if let Some(translated) = maybe_translate_to_japanese(&response_text, translate_provider.as_ref()).await {
+                        response_text = translated;
+                    }
+                }
 
                 // Save to session
                 {

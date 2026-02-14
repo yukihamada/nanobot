@@ -941,6 +941,56 @@
 
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
     applyRegionPricing();
+
+    // 🎮 Konami Code Easter Egg - for users who gave feedback
+    (function() {
+      const konamiCode = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+      let konamiIndex = 0;
+
+      document.addEventListener('keydown', function(e) {
+        const key = e.key === 'b' || e.key === 'a' ? e.key : e.code;
+
+        if (key === konamiCode[konamiIndex]) {
+          konamiIndex++;
+          if (konamiIndex === konamiCode.length) {
+            konamiIndex = 0;
+            activateKonamiReward();
+          }
+        } else {
+          konamiIndex = 0;
+        }
+      });
+
+      function activateKonamiReward() {
+        const lang = document.documentElement.lang || 'ja';
+        const msg = lang === 'ja'
+          ? '🎉 秘密のコマンド発動！\n\nフィードバックありがとう！\n特別に1000クレジットプレゼント🎁\n\nクーポンコード: KONAMI2026\n\n（登録時に入力してね）'
+          : '🎉 Secret Code Activated!\n\nThanks for your feedback!\nHere\'s 1000 bonus credits🎁\n\nCoupon: KONAMI2026\n\n(Enter at signup)';
+
+        alert(msg);
+
+        // Copy coupon to clipboard
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText('KONAMI2026');
+        }
+
+        // Visual celebration
+        document.body.style.animation = 'rainbow 2s infinite';
+        setTimeout(() => {
+          document.body.style.animation = '';
+        }, 5000);
+      }
+
+      // Add rainbow animation
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes rainbow {
+          0% { filter: hue-rotate(0deg); }
+          100% { filter: hue-rotate(360deg); }
+        }
+      `;
+      document.head.appendChild(style);
+    })();
   </script>
 </body>
 </html>
