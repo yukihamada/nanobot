@@ -3650,7 +3650,7 @@ async fn handle_worker_register(
 
 /// GET /api/v1/workers/poll — Long-poll for inference requests
 async fn handle_worker_poll(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     let _worker_id = params.get("worker_id").cloned().unwrap_or_default();

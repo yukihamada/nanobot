@@ -293,7 +293,7 @@
       <h2 id="auth">Authentication</h2>
       <p>All API requests require an API key passed in the <code>Authorization</code> header.</p>
       <div class="code-block">
-<span class="key">Authorization</span>: Bearer <span class="string">YOUR_API_KEY</span>
+<span class="key">Authorization</span>: Bearer <span class="string">nb_live_a1b2c3d4e5f6g7h8i9j0</span>
       </div>
       <p>Get your API key by signing up at <a href="https://chatweb.ai/pricing">chatweb.ai/pricing</a>. Free tier includes 1,000 credits/month.</p>
 
@@ -349,7 +349,7 @@ curl -X POST https://api.chatweb.ai/api/v1/chat \
             <button class="copy-btn" onclick="copyCode('code-chat')">Copy</button>
 curl -X POST https://api.chatweb.ai/api/v1/chat \
   -H <span class="string">"Content-Type: application/json"</span> \
-  -H <span class="string">"Authorization: Bearer nb_live_xxx"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
   -d <span class="string">'{
     "message": "What is the weather in Tokyo?",
     "session_id": "user-123"
@@ -373,7 +373,7 @@ curl -X POST https://api.chatweb.ai/api/v1/chat \
           <div class="code-block" id="code-sessions">
             <button class="copy-btn" onclick="copyCode('code-sessions')">Copy</button>
 curl https://api.chatweb.ai/api/v1/sessions \
-  -H <span class="string">"Authorization: Bearer nb_live_xxx"</span>
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span>
           </div>
         </div>
       </div>
@@ -430,7 +430,7 @@ curl https://api.chatweb.ai/api/v1/sessions \
           <div class="code-block" id="code-account">
             <button class="copy-btn" onclick="copyCode('code-account')">Copy</button>
 curl https://api.chatweb.ai/api/v1/account/my-session \
-  -H <span class="string">"Authorization: Bearer nb_live_xxx"</span>
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span>
           </div>
         </div>
       </div>

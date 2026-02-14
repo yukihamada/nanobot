@@ -232,7 +232,7 @@ POST /api/v1/auth/register
 {"email": "user@example.com", "password": "mypassword123"}
 
 // Response 200
-{"ok": true, "token": "uuid-token", "user_id": "user:uuid", "email": "user@example.com"}
+{"ok": true, "token": "nb_live_a1b2c3d4e5f6g7h8i9j0", "user_id": "user:550e8400-e29b-41d4", "email": "user@example.com"}
 
 // Error 409
 {"error": "Email already registered"}</code></pre>
@@ -254,7 +254,7 @@ POST /api/v1/auth/login
 {"email": "user@example.com", "password": "mypassword123", "session_id": "webchat:abc123"}
 
 // Response 200
-{"ok": true, "token": "uuid-token", "user_id": "user:uuid", "email": "user@example.com"}
+{"ok": true, "token": "nb_live_a1b2c3d4e5f6g7h8i9j0", "user_id": "user:550e8400-e29b-41d4", "email": "user@example.com"}
 
 // Error 401
 {"error": "Invalid email or password"}</code></pre>
@@ -275,7 +275,7 @@ POST /api/v1/auth/email
 {"email": "user@example.com", "session_id": "webchat:abc123"}
 
 // Response 200
-{"ok": true, "token": "uuid-token", "user_id": "user:uuid", "email": "user@example.com"}</code></pre>
+{"ok": true, "token": "nb_live_a1b2c3d4e5f6g7h8i9j0", "user_id": "user:550e8400-e29b-41d4", "email": "user@example.com"}</code></pre>
       </div>
     </div>
 
@@ -300,10 +300,10 @@ GET /auth/google?sid=webchat:abc123
         <div class="desc" data-ja="ログイン中のユーザー情報を取得" data-en="Get current authenticated user info">ログイン中のユーザー情報を取得</div>
         <pre><code>// Request
 GET /api/v1/auth/me
-Authorization: Bearer YOUR_TOKEN
+Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0
 
 // Response 200 (authenticated)
-{"authenticated": true, "user_id": "user:uuid", "email": "user@example.com", "display_name": "user@example.com"}
+{"authenticated": true, "user_id": "user:550e8400-e29b-41d4", "email": "user@example.com", "display_name": "user@example.com"}
 
 // Response 200 (not authenticated)
 {"authenticated": false}</code></pre>
@@ -325,7 +325,7 @@ POST /api/v1/auth/verify
 {"email": "user@example.com", "code": "123456"}
 
 // Response 200
-{"ok": true, "token": "uuid-token", "user_id": "user:uuid"}
+{"ok": true, "token": "nb_live_a1b2c3d4e5f6g7h8i9j0", "user_id": "user:550e8400-e29b-41d4"}
 
 // Error 400
 {"error": "Invalid verification code format"}</code></pre>
@@ -423,7 +423,7 @@ data: {"type":"done","content":"","credits_used":10,"credits_remaining":990,"mod
         <h3><span class="method get">GET</span><span class="path">/api/v1/conversations</span><span class="badge badge-auth">Auth Required</span></h3>
         <div class="desc" data-ja="ログインユーザーの会話一覧を取得" data-en="List authenticated user's conversations">ログインユーザーの会話一覧を取得</div>
         <pre><code>// Response 200
-{"conversations": [{"id": "conv-uuid", "title": "東京の天気", "created_at": "2025-01-01T00:00:00Z", "session_id": "webchat:abc"}]}</code></pre>
+{"conversations": [{"id": "conv-7a8b9c0d1e2f3g4h", "title": "東京の天気", "created_at": "2025-01-01T00:00:00Z", "session_id": "webchat:abc"}]}</code></pre>
       </div>
     </div>
 
@@ -432,7 +432,7 @@ data: {"type":"done","content":"","credits_used":10,"credits_remaining":990,"mod
         <h3><span class="method post">POST</span><span class="path">/api/v1/conversations</span><span class="badge badge-auth">Auth Required</span></h3>
         <div class="desc" data-ja="新しい会話を作成" data-en="Create a new conversation">新しい会話を作成</div>
         <pre><code>// Response 200
-{"ok": true, "conversation_id": "conv-uuid", "session_id": "webchat:new-uuid"}</code></pre>
+{"ok": true, "conversation_id": "conv-7a8b9c0d1e2f3g4h", "session_id": "webchat:e5f6g7h8i9j0k1l2"}</code></pre>
       </div>
     </div>
 
@@ -542,11 +542,11 @@ POST /api/v1/settings/webchat:abc123
         <div class="desc" data-ja="アカウント情報を取得（プラン、クレジット残高、Stripe情報）" data-en="Get account info (plan, credits, Stripe info)">アカウント情報を取得（プラン、クレジット残高、Stripe情報）</div>
         <pre><code>// Response 200
 {
-  "user_id": "user:uuid",
+  "user_id": "user:550e8400-e29b-41d4",
   "plan": "starter",
   "credits_remaining": 24500,
   "credits_total": 25000,
-  "stripe_customer_id": "cus_xxx",
+  "stripe_customer_id": "cus_NffrFeUfNV2Hib",
   "period_end": "2025-02-01T00:00:00Z"
 }</code></pre>
       </div>
@@ -578,7 +578,7 @@ POST /api/v1/settings/webchat:abc123
           <div class="param"><span class="param-name">session_id<span class="required">*</span></span><span class="param-type">string</span><span class="param-desc">Session ID</span></div>
         </div>
         <pre><code>// Response 200
-{"url": "https://checkout.stripe.com/c/pay_xxx"}</code></pre>
+{"url": "https://checkout.stripe.com/c/pay_cs_test_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"}</code></pre>
       </div>
     </div>
 
@@ -661,7 +661,7 @@ POST /api/v1/speech/synthesize
         <h3><span class="method get">GET</span><span class="path">/api/v1/apikeys</span><span class="badge badge-auth">Auth Required</span></h3>
         <div class="desc" data-ja="APIキー一覧を取得" data-en="List your API keys">APIキー一覧を取得</div>
         <pre><code>// Response 200
-{"keys": [{"id": "uuid", "name": "default", "prefix": "cw_abcd1234...", "created_at": "2026-01-01T00:00:00Z"}]}</code></pre>
+{"keys": [{"id": "key_9x8y7z6a5b4c3d2e", "name": "default", "prefix": "nb_live_a1b2c3d4...", "created_at": "2026-01-01T00:00:00Z"}]}</code></pre>
       </div>
     </div>
 
@@ -674,7 +674,7 @@ POST /api/v1/speech/synthesize
           <div class="param"><span class="param-name">name<span class="optional">?</span></span><span class="param-type">string</span><span class="param-desc" data-ja="キー名（デフォルト: default）" data-en="Key name (default: default)">キー名（デフォルト: default）</span></div>
         </div>
         <pre><code>// Response 200
-{"ok": true, "api_key": "cw_abcdef1234567890", "key_id": "uuid", "name": "default"}</code></pre>
+{"ok": true, "api_key": "nb_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6", "key_id": "key_9x8y7z6a5b4c3d2e", "name": "default"}</code></pre>
       </div>
     </div>
 
@@ -852,7 +852,7 @@ POST /mcp
         <h3><span class="method get">GET</span><span class="path">/api/v1/sync/conversations</span><span class="badge badge-auth">Auth Required</span></h3>
         <div class="desc" data-ja="会話リストを同期トークン付きで取得。?since=パラメータで差分取得。" data-en="List conversations with sync token. Use ?since= for incremental sync.">会話リストを同期トークン付きで取得。</div>
         <pre><code>GET /api/v1/sync/conversations?since=2026-01-01T00:00:00Z
-Authorization: Bearer {token}
+Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0
 
 // Response
 { "conversations": [...], "sync_token": "..." }</code></pre>
@@ -864,7 +864,7 @@ Authorization: Bearer {token}
         <h3><span class="method post">POST</span><span class="path">/api/v1/sync/push</span><span class="badge badge-auth">Auth Required</span></h3>
         <div class="desc" data-ja="クライアントの会話をサーバーにプッシュ同期。" data-en="Push client conversations to server.">クライアントの会話をサーバーにプッシュ同期。</div>
         <pre><code>POST /api/v1/sync/push
-Authorization: Bearer {token}
+Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0
 Content-Type: application/json
 
 {
@@ -889,7 +889,7 @@ Content-Type: application/json
         <h3><span class="method get">GET</span><span class="path">/api/v1/cron</span><span class="badge badge-auth">Auth Required</span></h3>
         <div class="desc" data-ja="ユーザーの定期タスク一覧を取得。" data-en="List user's scheduled tasks.">ユーザーの定期タスク一覧を取得。</div>
         <pre><code>GET /api/v1/cron
-Authorization: Bearer {token}
+Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0
 
 // Response
 {
@@ -912,7 +912,7 @@ Authorization: Bearer {token}
         <h3><span class="method post">POST</span><span class="path">/api/v1/cron</span><span class="badge badge-auth">Auth Required</span></h3>
         <div class="desc" data-ja="定期タスクを作成。スケジュールはinterval(分)、cron式、または1回実行(at)を指定。" data-en="Create a scheduled task. Schedule can be interval (minutes), cron expression, or one-time (at).">定期タスクを作成。</div>
         <pre><code>POST /api/v1/cron
-Authorization: Bearer {token}
+Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0
 Content-Type: application/json
 
 // Interval (every N minutes)
@@ -937,7 +937,7 @@ Content-Type: application/json
         <h3><span class="method put">PUT</span><span class="path">/api/v1/cron/{id}</span><span class="badge badge-auth">Auth Required</span></h3>
         <div class="desc" data-ja="定期タスクを更新（有効/無効の切り替え、名前・メッセージ変更）。" data-en="Update a scheduled task (enable/disable, change name/message).">定期タスクを更新。</div>
         <pre><code>PUT /api/v1/cron/abc12345
-Authorization: Bearer {token}
+Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0
 Content-Type: application/json
 
 { "enabled": false }
@@ -952,7 +952,7 @@ Content-Type: application/json
         <h3><span class="method delete">DELETE</span><span class="path">/api/v1/cron/{id}</span><span class="badge badge-auth">Auth Required</span></h3>
         <div class="desc" data-ja="定期タスクを削除。" data-en="Delete a scheduled task.">定期タスクを削除。</div>
         <pre><code>DELETE /api/v1/cron/abc12345
-Authorization: Bearer {token}
+Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0
 
 // Response
 { "ok": true }</code></pre>
