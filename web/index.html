@@ -1740,8 +1740,8 @@
       width: 48px; height: 48px;
       border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 700; color: #fff;
-      transition: transform 0.2s;
+      font-size: 22px;
+      transition: transform 0.2s, border-color 0.2s;
       border: 2px solid transparent;
     }
     .voice-char.active .vc-avatar { transform: scale(1.1); border-color: var(--accent); }
@@ -4103,23 +4103,23 @@
           <div class="app-chat-empty-text" id="app-empty-text">静かなところで、ゆっくり話しましょう</div>
           <div class="voice-chars" id="voice-chars">
             <button class="voice-char active" data-voice="nova" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=nova&backgroundColor=b6e3f4') center/cover;"></span>
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#818cf8,#6366f1);">🌸</span>
               <span class="vc-name">Nova</span>
             </button>
-            <button class="voice-char" data-voice="echo" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=echo&backgroundColor=c0aede') center/cover;"></span>
-              <span class="vc-name">Echo</span>
+            <button class="voice-char" data-voice="shimmer" onclick="selectVoiceChar(this)">
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#c084fc,#a855f7);">💜</span>
+              <span class="vc-name">Shimmer</span>
             </button>
             <button class="voice-char" data-voice="onyx" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=onyx&backgroundColor=ffd5dc') center/cover;"></span>
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#60a5fa,#3b82f6);">⚡</span>
               <span class="vc-name">Onyx</span>
             </button>
             <button class="voice-char" data-voice="alloy" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=alloy&backgroundColor=d1f4d1') center/cover;"></span>
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#34d399,#10b981);">🌿</span>
               <span class="vc-name">Alloy</span>
             </button>
             <button class="voice-char" data-voice="fable" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=fable&backgroundColor=ffe0b2') center/cover;"></span>
+              <span class="vc-avatar" style="background:linear-gradient(135deg,#fbbf24,#f59e0b);">✨</span>
               <span class="vc-name">Fable</span>
             </button>
           </div>
@@ -8405,11 +8405,13 @@
     }
 
     var selectedVoice = localStorage.getItem('ttsVoice') || 'nova';
+    // Migrate echo → shimmer (echo was replaced with shimmer for female voice)
+    if (selectedVoice === 'echo') { selectedVoice = 'shimmer'; localStorage.setItem('ttsVoice', 'shimmer'); }
 
     // Voice display names: Japanese names for ja, original for en
     var voiceNames = {
-      ja: { nova: 'さくら', echo: 'りん', onyx: 'かい', alloy: 'ゆう', fable: 'そら' },
-      en: { nova: 'Nova', echo: 'Echo', onyx: 'Onyx', alloy: 'Alloy', fable: 'Fable' },
+      ja: { nova: 'さくら', shimmer: 'りん', onyx: 'かい', alloy: 'ゆう', fable: 'そら' },
+      en: { nova: 'Nova', shimmer: 'Shimmer', onyx: 'Onyx', alloy: 'Alloy', fable: 'Fable' },
     };
     function updateVoiceDisplayNames() {
       var currentLang = document.documentElement.lang || 'ja';
@@ -8419,6 +8421,8 @@
         var nameEl = b.querySelector('.vc-name');
         if (nameEl && names[v]) nameEl.textContent = names[v];
       });
+      // Sync avatar polygon color with selected voice
+      if (window.setAvatarColor) window.setAvatarColor(selectedVoice);
     }
 
     function selectVoiceChar(btn) {
@@ -8427,19 +8431,20 @@
       localStorage.setItem('ttsVoice', voice);
       document.querySelectorAll('.voice-char').forEach(function(b) { b.classList.remove('active'); });
       btn.classList.add('active');
+      if (window.setAvatarColor) window.setAvatarColor(voice);
       playVoiceGreeting(voice);
     }
     function playVoiceGreeting(voice) {
       var greetingsJa = {
         nova: 'こんにちは！さくらです。何でも聞いてね。',
-        echo: 'りんだよ。一緒に楽しもうね。',
+        shimmer: 'りんだよ。一緒に楽しもうね。',
         onyx: 'かいです。どんな難題でも任せてください。',
         alloy: 'ゆうです！今日は何をしましょうか？',
         fable: 'そらです。楽しい時間にしましょう。',
       };
       var greetingsEn = {
         nova: "Hi! I'm Nova. Ask me anything!",
-        echo: "Hey, I'm Echo. I'm here to help.",
+        shimmer: "Hey, I'm Shimmer. I'm here to help.",
         onyx: "I'm Onyx. Let me handle the hard stuff.",
         alloy: "I'm Alloy! What shall we do today?",
         fable: "I'm Fable. Let's make this fun!",
@@ -8481,6 +8486,7 @@
         document.querySelectorAll('.voice-char').forEach(function(b) {
           b.classList.toggle('active', b.dataset.voice === saved);
         });
+        if (window.setAvatarColor) window.setAvatarColor(saved);
       }
     })();
 
@@ -9381,6 +9387,16 @@
       let _avatarTargetIntensity = 0;
       let _avatarTime = 0;
 
+      // Voice-specific color themes [r, g, b]
+      const voiceColors = {
+        nova:    [99, 102, 241],  // indigo (さくら)
+        shimmer: [168, 85, 247],  // purple (りん)
+        onyx:    [59, 130, 246],  // blue (かい)
+        alloy:   [16, 185, 129],  // emerald (ゆう)
+        fable:   [245, 158, 11],  // amber (そら)
+      };
+      let _avatarColor = voiceColors.nova;
+
       // Expose avatar state control
       window.setAvatarState = function(state) {
         _avatarState = state;
@@ -9388,6 +9404,9 @@
                                   state === 'listening' ? 0.4 :
                                   state === 'thinking' ? 0.6 :
                                   state === 'speaking' ? 1.0 : 0;
+      };
+      window.setAvatarColor = function(voice) {
+        _avatarColor = voiceColors[voice] || voiceColors.nova;
       };
 
       function rotateY(v, a) {
@@ -9432,7 +9451,10 @@
           return dv;
         });
 
-        const scale = 55 + _avatarIntensity * 8;
+        const [cr, cg, cb] = _avatarColor;
+        // Speaking pulsation: scale oscillates more during speech
+        const speakPulse = _avatarState === 'speaking' ? Math.sin(_avatarTime * 6) * 4 * _avatarIntensity : 0;
+        const scale = 55 + _avatarIntensity * 8 + speakPulse;
 
         // Draw edges
         const baseAlpha = 0.25 + _avatarIntensity * 0.3;
@@ -9444,7 +9466,7 @@
           ctx.beginPath();
           ctx.moveTo(pa[0], pa[1]);
           ctx.lineTo(pb[0], pb[1]);
-          ctx.strokeStyle = `rgba(99,102,241,${alpha.toFixed(2)})`;
+          ctx.strokeStyle = `rgba(${cr},${cg},${cb},${alpha.toFixed(2)})`;
           ctx.lineWidth = 1 + _avatarIntensity * 0.5;
           ctx.stroke();
         });
@@ -9463,17 +9485,18 @@
           ctx.lineTo(pts[2][0], pts[2][1]);
           ctx.closePath();
           const fillAlpha = (0.03 + _avatarIntensity * 0.06) * avgD;
-          ctx.fillStyle = `rgba(99,102,241,${fillAlpha.toFixed(3)})`;
+          ctx.fillStyle = `rgba(${cr},${cg},${cb},${fillAlpha.toFixed(3)})`;
           ctx.fill();
         });
 
         // Draw vertices (nodes)
+        const nr = Math.min(255, cr + 40), ng = Math.min(255, cg - 10), nb = Math.min(255, cb + 5);
         deformed.forEach((v, i) => {
           const p = project(v, scale);
           const r = (1.5 + _avatarIntensity * 1.5) * p[2];
           ctx.beginPath();
           ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(139,92,246,${(0.4 + _avatarIntensity * 0.4) * p[2]})`;
+          ctx.fillStyle = `rgba(${nr},${ng},${nb},${(0.4 + _avatarIntensity * 0.4) * p[2]})`;
           ctx.fill();
         });
 
@@ -9481,15 +9504,16 @@
         if (_avatarIntensity > 0.01) {
           const eyeGlow = 0.15 + Math.sin(_avatarTime * 1.5) * 0.05;
           const cx = W/2, cy = H/2;
+          const er = Math.min(255, cr + 68), eg = Math.min(255, cg + 37), eb = Math.min(255, cb + 9);
           // Left eye
           ctx.beginPath();
           ctx.arc(cx - 12, cy - 8, 3 + _avatarIntensity * 2, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(167,139,250,${eyeGlow * _avatarIntensity})`;
+          ctx.fillStyle = `rgba(${er},${eg},${eb},${eyeGlow * _avatarIntensity})`;
           ctx.fill();
           // Right eye
           ctx.beginPath();
           ctx.arc(cx + 12, cy - 8, 3 + _avatarIntensity * 2, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(167,139,250,${eyeGlow * _avatarIntensity})`;
+          ctx.fillStyle = `rgba(${er},${eg},${eb},${eyeGlow * _avatarIntensity})`;
           ctx.fill();
         }
 
@@ -9497,8 +9521,8 @@
         if (_avatarIntensity > 0.3) {
           const glowR = 65 + Math.sin(_avatarTime * 3) * 5 * _avatarIntensity;
           const gradient = ctx.createRadialGradient(W/2, H/2, glowR - 10, W/2, H/2, glowR + 15);
-          gradient.addColorStop(0, `rgba(99,102,241,${_avatarIntensity * 0.08})`);
-          gradient.addColorStop(1, 'rgba(99,102,241,0)');
+          gradient.addColorStop(0, `rgba(${cr},${cg},${cb},${_avatarIntensity * 0.08})`);
+          gradient.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
           ctx.beginPath();
           ctx.arc(W/2, H/2, glowR + 15, 0, Math.PI * 2);
           ctx.fillStyle = gradient;
@@ -9902,7 +9926,7 @@
         + '<h3 style="margin:0;font-size:18px;">\uD83D\uDE4B ' + (l==='ja' ? '人間の専門家に相談' : 'Ask a Human Expert') + '</h3>'
         + '<button onclick="document.getElementById(\'human-help-modal\').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">&times;</button>'
         + '</div>'
-        + '<p style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.5;">'
+        + '<p id="human-help-sla-text" style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.5;">'
         + (l==='ja' ? 'AIの回答で解決しなかった場合、人間の専門家が対応します。通常30分以内に回答します。' : 'If AI couldn\'t help, a human expert will assist you. Response within 30 minutes.')
         + '</p>'
         + '<textarea id="human-help-question" rows="3" placeholder="' + (l==='ja' ? '具体的に何を知りたいですか？' : 'What specifically do you need help with?') + '" '
@@ -9942,6 +9966,19 @@
           btn.classList.add('selected');
         });
       });
+
+      // Check support away status
+      fetch(API + '/api/v1/config/support-status').then(r => r.json()).then(d => {
+        if (d.away) {
+          var el = document.getElementById('human-help-sla-text');
+          if (el) {
+            el.innerHTML = '<span style="color:#f59e0b;">⚠️ ' + (l==='ja'
+              ? (d.away_message || '現在離席中です。回答までお時間いただく場合があります。')
+              : (d.away_message_en || 'Currently away. Response may take longer than usual.'))
+            + '</span>';
+          }
+        }
+      }).catch(function(){});
 
       // Submit
       document.getElementById('human-help-submit').addEventListener('click', async function() {

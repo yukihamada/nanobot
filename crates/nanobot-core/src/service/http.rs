@@ -2101,6 +2101,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/activity", get(handle_activity))
         // Tickets (user-facing)
         .route("/api/v1/tickets", post(handle_create_ticket))
+        .route("/api/v1/config/support-status", get(handle_support_status))
         // Feedback
         .route("/api/v1/feedback", post(handle_feedback))
         // OG image
@@ -8514,6 +8515,35 @@ async fn handle_create_ticket(
         }
     }
     (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "DynamoDB not configured"}))).into_response()
+}
+
+/// GET /api/v1/config/support-status — Check if human support is available or away
+async fn handle_support_status(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if let Ok(out) = dynamo.get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S("CONFIG#support".to_string()))
+                .key("sk", AttributeValue::S("STATUS".to_string()))
+                .send().await
+            {
+                if let Some(item) = out.item() {
+                    let away = item.get("away").and_then(|v| v.as_bool().ok()).copied().unwrap_or(false);
+                    let away_message = item.get("away_message").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let away_message_en = item.get("away_message_en").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    return Json(serde_json::json!({
+                        "away": away,
+                        "away_message": away_message,
+                        "away_message_en": away_message_en,
+                    }));
+                }
+            }
+        }
+    }
+    Json(serde_json::json!({"away": false}))
 }
 
 /// GET /api/v1/admin/tickets — List all tickets (admin only)
