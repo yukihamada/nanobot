@@ -7495,6 +7495,7 @@
         content.appendChild(nameLabel);
         const renderedText = renderMediaContent(text);
         const textSpan = document.createElement('span');
+        textSpan.style.fontWeight = 'bold';
         if (renderedText !== text) {
           textSpan.innerHTML = renderedText;
         } else {
@@ -10115,8 +10116,8 @@
     }
 
     // TTS engine state
-    let _ttsEngine = localStorage.getItem('ttsEngine') || 'openai';
-    let _elVoiceId = localStorage.getItem('elVoiceId') || 'pNInz6obpgDQGcFmaJgB';
+    let _ttsEngine = localStorage.getItem('ttsEngine') || 'elevenlabs';
+    let _elVoiceId = localStorage.getItem('elVoiceId') || 'jBpfAFnXaylXS2maSnkdl';
 
     function setTTSEngine(engine) {
       _ttsEngine = engine;
