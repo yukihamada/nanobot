@@ -787,13 +787,14 @@ async fn deduct_credits(
 
     let pk = format!("USER#{}", user_id);
 
-    // Atomic update with ReturnValue::AllNew to get remaining credits directly
+    // Atomic update with ConditionExpression to prevent negative balance (race condition fix)
     let remaining = match dynamo
         .update_item()
         .table_name(config_table)
         .key("pk", AttributeValue::S(pk))
         .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
         .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
+        .condition_expression("credits_remaining >= :c")
         .expression_attribute_values(":c", AttributeValue::N(credits.to_string()))
         .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
         .return_values(aws_sdk_dynamodb::types::ReturnValue::AllNew)
@@ -802,7 +803,16 @@ async fn deduct_credits(
     {
         Ok(output) => output.attributes
             .and_then(|attrs| attrs.get("credits_remaining").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok())),
-        Err(_) => None,
+        Err(e) => {
+            // ConditionalCheckFailedException = insufficient credits
+            let is_condition_fail = e.to_string().contains("ConditionalCheckFailed");
+            if is_condition_fail {
+                tracing::warn!("Insufficient credits for user {}: need {} credits", user_id, credits);
+                return (0, Some(0));
+            }
+            tracing::error!("deduct_credits DynamoDB error for {}: {}", user_id, e);
+            None
+        }
     };
 
     // Fire-and-forget: record usage for analytics
@@ -863,6 +873,46 @@ async fn link_stripe_to_user(
         Ok(_) => info!("Linked Stripe customer {} to user {} with plan {} ({} credits)", stripe_customer_id, user_id, plan, new_credits),
         Err(e) => tracing::error!("BILLING ERROR: Failed to link Stripe customer {} to user {} with plan {}: {}", stripe_customer_id, user_id, plan, e),
     }
+}
+
+/// Get user_id from Bearer token (supports both regular auth tokens and API keys with cw_ prefix).
+#[cfg(feature = "dynamodb-backend")]
+async fn auth_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Option<String> {
+    use aws_sdk_dynamodb::types::AttributeValue;
+
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+    if token.is_empty() { return None; }
+
+    // Check if this is an API key (cw_ prefix) or regular auth token
+    let (pk, sk) = if token.starts_with("cw_") {
+        (format!("APIKEY#{}", token), "LOOKUP".to_string())
+    } else {
+        (format!("AUTH#{}", token), "TOKEN".to_string())
+    };
+
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        if let Ok(output) = dynamo
+            .get_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S(pk))
+            .key("sk", AttributeValue::S(sk))
+            .send()
+            .await
+        {
+            if let Some(item) = output.item {
+                return item.get("user_id").and_then(|v| v.as_s().ok()).cloned();
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(feature = "dynamodb-backend"))]
+async fn auth_user_id(_state: &AppState, _headers: &axum::http::HeaderMap) -> Option<String> {
+    None
 }
 
 /// Add credits to a user (for one-time credit pack purchases).
@@ -1634,6 +1684,7 @@ pub struct RegisterRequest {
     pub email: String,
     pub password: String,
     pub name: Option<String>,
+    pub referral_code: Option<String>,
 }
 
 /// Request body for email login.
@@ -1658,6 +1709,7 @@ pub struct VerifyRequest {
     pub email: String,
     pub code: String,
     pub session_id: Option<String>,
+    pub referral_code: Option<String>,
 }
 
 /// Google OAuth callback query parameters.
@@ -1863,6 +1915,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Coupon
         .route("/api/v1/coupon/validate", post(handle_coupon_validate))
         .route("/api/v1/coupon/redeem", post(handle_coupon_redeem))
+        // Referral
+        .route("/api/v1/referral/code", get(handle_referral_code))
+        .route("/api/v1/referral/apply", post(handle_referral_apply))
         // SSE streaming chat
         .route("/api/v1/chat/stream", post(handle_chat_stream))
         // Multi-model explore (SSE — all models, progressive)
@@ -1939,9 +1994,16 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/admin", get(handle_admin))
         .route("/api/v1/admin/check", get(handle_admin_check))
         .route("/api/v1/admin/stats", get(handle_admin_stats))
+        .route("/api/v1/admin/users", get(handle_admin_users))
+        .route("/api/v1/admin/users/{user_id}/conversations", get(handle_admin_user_conversations))
+        .route("/api/v1/admin/sessions/{session_key}/messages", get(handle_admin_session_messages))
         .route("/api/v1/admin/logs", get(handle_admin_logs))
         .route("/api/v1/admin/feedback", get(handle_admin_feedback))
+        .route("/api/v1/admin/tickets", get(handle_admin_tickets))
+        .route("/api/v1/admin/tickets/{ticket_id}/respond", post(handle_admin_ticket_respond))
         .route("/api/v1/activity", get(handle_activity))
+        // Tickets (user-facing)
+        .route("/api/v1/tickets", post(handle_create_ticket))
         // Feedback
         .route("/api/v1/feedback", post(handle_feedback))
         // OG image
@@ -2497,6 +2559,27 @@ async fn handle_chat(
         ""
     };
 
+    // Wow Factor: enhanced prompt for new users
+    let wow_prompt = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            let is_new_user = cached_user.as_ref()
+                .map(|u| u.credits_used <= 10 && u.plan == "free")
+                .unwrap_or(false);
+            if is_new_user {
+                "\n\n## 初回ユーザー対応\n\
+                 このユーザーは新規ユーザーです。最高の第一印象を与えてください：\n\
+                 - 回答は具体的で価値のある内容にする\n\
+                 - 可能なら積極的にツール（検索・計算など）を活用して、AIの能力をデモする\n\
+                 - 親しみやすく、温かいトーンで対応する"
+            } else {
+                ""
+            }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { "" }
+    };
+
     // Custom system prompt from request or user settings
     let custom_sys = req.custom_system_prompt.as_deref()
         .or(user_settings.as_ref().and_then(|s| s.custom_system_prompt.as_deref()))
@@ -2508,9 +2591,9 @@ async fn handle_chat(
     };
 
     let system_prompt = if memory_context.is_empty() {
-        format!("{}\n\n今日の日付: {}{}{}{}{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, custom_sys_block, char_instruction)
+        format!("{}\n\n今日の日付: {}{}{}{}{}{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, char_instruction)
     } else {
-        format!("{}\n\n今日の日付: {}{}{}{}{}\n\n---\n{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, custom_sys_block, memory_context, char_instruction)
+        format!("{}\n\n今日の日付: {}{}{}{}{}{}\n\n---\n{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, memory_context, char_instruction)
     };
     let mut messages = vec![
         Message::system(&system_prompt),
@@ -2791,14 +2874,20 @@ async fn handle_chat(
             let mut conversation = messages.clone();
             let mut all_tool_results: Vec<(String, String, String)> = Vec::new();
 
-            // Determine max iterations based on user plan
+            // Determine max iterations based on user plan (Wow Factor: new free users get 2 iterations)
             let max_iterations: usize = {
                 #[cfg(feature = "dynamodb-backend")]
                 {
                     match cached_user.as_ref().map(|u| u.plan.as_str()) {
                         Some("pro") | Some("enterprise") => 5,
                         Some("starter") => 3,
-                        _ => 1, // free plan: single turn (backward compat)
+                        _ => {
+                            // Wow Factor: new free users get extra tool iteration
+                            let is_new = cached_user.as_ref()
+                                .map(|u| u.credits_used <= 10 && u.plan == "free")
+                                .unwrap_or(false);
+                            if is_new { 2 } else { 1 }
+                        }
                     }
                 }
                 #[cfg(not(feature = "dynamodb-backend"))]
@@ -2967,6 +3056,12 @@ async fn handle_chat(
                                     resp.usage.prompt_tokens, resp.usage.completion_tokens).await;
                                 total_credits_used += credits;
                                 if remaining.is_some() { last_remaining_credits = remaining; }
+                                // Break early if credits exhausted
+                                if remaining == Some(0) {
+                                    current = resp;
+                                    tracing::info!("Credits exhausted for user {}, breaking tool loop at iteration {}", session_key, iteration);
+                                    break;
+                                }
                             }
                         }
                         current = resp;
@@ -5244,6 +5339,27 @@ async fn handle_chat_stream(
         ""
     };
 
+    // Wow Factor: enhanced prompt for new users (streaming)
+    let stream_wow_prompt = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            let is_new_user = stream_user.as_ref()
+                .map(|u| u.credits_used <= 10 && u.plan == "free")
+                .unwrap_or(false);
+            if is_new_user {
+                "\n\n## 初回ユーザー対応\n\
+                 このユーザーは新規ユーザーです。最高の第一印象を与えてください：\n\
+                 - 回答は具体的で価値のある内容にする\n\
+                 - 可能なら積極的にツール（検索・計算など）を活用して、AIの能力をデモする\n\
+                 - 親しみやすく、温かいトーンで対応する"
+            } else {
+                ""
+            }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { "" }
+    };
+
     // Custom system prompt from request or user settings
     let stream_custom_sys = req.custom_system_prompt.as_deref()
         .or(user_settings.as_ref().and_then(|s| s.custom_system_prompt.as_deref()))
@@ -5255,9 +5371,9 @@ async fn handle_chat_stream(
     };
 
     let stream_system_prompt = if stream_memory.is_empty() {
-        format!("{}\n\n今日の日付: {}{}{}{}{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_custom_block, char_instruction)
+        format!("{}\n\n今日の日付: {}{}{}{}{}{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_wow_prompt, stream_custom_block, char_instruction)
     } else {
-        format!("{}\n\n今日の日付: {}{}{}{}{}\n\n---\n{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_custom_block, stream_memory, char_instruction)
+        format!("{}\n\n今日の日付: {}{}{}{}{}{}\n\n---\n{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_wow_prompt, stream_custom_block, stream_memory, char_instruction)
     };
     let mut messages = vec![Message::system(&stream_system_prompt)];
 
@@ -5318,25 +5434,41 @@ async fn handle_chat_stream(
             match stream_user.as_ref().map(|u| u.plan.as_str()) {
                 Some("pro") | Some("enterprise") => 5,
                 Some("starter") => 3,
-                _ => 1,
+                _ => {
+                    // Wow Factor: new free users get extra tool iteration
+                    let is_new = stream_user.as_ref()
+                        .map(|u| u.credits_used <= 10 && u.plan == "free")
+                        .unwrap_or(false);
+                    if is_new { 2 } else { 1 }
+                }
             }
         }
         #[cfg(not(feature = "dynamodb-backend"))]
         { 5 }
     };
 
-    let response_stream = stream::once(async move {
-        // Collect all SSE events into a Vec, then join as multi-line SSE
-        // (API Gateway v2 compatible — futures::stream::once pattern)
-        let mut events: Vec<serde_json::Value> = Vec::new();
+    // Real-time SSE: send each event individually as it happens via mpsc channel
+    let (tx, rx) = futures::channel::mpsc::unbounded::<Result<Event, Infallible>>();
 
-        // Start event with agent metadata
-        events.push(serde_json::json!({
+    tokio::spawn(async move {
+        // Helper: send a single SSE event immediately
+        macro_rules! send_sse {
+            ($data:expr) => {
+                let _ = tx.unbounded_send(Ok(Event::default().data(
+                    serde_json::to_string(&$data).unwrap_or_default()
+                )));
+            };
+        }
+        let mut event_count: usize = 0;
+
+        // Start event with agent metadata (sent immediately)
+        send_sse!(serde_json::json!({
             "type": "start",
             "session_id": req_session_id,
             "agent": agent_id,
             "estimated_seconds": agent_estimated_seconds,
         }));
+        event_count += 1;
 
         let tools_ref = if tools.is_empty() { None } else { Some(&tools[..]) };
 
@@ -5355,23 +5487,21 @@ async fn handle_chat_stream(
             Err(_) => {
                 tracing::warn!("Stream LLM call timed out after {}s, returning fallback", RESPONSE_DEADLINE_SECS);
                 let fallback = timeout_fallback_message();
-                // Deduct minimum 1 credit for timeout (input tokens were consumed)
                 #[cfg(feature = "dynamodb-backend")]
                 {
                     if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                         let (credits, remaining) = deduct_credits(dynamo, table, &session_key_clone, &model, 100, 0).await;
                         if let Some(r) = remaining {
-                            events.push(serde_json::json!({"type":"done","credits_used": credits, "credits_remaining": r}));
+                            send_sse!(serde_json::json!({"type":"done","credits_used": credits, "credits_remaining": r}));
                         } else {
-                            events.push(serde_json::json!({"type":"done","credits_used": credits}));
+                            send_sse!(serde_json::json!({"type":"done","credits_used": credits}));
                         }
                     }
                 }
-                events.push(serde_json::json!({"type":"content","content": fallback}));
+                send_sse!(serde_json::json!({"type":"content","content": fallback}));
                 #[cfg(not(feature = "dynamodb-backend"))]
-                events.push(serde_json::json!({"type":"done"}));
-                let body = serde_json::to_string(&events).unwrap_or_default();
-                return Ok::<_, Infallible>(Event::default().data(body));
+                send_sse!(serde_json::json!({"type":"done"}));
+                return; // tx dropped → stream ends
             }
         };
 
@@ -5410,13 +5540,14 @@ async fn handle_chat_stream(
                     iteration += 1;
                     let tool_calls_to_run: Vec<_> = current.tool_calls.iter().take(5).collect();
 
-                    // Emit tool_start events
+                    // Emit tool_start events (sent immediately — client shows progress)
                     for tc in &tool_calls_to_run {
-                        events.push(serde_json::json!({
+                        send_sse!(serde_json::json!({
                             "type": "tool_start",
                             "tool": tc.name,
                             "iteration": iteration,
                         }));
+                        event_count += 1;
                     }
 
                     // Execute tool calls in parallel
@@ -5428,7 +5559,6 @@ async fn handle_chat_stream(
                         if name == "code_execute" || name == "file_read" || name == "file_write" || name == "file_list" || name == "web_deploy" {
                             args.insert("_sandbox_dir".to_string(), serde_json::Value::String(sandbox_dir.clone()));
                         }
-                        // Inject session key for tools that need user context
                         if name == "phone_call" || name == "web_deploy" {
                             args.insert("_session_key".to_string(), serde_json::Value::String(session_key_clone.clone()));
                         }
@@ -5452,16 +5582,17 @@ async fn handle_chat_stream(
                     }).collect();
                     let tool_results: Vec<_> = futures::future::join_all(futures_vec).await;
 
-                    // Emit tool_result events
+                    // Emit tool_result events (sent immediately)
                     for (_, name, result) in &tool_results {
                         all_tools_used.push(name.clone());
                         let preview_end = result.char_indices().nth(500).map(|(i, _)| i).unwrap_or(result.len());
-                        events.push(serde_json::json!({
+                        send_sse!(serde_json::json!({
                             "type": "tool_result",
                             "tool": name,
                             "result": &result[..preview_end],
                             "iteration": iteration,
                         }));
+                        event_count += 1;
                     }
 
                     // Build conversation with tool calls + results
@@ -5480,11 +5611,12 @@ async fn handle_chat_stream(
                         conversation.push(Message::tool_result(id, name, result));
                     }
 
-                    // Emit thinking event
-                    events.push(serde_json::json!({
+                    // Emit thinking event (sent immediately)
+                    send_sse!(serde_json::json!({
                         "type": "thinking",
                         "iteration": iteration,
                     }));
+                    event_count += 1;
 
                     // Follow-up LLM call: pass tools if more iterations remain
                     let follow_up_tools = if iteration < max_iterations {
@@ -5504,6 +5636,12 @@ async fn handle_chat_stream(
                                         resp.usage.prompt_tokens, resp.usage.completion_tokens).await;
                                     total_credits_used += credits;
                                     if remaining.is_some() { last_remaining = remaining; }
+                                    // Break early if credits exhausted
+                                    if remaining == Some(0) {
+                                        current = resp;
+                                        tracing::info!("Credits exhausted for user {} in stream, breaking tool loop at iteration {}", session_key_clone, iteration);
+                                        break;
+                                    }
                                 }
                             }
                             current = resp;
@@ -5580,9 +5718,9 @@ async fn handle_chat_stream(
                     }
                 }
 
-                // Content event (final answer)
+                // Content event (final answer — sent immediately)
                 let stream_cost = crate::provider::pricing::calculate_cost(&stream_used_model, stream_total_input, stream_total_output);
-                events.push(serde_json::json!({
+                send_sse!(serde_json::json!({
                     "type": "content",
                     "content": response_text,
                     "agent": agent_id,
@@ -5595,24 +5733,26 @@ async fn handle_chat_stream(
                     "output_tokens": stream_total_output,
                     "estimated_cost_usd": if stream_cost > 0.0 { Some(stream_cost) } else { None::<f64> },
                 }));
+                event_count += 1;
             }
             Err(e) => {
                 tracing::error!("LLM stream error (all providers failed): {}", e);
                 stream_had_error = true;
                 let fallback = error_fallback_message();
-                events.push(serde_json::json!({"type":"content","content": fallback}));
+                send_sse!(serde_json::json!({"type":"content","content": fallback}));
+                event_count += 1;
             }
         }
 
         // Log latency and emit audit
         let stream_latency = stream_start.elapsed().as_millis();
         info!("Stream response: session={}, model={}, latency={}ms, events={}",
-            session_key_clone, model, stream_latency, events.len());
+            session_key_clone, model, stream_latency, event_count);
         #[cfg(feature = "dynamodb-backend")]
         {
             if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                 emit_audit_log(dynamo.clone(), table.clone(), "chat_stream", &session_key_clone, "",
-                    &format!("model={} latency={}ms events={}", model, stream_latency, events.len()));
+                    &format!("model={} latency={}ms events={}", model, stream_latency, event_count));
 
                 // Fire-and-forget routing log
                 let session_hash = {
@@ -5646,16 +5786,11 @@ async fn handle_chat_stream(
         }
 
         // Done event
-        events.push(serde_json::json!({"type":"done"}));
-
-        // Emit all events as a single SSE data payload (API Gateway v2 compatible)
-        // Client parses the JSON array to reconstruct individual events
-        Ok::<_, Infallible>(Event::default().data(
-            serde_json::to_string(&events).unwrap_or_else(|_| "[]".to_string())
-        ))
+        send_sse!(serde_json::json!({"type":"done"}));
+        // tx is dropped here → stream closes naturally
     });
 
-    Sse::new(response_stream)
+    Sse::new(rx)
         .keep_alive(axum::response::sse::KeepAlive::default())
         .into_response()
 }
@@ -7038,6 +7173,225 @@ async fn handle_coupon_redeem(
 }
 
 // ---------------------------------------------------------------------------
+// Referral system
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct ReferralApplyRequest {
+    code: String,
+}
+
+/// Generate a 6-char alphanumeric referral code from a user_id (deterministic).
+fn generate_referral_code(user_id: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    user_id.hash(&mut hasher);
+    let hash = hasher.finish();
+    const CHARS: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I confusion
+    let mut code = String::with_capacity(6);
+    let mut h = hash;
+    for _ in 0..6 {
+        code.push(CHARS[(h % CHARS.len() as u64) as usize] as char);
+        h /= CHARS.len() as u64;
+    }
+    code
+}
+
+/// GET /api/v1/referral/code — Get or create referral code for authenticated user
+async fn handle_referral_code(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let user_id = match auth_user_id(&state, &headers).await {
+        Some(id) => id,
+        None => return Json(serde_json::json!({ "error": "Unauthorized" })),
+    };
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Check if user already has a referral code in profile
+            let user = get_or_create_user(dynamo, table, &user_id).await;
+            let code = generate_referral_code(&user_id);
+
+            // Ensure REFERRAL#{code} OWNER record exists (idempotent)
+            let _ = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("REFERRAL#{}", code)))
+                .item("sk", AttributeValue::S("OWNER".to_string()))
+                .item("user_id", AttributeValue::S(user_id.clone()))
+                .item("created_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .condition_expression("attribute_not_exists(pk)")
+                .send()
+                .await; // ignore error if already exists
+
+            // Store referral_code on user profile if not set
+            let _ = dynamo
+                .update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .update_expression("SET referral_code = if_not_exists(referral_code, :code)")
+                .expression_attribute_values(":code", AttributeValue::S(code.clone()))
+                .send()
+                .await;
+
+            let referral_url = format!("https://chatweb.ai?ref={}", code);
+            return Json(serde_json::json!({
+                "ok": true,
+                "code": code,
+                "url": referral_url,
+                "credits_remaining": user.credits_remaining,
+            }));
+        }
+    }
+
+    Json(serde_json::json!({ "error": "Not available" }))
+}
+
+/// POST /api/v1/referral/apply — Apply a referral code (referee gets +100, referrer gets +100)
+async fn handle_referral_apply(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<ReferralApplyRequest>,
+) -> impl IntoResponse {
+    let user_id = match auth_user_id(&state, &headers).await {
+        Some(id) => id,
+        None => return Json(serde_json::json!({ "error": "Unauthorized" })),
+    };
+
+    let code = req.code.trim().to_uppercase();
+    if code.len() < 4 || code.len() > 10 {
+        return Json(serde_json::json!({ "error": "Invalid referral code" }));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Look up referral code owner
+            let referrer_id = match dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("REFERRAL#{}", code)))
+                .key("sk", AttributeValue::S("OWNER".to_string()))
+                .send()
+                .await
+            {
+                Ok(output) => output.item.and_then(|item| {
+                    item.get("user_id").and_then(|v| v.as_s().ok()).map(|s| s.to_string())
+                }),
+                Err(_) => None,
+            };
+
+            let referrer_id = match referrer_id {
+                Some(id) => id,
+                None => return Json(serde_json::json!({ "error": "Invalid referral code" })),
+            };
+
+            // Self-referral check
+            if referrer_id == user_id {
+                return Json(serde_json::json!({ "error": "Cannot use your own referral code" }));
+            }
+
+            // Duplicate check: REFERRAL_LOG#{referrer}#{referee}
+            let log_pk = format!("REFERRAL_LOG#{}#{}", referrer_id, user_id);
+            let already_used = match dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(log_pk.clone()))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .send()
+                .await
+            {
+                Ok(output) => output.item.is_some(),
+                Err(_) => false,
+            };
+
+            if already_used {
+                return Json(serde_json::json!({ "error": "Referral code already used" }));
+            }
+
+            // Also check if this user has ever used ANY referral code
+            // Use a simple flag on the user profile
+            let user = get_or_create_user(dynamo, table, &user_id).await;
+            // Check referred_by field via direct get
+            let has_referrer = match dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .send()
+                .await
+            {
+                Ok(output) => output.item
+                    .and_then(|item| item.get("referred_by").cloned())
+                    .is_some(),
+                Err(_) => false,
+            };
+
+            if has_referrer {
+                return Json(serde_json::json!({ "error": "You have already used a referral code" }));
+            }
+
+            let now = chrono::Utc::now().to_rfc3339();
+            let bonus: i64 = 100;
+
+            // Record referral log (prevents duplicates)
+            let _ = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(log_pk))
+                .item("sk", AttributeValue::S("INFO".to_string()))
+                .item("referrer_id", AttributeValue::S(referrer_id.clone()))
+                .item("referee_id", AttributeValue::S(user_id.clone()))
+                .item("code", AttributeValue::S(code.clone()))
+                .item("bonus", AttributeValue::N(bonus.to_string()))
+                .item("created_at", AttributeValue::S(now.clone()))
+                .condition_expression("attribute_not_exists(pk)")
+                .send()
+                .await;
+
+            // Credit referee (current user) +100
+            let _ = dynamo
+                .update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .update_expression("SET credits_remaining = credits_remaining + :bonus, referred_by = :ref, updated_at = :now")
+                .expression_attribute_values(":bonus", AttributeValue::N(bonus.to_string()))
+                .expression_attribute_values(":ref", AttributeValue::S(referrer_id.clone()))
+                .expression_attribute_values(":now", AttributeValue::S(now.clone()))
+                .send()
+                .await;
+
+            // Credit referrer +100
+            let _ = dynamo
+                .update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("USER#{}", referrer_id)))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .update_expression("SET credits_remaining = credits_remaining + :bonus, updated_at = :now")
+                .expression_attribute_values(":bonus", AttributeValue::N(bonus.to_string()))
+                .expression_attribute_values(":now", AttributeValue::S(now))
+                .send()
+                .await;
+
+            let updated_user = get_or_create_user(dynamo, table, &user_id).await;
+            return Json(serde_json::json!({
+                "ok": true,
+                "bonus_credits": bonus,
+                "credits_remaining": updated_user.credits_remaining,
+                "message": "Referral bonus applied! +100 credits"
+            }));
+        }
+    }
+
+    Json(serde_json::json!({ "error": "Not available" }))
+}
+
+// ---------------------------------------------------------------------------
 // Crypto payment (OpenRouter onchain — ETH/MATIC/Base)
 // ---------------------------------------------------------------------------
 
@@ -7664,6 +8018,502 @@ async fn handle_admin_stats(
     Json(serde_json::json!({
         "error": "DynamoDB not configured",
     })).into_response()
+}
+
+/// GET /api/v1/admin/users — List all registered users (admin only)
+/// Query params: ?sid=<admin_key>&limit=200
+async fn handle_admin_users(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let sid = q.get("sid").cloned().unwrap_or_default();
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let limit: usize = q.get("limit").and_then(|v| v.parse().ok()).unwrap_or(200);
+            let mut users: Vec<serde_json::Value> = Vec::new();
+            let mut start_key: Option<std::collections::HashMap<String, AttributeValue>> = None;
+
+            loop {
+                let mut req = dynamo.scan()
+                    .table_name(table)
+                    .filter_expression("begins_with(pk, :prefix) AND sk = :profile")
+                    .expression_attribute_values(":prefix", AttributeValue::S("USER#".to_string()))
+                    .expression_attribute_values(":profile", AttributeValue::S("PROFILE".to_string()));
+                if let Some(ref k) = start_key {
+                    req = req.set_exclusive_start_key(Some(k.clone()));
+                }
+                match req.send().await {
+                    Ok(output) => {
+                        for item in output.items() {
+                            let user_id = item.get("pk").and_then(|v| v.as_s().ok())
+                                .map(|s| s.strip_prefix("USER#").unwrap_or(s).to_string())
+                                .unwrap_or_default();
+                            let email = item.get("email").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let display_name = item.get("display_name").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let plan = item.get("plan").and_then(|v| v.as_s().ok()).cloned().unwrap_or_else(|| "free".to_string());
+                            let credits = item.get("credits_remaining").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
+                            let credits_used = item.get("credits_used").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
+                            let created_at = item.get("created_at").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let channel = item.get("channel").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let referral_code = item.get("referral_code").and_then(|v| v.as_s().ok()).cloned();
+
+                            users.push(serde_json::json!({
+                                "user_id": user_id,
+                                "email": email,
+                                "display_name": display_name,
+                                "plan": plan,
+                                "credits_remaining": credits,
+                                "credits_used": credits_used,
+                                "created_at": created_at,
+                                "channel": channel,
+                                "referral_code": referral_code,
+                            }));
+                        }
+                        if users.len() >= limit {
+                            users.truncate(limit);
+                            break;
+                        }
+                        match output.last_evaluated_key() {
+                            Some(k) => start_key = Some(k.to_owned()),
+                            None => break,
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("admin users scan error: {}", e);
+                        return Json(serde_json::json!({"error": e.to_string()})).into_response();
+                    }
+                }
+            }
+
+            // Sort by credits_used descending (most active first)
+            users.sort_by(|a, b| {
+                let au = a["credits_used"].as_i64().unwrap_or(0);
+                let bu = b["credits_used"].as_i64().unwrap_or(0);
+                bu.cmp(&au)
+            });
+
+            return Json(serde_json::json!({
+                "users": users,
+                "count": users.len(),
+            })).into_response();
+        }
+    }
+    Json(serde_json::json!({"users": [], "error": "DynamoDB not configured"})).into_response()
+}
+
+/// GET /api/v1/admin/users/{user_id}/conversations — List conversations for a user (admin only)
+/// Query params: ?sid=<admin_key>
+async fn handle_admin_user_conversations(
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<String>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let sid = q.get("sid").cloned().unwrap_or_default();
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let pk = format!("USER#{}", user_id);
+            match dynamo.query()
+                .table_name(table)
+                .key_condition_expression("pk = :pk AND begins_with(sk, :conv)")
+                .expression_attribute_values(":pk", AttributeValue::S(pk))
+                .expression_attribute_values(":conv", AttributeValue::S("CONV#".to_string()))
+                .scan_index_forward(false)
+                .send().await
+            {
+                Ok(output) => {
+                    let conversations: Vec<serde_json::Value> = output.items().iter().map(|item| {
+                        let conv_id = item.get("sk").and_then(|v| v.as_s().ok())
+                            .map(|s| s.strip_prefix("CONV#").unwrap_or(s).to_string())
+                            .unwrap_or_default();
+                        let title = item.get("title").and_then(|v| v.as_s().ok()).cloned().unwrap_or_else(|| "Untitled".to_string());
+                        let session_id = item.get("session_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                        let message_count = item.get("message_count").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
+                        let created_at = item.get("created_at").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                        let updated_at = item.get("updated_at").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                        serde_json::json!({
+                            "conv_id": conv_id,
+                            "title": title,
+                            "session_id": session_id,
+                            "message_count": message_count,
+                            "created_at": created_at,
+                            "updated_at": updated_at,
+                        })
+                    }).collect();
+                    return Json(serde_json::json!({
+                        "user_id": user_id,
+                        "conversations": conversations,
+                        "count": conversations.len(),
+                    })).into_response();
+                }
+                Err(e) => {
+                    tracing::warn!("admin user conversations query error: {}", e);
+                    return Json(serde_json::json!({"error": e.to_string()})).into_response();
+                }
+            }
+        }
+    }
+    Json(serde_json::json!({"conversations": [], "error": "DynamoDB not configured"})).into_response()
+}
+
+/// GET /api/v1/admin/sessions/{session_key}/messages — Get messages for a session (admin only)
+/// Query params: ?sid=<admin_key>
+async fn handle_admin_session_messages(
+    State(state): State<Arc<AppState>>,
+    Path(session_key): Path<String>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let sid = q.get("sid").cloned().unwrap_or_default();
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let Some(dynamo) = state.dynamo_client.as_ref() {
+            // Sessions are in a separate table: nanobot-sessions-default
+            let sessions_table = std::env::var("SESSIONS_TABLE").unwrap_or_else(|_| "nanobot-sessions-default".to_string());
+            match dynamo.get_item()
+                .table_name(&sessions_table)
+                .key("session_key", AttributeValue::S(session_key.clone()))
+                .send().await
+            {
+                Ok(output) => {
+                    if let Some(item) = output.item() {
+                        let messages: Vec<serde_json::Value> = if let Some(msg_list) = item.get("messages").and_then(|v| v.as_l().ok()) {
+                            msg_list.iter().filter_map(|m| {
+                                let map = m.as_m().ok()?;
+                                let role = map.get("role").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                                let content = map.get("content").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                                let timestamp = map.get("timestamp").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                                Some(serde_json::json!({
+                                    "role": role,
+                                    "content": content,
+                                    "timestamp": timestamp,
+                                }))
+                            }).collect()
+                        } else {
+                            Vec::new()
+                        };
+                        return Json(serde_json::json!({
+                            "session_key": session_key,
+                            "messages": messages,
+                            "count": messages.len(),
+                        })).into_response();
+                    } else {
+                        return Json(serde_json::json!({
+                            "session_key": session_key,
+                            "messages": [],
+                            "count": 0,
+                            "error": "Session not found",
+                        })).into_response();
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("admin session messages error: {}", e);
+                    return Json(serde_json::json!({"error": e.to_string()})).into_response();
+                }
+            }
+        }
+    }
+    Json(serde_json::json!({"messages": [], "error": "DynamoDB not configured"})).into_response()
+}
+
+/// POST /api/v1/tickets — Create a human escalation ticket
+/// Body: { "question": "...", "context": "...", "channel": "line|telegram|email|chatweb", "priority": false }
+async fn handle_create_ticket(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let question = body["question"].as_str().unwrap_or("").trim();
+    if question.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "question is required"}))).into_response();
+    }
+
+    let notify_channel = body["channel"].as_str().unwrap_or("chatweb");
+    let priority = body["priority"].as_bool().unwrap_or(false);
+    let context = body["context"].as_str().unwrap_or("");
+    let conv_id = body["conv_id"].as_str().unwrap_or("");
+
+    // Resolve user
+    let mut user_id = String::new();
+    let mut user_email = String::new();
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if let Some(uid) = auth_user_id(&state, &headers).await {
+                user_id = uid.clone();
+                // Get email
+                if let Ok(out) = dynamo.get_item()
+                    .table_name(table)
+                    .key("pk", AttributeValue::S(format!("USER#{}", uid)))
+                    .key("sk", AttributeValue::S("PROFILE".to_string()))
+                    .send().await
+                {
+                    if let Some(item) = out.item() {
+                        user_email = item.get("email").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    }
+                }
+            }
+        }
+    }
+    if user_id.is_empty() {
+        if let Some(sid) = headers.get("x-session-id").and_then(|v| v.to_str().ok()) {
+            user_id = sid.to_string();
+        }
+    }
+
+    // Generate ticket ID
+    let ticket_id = format!("TK{}", &uuid::Uuid::new_v4().to_string()[..8]);
+    let now = chrono::Utc::now().to_rfc3339();
+    let sla = if priority { "15min" } else { "30min" };
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Priority costs 50 credits
+            if priority && !user_id.is_empty() {
+                let pk = format!("USER#{}", user_id);
+                let _ = dynamo.update_item()
+                    .table_name(table)
+                    .key("pk", AttributeValue::S(pk))
+                    .key("sk", AttributeValue::S("PROFILE".to_string()))
+                    .update_expression("SET credits_remaining = credits_remaining - :c")
+                    .expression_attribute_values(":c", AttributeValue::N("50".to_string()))
+                    .condition_expression("credits_remaining >= :c")
+                    .send().await;
+            }
+
+            // Store ticket
+            let ttl = (chrono::Utc::now() + chrono::Duration::days(90)).timestamp();
+            let _ = dynamo.put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("TICKET#{}", ticket_id)))
+                .item("sk", AttributeValue::S("INFO".to_string()))
+                .item("ticket_id", AttributeValue::S(ticket_id.clone()))
+                .item("user_id", AttributeValue::S(user_id.clone()))
+                .item("user_email", AttributeValue::S(user_email.clone()))
+                .item("question", AttributeValue::S(question.to_string()))
+                .item("context", AttributeValue::S(context.to_string()))
+                .item("conv_id", AttributeValue::S(conv_id.to_string()))
+                .item("notify_channel", AttributeValue::S(notify_channel.to_string()))
+                .item("priority", AttributeValue::Bool(priority))
+                .item("sla", AttributeValue::S(sla.to_string()))
+                .item("status", AttributeValue::S("open".to_string()))
+                .item("created_at", AttributeValue::S(now.clone()))
+                .item("ttl", AttributeValue::N(ttl.to_string()))
+                .send().await;
+
+            // Notify admin via LINE push
+            if let Ok(access_token) = std::env::var("LINE_CHANNEL_ACCESS_TOKEN") {
+                if let Ok(admin_line_id) = std::env::var("ADMIN_LINE_USER_ID") {
+                    let prio_label = if priority { "🔴 優先" } else { "🟡 通常" };
+                    let msg = format!(
+                        "📩 新チケット {}\n{} (SLA: {})\n\n質問: {}\n\nユーザー: {}\nチャネル: {}\n\n管理画面: https://chatweb.ai/admin",
+                        ticket_id, prio_label, sla,
+                        if question.len() > 100 { &question[..100] } else { question },
+                        if user_email.is_empty() { &user_id } else { &user_email },
+                        notify_channel,
+                    );
+                    let _ = LineChannel::push_message(&access_token, &admin_line_id, &msg).await;
+                }
+            }
+
+            return Json(serde_json::json!({
+                "ticket_id": ticket_id,
+                "status": "open",
+                "sla": sla,
+                "priority": priority,
+                "message": format!("チケットを作成しました。{}以内に回答します。", sla),
+            })).into_response();
+        }
+    }
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "DynamoDB not configured"}))).into_response()
+}
+
+/// GET /api/v1/admin/tickets — List all tickets (admin only)
+/// Query params: ?sid=<admin_key>&status=open
+async fn handle_admin_tickets(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let sid = q.get("sid").cloned().unwrap_or_default();
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+
+    let filter_status = q.get("status").cloned();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let mut tickets: Vec<serde_json::Value> = Vec::new();
+            let mut start_key: Option<std::collections::HashMap<String, AttributeValue>> = None;
+
+            loop {
+                let mut req = dynamo.scan()
+                    .table_name(table)
+                    .filter_expression("begins_with(pk, :prefix) AND sk = :info")
+                    .expression_attribute_values(":prefix", AttributeValue::S("TICKET#".to_string()))
+                    .expression_attribute_values(":info", AttributeValue::S("INFO".to_string()));
+                if let Some(ref k) = start_key {
+                    req = req.set_exclusive_start_key(Some(k.clone()));
+                }
+                match req.send().await {
+                    Ok(output) => {
+                        for item in output.items() {
+                            let status = item.get("status").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            if let Some(ref fs) = filter_status {
+                                if &status != fs { continue; }
+                            }
+                            tickets.push(serde_json::json!({
+                                "ticket_id": item.get("ticket_id").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                                "user_id": item.get("user_id").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                                "user_email": item.get("user_email").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                                "question": item.get("question").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                                "context": item.get("context").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                                "notify_channel": item.get("notify_channel").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                                "priority": item.get("priority").and_then(|v| v.as_bool().ok()).copied().unwrap_or(false),
+                                "sla": item.get("sla").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                                "status": status,
+                                "response": item.get("response").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                                "created_at": item.get("created_at").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                                "resolved_at": item.get("resolved_at").and_then(|v| v.as_s().ok()).unwrap_or(&String::new()),
+                            }));
+                        }
+                        match output.last_evaluated_key() {
+                            Some(k) => start_key = Some(k.to_owned()),
+                            None => break,
+                        }
+                    }
+                    Err(e) => { tracing::warn!("admin tickets scan: {}", e); break; }
+                }
+            }
+
+            // Sort by created_at descending
+            tickets.sort_by(|a, b| {
+                let at = a["created_at"].as_str().unwrap_or("");
+                let bt = b["created_at"].as_str().unwrap_or("");
+                bt.cmp(at)
+            });
+
+            return Json(serde_json::json!({
+                "tickets": tickets,
+                "count": tickets.len(),
+            })).into_response();
+        }
+    }
+    Json(serde_json::json!({"tickets": [], "error": "DynamoDB not configured"})).into_response()
+}
+
+/// POST /api/v1/admin/tickets/{ticket_id}/respond — Respond to a ticket (admin only)
+/// Body: { "sid": "...", "response": "..." }
+async fn handle_admin_ticket_respond(
+    State(state): State<Arc<AppState>>,
+    Path(ticket_id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let sid = body["sid"].as_str().unwrap_or("");
+    if !is_admin(sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+    let response_text = body["response"].as_str().unwrap_or("").trim();
+    if response_text.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "response is required"}))).into_response();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let pk = format!("TICKET#{}", ticket_id);
+            let now = chrono::Utc::now().to_rfc3339();
+
+            // Get ticket info first
+            let ticket = match dynamo.get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(pk.clone()))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .send().await
+            {
+                Ok(out) => out.item().cloned(),
+                Err(e) => {
+                    return Json(serde_json::json!({"error": e.to_string()})).into_response();
+                }
+            };
+
+            let ticket = match ticket {
+                Some(t) => t,
+                None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Ticket not found"}))).into_response(),
+            };
+
+            // Update ticket status
+            let _ = dynamo.update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(pk))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .update_expression("SET #status = :s, #resp = :r, resolved_at = :t")
+                .expression_attribute_names("#status", "status")
+                .expression_attribute_names("#resp", "response")
+                .expression_attribute_values(":s", AttributeValue::S("resolved".to_string()))
+                .expression_attribute_values(":r", AttributeValue::S(response_text.to_string()))
+                .expression_attribute_values(":t", AttributeValue::S(now.clone()))
+                .send().await;
+
+            // Send response to user via their chosen channel
+            let notify_channel = ticket.get("notify_channel").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+            let user_id = ticket.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+            let question = ticket.get("question").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+
+            let notification = format!(
+                "💡 チケット {} への回答:\n\nご質問: {}\n\n回答: {}\n\n---\nchatweb.ai サポートチーム",
+                ticket_id,
+                if question.len() > 60 { format!("{}...", &question[..60]) } else { question },
+                response_text,
+            );
+
+            match notify_channel.as_str() {
+                "line" => {
+                    // user_id might be a LINE user ID (starts with line:U...)
+                    let line_uid = user_id.strip_prefix("line:").unwrap_or(&user_id);
+                    if let Ok(access_token) = std::env::var("LINE_CHANNEL_ACCESS_TOKEN") {
+                        let _ = LineChannel::push_message(&access_token, line_uid, &notification).await;
+                    }
+                }
+                _ => {
+                    // For chatweb/email/telegram — store notification for user to see on next visit
+                    let _ = dynamo.put_item()
+                        .table_name(table)
+                        .item("pk", AttributeValue::S(format!("NOTIFY#{}", user_id)))
+                        .item("sk", AttributeValue::S(format!("{}#{}", now, ticket_id)))
+                        .item("message", AttributeValue::S(notification))
+                        .item("ticket_id", AttributeValue::S(ticket_id.clone()))
+                        .item("read", AttributeValue::Bool(false))
+                        .item("ttl", AttributeValue::N(
+                            (chrono::Utc::now() + chrono::Duration::days(30)).timestamp().to_string()
+                        ))
+                        .send().await;
+                }
+            }
+
+            return Json(serde_json::json!({
+                "ticket_id": ticket_id,
+                "status": "resolved",
+                "resolved_at": now,
+                "notified_via": notify_channel,
+            })).into_response();
+        }
+    }
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "DynamoDB not configured"}))).into_response()
 }
 
 /// GET /api/v1/admin/logs — Fetch audit logs (admin only)
@@ -9620,24 +10470,55 @@ async fn handle_auth_me(
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            let auth_pk = format!("AUTH#{}", token);
+            // Check if this is an API key (cw_ prefix) or regular auth token
+            let (pk, sk) = if token.starts_with("cw_") {
+                (format!("APIKEY#{}", token), "LOOKUP".to_string())
+            } else {
+                (format!("AUTH#{}", token), "TOKEN".to_string())
+            };
+
             if let Ok(output) = dynamo
                 .get_item()
                 .table_name(table)
-                .key("pk", AttributeValue::S(auth_pk))
-                .key("sk", AttributeValue::S("TOKEN".to_string()))
+                .key("pk", AttributeValue::S(pk))
+                .key("sk", AttributeValue::S(sk))
                 .send()
                 .await
             {
                 if let Some(item) = output.item {
+                    // For API keys, we only have user_id in LOOKUP; fetch full profile from USER#
                     let user_id = item.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
-                    let email = item.get("email").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
-                    let display_name = item.get("display_name").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
 
-                    // Look up user profile for credits info
-                    let session_key = item.get("session_key").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
-                    let lookup_id = if !session_key.is_empty() { &session_key } else { &user_id };
-                    let user_profile = get_or_create_user(dynamo, table, lookup_id).await;
+                    // Get full user profile
+                    let user_profile = get_or_create_user(dynamo, table, &user_id).await;
+
+                    // For regular tokens, we have email/display_name; for API keys, get from USER# profile
+                    let (email, display_name) = if token.starts_with("cw_") {
+                        // Fetch from USER# profile
+                        if let Ok(user_output) = dynamo
+                            .get_item()
+                            .table_name(table)
+                            .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                            .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                            .send()
+                            .await
+                        {
+                            if let Some(user_item) = user_output.item {
+                                let e = user_item.get("email").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                                let d = user_item.get("display_name").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                                (e, d)
+                            } else {
+                                (String::new(), String::new())
+                            }
+                        } else {
+                            (String::new(), String::new())
+                        }
+                    } else {
+                        // Regular token - email/display_name are in AUTH# item
+                        let e = item.get("email").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                        let d = item.get("display_name").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                        (e, d)
+                    };
 
                     // Parse plan for capabilities
                     let plan_enum: crate::service::auth::Plan = user_profile.plan.parse().unwrap_or(crate::service::auth::Plan::Free);
@@ -9774,6 +10655,76 @@ async fn handle_auth_register(
                 .send()
                 .await;
 
+            // Apply referral code if provided
+            let mut referral_bonus: i64 = 0;
+            if let Some(ref ref_code) = req.referral_code {
+                let code = ref_code.trim().to_uppercase();
+                if code.len() >= 4 && code.len() <= 10 {
+                    // Look up referral code owner
+                    if let Ok(output) = dynamo
+                        .get_item()
+                        .table_name(table)
+                        .key("pk", AttributeValue::S(format!("REFERRAL#{}", code)))
+                        .key("sk", AttributeValue::S("OWNER".to_string()))
+                        .send()
+                        .await
+                    {
+                        if let Some(item) = output.item {
+                            if let Some(referrer_id) = item.get("user_id").and_then(|v| v.as_s().ok()) {
+                                if referrer_id != &user_id {
+                                    let bonus: i64 = 100;
+                                    let now_ref = chrono::Utc::now().to_rfc3339();
+
+                                    // Record referral log
+                                    let log_pk = format!("REFERRAL_LOG#{}#{}", referrer_id, user_id);
+                                    let _ = dynamo
+                                        .put_item()
+                                        .table_name(table)
+                                        .item("pk", AttributeValue::S(log_pk))
+                                        .item("sk", AttributeValue::S("INFO".to_string()))
+                                        .item("referrer_id", AttributeValue::S(referrer_id.to_string()))
+                                        .item("referee_id", AttributeValue::S(user_id.clone()))
+                                        .item("code", AttributeValue::S(code.clone()))
+                                        .item("bonus", AttributeValue::N(bonus.to_string()))
+                                        .item("created_at", AttributeValue::S(now_ref.clone()))
+                                        .condition_expression("attribute_not_exists(pk)")
+                                        .send()
+                                        .await;
+
+                                    // Credit referee (new user) +100
+                                    let _ = dynamo
+                                        .update_item()
+                                        .table_name(table)
+                                        .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                                        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                                        .update_expression("SET credits_remaining = credits_remaining + :bonus, referred_by = :ref, updated_at = :now")
+                                        .expression_attribute_values(":bonus", AttributeValue::N(bonus.to_string()))
+                                        .expression_attribute_values(":ref", AttributeValue::S(referrer_id.to_string()))
+                                        .expression_attribute_values(":now", AttributeValue::S(now_ref.clone()))
+                                        .send()
+                                        .await;
+
+                                    // Credit referrer +100
+                                    let _ = dynamo
+                                        .update_item()
+                                        .table_name(table)
+                                        .key("pk", AttributeValue::S(format!("USER#{}", referrer_id)))
+                                        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                                        .update_expression("SET credits_remaining = credits_remaining + :bonus, updated_at = :now")
+                                        .expression_attribute_values(":bonus", AttributeValue::N(bonus.to_string()))
+                                        .expression_attribute_values(":now", AttributeValue::S(now_ref))
+                                        .send()
+                                        .await;
+
+                                    referral_bonus = bonus;
+                                    tracing::info!("Referral applied: {} referred {} via code {}", referrer_id, user_id, code);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             emit_audit_log(dynamo.clone(), table.clone(), "register", &user_id, &email, "email_register");
 
             return (StatusCode::OK, Json(serde_json::json!({
@@ -9782,6 +10733,7 @@ async fn handle_auth_register(
                 "user_id": user_id,
                 "email": email,
                 "display_name": display_name,
+                "referral_bonus": referral_bonus,
             })));
         }
     }
@@ -10269,6 +11221,59 @@ async fn handle_auth_verify(
                 .send()
                 .await;
 
+            // Apply referral code if provided
+            let mut referral_bonus: i64 = 0;
+            if let Some(ref ref_code) = req.referral_code {
+                let rcode = ref_code.trim().to_uppercase();
+                if rcode.len() >= 4 && rcode.len() <= 10 {
+                    if let Ok(output) = dynamo
+                        .get_item()
+                        .table_name(table)
+                        .key("pk", AttributeValue::S(format!("REFERRAL#{}", rcode)))
+                        .key("sk", AttributeValue::S("OWNER".to_string()))
+                        .send()
+                        .await
+                    {
+                        if let Some(item) = output.item {
+                            if let Some(referrer_id) = item.get("user_id").and_then(|v| v.as_s().ok()) {
+                                if referrer_id != &user_id {
+                                    let bonus: i64 = 100;
+                                    let now_ref = chrono::Utc::now().to_rfc3339();
+                                    let log_pk = format!("REFERRAL_LOG#{}#{}", referrer_id, user_id);
+                                    let _ = dynamo.put_item().table_name(table)
+                                        .item("pk", AttributeValue::S(log_pk))
+                                        .item("sk", AttributeValue::S("INFO".to_string()))
+                                        .item("referrer_id", AttributeValue::S(referrer_id.to_string()))
+                                        .item("referee_id", AttributeValue::S(user_id.clone()))
+                                        .item("code", AttributeValue::S(rcode.clone()))
+                                        .item("bonus", AttributeValue::N(bonus.to_string()))
+                                        .item("created_at", AttributeValue::S(now_ref.clone()))
+                                        .condition_expression("attribute_not_exists(pk)")
+                                        .send().await;
+                                    let _ = dynamo.update_item().table_name(table)
+                                        .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                                        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                                        .update_expression("SET credits_remaining = credits_remaining + :bonus, referred_by = :ref, updated_at = :now")
+                                        .expression_attribute_values(":bonus", AttributeValue::N(bonus.to_string()))
+                                        .expression_attribute_values(":ref", AttributeValue::S(referrer_id.to_string()))
+                                        .expression_attribute_values(":now", AttributeValue::S(now_ref.clone()))
+                                        .send().await;
+                                    let _ = dynamo.update_item().table_name(table)
+                                        .key("pk", AttributeValue::S(format!("USER#{}", referrer_id)))
+                                        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                                        .update_expression("SET credits_remaining = credits_remaining + :bonus, updated_at = :now")
+                                        .expression_attribute_values(":bonus", AttributeValue::N(bonus.to_string()))
+                                        .expression_attribute_values(":now", AttributeValue::S(now_ref))
+                                        .send().await;
+                                    referral_bonus = bonus;
+                                    tracing::info!("Referral applied via verify: {} referred {} via code {}", referrer_id, user_id, rcode);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             emit_audit_log(dynamo.clone(), table.clone(), "email_verified", &user_id, &email, "email_code_verified");
 
             return (StatusCode::OK, Json(serde_json::json!({
@@ -10277,6 +11282,7 @@ async fn handle_auth_verify(
                 "user_id": user_id,
                 "email": email,
                 "display_name": display_name,
+                "referral_bonus": referral_bonus,
             })));
         }
     }
@@ -10529,12 +11535,6 @@ async fn handle_delete_conversation(
             let user_id = resolve_user_from_token(dynamo, table, &token).await;
             if user_id.is_empty() {
                 return Json(serde_json::json!({ "error": "Not authenticated" }));
-            }
-
-            // Check user is paid (free users can't delete)
-            let profile = get_or_create_user(dynamo, table, &user_id).await;
-            if profile.plan == "free" {
-                return Json(serde_json::json!({ "error": "Conversation deletion is available for paid plans" }));
             }
 
             let user_pk = format!("USER#{}", user_id);
@@ -10876,32 +11876,6 @@ async fn resolve_user_from_token(
 // ---------------------------------------------------------------------------
 // API Key management
 // ---------------------------------------------------------------------------
-
-/// Helper: extract user_id from Bearer token via DynamoDB lookup
-#[cfg(feature = "dynamodb-backend")]
-async fn auth_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Option<String> {
-    let token = headers.get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.trim_start_matches("Bearer ").to_string())
-        .unwrap_or_default();
-    if token.is_empty() { return None; }
-    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-        let auth_pk = format!("AUTH#{}", token);
-        if let Ok(output) = dynamo
-            .get_item()
-            .table_name(table)
-            .key("pk", AttributeValue::S(auth_pk))
-            .key("sk", AttributeValue::S("TOKEN".to_string()))
-            .send()
-            .await
-        {
-            if let Some(item) = output.item {
-                return item.get("user_id").and_then(|v| v.as_s().ok()).cloned();
-            }
-        }
-    }
-    None
-}
 
 /// GET /api/v1/apikeys — List user's API keys
 async fn handle_list_apikeys(
@@ -11492,23 +12466,33 @@ async fn handle_speech_synthesize(
 
     match audio_bytes {
         Some(bytes) if !bytes.is_empty() => {
-            // Deduct credits: 1 credit per 100 characters
+            // Deduct credits: 1 credit per 100 characters (with race condition protection)
             #[cfg(feature = "dynamodb-backend")]
             {
                 if let Some(ref uid) = tts_user_key {
                     if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
                         let tts_credits = std::cmp::max(1, (req.text.len() as i64) / 100);
                         let pk = format!("USER#{}", uid);
-                        let _ = dynamo
+                        let result = dynamo
                             .update_item()
                             .table_name(table)
                             .key("pk", AttributeValue::S(pk))
                             .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
                             .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
+                            .condition_expression("credits_remaining >= :c")
                             .expression_attribute_values(":c", AttributeValue::N(tts_credits.to_string()))
                             .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
                             .send()
                             .await;
+                        if let Err(e) = result {
+                            if e.to_string().contains("ConditionalCheckFailed") {
+                                return (
+                                    StatusCode::PAYMENT_REQUIRED,
+                                    [(axum::http::header::CONTENT_TYPE, "application/json")],
+                                    b"{ \"error\": \"Insufficient credits for TTS\" }".to_vec(),
+                                );
+                            }
+                        }
                     }
                 }
             }
