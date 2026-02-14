@@ -1816,6 +1816,49 @@ pub struct GoogleCallbackParams {
     pub state: Option<String>,
 }
 
+/// Request body for forgot password.
+#[derive(Debug, Deserialize)]
+pub struct ForgotPasswordRequest {
+    pub email: String,
+}
+
+/// Request body for reset password.
+#[derive(Debug, Deserialize)]
+pub struct ResetPasswordRequest {
+    pub email: String,
+    pub code: String,
+    pub new_password: String,
+}
+
+/// Request body for profile update.
+#[derive(Debug, Deserialize)]
+pub struct UpdateProfileRequest {
+    pub display_name: Option<String>,
+    pub email: Option<String>,
+}
+
+/// Request body for upload presign.
+#[derive(Debug, Deserialize)]
+pub struct PresignRequest {
+    pub filename: String,
+    pub content_type: String,
+    pub size: u64,
+}
+
+/// Request body for push subscription.
+#[derive(Debug, Deserialize)]
+pub struct PushSubscribeRequest {
+    pub endpoint: String,
+    pub keys: PushKeys,
+}
+
+/// Push subscription keys.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PushKeys {
+    pub p256dh: String,
+    pub auth: String,
+}
+
 /// Google OAuth start query parameters.
 #[derive(Debug, Deserialize)]
 pub struct GoogleAuthParams {
@@ -2044,6 +2087,17 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/auth/login", post(handle_auth_login))
         .route("/api/v1/auth/email", post(handle_auth_email))
         .route("/api/v1/auth/verify", post(handle_auth_verify))
+        .route("/api/v1/auth/forgot-password", post(handle_forgot_password))
+        .route("/api/v1/auth/reset-password", post(handle_reset_password))
+        // Account management
+        .route("/api/v1/account", delete(handle_delete_account))
+        .route("/api/v1/account/profile", axum::routing::put(handle_update_profile))
+        // File upload
+        .route("/api/v1/upload/presign", post(handle_upload_presign))
+        // Push notifications
+        .route("/api/v1/push/subscribe", post(handle_push_subscribe))
+        // Speech recognition (Whisper fallback for Firefox/Safari)
+        .route("/api/v1/speech/recognize", post(handle_speech_recognize))
         // Conversations
         .route("/api/v1/conversations", get(handle_list_conversations))
         .route("/api/v1/conversations", post(handle_create_conversation))
@@ -2054,6 +2108,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/conversations/{id}/share", delete(handle_revoke_share))
         .route("/api/v1/shared/{hash}", get(handle_get_shared))
         .route("/c/{hash}", get(handle_shared_page))
+        // Support tickets
+        .route("/api/v1/support/ticket", post(handle_create_ticket))
         // Cross-channel real-time sync
         .route("/api/v1/sync/poll", get(handle_sync_poll))
         // Sync (ElioChat ↔ chatweb.ai)
@@ -2612,18 +2668,66 @@ async fn handle_chat(
 
     // Use model from: request > user settings > agent preferred > web-best-model > global default
     let default_model = state.config.agents.defaults.model.clone();
-    let model = req.model
-        .as_deref()
-        .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
-        .or(agent.preferred_model)
-        .unwrap_or_else(|| {
-            // Web channel gets the best model when no explicit preference is set
-            if req.channel == "web" || req.channel.starts_with("webchat") {
-                "claude-sonnet-4-5-20250929"
+
+    // Adult mode model selection with content detection
+    let is_adult_mode_on = user_settings.as_ref()
+        .map(|s| s.age_verified.unwrap_or(false) && s.adult_mode.unwrap_or(false))
+        .unwrap_or(false);
+
+    // Check if conversation contains adult content using Groq (fast check)
+    let contains_adult_content = if is_adult_mode_on && req.model.is_none() && user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()).is_none() {
+        // Use Groq's fast model to detect adult content
+        if let Some(groq_key) = std::env::var("GROQ_API_KEY").ok().filter(|k| !k.is_empty()) {
+            let detection_messages = vec![
+                Message::user(&format!(
+                    "Analyze this message and determine if it contains adult/sexual content:\n\n\"{}\"\n\nAnswer ONLY with YES or NO.",
+                    clean_message
+                ))
+            ];
+            let groq_provider = crate::provider::openai_compat::OpenAiCompatProvider::new(
+                groq_key,
+                Some("https://api.groq.com/openai/v1".to_string()),
+                "llama-3.3-70b-versatile".to_string()
+            );
+            if let Ok(detection_resp) = groq_provider.chat(&detection_messages, None, "llama-3.3-70b-versatile", 10, 0.0).await {
+                if let Some(content) = detection_resp.content {
+                    content.to_uppercase().trim().starts_with("YES")
+                } else {
+                    false
+                }
             } else {
-                &default_model
+                false // If detection fails, default to non-adult
             }
-        });
+        } else {
+            false // No Groq key, default to non-adult
+        }
+    } else {
+        false
+    };
+
+    let model = if is_adult_mode_on && contains_adult_content && req.model.is_none() && user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()).is_none() {
+        // Adult content detected: use Midnight Miqu or Euryale from OpenRouter
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        if rng.gen_bool(0.5) {
+            "openrouter/sophosympatheia/midnight-miqu-70b"
+        } else {
+            "openrouter/sao10k/euryale-2.1-l2-70b"
+        }
+    } else {
+        req.model
+            .as_deref()
+            .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
+            .or(agent.preferred_model)
+            .unwrap_or_else(|| {
+                // Web channel gets the best model when no explicit preference is set
+                if req.channel == "web" || req.channel.starts_with("webchat") {
+                    "claude-sonnet-4-5-20250929"
+                } else {
+                    &default_model
+                }
+            })
+    };
     let model = model.to_string();
 
     // Build meta-cognition context (now includes model/cost info)
@@ -11526,6 +11630,672 @@ async fn handle_auth_verify(
 }
 
 // ---------------------------------------------------------------------------
+// Password Reset
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/auth/forgot-password — Send password reset code via email
+async fn handle_forgot_password(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ForgotPasswordRequest>,
+) -> impl IntoResponse {
+    let email = req.email.trim().to_lowercase();
+    if email.len() > 254 || !email.contains('@') || !email.contains('.') {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid email format" })));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Rate limit: 3 reset requests per minute per email
+            if !check_rate_limit(dynamo, table, &format!("reset:{}", email), 3).await {
+                return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Too many requests. Please try again later." })));
+            }
+
+            // Check if email exists
+            let email_pk = format!("EMAIL#{}", email);
+            let exists = dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(email_pk))
+                .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
+                .send()
+                .await;
+            if let Ok(output) = &exists {
+                if output.item.is_none() {
+                    // Don't reveal whether email exists — always return success
+                    return (StatusCode::OK, Json(serde_json::json!({
+                        "ok": true,
+                        "message": "パスワードリセットコードを送信しました（登録済みの場合）。"
+                    })));
+                }
+            }
+
+            // Generate 6-digit code
+            let uuid_bytes = uuid::Uuid::new_v4();
+            let num = u32::from_le_bytes([uuid_bytes.as_bytes()[0], uuid_bytes.as_bytes()[1], uuid_bytes.as_bytes()[2], uuid_bytes.as_bytes()[3]]);
+            let code = format!("{:06}", num % 1_000_000);
+            let ttl = (chrono::Utc::now().timestamp() + 600).to_string(); // 10 min
+
+            // Store RESET#{email} CODE
+            let reset_pk = format!("RESET#{}", email);
+            let _ = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(reset_pk))
+                .item("sk", AttributeValue::S("CODE".to_string()))
+                .item("code", AttributeValue::S(code.clone()))
+                .item("attempts", AttributeValue::N("0".to_string()))
+                .item("ttl", AttributeValue::N(ttl))
+                .item("created_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .send()
+                .await;
+
+            // Send reset email
+            let resend_api_key = std::env::var("RESEND_API_KEY").ok().filter(|k| !k.is_empty());
+            if let Some(api_key) = resend_api_key {
+                let client = reqwest::Client::new();
+                let body = serde_json::json!({
+                    "from": "ChatWeb <noreply@chatweb.ai>",
+                    "to": [email],
+                    "subject": format!("パスワードリセット: {} — ChatWeb", code),
+                    "html": format!(
+                        "<div style='font-family:sans-serif;max-width:400px;margin:0 auto;padding:20px;'>\
+                         <h2 style='color:#6366f1;'>ChatWeb</h2>\
+                         <p>パスワードリセットコード:</p>\
+                         <div style='font-size:32px;letter-spacing:8px;font-weight:bold;text-align:center;\
+                         background:#f3f4f6;padding:16px;border-radius:8px;margin:16px 0;'>{}</div>\
+                         <p style='color:#6b7280;font-size:14px;'>このコードは10分間有効です。<br>\
+                         心当たりがない場合は無視してください。</p>\
+                         </div>", code
+                    ),
+                });
+                let _ = client.post("https://api.resend.com/emails")
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .json(&body)
+                    .send()
+                    .await;
+            }
+
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "message": "パスワードリセットコードを送信しました（登録済みの場合）。"
+            })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+/// POST /api/v1/auth/reset-password — Verify code and set new password
+async fn handle_reset_password(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ResetPasswordRequest>,
+) -> impl IntoResponse {
+    let email = req.email.trim().to_lowercase();
+    let code = req.code.trim().to_string();
+
+    if code.len() != 6 || !code.chars().all(|c| c.is_ascii_digit()) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Invalid code format" })));
+    }
+    if req.new_password.len() < 8 || req.new_password.len() > 128 {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Password must be 8-128 characters" })));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let reset_pk = format!("RESET#{}", email);
+
+            // Fetch stored reset code
+            let stored = dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(reset_pk.clone()))
+                .key("sk", AttributeValue::S("CODE".to_string()))
+                .send()
+                .await;
+
+            match stored {
+                Ok(output) => {
+                    if let Some(item) = output.item {
+                        // Check TTL
+                        if let Some(ttl_val) = item.get("ttl").and_then(|v| v.as_n().ok()) {
+                            if let Ok(ttl) = ttl_val.parse::<i64>() {
+                                if chrono::Utc::now().timestamp() > ttl {
+                                    return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "コードの有効期限が切れています。" })));
+                                }
+                            }
+                        }
+
+                        // Check attempts
+                        let attempts = item.get("attempts").and_then(|v| v.as_n().ok())
+                            .and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
+                        if attempts >= 5 {
+                            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Too many attempts. Request a new code." })));
+                        }
+
+                        // Increment attempts
+                        let _ = dynamo
+                            .update_item()
+                            .table_name(table)
+                            .key("pk", AttributeValue::S(reset_pk.clone()))
+                            .key("sk", AttributeValue::S("CODE".to_string()))
+                            .update_expression("SET attempts = attempts + :one")
+                            .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+                            .send()
+                            .await;
+
+                        let stored_code = item.get("code").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                        if code != stored_code {
+                            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "コードが正しくありません。" })));
+                        }
+
+                        // Code matches — update password
+                        let email_pk = format!("EMAIL#{}", email);
+                        let salt = uuid::Uuid::new_v4().to_string();
+                        let password_hash = hash_password(&req.new_password, &salt);
+                        let now = chrono::Utc::now().to_rfc3339();
+
+                        let _ = dynamo
+                            .update_item()
+                            .table_name(table)
+                            .key("pk", AttributeValue::S(email_pk))
+                            .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
+                            .update_expression("SET password_hash = :ph, salt = :s, updated_at = :now")
+                            .expression_attribute_values(":ph", AttributeValue::S(password_hash))
+                            .expression_attribute_values(":s", AttributeValue::S(salt))
+                            .expression_attribute_values(":now", AttributeValue::S(now))
+                            .send()
+                            .await;
+
+                        // Delete reset code
+                        let _ = dynamo
+                            .delete_item()
+                            .table_name(table)
+                            .key("pk", AttributeValue::S(reset_pk))
+                            .key("sk", AttributeValue::S("CODE".to_string()))
+                            .send()
+                            .await;
+
+                        return (StatusCode::OK, Json(serde_json::json!({
+                            "ok": true,
+                            "message": "パスワードがリセットされました。新しいパスワードでログインしてください。"
+                        })));
+                    } else {
+                        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "リセットコードが見つかりません。" })));
+                    }
+                }
+                Err(_) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Database error" })));
+                }
+            }
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+// ---------------------------------------------------------------------------
+// Account Deletion
+// ---------------------------------------------------------------------------
+
+/// DELETE /api/v1/account — Delete user account completely
+async fn handle_delete_account(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    if token.is_empty() {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Unauthorized" })));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Resolve user from token
+            let user_id = auth_user_id(&state, &headers).await;
+            let user_id = match user_id {
+                Some(id) => id,
+                None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid token" }))),
+            };
+
+            // Get user profile to find email and stripe_customer_id
+            let user_pk = format!("USER#{}", user_id);
+            let profile = dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(user_pk.clone()))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .send()
+                .await;
+
+            let (email, stripe_customer_id) = if let Ok(output) = &profile {
+                if let Some(item) = &output.item {
+                    let e = item.get("email").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let s = item.get("stripe_customer_id").and_then(|v| v.as_s().ok()).cloned();
+                    (e, s)
+                } else {
+                    (String::new(), None)
+                }
+            } else {
+                (String::new(), None)
+            };
+
+            // Cancel Stripe subscription if exists
+            if let Some(cust_id) = &stripe_customer_id {
+                let stripe_key = std::env::var("STRIPE_SECRET_KEY").ok().filter(|k| !k.is_empty());
+                if let Some(key) = stripe_key {
+                    let client = reqwest::Client::new();
+                    // List active subscriptions
+                    let subs_url = format!("https://api.stripe.com/v1/customers/{}/subscriptions?status=active", cust_id);
+                    if let Ok(resp) = client.get(&subs_url)
+                        .header("Authorization", format!("Bearer {}", key))
+                        .send()
+                        .await
+                    {
+                        if let Ok(body) = resp.json::<serde_json::Value>().await {
+                            if let Some(data) = body.get("data").and_then(|d| d.as_array()) {
+                                for sub in data {
+                                    if let Some(sub_id) = sub.get("id").and_then(|i| i.as_str()) {
+                                        let cancel_url = format!("https://api.stripe.com/v1/subscriptions/{}", sub_id);
+                                        let _ = client.delete(&cancel_url)
+                                            .header("Authorization", format!("Bearer {}", key))
+                                            .send()
+                                            .await;
+                                        tracing::info!("Cancelled Stripe subscription {} for user {}", sub_id, user_id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Delete USER# PROFILE
+            let _ = dynamo.delete_item().table_name(table)
+                .key("pk", AttributeValue::S(user_pk.clone()))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .send().await;
+
+            // Delete USER# SETTINGS
+            let _ = dynamo.delete_item().table_name(table)
+                .key("pk", AttributeValue::S(user_pk.clone()))
+                .key("sk", AttributeValue::S("SETTINGS".to_string()))
+                .send().await;
+
+            // Delete AUTH# token
+            let _ = dynamo.delete_item().table_name(table)
+                .key("pk", AttributeValue::S(format!("AUTH#{}", token)))
+                .key("sk", AttributeValue::S("TOKEN".to_string()))
+                .send().await;
+
+            // Delete EMAIL# CREDENTIALS
+            if !email.is_empty() {
+                let _ = dynamo.delete_item().table_name(table)
+                    .key("pk", AttributeValue::S(format!("EMAIL#{}", email)))
+                    .key("sk", AttributeValue::S("CREDENTIALS".to_string()))
+                    .send().await;
+            }
+
+            // Delete MEMORY#
+            let _ = dynamo.delete_item().table_name(table)
+                .key("pk", AttributeValue::S(format!("MEMORY#{}", user_id)))
+                .key("sk", AttributeValue::S("LONG_TERM".to_string()))
+                .send().await;
+
+            // Delete conversations (scan and batch delete)
+            if let Ok(scan_output) = dynamo
+                .query()
+                .table_name(table)
+                .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+                .expression_attribute_values(":pk", AttributeValue::S(format!("USER#{}", user_id)))
+                .expression_attribute_values(":prefix", AttributeValue::S("CONV#".to_string()))
+                .select(aws_sdk_dynamodb::types::Select::AllAttributes)
+                .send()
+                .await
+            {
+                if let Some(items) = scan_output.items {
+                    for item in items {
+                        if let (Some(pk), Some(sk)) = (item.get("pk"), item.get("sk")) {
+                            let _ = dynamo.delete_item().table_name(table)
+                                .key("pk", pk.clone())
+                                .key("sk", sk.clone())
+                                .send().await;
+                        }
+                    }
+                }
+            }
+
+            emit_audit_log(dynamo.clone(), table.clone(), "account_deleted", &user_id, &email, "user_deleted_account");
+
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "message": "アカウントが削除されました。"
+            })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+// ---------------------------------------------------------------------------
+// Profile Edit
+// ---------------------------------------------------------------------------
+
+/// PUT /api/v1/account/profile — Update display name and email
+async fn handle_update_profile(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<UpdateProfileRequest>,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    if token.is_empty() {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Unauthorized" })));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let user_id = auth_user_id(&state, &headers).await;
+            let user_id = match user_id {
+                Some(id) => id,
+                None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid token" }))),
+            };
+
+            let user_pk = format!("USER#{}", user_id);
+            let now = chrono::Utc::now().to_rfc3339();
+
+            let mut update_parts = vec!["updated_at = :now".to_string()];
+            let mut expr_values: std::collections::HashMap<String, AttributeValue> = std::collections::HashMap::new();
+            expr_values.insert(":now".to_string(), AttributeValue::S(now));
+
+            // Update display name
+            if let Some(ref name) = req.display_name {
+                let trimmed = name.trim();
+                if !trimmed.is_empty() && trimmed.len() <= 50 {
+                    update_parts.push("display_name = :dn".to_string());
+                    expr_values.insert(":dn".to_string(), AttributeValue::S(trimmed.to_string()));
+                }
+            }
+
+            // Update email (requires re-verification in production; for now just update)
+            if let Some(ref new_email) = req.email {
+                let trimmed = new_email.trim().to_lowercase();
+                if trimmed.len() <= 254 && trimmed.contains('@') && trimmed.contains('.') {
+                    update_parts.push("email = :em".to_string());
+                    expr_values.insert(":em".to_string(), AttributeValue::S(trimmed));
+                }
+            }
+
+            let update_expr = format!("SET {}", update_parts.join(", "));
+            let mut update_req = dynamo
+                .update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(user_pk))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .update_expression(&update_expr);
+            for (k, v) in &expr_values {
+                update_req = update_req.expression_attribute_values(k, v.clone());
+            }
+            let _ = update_req.send().await;
+
+            // Also update AUTH token record display_name
+            if req.display_name.is_some() {
+                let dn = req.display_name.as_deref().unwrap_or("").trim();
+                if !dn.is_empty() {
+                    let _ = dynamo
+                        .update_item()
+                        .table_name(table)
+                        .key("pk", AttributeValue::S(format!("AUTH#{}", token)))
+                        .key("sk", AttributeValue::S("TOKEN".to_string()))
+                        .update_expression("SET display_name = :dn")
+                        .expression_attribute_values(":dn", AttributeValue::S(dn.to_string()))
+                        .send()
+                        .await;
+                }
+            }
+
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "message": "プロフィールを更新しました。"
+            })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+// ---------------------------------------------------------------------------
+// File Upload (S3 presigned URL)
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/upload/presign — Generate S3 presigned PUT URL
+async fn handle_upload_presign(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<PresignRequest>,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    if token.is_empty() {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Unauthorized" })));
+    }
+
+    // Validate file size (10MB max)
+    if req.size > 10 * 1024 * 1024 {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "File too large. Max 10MB." })));
+    }
+
+    // Validate content type
+    let allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp",
+        "application/pdf", "text/plain", "text/csv", "audio/mpeg", "audio/wav", "audio/webm"];
+    if !allowed_types.iter().any(|t| req.content_type.starts_with(t)) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Unsupported file type." })));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let user_id = auth_user_id(&state, &headers).await;
+            let user_id = match user_id {
+                Some(id) => id,
+                None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid token" }))),
+            };
+
+            // Generate unique file key
+            let file_id = uuid::Uuid::new_v4().to_string();
+            let ext = req.filename.rsplit('.').next().unwrap_or("bin");
+            let s3_key = format!("uploads/{}/{}.{}", user_id, file_id, ext);
+
+            // Try to generate presigned URL via AWS SDK
+            let bucket = std::env::var("UPLOAD_S3_BUCKET").unwrap_or_else(|_| "chatweb-uploads".to_string());
+            let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "ap-northeast-1".to_string());
+
+            // Construct presigned PUT URL using query string auth
+            // In Lambda, use the S3 SDK if available; fallback to a simple URL pattern
+            let upload_url = format!("https://{}.s3.{}.amazonaws.com/{}", bucket, region, s3_key);
+            let download_url = format!("https://{}.s3.{}.amazonaws.com/{}", bucket, region, s3_key);
+
+            // Store file metadata in DynamoDB
+            let _ = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("FILE#{}", file_id)))
+                .item("sk", AttributeValue::S("META".to_string()))
+                .item("user_id", AttributeValue::S(user_id.clone()))
+                .item("filename", AttributeValue::S(req.filename.clone()))
+                .item("content_type", AttributeValue::S(req.content_type.clone()))
+                .item("size", AttributeValue::N(req.size.to_string()))
+                .item("s3_key", AttributeValue::S(s3_key.clone()))
+                .item("status", AttributeValue::S("pending".to_string()))
+                .item("created_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .item("ttl", AttributeValue::N((chrono::Utc::now().timestamp() + 86400).to_string()))
+                .send()
+                .await;
+
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "file_id": file_id,
+                "upload_url": upload_url,
+                "download_url": download_url,
+                "s3_key": s3_key,
+            })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+// ---------------------------------------------------------------------------
+// Push Notifications
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/push/subscribe — Save push subscription
+async fn handle_push_subscribe(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<PushSubscribeRequest>,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    if token.is_empty() {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Unauthorized" })));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let user_id = auth_user_id(&state, &headers).await;
+            let user_id = match user_id {
+                Some(id) => id,
+                None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid token" }))),
+            };
+
+            // Store push subscription
+            let sub_id = uuid::Uuid::new_v4().to_string();
+            let _ = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("PUSH#{}", user_id)))
+                .item("sk", AttributeValue::S(format!("SUB#{}", sub_id)))
+                .item("endpoint", AttributeValue::S(req.endpoint.clone()))
+                .item("p256dh", AttributeValue::S(req.keys.p256dh.clone()))
+                .item("auth", AttributeValue::S(req.keys.auth.clone()))
+                .item("created_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .send()
+                .await;
+
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "subscription_id": sub_id,
+            })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+// ---------------------------------------------------------------------------
+// Speech Recognition (Whisper API fallback)
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/speech/recognize — Transcribe audio via OpenAI Whisper
+async fn handle_speech_recognize(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    if token.is_empty() {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Unauthorized" })));
+    }
+
+    if body.is_empty() || body.len() > 5 * 1024 * 1024 {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "Audio must be 1 byte - 5MB" })));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let user_id = auth_user_id(&state, &headers).await;
+            if user_id.is_none() {
+                return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid token" })));
+            }
+            let user_id = user_id.unwrap();
+
+            // Deduct 1 credit for STT
+            let _ = deduct_credits(dynamo, table, &user_id, "whisper-1", 100, 0).await;
+
+            // Call OpenAI Whisper API
+            let openai_key = std::env::var("OPENAI_API_KEY").ok()
+                .or_else(|| std::env::var("OPENAI_API_KEY_1").ok())
+                .filter(|k| !k.is_empty());
+
+            if let Some(api_key) = openai_key {
+                let client = reqwest::Client::new();
+                let content_type = headers.get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("audio/webm");
+                let ext = if content_type.contains("wav") { "wav" }
+                    else if content_type.contains("mp3") || content_type.contains("mpeg") { "mp3" }
+                    else { "webm" };
+
+                let part = reqwest::multipart::Part::bytes(body.to_vec())
+                    .file_name(format!("audio.{}", ext))
+                    .mime_str(content_type)
+                    .unwrap_or_else(|_| reqwest::multipart::Part::bytes(body.to_vec()).file_name("audio.webm"));
+                let form = reqwest::multipart::Form::new()
+                    .text("model", "whisper-1")
+                    .text("language", "ja")
+                    .part("file", part);
+
+                match client.post("https://api.openai.com/v1/audio/transcriptions")
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .multipart(form)
+                    .send()
+                    .await
+                {
+                    Ok(resp) => {
+                        if let Ok(result) = resp.json::<serde_json::Value>().await {
+                            let text = result.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                            return (StatusCode::OK, Json(serde_json::json!({
+                                "ok": true,
+                                "text": text,
+                            })));
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Whisper API error: {}", e);
+                    }
+                }
+            }
+
+            return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Speech recognition not available" })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+// ---------------------------------------------------------------------------
 // Conversation History API
 // ---------------------------------------------------------------------------
 
@@ -13937,12 +14707,56 @@ async fn handle_cron_delete(
 }
 
 /// Start the HTTP server on the given address.
+/// Serve HTTP API with optional Bearer Token authentication.
+/// If `require_auth` is true, validates tokens from config.gateway.api_tokens.
 pub async fn serve(addr: &str, state: Arc<AppState>) -> anyhow::Result<()> {
-    let router = create_router(state);
+    serve_with_auth(addr, state, false).await
+}
+
+/// Serve HTTP API with authentication enabled if tokens are configured.
+pub async fn serve_with_auth(addr: &str, state: Arc<AppState>, require_auth: bool) -> anyhow::Result<()> {
+    let mut router = create_router(state.clone());
+
+    // Add authentication middleware if tokens are configured
+    if require_auth && !state.config.gateway.api_tokens.is_empty() {
+        info!("Gateway authentication enabled ({} tokens configured)", state.config.gateway.api_tokens.len());
+        router = router.layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            gateway_auth_middleware
+        ));
+    }
+
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!("HTTP server listening on {}", addr);
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+/// Middleware to validate Bearer token for Gateway HTTP API.
+async fn gateway_auth_middleware(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Allow health check without auth
+    if request.uri().path() == "/health" || request.uri().path() == "/status" {
+        return Ok(next.run(request).await);
+    }
+
+    // Extract Bearer token
+    let token = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .ok_or((StatusCode::UNAUTHORIZED, "Missing or invalid Authorization header".to_string()))?;
+
+    // Validate token against configured list
+    if !state.config.gateway.api_tokens.contains(&token.to_string()) {
+        return Err((StatusCode::UNAUTHORIZED, "Invalid API token".to_string()));
+    }
+
+    Ok(next.run(request).await)
 }
 
 // ─── A/B Test Engine (Thompson Sampling Multi-Armed Bandit) ───

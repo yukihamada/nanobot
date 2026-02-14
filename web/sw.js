@@ -27,3 +27,42 @@ self.addEventListener('fetch', e => {
     }).catch(() => caches.match(e.request))
   );
 });
+
+// Push notification handler
+self.addEventListener('push', e => {
+  let data = { title: 'ChatWeb', body: '新しいメッセージがあります', icon: '/manifest.json' };
+  try {
+    if (e.data) {
+      const payload = e.data.json();
+      data = { ...data, ...payload };
+    }
+  } catch (_) {
+    if (e.data) data.body = e.data.text();
+  }
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon || '/manifest.json',
+      badge: data.badge,
+      data: data.url || '/',
+      tag: data.tag || 'chatweb-msg',
+      renotify: true,
+    })
+  );
+});
+
+// Notification click — open or focus the app
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = e.notification.data || '/';
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
+});

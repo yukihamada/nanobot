@@ -61,6 +61,9 @@ enum Commands {
         /// HTTP server port (default: 3000)
         #[arg(long, default_value_t = 3000)]
         http_port: u16,
+        /// Require Bearer token authentication
+        #[arg(long)]
+        auth: bool,
     },
     /// Show chatweb status
     Status,
@@ -92,6 +95,8 @@ enum Commands {
         #[arg(long, default_value = "https://chatweb.ai")]
         api: String,
     },
+    /// Generate a new API token for Gateway authentication
+    GenToken,
 }
 
 #[derive(Subcommand)]
@@ -146,7 +151,7 @@ async fn main() -> Result<()> {
         Commands::Link { session_id } => cmd_link(session_id).await?,
         Commands::Onboard => cmd_onboard()?,
         Commands::Agent { message, session } => cmd_agent(message, session).await?,
-        Commands::Gateway { port, verbose, http, http_port } => cmd_gateway(port, verbose, http, http_port).await?,
+        Commands::Gateway { port, verbose, http, http_port, auth } => cmd_gateway(port, verbose, http, http_port, auth).await?,
         Commands::Daemon { interval, api } => cmd_daemon(interval, api).await?,
         Commands::Status => cmd_status()?,
         Commands::Channels { command } => match command {
@@ -163,6 +168,7 @@ async fn main() -> Result<()> {
             CronCommands::Remove { job_id } => cmd_cron_remove(job_id)?,
         },
         Commands::Earn { model, api } => cmd_earn(model, api).await?,
+        Commands::GenToken => cmd_gen_token(),
     }
 
     Ok(())
@@ -731,7 +737,7 @@ async fn cmd_agent(message: Option<String>, session_id: String) -> Result<()> {
 }
 
 #[allow(unused_variables)]
-async fn cmd_gateway(port: u16, verbose: bool, http: bool, http_port: u16) -> Result<()> {
+async fn cmd_gateway(port: u16, verbose: bool, http: bool, http_port: u16, auth: bool) -> Result<()> {
     if verbose {
         // Re-init with debug level
         // Already handled by env filter
@@ -741,7 +747,7 @@ async fn cmd_gateway(port: u16, verbose: bool, http: bool, http_port: u16) -> Re
 
     #[cfg(feature = "http-api")]
     if http {
-        use nanobot_core::service::http::{serve, AppState};
+        use nanobot_core::service::http::{serve_with_auth, AppState};
         use nanobot_core::session::file_store::FileSessionStore;
 
         let workspace = cfg.workspace_path();
@@ -755,10 +761,15 @@ async fn cmd_gateway(port: u16, verbose: bool, http: bool, http_port: u16) -> Re
             "{} Starting chatweb HTTP API on {}...",
             nanobot_core::LOGO, addr
         );
+        if auth {
+            println!("  Authentication: ENABLED");
+        } else {
+            println!("  Authentication: disabled (use --auth to enable)");
+        }
 
         // Run HTTP server and gateway concurrently
         let http_handle = tokio::spawn(async move {
-            if let Err(e) = serve(&addr, state).await {
+            if let Err(e) = serve_with_auth(&addr, state, auth).await {
                 eprintln!("HTTP server error: {}", e);
             }
         });
@@ -852,6 +863,18 @@ fn cmd_status() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn cmd_gen_token() {
+    let token = uuid::Uuid::new_v4().to_string();
+    println!("{} Generated Gateway API Token:\n", nanobot_core::LOGO);
+    println!("  {}\n", token);
+    println!("Add this token to your config:");
+    println!("  1. Edit ~/.nanobot/config.json");
+    println!("  2. Add token to \"gateway.apiTokens\" array");
+    println!("  3. Or set GATEWAY_API_TOKENS environment variable\n");
+    println!("Example:");
+    println!("  GATEWAY_API_TOKENS=\"{}\" chatweb gateway --http --auth", token);
 }
 
 fn cmd_channels_status() -> Result<()> {

@@ -3491,11 +3491,27 @@
         <input type="text" class="auth-input" id="login-name" placeholder="お名前（ニックネームOK）" maxlength="30" aria-label="Name" onkeydown="if(event.key==='Enter')document.getElementById('login-email').focus()">
         <input type="email" class="auth-input" id="login-email" placeholder="Email" aria-label="Email" onkeydown="if(event.key==='Enter')emailAuth()">
         <button class="auth-submit" id="email-auth-btn" onclick="emailAuth()">メールでログイン</button>
+        <div style="text-align:center;margin-top:8px;">
+          <a href="#" onclick="showForgotPasswordForm();return false;" style="font-size:12px;color:var(--muted);text-decoration:underline;">パスワードを忘れた方</a>
+        </div>
       </div>
       <div id="auth-form-verify" style="display:none;">
         <p style="font-size:13px;color:var(--muted);margin-bottom:8px;" id="verify-hint">認証コードをメールに送信しました</p>
         <input type="text" class="auth-input" id="verify-code" placeholder="6桁の認証コード" maxlength="6" inputmode="numeric" pattern="[0-9]*" aria-label="Verification code" onkeydown="if(event.key==='Enter')verifyCode()" style="text-align:center;letter-spacing:6px;font-size:20px;">
         <button class="auth-submit" onclick="verifyCode()">認証する</button>
+        <button class="auth-submit" style="background:transparent;color:var(--muted);margin-top:4px;" onclick="showEmailForm()">戻る</button>
+      </div>
+      <div id="auth-form-forgot" style="display:none;">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">パスワードリセット用のコードをメールに送信します</p>
+        <input type="email" class="auth-input" id="forgot-email" placeholder="登録メールアドレス" aria-label="Email">
+        <button class="auth-submit" id="forgot-btn" onclick="forgotPassword()">リセットコードを送信</button>
+        <button class="auth-submit" style="background:transparent;color:var(--muted);margin-top:4px;" onclick="showEmailForm()">戻る</button>
+      </div>
+      <div id="auth-form-reset" style="display:none;">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">メールに届いたコードと新しいパスワードを入力</p>
+        <input type="text" class="auth-input" id="reset-code" placeholder="6桁のリセットコード" maxlength="6" inputmode="numeric" pattern="[0-9]*" style="text-align:center;letter-spacing:6px;font-size:20px;">
+        <input type="password" class="auth-input" id="reset-new-password" placeholder="新しいパスワード（8文字以上）" minlength="8" maxlength="128">
+        <button class="auth-submit" onclick="resetPassword()">パスワードをリセット</button>
         <button class="auth-submit" style="background:transparent;color:var(--muted);margin-top:4px;" onclick="showEmailForm()">戻る</button>
       </div>
       <div class="auth-divider"><span>or</span></div>
@@ -3941,10 +3957,23 @@
           <button class="settings-toggle" id="settings-adult-toggle" onclick="toggleAdultMode()"></button>
         </div>
 
+        <div class="settings-group-title" style="margin-top:16px;">Profile</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+          <label style="font-size:11px;color:var(--muted);">Display Name</label>
+          <input type="text" class="auth-input" id="profile-display-name" placeholder="表示名" maxlength="50" style="margin:0;">
+          <label style="font-size:11px;color:var(--muted);">Email</label>
+          <input type="email" class="auth-input" id="profile-email" placeholder="メールアドレス" style="margin:0;" disabled>
+          <button class="settings-btn" onclick="saveProfile()" style="background:var(--accent);color:#fff;border:none;">Save Profile</button>
+        </div>
+
         <div class="settings-group-title" style="margin-top:16px;">Data</div>
         <button class="settings-btn" onclick="exportConversationData()" style="margin-bottom:8px;">&#128229; データエクスポート / Export Data</button>
         <button class="settings-btn settings-btn-danger" onclick="deleteAllData()" style="margin-bottom:8px;">&#128465; 全データ削除 / Delete All Data</button>
         <button class="settings-btn" onclick="handleLogout()" style="margin-bottom:8px;">&#128682; ログアウト / Logout</button>
+
+        <div class="settings-group-title" style="margin-top:16px;color:#e53e3e;">Danger Zone</div>
+        <button class="settings-btn settings-btn-danger" onclick="deleteAccount()" style="margin-bottom:8px;border-color:#e53e3e;color:#e53e3e;">&#128465; アカウントを完全に削除 / Delete Account</button>
+        <p style="font-size:10px;color:var(--muted);">この操作は取り消せません。全データ・サブスクリプションが削除されます。</p>
       </div>
 
       <button class="close-btn" onclick="document.getElementById('settings-modal').classList.remove('show')" style="margin-top:12px;">Close</button>
@@ -4073,6 +4102,11 @@
         <button class="app-sidebar-link" onclick="openSettingsModal()" id="app-link-settings" title="Settings" style="font-size:18px;padding:6px 10px;">⚙️</button>
       </div>
       <div class="app-sidebar-footer">
+        <div class="points-display" id="points-display" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;background:linear-gradient(135deg,rgba(34,197,94,0.1),rgba(16,185,129,0.1));border:1px solid rgba(34,197,94,0.2);border-radius:8px;margin-bottom:8px;">
+          <span style="font-size:16px;">⭐️</span>
+          <span style="font-size:14px;font-weight:700;color:var(--green);" id="points-count">0</span>
+          <span style="font-size:11px;color:var(--muted);" id="points-label">pts</span>
+        </div>
         <div class="credit-display" id="credit-display" style="display:none;">
           <span>&#9889;</span> <span class="credit-count" id="credit-count">--</span> <span style="font-size:11px;">credits</span>
           <button onclick="showTopupModal()" style="margin-left:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:12px;padding:2px 10px;font-size:11px;cursor:pointer;white-space:nowrap;" title="クレジットをチャージ">+ Top Up</button>
@@ -4132,6 +4166,20 @@
       </div>
       <div class="app-chat-input-area">
         <div class="app-chat-input-box">
+          <button class="app-chat-send-btn" id="app-attach-btn" onclick="document.getElementById('file-upload-input').click()" title="ファイルを添付" style="background:transparent;border:1px solid var(--border);color:var(--muted);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <input type="file" id="file-upload-input" style="display:none;" accept="image/*,.pdf,.txt,.csv,audio/*" onchange="handleFileSelect(event)">
+          <div id="file-preview" style="display:none;position:absolute;bottom:100%;left:8px;right:8px;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;font-size:12px;display:none;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span id="file-preview-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+              <span id="file-preview-size" style="color:var(--muted);flex-shrink:0;"></span>
+              <button onclick="clearFileAttachment()" style="background:none;border:none;color:#e53e3e;cursor:pointer;font-size:14px;padding:2px;">✕</button>
+            </div>
+            <div id="file-upload-progress" style="display:none;margin-top:4px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;">
+              <div id="file-upload-bar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s;"></div>
+            </div>
+          </div>
           <textarea id="app-input" rows="1" placeholder="テキスト入力 or マイクで話す →" onkeydown="appInputKeydown(event)"></textarea>
           <button class="app-chat-send-btn" id="app-send-btn" onclick="appSend()">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14l12-6L2 2v5l8 1-8 1v5z" fill="currentColor"/></svg>
@@ -6015,8 +6063,257 @@
     function showEmailForm() {
       document.getElementById('auth-form-email').style.display = '';
       document.getElementById('auth-form-verify').style.display = 'none';
+      document.getElementById('auth-form-forgot').style.display = 'none';
+      document.getElementById('auth-form-reset').style.display = 'none';
       document.getElementById('verify-code').value = '';
       pendingVerifyEmail = '';
+    }
+
+    function showForgotPasswordForm() {
+      document.getElementById('auth-form-email').style.display = 'none';
+      document.getElementById('auth-form-verify').style.display = 'none';
+      document.getElementById('auth-form-forgot').style.display = '';
+      document.getElementById('auth-form-reset').style.display = 'none';
+      document.getElementById('auth-error').style.display = 'none';
+      const loginEmail = document.getElementById('login-email').value.trim();
+      if (loginEmail) document.getElementById('forgot-email').value = loginEmail;
+    }
+
+    let pendingResetEmail = '';
+    async function forgotPassword() {
+      const email = document.getElementById('forgot-email').value.trim();
+      if (!email) return showAuthError('メールアドレスを入力してください');
+      const btn = document.getElementById('forgot-btn');
+      btn.disabled = true; btn.textContent = '送信中...';
+      try {
+        const r = await fetch(API + '/api/v1/auth/forgot-password', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ email })
+        });
+        const d = await r.json();
+        if (d.ok) {
+          pendingResetEmail = email;
+          document.getElementById('auth-form-forgot').style.display = 'none';
+          document.getElementById('auth-form-reset').style.display = '';
+          showAuthError('');
+          document.getElementById('auth-error').style.display = 'none';
+        } else {
+          showAuthError(d.error || 'Error');
+        }
+      } catch(e) { showAuthError('Network error'); }
+      finally { btn.disabled = false; btn.textContent = 'リセットコードを送信'; }
+    }
+
+    async function resetPassword() {
+      const code = document.getElementById('reset-code').value.trim();
+      const pw = document.getElementById('reset-new-password').value;
+      if (!code || code.length !== 6) return showAuthError('6桁のコードを入力してください');
+      if (!pw || pw.length < 8) return showAuthError('パスワードは8文字以上');
+      try {
+        const r = await fetch(API + '/api/v1/auth/reset-password', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ email: pendingResetEmail, code, new_password: pw })
+        });
+        const d = await r.json();
+        if (d.ok) {
+          showAuthError('');
+          document.getElementById('auth-error').style.display = 'none';
+          showEmailForm();
+          showToast('パスワードがリセットされました。新しいパスワードでログインしてください。', 5000);
+        } else {
+          showAuthError(d.error || 'Error');
+        }
+      } catch(e) { showAuthError('Network error'); }
+    }
+
+    // --- Profile Edit ---
+    async function saveProfile() {
+      const name = document.getElementById('profile-display-name').value.trim();
+      if (!name) return showToast('表示名を入力してください');
+      const token = localStorage.getItem('authToken');
+      if (!token) return showToast('ログインしてください');
+      try {
+        const r = await fetch(API + '/api/v1/account/profile', {
+          method: 'PUT',
+          headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + token},
+          body: JSON.stringify({ display_name: name })
+        });
+        const d = await r.json();
+        if (d.ok) {
+          showToast('プロフィールを更新しました');
+          await checkAuth();
+        } else {
+          showToast(d.error || 'Error');
+        }
+      } catch(e) { showToast('Network error'); }
+    }
+
+    // --- Account Deletion ---
+    async function deleteAccount() {
+      const confirmed = prompt('アカウントを完全に削除します。確認のため「DELETE」と入力してください:');
+      if (confirmed !== 'DELETE') return;
+      const token = localStorage.getItem('authToken');
+      if (!token) return showToast('ログインしてください');
+      try {
+        const r = await fetch(API + '/api/v1/account', {
+          method: 'DELETE',
+          headers: {'Authorization': 'Bearer ' + token}
+        });
+        const d = await r.json();
+        if (d.ok) {
+          localStorage.removeItem('authToken');
+          showToast('アカウントが削除されました', 5000);
+          location.reload();
+        } else {
+          showToast(d.error || 'Error');
+        }
+      } catch(e) { showToast('Network error'); }
+    }
+
+    // --- File Upload ---
+    let pendingFile = null;
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { showToast('ファイルは10MBまで'); return; }
+      pendingFile = file;
+      const preview = document.getElementById('file-preview');
+      document.getElementById('file-preview-name').textContent = file.name;
+      document.getElementById('file-preview-size').textContent = (file.size / 1024).toFixed(0) + 'KB';
+      preview.style.display = 'block';
+    }
+    function clearFileAttachment() {
+      pendingFile = null;
+      document.getElementById('file-preview').style.display = 'none';
+      document.getElementById('file-upload-input').value = '';
+    }
+    async function uploadFile(file) {
+      const token = localStorage.getItem('authToken');
+      if (!token) { showToast('ログインしてください'); return null; }
+      // Get presigned URL
+      const presignR = await fetch(API + '/api/v1/upload/presign', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + token},
+        body: JSON.stringify({ filename: file.name, content_type: file.type || 'application/octet-stream', size: file.size })
+      });
+      const presignD = await presignR.json();
+      if (!presignD.ok) { showToast(presignD.error || 'Upload error'); return null; }
+      // Upload to S3
+      document.getElementById('file-upload-progress').style.display = '';
+      const xhr = new XMLHttpRequest();
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          document.getElementById('file-upload-bar').style.width = ((e.loaded/e.total)*100)+'%';
+        }
+      };
+      return new Promise((resolve) => {
+        xhr.onload = () => {
+          document.getElementById('file-upload-bar').style.width = '100%';
+          resolve(presignD.download_url);
+        };
+        xhr.onerror = () => { showToast('Upload failed'); resolve(null); };
+        xhr.open('PUT', presignD.upload_url, true);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.send(file);
+      });
+    }
+
+    // --- Web Push Notifications ---
+    async function subscribePush() {
+      if (!('PushManager' in window)) return;
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const vapidKey = window.__VAPID_PUBLIC_KEY;
+        if (!vapidKey) return;
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: vapidKey
+        });
+        const token = localStorage.getItem('authToken');
+        if (!token) return;
+        const subJson = sub.toJSON();
+        await fetch(API + '/api/v1/push/subscribe', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json', 'Authorization': 'Bearer ' + token},
+          body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys })
+        });
+        localStorage.setItem('pushSubscribed', '1');
+      } catch(e) { console.warn('Push subscribe failed:', e); }
+    }
+
+    // Request push permission after first login
+    function maybeRequestPush() {
+      if (localStorage.getItem('pushSubscribed')) return;
+      if (!('Notification' in window)) return;
+      if (Notification.permission === 'granted') { subscribePush(); return; }
+      if (Notification.permission === 'denied') return;
+      // Show a non-intrusive banner
+      const banner = document.createElement('div');
+      banner.id = 'push-banner';
+      banner.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 20px;display:flex;align-items:center;gap:12px;z-index:500;box-shadow:0 4px 20px rgba(0,0,0,0.1);font-size:13px;max-width:400px;';
+      banner.innerHTML = '<span style="flex:1;">新しいメッセージの通知を受け取りますか？</span>' +
+        '<button onclick="Notification.requestPermission().then(p=>{if(p===\'granted\')subscribePush();document.getElementById(\'push-banner\').remove()})" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12px;white-space:nowrap;">許可する</button>' +
+        '<button onclick="document.getElementById(\'push-banner\').remove();localStorage.setItem(\'pushSubscribed\',\'dismissed\')" style="background:none;border:none;color:var(--muted);cursor:pointer;">✕</button>';
+      document.body.appendChild(banner);
+      setTimeout(() => { const b = document.getElementById('push-banner'); if(b) b.remove(); }, 30000);
+    }
+
+    // --- Whisper STT fallback for Firefox/Safari ---
+    let whisperFallback = false;
+    function initWhisperFallback() {
+      if (window.SpeechRecognition || window.webkitSpeechRecognition) return; // Native available
+      whisperFallback = true;
+      document.body.classList.remove('no-speech-api');
+      // Re-show mic button for whisper fallback
+      const micBtn = document.getElementById('app-mic-btn');
+      if (micBtn) micBtn.style.display = '';
+    }
+    let whisperRecording = false;
+    let whisperMediaRecorder = null;
+    async function toggleWhisperRecording() {
+      if (whisperRecording) {
+        // Stop recording
+        if (whisperMediaRecorder) whisperMediaRecorder.stop();
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const chunks = [];
+        whisperMediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        whisperMediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        whisperMediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          whisperRecording = false;
+          const micBtn = document.getElementById('app-mic-btn');
+          if (micBtn) micBtn.classList.remove('recording');
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          if (blob.size < 100) return;
+          const token = localStorage.getItem('authToken');
+          if (!token) { showToast('ログインしてください'); return; }
+          try {
+            const r = await fetch(API + '/api/v1/speech/recognize', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'audio/webm' },
+              body: blob
+            });
+            const d = await r.json();
+            if (d.ok && d.text) {
+              document.getElementById('app-input').value = d.text;
+              appSend();
+            } else {
+              showToast(d.error || '音声認識に失敗しました');
+            }
+          } catch(e) { showToast('Network error'); }
+        };
+        whisperMediaRecorder.start();
+        whisperRecording = true;
+        const micBtn = document.getElementById('app-mic-btn');
+        if (micBtn) micBtn.classList.add('recording');
+        // Auto-stop after 30 seconds
+        setTimeout(() => { if (whisperRecording && whisperMediaRecorder) whisperMediaRecorder.stop(); }, 30000);
+      } catch(e) {
+        showToast('マイクのアクセスが拒否されました');
+      }
     }
 
     function googleLogin() {
@@ -6105,7 +6402,16 @@
               }
             } catch(e) { /* ignore */ }
           }
+          // Populate profile fields in settings
+          const profileName = document.getElementById('profile-display-name');
+          if (profileName) profileName.value = d.display_name || '';
+          const profileEmail = document.getElementById('profile-email');
+          if (profileEmail) profileEmail.value = d.email || '';
+
           enterAppMode();
+
+          // Request push notification permission after first successful login
+          setTimeout(maybeRequestPush, 3000);
         } else {
           localStorage.removeItem('authToken');
           authToken = null;
@@ -7025,6 +7331,13 @@
     }
 
     function renderMediaContent(text) {
+      // Extract <think> tags before escaping
+      const thinkTags = [];
+      text = text.replace(/<think>([\s\S]*?)<\/think>/g, function(match, content) {
+        thinkTags.push(content.trim());
+        return `__THINK_${thinkTags.length - 1}__`;
+      });
+
       let html = escapeHtml(text);
       let hasMedia = false;
       let hasMarkdown = false;
@@ -7126,7 +7439,19 @@
         html = html.replace(/\n/g, '<br>');
       }
 
-      return (hasMedia || hasMarkdown) ? html : text;
+      // Replace think tag placeholders with collapsible elements
+      if (thinkTags.length > 0) {
+        thinkTags.forEach((content, index) => {
+          const thinkId = 'think-' + Date.now() + '-' + index;
+          const lang = document.documentElement.lang || 'ja';
+          const label = lang === 'ja' ? '💭 思考過程を表示' : '💭 Show thinking';
+          const collapsible = `<details class="think-details" style="margin:8px 0;background:var(--surface2);border-left:3px solid var(--primary);border-radius:6px;padding:8px 12px;"><summary style="cursor:pointer;user-select:none;font-size:12px;color:var(--muted);font-weight:600;">${label}</summary><div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;">${escapeHtml(content)}</div></details>`;
+          html = html.replace(`__THINK_${index}__`, collapsible);
+        });
+        hasMarkdown = true;
+      }
+
+      return (hasMedia || hasMarkdown || thinkTags.length > 0) ? html : text;
     }
 
     function escapeHtml(str) {
@@ -7321,15 +7646,58 @@
       }
     }
 
-    function escalateToHuman(question) {
-      var lang = document.documentElement.lang || 'ja';
-      var msg = lang === 'ja'
-        ? 'AIでは解決できなかったようです。作者の濱田優貴がLINEで直接お答えします。LINEで質問を送りますか？'
-        : 'The AI couldn\'t fully help. Creator Yuki Hamada will answer personally via LINE. Send your question?';
-      if (!confirm(msg)) return;
-      var encoded = encodeURIComponent(question.substring(0, 200));
-      window.open('https://line.me/R/oaMessage/@619jcqqh/?text=' + encoded, '_blank');
-      showToast(lang === 'ja' ? 'LINEで質問を送信してください' : 'Send your question via LINE', 3000);
+    async function escalateToHuman(question) {
+      const lang = document.documentElement.lang || 'ja';
+      const token = localStorage.getItem('auth_token');
+      const sessionId = localStorage.getItem('session_id') || '';
+
+      try {
+        const resp = await fetch(API + '/api/v1/support/ticket', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {}),
+            'x-session-id': sessionId
+          },
+          body: JSON.stringify({
+            question: question,
+            channel: 'web',
+            priority: false,
+            context: 'web_escalation',
+            conv_id: appCurrentConvId || ''
+          })
+        });
+
+        const data = await resp.json();
+
+        if (data.ticket_id) {
+          // Show success message with ticket ID
+          const slaMinutes = data.sla === '15min' ? '15' : '30';
+          const msg = lang === 'ja'
+            ? `📩 人間の専門家にエスカレーションしました（チケット: ${data.ticket_id}）。${slaMinutes}分以内に回答します。`
+            : `📩 Escalated to human expert (Ticket: ${data.ticket_id}). Response within ${slaMinutes} minutes.`;
+
+          // Add system message to chat
+          appAddMsg(msg, 'bot');
+
+          showToast(
+            lang === 'ja' ? 'チケットを作成しました' : 'Ticket created',
+            3000
+          );
+        } else {
+          throw new Error(data.error || 'Failed to create ticket');
+        }
+      } catch (e) {
+        console.error('Escalation failed:', e);
+        // Fallback to LINE-only
+        const msg = lang === 'ja'
+          ? 'チケット作成に失敗しました。LINEで直接お問い合わせください。'
+          : 'Failed to create ticket. Please contact us via LINE.';
+        if (confirm(msg)) {
+          const encoded = encodeURIComponent(question.substring(0, 200));
+          window.open('https://line.me/R/oaMessage/@619jcqqh/?text=' + encoded, '_blank');
+        }
+      }
     }
 
     function appInputKeydown(e) {
@@ -7352,7 +7720,17 @@
 
     async function appSend() {
       const textarea = document.getElementById('app-input');
-      const text = textarea.value.trim();
+      let text = textarea.value.trim();
+
+      // Handle file attachment — upload first, then append URL to message
+      if (pendingFile) {
+        const fileUrl = await uploadFile(pendingFile);
+        clearFileAttachment();
+        if (fileUrl) {
+          text = (text ? text + '\n' : '') + '[Attached: ' + pendingFile.name + '](' + fileUrl + ')';
+        }
+      }
+
       if (!text) return;
       textarea.value = '';
       textarea.style.height = 'auto';
@@ -7951,39 +8329,77 @@
         const reader = r.body.getReader();
         const decoder = new TextDecoder();
         let buf = '';
+        let results = [];
+        let firstResultShown = false;
+        let container = null;
+        let raceData = null;
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           buf += decoder.decode(value, { stream: true });
-        }
 
-        let raceData = null;
-        for (const line of buf.split('\n')) {
-          if (!line.startsWith('data:')) continue;
-          const dataStr = line.slice(5).trim();
-          if (!dataStr) continue;
-          try {
-            const data = JSON.parse(dataStr);
-            if (data.error) {
-              appAddMsg(escapeHtml(data.error), 'bot');
-              if (data.action === 'upgrade') {
-                appendUpgradeButton();
-                setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800);
+          // Process complete lines immediately
+          const lines = buf.split('\n');
+          buf = lines.pop() || ''; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            const dataStr = line.slice(5).trim();
+            if (!dataStr) continue;
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.error) {
+                clearInterval(statusInterval);
+                thinking.remove();
+                appAddMsg(escapeHtml(data.error), 'bot');
+                if (data.action === 'upgrade') {
+                  appendUpgradeButton();
+                  setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800);
+                }
+                return;
               }
-              return;
-            }
-            if (data.type === 'race_done') {
-              raceData = data;
-            }
-          } catch (parseErr) { console.warn('Race SSE parse error:', dataStr, parseErr); }
+
+              // Handle individual race results as they arrive
+              if (data.type === 'race_result') {
+                results.push(data);
+                results.sort((a, b) => a.rank - b.rank);
+
+                // Show first result immediately
+                if (!firstResultShown) {
+                  clearInterval(statusInterval);
+                  thinking.remove();
+
+                  container = document.createElement('div');
+                  container.className = 'race-container';
+                  const winnerCard = buildRaceCard(data, true);
+                  winnerCard.classList.add('visible');
+                  container.appendChild(winnerCard);
+
+                  const msgWrapper = document.createElement('div');
+                  msgWrapper.className = 'app-msg app-msg-bot';
+                  msgWrapper.innerHTML = '<div class="app-msg-avatar">cw</div><div class="app-msg-content"></div>';
+                  msgWrapper.querySelector('.app-msg-content').appendChild(container);
+                  msgsEl.appendChild(msgWrapper);
+                  msgsEl.scrollTop = msgsEl.scrollHeight;
+
+                  autoPlayTTS(data.response, true);
+                  firstResultShown = true;
+                }
+              } else if (data.type === 'race_done') {
+                raceData = data;
+              }
+            } catch (parseErr) { console.warn('Race SSE parse error:', dataStr, parseErr); }
+          }
         }
 
-        if (!raceData || !raceData.results || raceData.results.length === 0) {
+        if (!firstResultShown) {
+          clearInterval(statusInterval);
+          thinking.remove();
           appAddMsg(lang === 'ja' ? '\u5168\u30E2\u30C7\u30EB\u304C\u5931\u6557\u3057\u307E\u3057\u305F' : 'All models failed', 'bot');
           return;
         }
 
-        const results = raceData.results.sort((a, b) => a.rank - b.rank);
         const winner = results[0];
 
         // If single-tier mode, just show the response normally
@@ -7992,7 +8408,7 @@
           botMsg += '\n\n<small style="color:var(--muted);">' + modelIcon(winner.model) + ' ' + winner.model + ' \u00B7 ' + (winner.time_ms / 1000).toFixed(1) + 's</small>';
           appAddMsg(botMsg, 'bot');
           if (raceData.credits_remaining !== undefined && raceData.credits_remaining !== null) updateCredits(raceData.credits_remaining);
-          autoPlayTTS(winner.response);
+          autoPlayTTS(winner.response, true);
           knownMsgCount += 2; syncVersion++;
           setTimeout(() => appLoadConversations(), 1500);
           return;
@@ -8083,7 +8499,7 @@
         msgsEl.scrollTop = msgsEl.scrollHeight;
 
         if (raceData.credits_remaining !== undefined && raceData.credits_remaining !== null) updateCredits(raceData.credits_remaining);
-        autoPlayTTS(winner.response);
+        autoPlayTTS(winner.response, true);
         knownMsgCount += 2; syncVersion++;
         setTimeout(() => appLoadConversations(), 1500);
 
@@ -8353,6 +8769,11 @@
     }
 
     function toggleSpeechRecognition() {
+      // Whisper fallback for Firefox/Safari
+      if (whisperFallback) {
+        toggleWhisperRecording();
+        return;
+      }
       if (isRecording) {
         stopListening();
         _voiceConversationActive = false;
@@ -9034,7 +9455,7 @@
       initAbTest();
     })();
 
-    function autoPlayTTS(text) {
+    function autoPlayTTS(text, isRaceMode) {
       if (!autoTtsEnabled) return;
       if (!text || text.length < 2) return;
       const clean = text
@@ -9052,17 +9473,106 @@
         .trim();
       if (clean.length < 2) return;
 
+      let textToSpeak = clean;
+
+      // Race mode: limit to 100-200 chars with natural interruption
+      if (isRaceMode && clean.length > 100) {
+        const lang = document.documentElement.lang || 'ja';
+        const fillers = lang === 'ja' ? [
+          'ということは、',
+          'あ、ちょっと違う。',
+          'まあ、',
+          'つまり、',
+          'えっと、',
+          'そうだな、',
+        ] : [
+          'So,',
+          'Wait, no.',
+          'Well,',
+          'I mean,',
+          'Hmm,',
+          'Let me think,',
+        ];
+        const targetLen = 100 + Math.floor(Math.random() * 100); // 100-200 chars
+        let cutPoint = Math.min(targetLen, clean.length);
+
+        // Try to cut at sentence boundary (。！？) near target length
+        const nearbyPunc = clean.substring(Math.max(0, cutPoint - 30), Math.min(clean.length, cutPoint + 30));
+        const puncMatch = nearbyPunc.match(/[。！？]/);
+        if (puncMatch) {
+          cutPoint = Math.max(0, cutPoint - 30) + nearbyPunc.indexOf(puncMatch[0]) + 1;
+        }
+
+        textToSpeak = clean.substring(0, cutPoint);
+
+        // 50% chance to add filler phrase
+        if (Math.random() > 0.5) {
+          const filler = fillers[Math.floor(Math.random() * fillers.length)];
+          textToSpeak += filler;
+        }
+      }
+
       setVoiceState('speaking');
 
       // Always stop current TTS before starting new one — never play simultaneously
-      streamTTS(clean);
+      streamTTS(textToSpeak);
     }
 
     initSpeechRecognition();
+    initWhisperFallback();
 
     // ---------------------------------------------------------------------------
     // Voice-first Onboarding Flow
     // ---------------------------------------------------------------------------
+    // AI Personality profiles
+    const aiPersonalities = {
+      'えり': {
+        emoji: '🌸',
+        voice: '0',
+        questions: [
+          { avatar: '🌸', message: '私、えりって言うの。<br>あなたのこと、なんて呼べばいい？', speak: '私、えりって言うの。あなたのこと、なんて呼べばいい？', expect: 'username' },
+          { avatar: '💕', message: 'ありがとう♪<br>どんな時、一番話したくなる？', speak: 'ありがとう。どんな時、一番話したくなる？', expect: 'answer' },
+          { avatar: '🎤', message: '私の声、色々あるの。<br>どれが好き？', speak: '私の声、色々あるの。どれが好き？', expect: 'voice' },
+        ]
+      },
+      'みく': {
+        emoji: '✨',
+        voice: '0',
+        questions: [
+          { avatar: '✨', message: 'みくだよ！<br>君の名前は？', speak: 'みくだよ！君の名前は？', expect: 'username' },
+          { avatar: '🎨', message: 'よろしくね！<br>今日はどんな気分？', speak: 'よろしくね！今日はどんな気分？', expect: 'answer' },
+          { avatar: '🎵', message: 'こんな声も出せるよ〜', speak: 'こんな声も出せるよ', expect: 'voice' },
+        ]
+      },
+      'よ': {
+        emoji: '🌙',
+        voice: '1',
+        questions: [
+          { avatar: '🌙', message: 'よ。<br>あんたは？', speak: 'よ。あんたは？', expect: 'username' },
+          { avatar: '📚', message: 'そっか。<br>何に使うの？', speak: 'そっか。何に使うの？', expect: 'answer' },
+          { avatar: '🎧', message: '声、選べる。', speak: '声、選べる。', expect: 'voice' },
+        ]
+      },
+      'ひかり': {
+        emoji: '☀️',
+        voice: '2',
+        questions: [
+          { avatar: '☀️', message: 'ひかりです！<br>あなたのお名前を教えてください', speak: 'ひかりです！あなたのお名前を教えてください', expect: 'username' },
+          { avatar: '🌟', message: 'よろしくお願いします。<br>どんなことをお手伝いできますか？', speak: 'よろしくお願いします。どんなことをお手伝いできますか？', expect: 'answer' },
+          { avatar: '🎤', message: '声のトーンも変えられます', speak: '声のトーンも変えられます', expect: 'voice' },
+        ]
+      },
+      'そら': {
+        emoji: '☁️',
+        voice: '3',
+        questions: [
+          { avatar: '☁️', message: 'そらって呼んで♪<br>あなたの名前は？', speak: 'そらって呼んで。あなたの名前は？', expect: 'username' },
+          { avatar: '🌈', message: 'いい名前だね〜<br>今、何してるの？', speak: 'いい名前だね。今、何してるの？', expect: 'answer' },
+          { avatar: '🎶', message: 'いろんな声で話せるよ！', speak: 'いろんな声で話せるよ！', expect: 'voice' },
+        ]
+      },
+    };
+
     let onboardState = {
       step: 0,
       isListening: false,
@@ -9092,13 +9602,6 @@
           hint: '決められなければ、私が提案するよ',
           expect: 'ainame',
           speak: '私の名前、なんて呼んでくれる？決められなければ、私が提案するよ',
-        },
-        {
-          avatar: '🎤',
-          message: 'こんな声でも話せるよ',
-          hint: 'どの声が好き？タップして聴き比べてね',
-          expect: 'voice',
-          speak: 'こんな声でも話せるよ。どの声が好き？',
         },
       ]
     };
@@ -9232,10 +9735,15 @@
         }
       } else if (step.expect === 'confirm') {
         if (lower.includes('いい') || lower.includes('ok') || lower.includes('yes') || lower.includes('うん')) {
+          onboardSwitchPersonality(); // Switch to personality-specific questions
           onboardNextStep();
         } else if (lower.includes('やだ') || lower.includes('no') || lower.includes('違')) {
           onboardSuggestNames(); // Try another name
         }
+      } else if (step.expect === 'username') {
+        // Store user's name
+        onboardState.userNickname = text.trim();
+        setTimeout(() => onboardNextStep(), 1000);
       }
     }
 
@@ -9261,6 +9769,17 @@
       }, 2000);
       const step = onboardState.steps[onboardState.step];
       step.expect = 'confirm';
+    }
+
+    function onboardSwitchPersonality() {
+      const name = onboardState.aiNickname;
+      const personality = aiPersonalities[name];
+
+      if (personality) {
+        // Replace remaining steps with personality-specific questions
+        onboardState.selectedVoice = personality.voice;
+        onboardState.steps = onboardState.steps.slice(0, onboardState.step + 1).concat(personality.questions);
+      }
     }
 
     function onboardShowVoiceSelection() {
@@ -9314,6 +9833,7 @@
           },
           body: JSON.stringify({
             ai_nickname: onboardState.aiNickname || 'AI',
+            user_nickname: onboardState.userNickname || '',
             preferred_voice: onboardState.selectedVoice,
             preferred_tts_provider: onboardState.selectedProvider,
             onboarding_completed: true
@@ -9321,7 +9841,19 @@
         }).catch(e => console.warn('Failed to save settings:', e));
       }
       document.getElementById('onboard-modal').style.display = 'none';
-      onboardSpeak('よろしくね！');
+
+      // Personalized goodbye based on AI name
+      const name = onboardState.aiNickname;
+      const userName = onboardState.userNickname;
+      const goodbyes = {
+        'えり': userName + 'さん、これからよろしくね♪',
+        'みく': userName + '、一緒に楽しもうね！',
+        'よ': userName + '、よろしく。',
+        'ひかり': userName + 'さん、お力になれるよう頑張ります！',
+        'そら': userName + '、いつでも話しかけてね〜',
+      };
+      const goodbye = goodbyes[name] || (userName ? userName + 'さん、よろしくね！' : 'よろしくね！');
+      onboardSpeak(goodbye);
     }
 
     // Check if onboarding is needed (first-time user)
@@ -11101,6 +11633,76 @@
         phoneState.transcriptPoll = null;
       }
     }
+
+    // ---------------------------------------------------------------------------
+    // Idle Points Reward System
+    // ---------------------------------------------------------------------------
+    let idlePoints = parseInt(localStorage.getItem('idle_points') || '0');
+    let lastActiveTime = parseInt(localStorage.getItem('last_active_time') || Date.now());
+
+    function updatePointsDisplay() {
+      const pointsEl = document.getElementById('points-count');
+      if (pointsEl) {
+        pointsEl.textContent = idlePoints.toLocaleString();
+        // Pulse animation when points increase
+        pointsEl.style.animation = 'none';
+        setTimeout(() => { pointsEl.style.animation = 'pulse 0.3s ease'; }, 10);
+      }
+      localStorage.setItem('idle_points', idlePoints.toString());
+    }
+
+    function checkIdleReward() {
+      const now = Date.now();
+      const offlineMinutes = Math.floor((now - lastActiveTime) / 60000);
+
+      if (offlineMinutes > 0) {
+        idlePoints += offlineMinutes;
+        localStorage.setItem('idle_points', idlePoints.toString());
+        updatePointsDisplay();
+
+        // Show reward notification
+        if (offlineMinutes >= 1) {
+          const lang = document.documentElement.lang || 'ja';
+          const msg = lang === 'ja'
+            ? `おかえりなさい！${offlineMinutes}分間のオフライン報酬: +${offlineMinutes}pts ⭐️`
+            : `Welcome back! Offline reward for ${offlineMinutes} min: +${offlineMinutes}pts ⭐️`;
+
+          const toast = document.createElement('div');
+          toast.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,rgba(34,197,94,0.95),rgba(16,185,129,0.95));color:#fff;padding:12px 24px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 8px 32px rgba(34,197,94,0.4);z-index:10000;animation:slideDown 0.5s ease;pointer-events:none;';
+          toast.textContent = msg;
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 3000);
+        }
+      }
+
+      // Update last active time
+      lastActiveTime = now;
+      localStorage.setItem('last_active_time', lastActiveTime.toString());
+    }
+
+    // Track visibility changes
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        // User left the page - save current time
+        lastActiveTime = Date.now();
+        localStorage.setItem('last_active_time', lastActiveTime.toString());
+      } else {
+        // User returned - check for idle rewards
+        checkIdleReward();
+      }
+    });
+
+    // Check on page load
+    checkIdleReward();
+    updatePointsDisplay();
+
+    // Update last active time periodically while on page
+    setInterval(function() {
+      if (!document.hidden) {
+        lastActiveTime = Date.now();
+        localStorage.setItem('last_active_time', lastActiveTime.toString());
+      }
+    }, 10000); // Every 10 seconds
   </script>
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
 </body>

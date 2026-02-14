@@ -360,6 +360,8 @@ pub struct ProviderConfig {
 pub struct GatewayConfig {
     pub host: String,
     pub port: u16,
+    /// API tokens for HTTP authentication (Bearer tokens)
+    pub api_tokens: Vec<String>,
 }
 
 impl Default for GatewayConfig {
@@ -367,6 +369,7 @@ impl Default for GatewayConfig {
         Self {
             host: "0.0.0.0".to_string(),
             port: 18790,
+            api_tokens: Vec::new(),
         }
     }
 }
@@ -547,6 +550,14 @@ pub fn load_config_from_env() -> Config {
     // Agent defaults
     if let Ok(v) = std::env::var("NANOBOT_MODEL") {
         cfg.agents.defaults.model = v;
+    }
+
+    // Gateway API tokens
+    if let Ok(v) = std::env::var("GATEWAY_API_TOKENS") {
+        cfg.gateway.api_tokens = v.split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
     }
 
     cfg

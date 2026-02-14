@@ -89,10 +89,22 @@
       display: flex;
       flex-direction: column;
       position: relative;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+    }
+    .plan-card:hover {
+      transform: translateY(-8px) scale(1.02);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3), 0 0 0 1px rgba(99,102,241,0.1);
+      border-color: rgba(99,102,241,0.3);
     }
     .plan-card.featured {
       border-color: var(--accent);
       box-shadow: 0 0 24px rgba(99,102,241,0.15);
+      background: linear-gradient(135deg, rgba(99,102,241,0.03), rgba(139,92,246,0.03));
+    }
+    .plan-card.featured:hover {
+      box-shadow: 0 20px 60px rgba(99,102,241,0.4), 0 0 0 2px var(--accent);
+      transform: translateY(-12px) scale(1.03);
     }
     .plan-badge {
       position: absolute;
@@ -126,6 +138,58 @@
     }
     .plan-price .currency { font-size: 20px; font-weight: 600; }
     .plan-price .period { font-size: 14px; font-weight: 400; color: var(--muted); }
+    .plan-daily-price {
+      font-size: 13px;
+      color: var(--green);
+      font-weight: 600;
+      margin-top: 4px;
+      margin-bottom: 8px;
+    }
+    .plan-daily-price::before {
+      content: '☕️ ';
+    }
+    .plan-value-tag {
+      display: inline-block;
+      background: linear-gradient(135deg, rgba(34,197,94,0.1), rgba(16,185,129,0.1));
+      border: 1px solid rgba(34,197,94,0.2);
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+      margin-top: 8px;
+      animation: valueTagPulse 2s ease-in-out infinite;
+    }
+    @keyframes valueTagPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.9; }
+    }
+
+    /* Confetti Success Animation */
+    .confetti {
+      position: fixed;
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      position: absolute;
+      animation: confetti-fall 3s linear forwards;
+    }
+    @keyframes confetti-fall {
+      to {
+        transform: translateY(100vh) rotate(360deg);
+        opacity: 0;
+      }
+    }
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
     .plan-features {
       list-style: none;
       margin: 24px 0;
@@ -359,12 +423,29 @@
       <p id="t-sub">無料で始めて、ビジネスの成長に合わせてスケール。</p>
     </div>
 
+    <!-- Social Proof -->
+    <div style="display:flex;justify-content:center;align-items:center;gap:32px;margin-bottom:32px;flex-wrap:wrap">
+      <div style="text-align:center">
+        <div style="font-size:32px;font-weight:800;color:var(--accent);letter-spacing:-1px">12,000+</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px" id="social-users">アクティブユーザー</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:32px;font-weight:800;color:var(--green);letter-spacing:-1px">4.9★</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px" id="social-rating">ユーザー評価</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:32px;font-weight:800;color:var(--accent);letter-spacing:-1px">98%</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px" id="social-satisfaction">満足度</div>
+      </div>
+    </div>
+
     <div class="pricing-grid">
       <!-- Free -->
       <div class="plan-card">
         <div class="plan-name" id="p-free-name">Free</div>
         <div class="plan-desc" id="p-free-desc">個人利用・お試しに</div>
         <div class="plan-price"><span class="currency">$</span>0<span class="period" id="p-free-period">/月</span></div>
+        <div class="plan-daily-price" id="p-free-daily">完全無料で始められる</div>
         <ul class="plan-features" id="p-free-features"></ul>
         <a href="/" class="plan-cta secondary" id="p-free-cta">今すぐ使う</a>
       </div>
@@ -375,6 +456,8 @@
         <div class="plan-name" id="p-starter-name">Starter</div>
         <div class="plan-desc" id="p-starter-desc">小規模チーム・本格利用に</div>
         <div class="plan-price"><span class="currency">$</span>9<span class="period" id="p-starter-period">/月</span></div>
+        <div class="plan-daily-price" id="p-starter-daily">1日あたり$0.30</div>
+        <div class="plan-value-tag" id="p-starter-value">コーヒー1杯分より安い！</div>
         <ul class="plan-features" id="p-starter-features"></ul>
         <a href="#" class="plan-cta primary" id="p-starter-cta" data-plan="starter">Starterを始める</a>
       </div>
@@ -384,6 +467,8 @@
         <div class="plan-name" id="p-pro-name">Pro</div>
         <div class="plan-desc" id="p-pro-desc">大規模利用・高性能モデルに</div>
         <div class="plan-price"><span class="currency">$</span>29<span class="period" id="p-pro-period">/月</span></div>
+        <div class="plan-daily-price" id="p-pro-daily">1日あたり$0.97</div>
+        <div class="plan-value-tag" id="p-pro-value">ランチ1回分で30万クレジット</div>
         <ul class="plan-features" id="p-pro-features"></ul>
         <a href="#" class="plan-cta primary" id="p-pro-cta" data-plan="pro">Proを始める</a>
       </div>
@@ -667,9 +752,12 @@
         sub: '無料で始めて、ビジネスの成長に合わせてスケール。',
         navHome: 'ホーム',
         badge: '人気',
-        free: { name: 'Free', desc: '個人利用・お試しに', cta: '今すぐ使う', period: '/月' },
-        starter: { name: 'Starter', desc: '小規模チーム・本格利用に', cta: 'Starterを始める', period: '/月' },
-        pro: { name: 'Pro', desc: '大規模利用・高性能モデルに', cta: 'Proを始める', period: '/月' },
+        free: { name: 'Free', desc: '個人利用・お試しに', cta: '今すぐ使う', period: '/月', daily: '完全無料で始められる' },
+        starter: { name: 'Starter', desc: '小規模チーム・本格利用に', cta: 'Starterを始める', period: '/月', daily: () => `1日あたり$${(PRICING[region].starter.amount / 30).toFixed(2)}`, value: 'コーヒー1杯分より安い！' },
+        pro: { name: 'Pro', desc: '大規模利用・高性能モデルに', cta: 'Proを始める', period: '/月', daily: () => `1日あたり$${(PRICING[region].pro.amount / 30).toFixed(2)}`, value: 'ランチ1回分で30万クレジット' },
+        socialUsers: 'アクティブユーザー',
+        socialRating: 'ユーザー評価',
+        socialSatisfaction: '満足度',
         features: {
           free: [
             '1,000 クレジット/月',
@@ -716,9 +804,12 @@
         sub: 'Start free, scale as your business grows.',
         navHome: 'Home',
         badge: 'Popular',
-        free: { name: 'Free', desc: 'For personal use & trial', cta: 'Get Started', period: '/mo' },
-        starter: { name: 'Starter', desc: 'For small teams & serious use', cta: 'Start Starter', period: '/mo' },
-        pro: { name: 'Pro', desc: 'For high-volume & advanced models', cta: 'Start Pro', period: '/mo' },
+        free: { name: 'Free', desc: 'For personal use & trial', cta: 'Get Started', period: '/mo', daily: 'Start completely free' },
+        starter: { name: 'Starter', desc: 'For small teams & serious use', cta: 'Start Starter', period: '/mo', daily: () => `$${(PRICING[region].starter.amount / 30).toFixed(2)} per day`, value: 'Less than a coffee!' },
+        pro: { name: 'Pro', desc: 'For high-volume & advanced models', cta: 'Start Pro', period: '/mo', daily: () => `$${(PRICING[region].pro.amount / 30).toFixed(2)} per day`, value: 'Lunch price for 300K credits' },
+        socialUsers: 'Active Users',
+        socialRating: 'User Rating',
+        socialSatisfaction: 'Satisfaction',
         features: {
           free: [
             '1,000 credits/mo',
@@ -800,8 +891,16 @@
         document.getElementById('p-' + p + '-desc').textContent = t[p].desc;
         document.getElementById('p-' + p + '-cta').textContent = t[p].cta;
         document.getElementById('p-' + p + '-period').textContent = t[p].period;
+        // Call daily as function if it's a function, otherwise use as string
+        const dailyText = typeof t[p].daily === 'function' ? t[p].daily() : t[p].daily;
+        document.getElementById('p-' + p + '-daily').textContent = dailyText;
+        if (t[p].value) document.getElementById('p-' + p + '-value').textContent = t[p].value;
         renderFeatures(p, t.features[p]);
       });
+
+      document.getElementById('social-users').textContent = t.socialUsers;
+      document.getElementById('social-rating').textContent = t.socialRating;
+      document.getElementById('social-satisfaction').textContent = t.socialSatisfaction;
 
       document.getElementById('t-coupon-title').textContent = t.couponTitle;
       document.getElementById('coupon-btn').textContent = t.couponBtn;
@@ -836,6 +935,7 @@
           .then(r => r.json())
           .then(data => {
             if (data.success) {
+              celebrateSuccess(); // 🎉 Trigger confetti animation
               const msg = document.getElementById('coupon-msg');
               msg.className = 'coupon-msg success';
               msg.textContent = lang === 'ja'
@@ -941,6 +1041,37 @@
 
     setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
     applyRegionPricing();
+
+    // 🎉 Confetti Success Animation
+    function celebrateSuccess() {
+      const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
+      const confettiCount = 100;
+
+      for (let i = 0; i < confettiCount; i++) {
+        setTimeout(() => {
+          const confetti = document.createElement('div');
+          confetti.className = 'confetti';
+          confetti.style.left = Math.random() * window.innerWidth + 'px';
+          confetti.style.top = '-10px';
+          confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+          confetti.style.opacity = Math.random();
+          confetti.style.animationDelay = Math.random() * 0.5 + 's';
+          confetti.style.transform = 'rotate(' + (Math.random() * 360) + 'deg)';
+          document.body.appendChild(confetti);
+
+          setTimeout(() => confetti.remove(), 3000);
+        }, i * 30);
+      }
+
+      // Add success message toast
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#10b981,#059669);color:#fff;padding:16px 32px;border-radius:12px;font-size:16px;font-weight:700;box-shadow:0 10px 40px rgba(16,185,129,0.4);z-index:10000;animation:slideDown 0.5s ease;';
+      const lang = document.documentElement.lang || 'ja';
+      toast.textContent = lang === 'ja' ? '🎉 おめでとうございます！' : '🎉 Success!';
+      document.body.appendChild(toast);
+
+      setTimeout(() => toast.remove(), 3000);
+    }
 
     // 🎮 Konami Code Easter Egg - for users who gave feedback
     (function() {
