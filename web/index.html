@@ -2162,6 +2162,19 @@
       white-space: nowrap;
     }
     .escalate-human:hover { background: rgba(239,68,68,0.1); }
+    .human-help-btn {
+      display: inline-block;
+      margin-top: 8px;
+      background: transparent;
+      border: 1px solid rgba(239,68,68,0.3);
+      color: #ef4444;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 4px 12px;
+      border-radius: 12px;
+      transition: all 0.2s;
+    }
+    .human-help-btn:hover { background: rgba(239,68,68,0.15); border-color: #ef4444; }
 
     /* Settings modal */
     .settings-modal { max-width: 480px; text-align: left; max-height: 80vh; overflow-y: auto; }
@@ -3078,7 +3091,7 @@
       <a href="/settings" id="nav-settings">Settings</a>
       <a href="/status" id="nav-status">Status</a>
       <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
-      <div class="lang-sw">
+      <div class="lang-sw" id="lang-sw-nav" style="display:none;">
         <button onclick="setLang('ja')" id="l-ja">JA</button>
         <button onclick="setLang('en')" id="l-en">EN</button>
       </div>
@@ -3095,8 +3108,8 @@
         <a href="/settings" id="mob-settings">Settings</a>
         <a href="/status" id="mob-status">Status</a>
         <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
-        <button onclick="setLang('ja');closeMobileMenu()">🇯🇵 日本語</button>
-        <button onclick="setLang('en');closeMobileMenu()">🇬🇧 English</button>
+        <button onclick="setLang('ja');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇯🇵 日本語</button>
+        <button onclick="setLang('en');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇬🇧 English</button>
       </div>
     </div>
   </nav>
@@ -3536,28 +3549,20 @@
         <h3 style="font-size:20px;font-weight:800;margin-bottom:6px;">他にもこんな声あるよ</h3>
         <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">タップして聴き比べてみて</p>
         <div class="voice-chars" id="onboard-voices" style="margin-bottom:16px;justify-content:center;">
-          <button class="voice-char" data-voice="clone" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:linear-gradient(135deg,#f59e0b,#ef4444);">&#x1F464;</span>
-            <span class="vc-name">あなた</span>
-          </button>
           <button class="voice-char active" data-voice="nova" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:linear-gradient(135deg,#6366f1,#a78bfa);">N</span>
+            <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=nova&backgroundColor=b6e3f4') center/cover;"></span>
             <span class="vc-name">Nova</span>
           </button>
-          <button class="voice-char" data-voice="shimmer" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:linear-gradient(135deg,#ec4899,#f472b6);">S</span>
-            <span class="vc-name">Shimmer</span>
-          </button>
           <button class="voice-char" data-voice="echo" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:linear-gradient(135deg,#22c55e,#4ade80);">E</span>
+            <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=echo&backgroundColor=c0aede') center/cover;"></span>
             <span class="vc-name">Echo</span>
           </button>
           <button class="voice-char" data-voice="onyx" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);">O</span>
+            <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=onyx&backgroundColor=ffd5dc') center/cover;"></span>
             <span class="vc-name">Onyx</span>
           </button>
           <button class="voice-char" data-voice="alloy" onclick="selectVoiceChar(this)">
-            <span class="vc-avatar" style="background:linear-gradient(135deg,#06b6d4,#67e8f9);">A</span>
+            <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=alloy&backgroundColor=d1f4d1') center/cover;"></span>
             <span class="vc-name">Alloy</span>
           </button>
         </div>
@@ -4141,6 +4146,7 @@
           <span>&#9889;</span> <span class="credit-count" id="credit-count">--</span> <span style="font-size:11px;">credits</span>
           <button onclick="showTopupModal()" style="margin-left:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:12px;padding:2px 10px;font-size:11px;cursor:pointer;white-space:nowrap;" title="クレジットをチャージ">+ Top Up</button>
         </div>
+        <button id="referral-btn" onclick="showReferralModal()" style="display:none;width:100%;padding:8px 12px;margin-bottom:6px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-align:center;">友達を招待 +100 credits</button>
         <div class="app-sidebar-user" onclick="logout()">
           <div class="app-sidebar-user-avatar" id="app-user-avatar"></div>
           <div style="flex:1;min-width:0;">
@@ -4166,27 +4172,23 @@
           <div class="app-chat-empty-text" id="app-empty-text">静かなところで、ゆっくり話しましょう</div>
           <div class="voice-chars" id="voice-chars">
             <button class="voice-char active" data-voice="nova" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#6366f1,#a78bfa);">N</span>
+              <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=nova&backgroundColor=b6e3f4') center/cover;"></span>
               <span class="vc-name">Nova</span>
             </button>
-            <button class="voice-char" data-voice="shimmer" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#ec4899,#f472b6);">S</span>
-              <span class="vc-name">Shimmer</span>
-            </button>
             <button class="voice-char" data-voice="echo" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#22c55e,#4ade80);">E</span>
+              <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=echo&backgroundColor=c0aede') center/cover;"></span>
               <span class="vc-name">Echo</span>
             </button>
             <button class="voice-char" data-voice="onyx" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);">O</span>
+              <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=onyx&backgroundColor=ffd5dc') center/cover;"></span>
               <span class="vc-name">Onyx</span>
             </button>
             <button class="voice-char" data-voice="alloy" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#06b6d4,#67e8f9);">A</span>
+              <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=alloy&backgroundColor=d1f4d1') center/cover;"></span>
               <span class="vc-name">Alloy</span>
             </button>
             <button class="voice-char" data-voice="fable" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#f97316,#fb923c);">F</span>
+              <span class="vc-avatar" style="background:url('https://api.dicebear.com/9.x/notionists/svg?seed=fable&backgroundColor=ffe0b2') center/cover;"></span>
               <span class="vc-name">Fable</span>
             </button>
           </div>
@@ -6025,17 +6027,22 @@
       const code = document.getElementById('verify-code').value.trim();
       if (!code || code.length !== 6) return showAuthError('6桁の認証コードを入力してください');
       try {
+        const pendingRef = localStorage.getItem('pending_referral') || undefined;
         const r = await fetch(API + '/api/v1/auth/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: pendingVerifyEmail, code, session_id: webSessionId }),
+          body: JSON.stringify({ email: pendingVerifyEmail, code, session_id: webSessionId, referral_code: pendingRef }),
         });
         const d = await r.json();
         if (d.ok) {
           localStorage.setItem('authToken', d.token);
           authToken = d.token;
+          localStorage.removeItem('pending_referral');
           closeAuthModal();
           showEmailForm();
+          if (d.referral_bonus > 0) {
+            setTimeout(() => showToast('紹介ボーナス: +' + d.referral_bonus + ' クレジット獲得!', 5000), 500);
+          }
           await checkAuth();
         } else {
           showAuthError(d.error || 'Verification failed');
@@ -6071,6 +6078,14 @@
 
     async function checkAuth() {
       const urlParams = new URLSearchParams(window.location.search);
+
+      // Save referral code from URL
+      const refCode = urlParams.get('ref');
+      if (refCode && refCode.length >= 4) {
+        localStorage.setItem('pending_referral', refCode.toUpperCase());
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+
       const urlToken = urlParams.get('token');
       if (urlToken) {
         localStorage.setItem('authToken', urlToken);
@@ -6108,6 +6123,25 @@
           const mmToggle = document.getElementById('multi-model-toggle');
           if (mmToggle && d.plan && d.plan !== 'free') {
             mmToggle.style.display = '';
+          }
+          // Apply pending referral code if exists
+          const pendingRef = localStorage.getItem('pending_referral');
+          if (pendingRef) {
+            try {
+              const rr = await fetch(API + '/api/v1/referral/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                body: JSON.stringify({ code: pendingRef }),
+              });
+              const rd = await rr.json();
+              if (rd.ok) {
+                localStorage.removeItem('pending_referral');
+                showToast('紹介ボーナス: +' + rd.bonus_credits + ' クレジット獲得!', 5000);
+                if (rd.credits_remaining !== undefined) updateCredits(rd.credits_remaining);
+              } else {
+                localStorage.removeItem('pending_referral');
+              }
+            } catch(e) { /* ignore */ }
           }
           enterAppMode();
         } else {
@@ -6296,6 +6330,8 @@
       document.getElementById('app-user-avatar').textContent = name.charAt(0).toUpperCase();
       document.getElementById('app-user-email').textContent = currentUser.email || '';
       updateCredits(currentUser.credits_remaining || 0);
+      const refBtn = document.getElementById('referral-btn');
+      if (refBtn) refBtn.style.display = '';
       appLoadConversations();
       appRenderSuggestions();
       const l = document.documentElement.lang || 'ja';
@@ -6676,15 +6712,15 @@
       }
 
       const suggestions = l === 'ja' ? [
-        'ポートフォリオサイトを作って',
-        '領収書を整理してCSVにして',
-        '競合の最新情報を調べて',
-        '今晩の献立を考えて',
+        '確定申告の医療費控除、いくらから得になる？',
+        '子どもの夜泣きが続く。原因と対策を教えて',
+        '転職の面接、自己PRの組み立て方を教えて',
+        '肩こりがひどい。今すぐできるストレッチは？',
       ] : [
-        'Build me a portfolio site',
-        'Organize receipts into a CSV',
-        'Research competitor updates',
-        'Plan dinner from my fridge',
+        'How do I negotiate a raise at work?',
+        'My kid won\'t sleep — what can I try?',
+        'Explain tax deductions I might be missing',
+        'Quick exercises for back pain at my desk',
       ];
       suggestions.forEach(s => {
         const btn = document.createElement('div');
@@ -7027,35 +7063,108 @@
     }
 
     function renderMediaContent(text) {
-      let html = text;
+      let html = escapeHtml(text);
       let hasMedia = false;
+      let hasMarkdown = false;
 
+      // Images from markdown ![alt](url)
       html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function(match, alt, url) {
         hasMedia = true;
         if (url.startsWith('data:')) return match; // skip base64
-        return '<div style="margin:8px 0"><img src="' + escapeHtml(url) + '" alt="' + escapeHtml(alt) +
+        return '<div style="margin:8px 0"><img src="' + url + '" alt="' + alt +
           '" style="max-width:100%;border-radius:8px;cursor:pointer" onclick="window.open(this.src,\'_blank\')" loading="lazy"></div>';
       });
 
+      // Audio/video special syntax
       html = html.replace(/\[AUDIO:([^\]]+)\]/g, function(match, url) {
         hasMedia = true;
-        return '<div style="margin:8px 0"><audio controls preload="none" style="width:100%;max-width:400px" src="' + escapeHtml(url) + '"></audio></div>';
+        return '<div style="margin:8px 0"><audio controls preload="none" style="width:100%;max-width:400px" src="' + url + '"></audio></div>';
       });
 
       html = html.replace(/\[VIDEO:([^\]]+)\]/g, function(match, url) {
         hasMedia = true;
-        return '<div style="margin:8px 0"><video controls preload="none" style="max-width:100%;border-radius:8px" src="' + escapeHtml(url) + '"></video></div>';
+        return '<div style="margin:8px 0"><video controls preload="none" style="max-width:100%;border-radius:8px" src="' + url + '"></video></div>';
       });
 
+      // Auto-detect image URLs
       if (!hasMedia) {
         html = html.replace(/(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s]*)?)/gi, function(url) {
           hasMedia = true;
-          return '<div style="margin:8px 0"><img src="' + escapeHtml(url) +
+          return '<div style="margin:8px 0"><img src="' + url +
             '" style="max-width:100%;border-radius:8px;cursor:pointer" onclick="window.open(this.src,\'_blank\')" loading="lazy"></div>';
         });
       }
 
-      return hasMedia ? html : text;
+      // Markdown formatting
+      // Headings: ## h2, ### h3, #### h4
+      html = html.replace(/^####\s+(.+)$/gm, function(match, content) {
+        hasMarkdown = true;
+        return '<h4 style="margin:12px 0 6px;font-size:15px;font-weight:600">' + content + '</h4>';
+      });
+      html = html.replace(/^###\s+(.+)$/gm, function(match, content) {
+        hasMarkdown = true;
+        return '<h3 style="margin:14px 0 8px;font-size:16px;font-weight:700">' + content + '</h3>';
+      });
+      html = html.replace(/^##\s+(.+)$/gm, function(match, content) {
+        hasMarkdown = true;
+        return '<h2 style="margin:16px 0 10px;font-size:18px;font-weight:700">' + content + '</h2>';
+      });
+
+      // Bold: **text** or __text__
+      html = html.replace(/\*\*([^*]+)\*\*/g, function(match, content) {
+        hasMarkdown = true;
+        return '<b>' + content + '</b>';
+      });
+      html = html.replace(/__([^_]+)__/g, function(match, content) {
+        hasMarkdown = true;
+        return '<b>' + content + '</b>';
+      });
+
+      // Italic: *text* or _text_ (but not **text**)
+      html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, function(match, content) {
+        hasMarkdown = true;
+        return '<i>' + content + '</i>';
+      });
+
+      // Lists: convert "* item" or "- item" to <li>
+      // Group consecutive list items into <ul>
+      html = html.replace(/^[*\-]\s+(.+)$/gm, function(match, content) {
+        hasMarkdown = true;
+        return '<li>' + content + '</li>';
+      });
+      // Wrap consecutive <li> in <ul>
+      html = html.replace(/(<li>.*<\/li>\n?)+/g, function(match) {
+        return '<ul style="margin:8px 0;padding-left:24px">' + match + '</ul>';
+      });
+
+      // Numbered lists: convert "1. item" to <li> in <ol>
+      html = html.replace(/^\d+\.\s+(.+)$/gm, function(match, content) {
+        hasMarkdown = true;
+        return '<li>' + content + '</li>';
+      });
+      html = html.replace(/(<li>.*<\/li>\n?)+/g, function(match) {
+        if (match.includes('<ul')) return match; // already wrapped
+        return '<ol style="margin:8px 0;padding-left:24px">' + match + '</ol>';
+      });
+
+      // Code blocks: ```code```
+      html = html.replace(/```([^`]+)```/g, function(match, code) {
+        hasMarkdown = true;
+        return '<pre style="background:var(--surface2);padding:12px;border-radius:8px;overflow-x:auto;margin:8px 0"><code>' + code + '</code></pre>';
+      });
+
+      // Inline code: `code`
+      html = html.replace(/`([^`]+)`/g, function(match, code) {
+        hasMarkdown = true;
+        return '<code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:0.9em">' + code + '</code>';
+      });
+
+      // Convert newlines to <br>
+      if (hasMarkdown || hasMedia) {
+        html = html.replace(/\n/g, '<br>');
+      }
+
+      return (hasMedia || hasMarkdown) ? html : text;
     }
 
     function escapeHtml(str) {
@@ -7098,13 +7207,13 @@
         nameLabel.textContent = 'chatweb.ai';
         content.appendChild(nameLabel);
         const renderedText = renderMediaContent(text);
+        const textSpan = document.createElement('span');
         if (renderedText !== text) {
-          const textSpan = document.createElement('span');
           textSpan.innerHTML = renderedText;
-          content.appendChild(textSpan);
         } else {
-          content.appendChild(document.createTextNode(text));
+          textSpan.textContent = text;
         }
+        content.appendChild(textSpan);
         if (agentName) {
           const badge = document.createElement('span');
           badge.className = 'agent-badge';
@@ -7156,6 +7265,15 @@
         ratingDiv.appendChild(thumbUp);
         ratingDiv.appendChild(thumbDown);
         content.appendChild(ratingDiv);
+
+        // Human escalation button
+        var humanBtn = document.createElement('button');
+        humanBtn.className = 'human-help-btn';
+        humanBtn.dataset.question = text;
+        var lang2 = document.documentElement.lang || 'ja';
+        humanBtn.innerHTML = '\uD83D\uDE4B ' + (lang2 === 'ja' ? '人間に相談' : 'Ask a human');
+        humanBtn.onclick = function() { showHumanHelpModal(this.dataset.question); };
+        content.appendChild(humanBtn);
 
         wrapper.appendChild(content);
       }
@@ -8291,7 +8409,6 @@
     function playVoiceGreeting(voice) {
       var greetings = {
         nova: 'こんにちは！ノヴァです。何でも聞いてね。',
-        shimmer: 'シマーです。一緒に何か素敵なこと始めましょう。',
         echo: 'エコーだよ。君の力になれるよ。',
         onyx: 'オニキスです。どんな難題でも任せてください。',
         alloy: 'アロイです！今日は何をしましょうか？',
@@ -8301,6 +8418,8 @@
       fetchTTS(text, voice);
     }
     function fetchTTS(text, voice) {
+      // Stop any current TTS before playing preview
+      stopTTS();
       var token = authToken || '';
       fetch(API + '/api/v1/speech/synthesize', {
         method: 'POST',
@@ -8308,7 +8427,10 @@
         body: JSON.stringify({ text: text, voice: voice || selectedVoice }),
       }).then(function(r) { return r.blob(); }).then(function(blob) {
         var url = URL.createObjectURL(blob);
+        stopTTS(); // Stop again in case something started while fetching
         var a = new Audio(url);
+        currentAudio = a;
+        a.onended = function() { currentAudio = null; };
         a.play().catch(function() {});
       }).catch(function() {});
     }
@@ -8755,6 +8877,11 @@
       // Stop polling
       stopPolling();
 
+      // Clear sidebar immediately for visual feedback
+      appConversations = [];
+      const convList = document.getElementById('app-conv-list');
+      if (convList) convList.innerHTML = '';
+
       // Clear all local data
       localStorage.clear();
       if (token) localStorage.setItem('authToken', token);
@@ -8882,13 +9009,8 @@
 
       setVoiceState('speaking');
 
-      const wasPlaying = ttsPlaying || (currentAudio && !currentAudio.paused);
-      if (wasPlaying) {
-        const transition = 'ちょっと待ってね。';
-        streamTTS(transition + clean);
-      } else {
-        streamTTS(clean);
-      }
+      // Always stop current TTS before starting new one — never play simultaneously
+      streamTTS(clean);
     }
 
     initSpeechRecognition();
@@ -9196,11 +9318,16 @@
       ttsPlaying = true;
       setVoiceState('speaking');
       const item = ttsQueue.shift();
+      // Skip non-audio items (failed fetches)
+      if (!item.blobUrl || item.blobUrl === 'SKIP' || item.blobUrl === 'SPOKEN') {
+        playNextQueued();
+        return;
+      }
       const audio = new Audio(item.blobUrl);
       currentAudio = audio;
-      audio.onended = function() { playNextQueued(); };
-      audio.onerror = function() { playNextQueued(); };
-      audio.play().catch(function() { playNextQueued(); });
+      audio.onended = function() { currentAudio = null; playNextQueued(); };
+      audio.onerror = function() { currentAudio = null; playNextQueued(); };
+      audio.play().catch(function() { currentAudio = null; playNextQueued(); });
     }
 
     function showTtsStopBtn(show) {
@@ -9236,11 +9363,11 @@
           slots[idx] = blobUrl;
           tryEnqueue();
         }).catch(function(err) {
-          console.warn('TTS API failed for sentence, trying browser fallback:', err.message);
+          console.warn('TTS API failed for sentence, skipping:', err.message);
           ttsPendingCount--;
           if (ttsAborted) return;
-          speakWithBrowser(sentence);
-          slots[idx] = 'SPOKEN'; // mark as handled
+          // Skip failed sentences — do NOT use browser fallback (causes mixed language/simultaneous playback)
+          slots[idx] = 'SKIP';
           tryEnqueue();
         });
       });
@@ -9263,6 +9390,7 @@
         currentTtsBtn = null;
       }
       showTtsStopBtn(false);
+      setVoiceState('idle'); // Reset voice state bar
     }
 
     function speakWithBrowser(text) {
@@ -9315,7 +9443,7 @@
         display.classList.add('credit-flash');
         setTimeout(() => display.classList.remove('credit-flash'), 600);
       }
-      if (remaining <= 100 && remaining > 0 && !lowCreditShown) {
+      if (remaining <= 20 && remaining > 0 && !lowCreditShown) {
         lowCreditShown = true;
         setTimeout(() => showLowCreditBanner(remaining), 800);
       }
@@ -9340,8 +9468,8 @@
         + '</div>'
         + '<div style="font-size:13px;color:#e2e8f0;margin-bottom:12px;line-height:1.5;">'
         + (l === 'ja'
-          ? '今なら <b style="color:#fbbf24;">月額 ¥980</b> で5,000クレジット+全ツール解放。<br><span style="color:#f87171;font-size:12px;">' + deadlineStr + ' 以降は ¥1,480 に値上げ予定</span>'
-          : 'Get <b style="color:#fbbf24;">5,000 credits + all tools</b> for just $5/mo.<br><span style="color:#f87171;font-size:12px;">Price increases to $9/mo after ' + deadlineStr + '</span>')
+          ? 'Starterプラン: <b style="color:#fbbf24;">月額 $9</b> で25,000クレジット+全ツール解放。'
+          : 'Starter plan: <b style="color:#fbbf24;">25,000 credits + all tools</b> for just $9/mo.')
         + '</div>'
         + '<div style="display:flex;gap:8px;align-items:center;">'
         + '<button onclick="document.getElementById(\'low-credit-banner\').remove();document.getElementById(\'topup-modal\').classList.add(\'show\');" style="flex:1;padding:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:700;font-size:14px;border:none;border-radius:10px;cursor:pointer;">'
@@ -9379,6 +9507,170 @@
     }
 
     // ---------------------------------------------------------------------------
+    // Referral modal
+    // ---------------------------------------------------------------------------
+    async function showReferralModal() {
+      if (!authToken) return;
+      const l = document.documentElement.lang || 'ja';
+      // Get or create referral code
+      let code = '';
+      let url = '';
+      try {
+        const r = await fetch(API + '/api/v1/referral/code', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        if (d.ok) { code = d.code; url = d.url; }
+      } catch(e) { showToast('Error fetching referral code'); return; }
+
+      const existing = document.getElementById('referral-modal');
+      if (existing) existing.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'referral-modal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);';
+      modal.innerHTML = '<div style="background:var(--bg-secondary,#1a1a2e);border-radius:16px;padding:24px;max-width:400px;width:90%;color:#e2e8f0;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+        + '<h3 style="margin:0;font-size:18px;">' + (l==='ja' ? '友達を招待' : 'Invite Friends') + '</h3>'
+        + '<button onclick="document.getElementById(\'referral-modal\').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">&times;</button>'
+        + '</div>'
+        + '<p style="font-size:14px;margin-bottom:16px;line-height:1.5;">'
+        + (l==='ja' ? '友達が登録すると、あなたも友達も <b style="color:#10b981;">+100クレジット</b> 獲得!' : 'When your friend signs up, you both get <b style="color:#10b981;">+100 credits</b>!')
+        + '</p>'
+        + '<div style="background:var(--surface,#0a0a1a);border-radius:10px;padding:12px;margin-bottom:12px;font-family:monospace;font-size:16px;text-align:center;letter-spacing:2px;color:#fbbf24;">' + code + '</div>'
+        + '<div style="display:flex;gap:8px;">'
+        + '<button id="ref-copy-url" style="flex:1;padding:10px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;">'
+        + (l==='ja' ? 'URLをコピー' : 'Copy URL') + '</button>'
+        + '<button id="ref-share" style="flex:1;padding:10px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;">'
+        + (l==='ja' ? 'SNSで共有' : 'Share') + '</button>'
+        + '</div>'
+        + '</div>';
+      document.body.appendChild(modal);
+      modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+      document.getElementById('ref-copy-url').addEventListener('click', function() {
+        navigator.clipboard.writeText(url).then(function() {
+          showToast(l==='ja' ? '紹介URLをコピーしました' : 'Referral URL copied!');
+        });
+      });
+      document.getElementById('ref-share').addEventListener('click', function() {
+        const text = l==='ja'
+          ? 'chatweb.ai - AI音声アシスタント。招待リンクで+100クレジット!'
+          : 'chatweb.ai - AI voice assistant. Get +100 credits with my invite link!';
+        if (navigator.share) {
+          navigator.share({ title: 'chatweb.ai', text: text, url: url }).catch(function(){});
+        } else {
+          const twitterUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text + ' ' + url);
+          window.open(twitterUrl, '_blank');
+        }
+      });
+    }
+
+    // ---------------------------------------------------------------------------
+    // Human escalation modal
+    function showHumanHelpModal(aiResponse) {
+      const l = document.documentElement.lang || 'ja';
+      const existing = document.getElementById('human-help-modal');
+      if (existing) existing.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'human-help-modal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);';
+      modal.innerHTML = '<div style="background:var(--bg-secondary,#1a1a2e);border-radius:16px;padding:24px;max-width:440px;width:90%;color:#e2e8f0;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+        + '<h3 style="margin:0;font-size:18px;">\uD83D\uDE4B ' + (l==='ja' ? '人間の専門家に相談' : 'Ask a Human Expert') + '</h3>'
+        + '<button onclick="document.getElementById(\'human-help-modal\').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">&times;</button>'
+        + '</div>'
+        + '<p style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.5;">'
+        + (l==='ja' ? 'AIの回答で解決しなかった場合、人間の専門家が対応します。通常30分以内に回答します。' : 'If AI couldn\'t help, a human expert will assist you. Response within 30 minutes.')
+        + '</p>'
+        + '<textarea id="human-help-question" rows="3" placeholder="' + (l==='ja' ? '具体的に何を知りたいですか？' : 'What specifically do you need help with?') + '" '
+        + 'style="width:100%;padding:10px;background:var(--surface,#0a0a1a);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;resize:vertical;margin-bottom:12px;"></textarea>'
+        + '<div style="margin-bottom:12px;">'
+        + '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">' + (l==='ja' ? '回答の受け取り方法' : 'How to receive the answer') + '</label>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;" id="human-help-channels">'
+        + '<button class="hh-ch-btn selected" data-ch="chatweb" style="padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--accent);background:rgba(99,102,241,0.15);color:var(--accent);">chatweb.ai</button>'
+        + '<button class="hh-ch-btn" data-ch="line" style="padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);">LINE</button>'
+        + '<button class="hh-ch-btn" data-ch="email" style="padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);">Email</button>'
+        + '</div>'
+        + '</div>'
+        + '<label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:12px;cursor:pointer;">'
+        + '<input type="checkbox" id="human-help-priority" style="accent-color:#ef4444;">'
+        + '<span>' + (l==='ja' ? '優先対応 (15分以内) — 50 credits' : 'Priority (15min) — 50 credits') + '</span>'
+        + '</label>'
+        + '<button id="human-help-submit" style="width:100%;padding:12px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border:none;border-radius:10px;font-weight:600;font-size:14px;cursor:pointer;">'
+        + (l==='ja' ? '人間に相談する' : 'Ask a Human') + '</button>'
+        + '<p style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center;">'
+        + (l==='ja' ? '通常: 30分以内 / 優先: 15分以内に回答' : 'Standard: within 30min / Priority: within 15min')
+        + '</p></div>';
+      document.body.appendChild(modal);
+      modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+
+      // Channel button selection
+      document.querySelectorAll('.hh-ch-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.hh-ch-btn').forEach(function(b) {
+            b.style.borderColor = 'var(--border)';
+            b.style.background = 'transparent';
+            b.style.color = 'var(--muted)';
+            b.classList.remove('selected');
+          });
+          btn.style.borderColor = 'var(--accent)';
+          btn.style.background = 'rgba(99,102,241,0.15)';
+          btn.style.color = 'var(--accent)';
+          btn.classList.add('selected');
+        });
+      });
+
+      // Submit
+      document.getElementById('human-help-submit').addEventListener('click', async function() {
+        const question = document.getElementById('human-help-question').value.trim();
+        if (!question) {
+          showToast(l==='ja' ? '質問を入力してください' : 'Please enter your question');
+          return;
+        }
+        const channel = document.querySelector('.hh-ch-btn.selected')?.dataset.ch || 'chatweb';
+        const priority = document.getElementById('human-help-priority').checked;
+        const submitBtn = document.getElementById('human-help-submit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = l==='ja' ? '送信中...' : 'Submitting...';
+
+        try {
+          const hdrs = { 'Content-Type': 'application/json', 'x-session-id': webSessionId };
+          if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
+          const r = await fetch(API + '/api/v1/tickets', {
+            method: 'POST',
+            headers: hdrs,
+            body: JSON.stringify({
+              question: question,
+              context: (aiResponse || '').substring(0, 500),
+              channel: channel,
+              priority: priority,
+              conv_id: appCurrentConvId || '',
+            }),
+          });
+          const d = await r.json();
+          if (d.ticket_id) {
+            modal.remove();
+            const sla = priority ? '15' : '30';
+            showToast(l==='ja'
+              ? '\u2705 チケット ' + d.ticket_id + ' を作成しました。' + sla + '分以内に回答します。'
+              : '\u2705 Ticket ' + d.ticket_id + ' created. Response within ' + sla + ' minutes.');
+            appAddMsg(l==='ja'
+              ? '\uD83D\uDCE9 人間の専門家にエスカレーションしました（チケット: ' + d.ticket_id + '）。' + sla + '分以内に回答します。'
+              : '\uD83D\uDCE9 Escalated to human expert (Ticket: ' + d.ticket_id + '). Response within ' + sla + ' minutes.', 'bot');
+          } else {
+            showToast(d.error || 'Error creating ticket');
+            submitBtn.disabled = false;
+            submitBtn.textContent = l==='ja' ? '人間に相談する' : 'Ask a Human';
+          }
+        } catch(e) {
+          showToast('Error: ' + e.message);
+          submitBtn.disabled = false;
+          submitBtn.textContent = l==='ja' ? '人間に相談する' : 'Ask a Human';
+        }
+      });
+    }
+
     // ---------------------------------------------------------------------------
     function showTopupModal(tab) {
       const l = document.documentElement.lang || 'ja';
@@ -10182,7 +10474,21 @@
     })();
 
     applyABVariant(getABVariant());
-    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+    // Auto-detect language from browser — no toggle needed
+    // Japanese browsers → ja, everything else → en
+    (function() {
+      var saved = localStorage.getItem('nl');
+      var browserLang = (navigator.language || 'en').toLowerCase();
+      var lang;
+      if (saved) {
+        lang = saved;
+      } else if (browserLang.startsWith('ja')) {
+        lang = 'ja';
+      } else {
+        lang = 'en';
+      }
+      setLang(lang);
+    })();
 
     let phoneState = { active: false, contactId: null, ccpInitialized: false, transcriptPoll: null };
 
