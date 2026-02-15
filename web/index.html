@@ -3179,7 +3179,7 @@
       <h1 id="t-title">お願いしたら、本当にやってくれるAI。</h1>
       <p id="t-subtitle">チャットで頼むだけ。検索、コード実行、ファイル操作、定期監視まで — 声でもテキストでも。</p>
       <div class="hero-cta" id="t-hero-cta">
-        <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="document.getElementById('input').focus();return false;">今すぐ無料で試す</a>
+        <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="if(!currentUser){openAuthModal();return false;}document.getElementById('input').focus();return false;">今すぐ無料で試す</a>
       </div>
     </div>
 
@@ -4691,7 +4691,7 @@
     };
 
     // Guest Trial Tracking
-    const GUEST_MAX_TURNS = 1;
+    const GUEST_MAX_TURNS = 0;
     function getGuestTurns() { return parseInt(localStorage.getItem('guestTurns') || '0'); }
     function incGuestTurns() { const t = getGuestTurns() + 1; localStorage.setItem('guestTurns', t.toString()); return t; }
     function clearGuestTrial() { localStorage.removeItem('guestTurns'); }
