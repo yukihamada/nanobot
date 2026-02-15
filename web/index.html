@@ -1274,20 +1274,71 @@
       overflow-y: auto;
       padding: 0 8px;
     }
+    .sidebar-footer {
+      border-top: 1px solid var(--border);
+      padding: 12px 8px;
+      margin-top: auto;
+    }
+    .sidebar-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      padding: 0 4px;
+    }
+    .sidebar-btn {
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.2s;
+      text-align: left;
+      margin-bottom: 4px;
+    }
+    .sidebar-btn:hover { background: var(--surface2); }
+    .sidebar-btn.connected { background: var(--accent-glow); color: var(--accent); }
     .sidebar-item {
       padding: 10px 12px;
       border-radius: 8px;
-      cursor: pointer;
       font-size: 13px;
       color: var(--text);
       transition: background 0.2s;
       margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .sidebar-item:hover { background: var(--surface2); }
+    .sidebar-item.active { background: var(--accent-glow); color: var(--accent-hover); }
+    .conv-title {
+      flex: 1;
+      cursor: pointer;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .sidebar-item:hover { background: var(--surface2); }
-    .sidebar-item.active { background: var(--accent-glow); color: var(--accent-hover); }
+    .conv-actions {
+      display: none;
+      gap: 4px;
+    }
+    .sidebar-item:hover .conv-actions { display: flex; }
+    .conv-action-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 4px;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    .conv-action-btn:hover { opacity: 1; }
     .sidebar-toggle {
       position: fixed;
       top: 16px;
@@ -3171,6 +3222,12 @@
     </div>
     <button class="sidebar-new-btn" id="new-conv-btn" onclick="newConversation()">+ New Conversation</button>
     <div class="sidebar-list" id="conv-list"></div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-section-title">⚙️ Settings</div>
+      <button class="sidebar-btn" onclick="openWebhookSettings()">🔗 Webhook Settings</button>
+      <button class="sidebar-btn" id="line-connect-btn" onclick="toggleLineConnection()">📱 Connect LINE</button>
+    </div>
   </div>
   <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" style="display:none;">&#x2630;</button>
 
@@ -6545,6 +6602,7 @@
           if (profileEmail) profileEmail.value = d.email || '';
 
           enterAppMode();
+          checkLineConnection();
 
           // Request push notification permission after first successful login
           setTimeout(maybeRequestPush, 3000);
@@ -6578,9 +6636,21 @@
         (d.conversations || []).forEach(conv => {
           const item = document.createElement('div');
           item.className = 'sidebar-item';
-          item.textContent = conv.title || 'New conversation';
+
+          const title = document.createElement('span');
+          title.className = 'conv-title';
+          title.textContent = conv.title || 'New conversation';
+          title.onclick = () => loadConversation(conv.id, conv.session_id);
+          item.appendChild(title);
+
+          const actions = document.createElement('div');
+          actions.className = 'conv-actions';
+          actions.innerHTML = '<button class="conv-action-btn" onclick="event.stopPropagation();renameConversation(\'' + conv.id + '\',\'' + (conv.title || 'New conversation').replace(/'/g, "\\'") + '\')" title="Rename">✏️</button>'
+            + '<button class="conv-action-btn" onclick="event.stopPropagation();deleteConversation(\'' + conv.id + '\')" title="Delete">🗑️</button>'
+            + '<button class="conv-action-btn" onclick="event.stopPropagation();shareConversation(\'' + conv.id + '\')" title="Share">🔗</button>';
+          item.appendChild(actions);
+
           item.title = conv.created_at;
-          item.onclick = () => loadConversation(conv.id, conv.session_id);
           list.appendChild(item);
         });
       } catch(e) { /* ignore */ }
@@ -6630,6 +6700,101 @@
           typewriter(document.getElementById('t-welcome'), t.welcome, 25);
           loadConversations();
           toggleSidebar();
+        }
+      } catch(e) { /* ignore */ }
+    }
+
+    async function renameConversation(convId, currentTitle) {
+      const lang = document.documentElement.lang || 'ja';
+      const newTitle = prompt(lang === 'ja' ? '新しい会話名を入力してください：' : 'Enter new conversation title:', currentTitle);
+      if (!newTitle || newTitle === currentTitle) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations/' + encodeURIComponent(convId), {
+          method: 'PATCH',
+          headers: {
+            'Authorization': 'Bearer ' + authToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ title: newTitle })
+        });
+        if (r.ok) {
+          loadConversations();
+          showToast(lang === 'ja' ? '会話名を変更しました' : 'Conversation renamed');
+        }
+      } catch(e) { showToast(lang === 'ja' ? 'エラーが発生しました' : 'Error occurred'); }
+    }
+
+    async function deleteConversation(convId) {
+      const lang = document.documentElement.lang || 'ja';
+      if (!confirm(lang === 'ja' ? '本当にこの会話を削除しますか？' : 'Delete this conversation?')) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations/' + encodeURIComponent(convId), {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        if (r.ok) {
+          loadConversations();
+          showToast(lang === 'ja' ? '会話を削除しました' : 'Conversation deleted');
+        }
+      } catch(e) { showToast(lang === 'ja' ? 'エラーが発生しました' : 'Error occurred'); }
+    }
+
+    function openWebhookSettings() {
+      const lang = document.documentElement.lang || 'ja';
+      const webhookUrl = prompt(
+        lang === 'ja' ? 'Webhook URLを入力してください（各メッセージがPOSTされます）：' : 'Enter Webhook URL (messages will be POSTed):',
+        localStorage.getItem('webhook_url') || ''
+      );
+      if (webhookUrl !== null) {
+        if (webhookUrl) {
+          localStorage.setItem('webhook_url', webhookUrl);
+          showToast(lang === 'ja' ? 'Webhook設定を保存しました' : 'Webhook settings saved');
+        } else {
+          localStorage.removeItem('webhook_url');
+          showToast(lang === 'ja' ? 'Webhookを無効にしました' : 'Webhook disabled');
+        }
+      }
+    }
+
+    async function toggleLineConnection() {
+      const lang = document.documentElement.lang || 'ja';
+      const btn = document.getElementById('line-connect-btn');
+      const isConnected = btn.classList.contains('connected');
+
+      if (isConnected) {
+        // Disconnect LINE
+        if (!confirm(lang === 'ja' ? 'LINE連携を解除しますか？' : 'Disconnect LINE?')) return;
+        try {
+          const r = await fetch(API + '/api/v1/channels/line/disconnect', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + authToken }
+          });
+          if (r.ok) {
+            btn.classList.remove('connected');
+            btn.textContent = '📱 Connect LINE';
+            showToast(lang === 'ja' ? 'LINE連携を解除しました' : 'LINE disconnected');
+          }
+        } catch(e) { showToast(lang === 'ja' ? 'エラーが発生しました' : 'Error occurred'); }
+      } else {
+        // Connect LINE
+        openChannelModal('line');
+      }
+    }
+
+    async function checkLineConnection() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/channels/line/status', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const d = await r.json();
+        const btn = document.getElementById('line-connect-btn');
+        if (d.connected) {
+          btn.classList.add('connected');
+          btn.textContent = '📱 Disconnect LINE';
+        } else {
+          btn.classList.remove('connected');
+          btn.textContent = '📱 Connect LINE';
         }
       } catch(e) { /* ignore */ }
     }
