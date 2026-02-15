@@ -3594,7 +3594,6 @@
       <h3 id="auth-modal-title">ログイン</h3>
       <div class="auth-error" id="auth-error" style="display:none;"></div>
       <div id="auth-form-email">
-        <input type="text" class="auth-input" id="login-name" placeholder="お名前（ニックネームOK）" maxlength="30" aria-label="Name" onkeydown="if(event.key==='Enter')document.getElementById('login-email').focus()">
         <input type="email" class="auth-input" id="login-email" placeholder="Email" aria-label="Email" onkeydown="if(event.key==='Enter')emailAuth()">
         <button class="auth-submit" id="email-auth-btn" onclick="emailAuth()">メールでログイン</button>
         <div style="text-align:center;margin-top:8px;">
@@ -6195,14 +6194,25 @@
     async function emailAuth() {
       const email = document.getElementById('login-email').value.trim();
       if (!email) return showAuthError('メールアドレスを入力してください');
-      const name = (document.getElementById('login-name').value || '').trim() || undefined;
+
+      // Auto-detect language from browser and email TLD
+      const browserLang = navigator.language || navigator.userLanguage || 'en';
+      const emailTLD = email.split('.').pop();
+      const tldLangMap = { 'jp': 'ja', 'cn': 'zh', 'kr': 'ko', 'fr': 'fr', 'de': 'de', 'es': 'es', 'ru': 'ru' };
+      const detectedLang = tldLangMap[emailTLD] || browserLang.split('-')[0];
+
       try {
         document.getElementById('email-auth-btn').disabled = true;
         document.getElementById('email-auth-btn').textContent = '送信中...';
         const r = await fetch(API + '/api/v1/auth/email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, session_id: webSessionId, name }),
+          body: JSON.stringify({
+            email,
+            session_id: webSessionId,
+            preferred_lang: detectedLang,
+            user_agent: navigator.userAgent
+          }),
         });
         const d = await r.json();
         if (d.ok && d.pending_verification) {
@@ -11603,6 +11613,40 @@
       enterSharedViewMode(shareMatch[1]);
     } else {
       checkAuth();
+      playWelcomeVoice();
+    }
+
+    async function playWelcomeVoice() {
+      // Only play once for first-time visitors
+      if (localStorage.getItem('welcomed')) return;
+
+      const lang = document.documentElement.lang || 'ja';
+      const message = lang === 'ja'
+        ? 'こんにちは。話す時はマイクボタンを長押しして話してね'
+        : 'Hello. Please press and hold the microphone button to speak.';
+
+      try {
+        // Wait a bit for page to settle
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        const r = await fetch(API + '/api/v1/speech/synthesize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: message,
+            voice: lang === 'ja' ? 'nova' : 'alloy',
+            speed: 1.0
+          })
+        });
+
+        if (r.ok) {
+          const audioBlob = await r.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          audio.play();
+          localStorage.setItem('welcomed', 'true');
+        }
+      } catch(e) { /* ignore */ }
     }
 
     // -----------------------------------------------------------------------
