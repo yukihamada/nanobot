@@ -13709,8 +13709,8 @@ async fn handle_speech_synthesize(
 /// Body: multipart/form-data with fields: audio (blob), text (string to speak), prompt_text (transcript of audio)
 /// Or JSON: { audio_base64, text, prompt_text }
 async fn handle_voice_clone(
-    State(state): State<Arc<AppState>>,
-    headers: axum::http::HeaderMap,
+    State(_state): State<Arc<AppState>>,
+    _headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
     let api_key = std::env::var("RUNPOD_API_KEY").unwrap_or_default();
@@ -13890,6 +13890,7 @@ async fn handle_tts_openai_compat(
         voice_id: body.get("voice_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
         model_id: body.get("model_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
         style: body.get("style").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        reference_audio: body.get("reference_audio").and_then(|v| v.as_str()).map(|s| s.to_string()),
         session_id: body.get("session_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
     };
 
@@ -15157,7 +15158,7 @@ async fn handle_ab_event(
 /// GET /api/v1/ab/stats — View A/B test statistics.
 async fn handle_ab_stats(
     State(state): State<Arc<AppState>>,
-    headers: axum::http::HeaderMap,
+    _headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
     let stats = load_ab_stats(&state).await;
 
