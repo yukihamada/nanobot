@@ -26,6 +26,7 @@
   <link rel="alternate" hreflang="x-default" href="https://chatweb.ai/">
   <meta name="theme-color" content="#6366f1">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="chatweb.ai">
   <link rel="manifest" href="/manifest.json">
@@ -8602,7 +8603,7 @@
         }
 
         // Race mode: show winner prominently, others in collapsible cards
-        const container = document.createElement('div');
+        container = document.createElement('div');
         container.className = 'race-container';
 
         // Winner card (immediate)
