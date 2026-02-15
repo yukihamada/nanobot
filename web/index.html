@@ -7520,6 +7520,32 @@
       return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // Simplify model names for display
+    function simplifyModelName(fullModel) {
+      if (fullModel.includes('claude')) {
+        return fullModel.includes('opus') ? 'Claude Opus' :
+               fullModel.includes('sonnet') ? 'Claude Sonnet' :
+               fullModel.includes('haiku') ? 'Claude Haiku' : 'Claude';
+      } else if (fullModel.includes('gpt-4o-mini')) {
+        return 'GPT-4o mini';
+      } else if (fullModel.includes('gpt-4o')) {
+        return 'GPT-4o';
+      } else if (fullModel.includes('gpt-4')) {
+        return 'GPT-4';
+      } else if (fullModel.includes('gemini')) {
+        return fullModel.includes('pro') ? 'Gemini Pro' :
+               fullModel.includes('flash') ? 'Gemini Flash' : 'Gemini';
+      } else if (fullModel.includes('o1')) {
+        return 'o1';
+      } else if (fullModel.includes('qwen')) {
+        return 'Qwen';
+      } else if (fullModel.includes('deepseek')) {
+        return 'DeepSeek';
+      } else {
+        return fullModel.replace(/^(openai\/|anthropic\/|google\/|openrouter\/)/,'').replace(/-\d{8,}$/,'').substring(0,25);
+      }
+    }
+
     function appAddMsg(text, who, agentName, toolsUsed, channel) {
       const empty = document.getElementById('app-empty');
       if (empty) empty.remove();
@@ -8029,16 +8055,34 @@
                 var lastMsg = document.querySelector('#app-messages .app-msg-bot:last-child .app-msg-content');
                 if (lastMsg) {
                   var footer = document.createElement('div');
-                  footer.style.cssText = 'font-size:9px;color:var(--muted);margin-top:4px;opacity:0.5;text-align:right;letter-spacing:0.3px;';
+                  footer.style.cssText = 'font-size:9px;color:var(--muted);margin-top:4px;opacity:0.5;text-align:right;letter-spacing:0.3px;display:flex;gap:8px;justify-content:flex-end;align-items:center;';
                   var parts = [];
                   if (evt.model_used) {
-                    var m = evt.model_used.replace('claude-','').replace('gpt-','').replace('-20250929','').replace('-20251001','');
-                    parts.push(m);
+                    // Simplify model name and make it clickable
+                    var fullModel = evt.model_used;
+                    var shortModel = simplifyModelName(fullModel);
+                    var modelSpan = document.createElement('span');
+                    modelSpan.textContent = shortModel;
+                    modelSpan.title = fullModel;
+                    modelSpan.style.cssText = 'cursor:help;border-bottom:1px dotted var(--muted);';
+                    modelSpan.onclick = function() {
+                      var expanded = this.getAttribute('data-expanded') === 'true';
+                      this.textContent = expanded ? shortModel : fullModel;
+                      this.setAttribute('data-expanded', !expanded);
+                    };
+                    footer.appendChild(modelSpan);
                   }
                   var tok = (evt.input_tokens||0) + (evt.output_tokens||0);
-                  if (tok > 0) parts.push(tok >= 1000 ? (tok/1000).toFixed(1)+'k' : tok + ' tok');
-                  if (evt.credits_used) parts.push(evt.credits_used + 'cr');
-                  footer.textContent = parts.join(' · ');
+                  if (tok > 0) {
+                    var tokSpan = document.createElement('span');
+                    tokSpan.textContent = tok >= 1000 ? (tok/1000).toFixed(1)+'k tok' : tok + ' tok';
+                    footer.appendChild(tokSpan);
+                  }
+                  if (evt.credits_used) {
+                    var crSpan = document.createElement('span');
+                    crSpan.textContent = evt.credits_used + 'cr';
+                    footer.appendChild(crSpan);
+                  }
                   lastMsg.appendChild(footer);
                 }
                 // Track cumulative session tokens
@@ -8584,10 +8628,14 @@
       const rankLabels = { 1: '1st', 2: '2nd', 3: '3rd' };
       const rankLabel = rankLabels[result.rank] || (result.rank + 'th');
 
+      const shortModel = simplifyModelName(result.model);
+      const fullModel = result.model;
+
       card.innerHTML = '<div class="race-card-header">'
         + (isWinner ? '<span class="race-winner-badge">\u{1F3C6} Winner</span>' : '')
         + '<span class="race-rank-badge race-rank-' + Math.min(result.rank, 3) + '">#' + rankLabel + '</span>'
-        + '<span class="race-model-name">' + modelIcon(result.model) + ' ' + escapeHtml(result.model) + '</span>'
+        + '<span class="race-model-name" title="' + escapeHtml(fullModel) + '" style="cursor:help;border-bottom:1px dotted var(--muted);" onclick="this.textContent=this.textContent===\'' + escapeHtml(shortModel) + '\'?\'' + escapeHtml(fullModel) + '\':\'' + escapeHtml(shortModel) + '\'">'
+        + modelIcon(result.model) + ' ' + escapeHtml(shortModel) + '</span>'
         + '<span class="race-time-badge">' + (result.time_ms / 1000).toFixed(1) + 's</span>'
         + (result.credits_used > 0 ? '<span style="font-size:10px;color:var(--muted);">' + result.credits_used + ' credits</span>' : '')
         + '</div>'
