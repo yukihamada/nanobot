@@ -1399,6 +1399,7 @@ Naturally use the context above. Don't mention everything every time.\n\
   Never vulgar. Keep it classy. Anything involving minors is strictly forbidden.";
 
 /// Build a one-line meta-cognition context string.
+#[allow(dead_code)]
 fn build_meta_context(
     user: Option<&UserProfile>,
     channel: &str,
@@ -6721,7 +6722,7 @@ async fn handle_chat_race(
 
 /// POST /api/v1/billing/checkout — Create Stripe Checkout session via API
 async fn handle_billing_checkout(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
     Json(req): Json<CheckoutRequest>,
 ) -> impl IntoResponse {
@@ -6804,7 +6805,7 @@ async fn handle_billing_checkout(
 
 /// POST /api/v1/billing/credit-pack — Purchase a one-time credit pack
 async fn handle_credit_pack_checkout(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
     Json(req): Json<CreditPackRequest>,
 ) -> impl IntoResponse {
@@ -7600,7 +7601,7 @@ async fn handle_referral_apply(
 
             // Also check if this user has ever used ANY referral code
             // Use a simple flag on the user profile
-            let user = get_or_create_user(dynamo, table, &user_id).await;
+            let _user = get_or_create_user(dynamo, table, &user_id).await;
             // Check referred_by field via direct get
             let has_referrer = match dynamo
                 .get_item()
@@ -12564,7 +12565,7 @@ async fn handle_delete_conversation(
 
 /// GET /c/{hash} — Serve the SPA for shared conversation view
 async fn handle_shared_page(
-    Path(hash): Path<String>,
+    Path(_hash): Path<String>,
 ) -> impl IntoResponse {
     // Serve the same index.html — frontend detects /c/{hash} and enters shared mode
     axum::response::Html(include_str!("../../../../web/index.html"))
@@ -13047,7 +13048,7 @@ struct SpeechRequest {
     #[serde(default = "default_tts_speed")]
     speed: f64,
     #[serde(default)]
-    engine: Option<String>, // "polly", "openai", "elevenlabs", "sbv2" — auto if absent
+    engine: Option<String>, // "polly", "openai", "elevenlabs", "sbv2", "runpod-qwen" — auto if absent
     #[serde(default)]
     instructions: Option<String>, // Voice style instructions for gpt-4o-mini-tts
     #[serde(default)]
@@ -13056,6 +13057,8 @@ struct SpeechRequest {
     model_id: Option<String>, // ElevenLabs model ID or SBV2 model_id
     #[serde(default)]
     style: Option<String>, // SBV2 voice style (e.g., "Neutral", "Happy")
+    #[serde(default)]
+    reference_audio: Option<String>, // Base64-encoded reference audio for voice cloning (RunPod Qwen)
     session_id: Option<String>,
 }
 
@@ -13374,6 +13377,71 @@ async fn try_sbv2_tts(text: &str, model_id: i32, speaker_id: i32, style: &str) -
     }
 }
 
+/// Qwen3 Voice Cloning via RunPod — high-quality voice synthesis with custom voice cloning
+async fn try_runpod_qwen_tts(text: &str, voice: &str, speed: f64, reference_audio: Option<&str>) -> Result<Vec<u8>, String> {
+    let endpoint_url = std::env::var("RUNPOD_QWEN_TTS_URL")
+        .map_err(|_| "No RUNPOD_QWEN_TTS_URL environment variable set".to_string())?;
+
+    if endpoint_url.is_empty() {
+        return Err("Empty RUNPOD_QWEN_TTS_URL".to_string());
+    }
+
+    // Detect Japanese text for language selection
+    let is_ja = text.chars().any(|c| {
+        ('\u{3040}'..='\u{309F}').contains(&c) || // hiragana
+        ('\u{30A0}'..='\u{30FF}').contains(&c) || // katakana
+        ('\u{4E00}'..='\u{9FFF}').contains(&c)    // CJK
+    });
+
+    let language = if is_ja { "ja" } else { "en" };
+    let voice_name = if voice.is_empty() { "default" } else { voice };
+
+    let client = reqwest::Client::new();
+    let url = format!("{}/synthesize", endpoint_url.trim_end_matches('/'));
+
+    let mut payload = serde_json::json!({
+        "text": text,
+        "voice": voice_name,
+        "language": language,
+        "speed": speed,
+    });
+
+    // Add reference audio for voice cloning if provided
+    if let Some(ref_audio) = reference_audio {
+        payload["reference_audio"] = serde_json::json!(ref_audio);
+    }
+
+    let resp = client
+        .post(&url)
+        .json(&payload)
+        .timeout(std::time::Duration::from_secs(90))
+        .send()
+        .await
+        .map_err(|e| format!("RunPod Qwen TTS request failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("RunPod Qwen TTS error: {} {}", status, body));
+    }
+
+    let json: serde_json::Value = resp.json().await
+        .map_err(|e| format!("Failed to parse RunPod Qwen response: {}", e))?;
+
+    // Extract base64 audio from response
+    let audio_b64 = json["audio"]
+        .as_str()
+        .ok_or_else(|| format!("No audio in response: {:?}", json))?;
+
+    // Decode base64 audio
+    use base64::Engine as _;
+    let audio = base64::engine::general_purpose::STANDARD.decode(audio_b64)
+        .map_err(|e| format!("Base64 decode error: {}", e))?;
+
+    tracing::info!("RunPod Qwen TTS success: {} bytes, voice={}, lang={}", audio.len(), voice_name, language);
+    Ok(audio)
+}
+
 /// CosyVoice 2 TTS via RunPod Serverless — high-quality multilingual zero-shot voice cloning
 async fn try_cosyvoice_tts(text: &str, mode: &str, speaker_id: &str) -> Result<Vec<u8>, String> {
     let api_key = std::env::var("RUNPOD_API_KEY")
@@ -13534,6 +13602,16 @@ async fn handle_speech_synthesize(
                 audio_bytes = Some(bytes);
             }
             Err(e) => tracing::warn!("TTS: QWEN3 failed: {}", e),
+        }
+    } else if force_engine == Some("runpod-qwen") || force_engine == Some("qwen-clone") {
+        // RunPod Qwen with voice cloning support
+        let reference_audio = req.reference_audio.as_deref();
+        match try_runpod_qwen_tts(&req.text, &req.voice, req.speed, reference_audio).await {
+            Ok(bytes) => {
+                tracing::info!("TTS: RunPod Qwen success, {} bytes", bytes.len());
+                audio_bytes = Some(bytes);
+            }
+            Err(e) => tracing::warn!("TTS: RunPod Qwen failed: {}", e),
         }
     }
 

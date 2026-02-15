@@ -536,6 +536,46 @@
       margin-top: 6px;
     }
 
+    /* AI Thinking section (collapsible) */
+    .think-section {
+      margin: 8px 0;
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 8px;
+      background: rgba(99,102,241,0.05);
+      overflow: hidden;
+    }
+    .think-summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--accent-hover);
+      transition: background 0.2s;
+    }
+    .think-summary:hover {
+      background: rgba(99,102,241,0.1);
+    }
+    .think-summary::before {
+      content: '▶';
+      font-size: 10px;
+      transition: transform 0.2s;
+      display: inline-block;
+    }
+    .think-section[open] .think-summary::before {
+      transform: rotate(90deg);
+    }
+    .think-content {
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      border-top: 1px solid rgba(99,102,241,0.1);
+      background: rgba(0,0,0,0.2);
+    }
+
     /* Channel badge */
     .msg .channel-badge {
       display: inline-block;
@@ -4432,6 +4472,28 @@
       return match[1];
     }
 
+    function processThinkTags(text) {
+      // Check if text contains <think> tags
+      if (!text.includes('<think>')) {
+        return { hasThink: false, text: text };
+      }
+
+      // Replace <think>...</think> with collapsible HTML
+      const processed = text.replace(
+        /<think>([\s\S]*?)<\/think>/g,
+        (match, content) => {
+          const lang = document.documentElement.lang || 'ja';
+          const label = lang === 'ja' ? '🧠 思考過程' : '🧠 Thinking Process';
+          return `<details class="think-section">
+  <summary class="think-summary">${label}</summary>
+  <div class="think-content">${content.trim()}</div>
+</details>`;
+        }
+      );
+
+      return { hasThink: true, text: processed };
+    }
+
     function addMsg(text, who, useTypewriter = false, channel = null, agentName = null, toolsUsed = null) {
       const d = document.createElement('div');
       d.className = 'msg ' + who;
@@ -4512,10 +4574,21 @@
         }
       }
 
-      if (who === 'bot' && useTypewriter && !channel) {
+      // Process <think> tags for bot messages
+      const processed = (who === 'bot') ? processThinkTags(text) : { hasThink: false, text: text };
+
+      if (who === 'bot' && useTypewriter && !channel && !processed.hasThink) {
+        // Typewriter only for messages without <think> tags
         msgs.appendChild(d);
         typewriter(d, text).then(appendBadges);
+      } else if (processed.hasThink) {
+        // Use innerHTML for messages with <think> tags
+        d.innerHTML = processed.text;
+        appendBadges();
+        msgs.appendChild(d);
+        msgs.scrollTop = msgs.scrollHeight;
       } else {
+        // Regular text node for user messages and non-typewriter bot messages
         const textNode = document.createTextNode(text);
         d.appendChild(textNode);
         appendBadges();
@@ -6033,7 +6106,7 @@
       resultEl.style.color = 'var(--muted)';
       resultEl.textContent = 'Validating...';
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = localStorage.getItem('authToken');
         if (!token) {
           resultEl.style.color = '#ef4444';
           resultEl.textContent = document.documentElement.lang === 'ja' ? 'まずログインしてください' : 'Please login first';
@@ -7530,6 +7603,8 @@
         return fullModel.includes('opus') ? 'Claude Opus' :
                fullModel.includes('sonnet') ? 'Claude Sonnet' :
                fullModel.includes('haiku') ? 'Claude Haiku' : 'Claude';
+      } else if (fullModel.includes('gpt-5') || fullModel.includes('gpt5')) {
+        return 'GPT-5';
       } else if (fullModel.includes('gpt-4o-mini')) {
         return 'GPT-4o mini';
       } else if (fullModel.includes('gpt-4o')) {
@@ -7741,7 +7816,7 @@
 
     async function escalateToHuman(question) {
       const lang = document.documentElement.lang || 'ja';
-      const token = localStorage.getItem('auth_token');
+      const token = localStorage.getItem('authToken');
       const sessionId = localStorage.getItem('session_id') || '';
 
       try {
