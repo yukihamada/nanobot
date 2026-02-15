@@ -1250,6 +1250,7 @@
             <span class="chat-dot yellow"></span>
             <span class="chat-dot green"></span>
             <span class="chat-header-title">teai.io</span>
+            <span id="conversation-id-badge" style="display:none;font-size:11px;background:rgba(99,102,241,0.1);color:#818cf8;padding:2px 8px;border-radius:8px;margin-left:8px;cursor:pointer;font-family:monospace;" title="Click to copy conversation ID" onclick="copyConversationId()"></span>
           </div>
           <select class="chat-model-select" id="model-select">
             <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
@@ -2061,6 +2062,31 @@
     let appConversations = [];
     let appCurrentConvId = null;
 
+    // Conversation ID display and copy functionality
+    function updateConversationIdDisplay() {
+      const badge = document.getElementById('conversation-id-badge');
+      if (badge && appCurrentConvId) {
+        badge.textContent = 'ID: ' + appCurrentConvId.substring(0, 8) + '...';
+        badge.style.display = '';
+        badge.title = 'Conversation ID: ' + appCurrentConvId + ' (click to copy)';
+      } else if (badge) {
+        badge.style.display = 'none';
+      }
+    }
+
+    function copyConversationId() {
+      if (!appCurrentConvId) return;
+      navigator.clipboard.writeText(appCurrentConvId).then(() => {
+        const badge = document.getElementById('conversation-id-badge');
+        const originalText = badge.textContent;
+        badge.textContent = '✓ Copied!';
+        setTimeout(() => { badge.textContent = originalText; }, 2000);
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        alert('Conversation ID: ' + appCurrentConvId);
+      });
+    }
+
     function enterAppMode() {
       document.body.classList.add('app-mode');
       document.getElementById('app-sidebar-toggle').style.display = 'flex';
@@ -2116,6 +2142,7 @@
           localStorage.setItem('webSessionId', webSessionId);
         }
         appCurrentConvId = convId;
+        updateConversationIdDisplay();
         // Clear and re-render
         const msgsEl = document.getElementById('messages');
         msgsEl.innerHTML = '';
@@ -2142,6 +2169,7 @@
           webSessionId = d.session_id;
           localStorage.setItem('webSessionId', webSessionId);
           appCurrentConvId = null;
+          updateConversationIdDisplay();
           const msgsEl = document.getElementById('messages');
           const t = T[currentLang] || T.en;
           msgsEl.innerHTML = '<div class="chat-welcome"><div class="tei-avatar">T</div><div>' + t.chat_welcome + '</div></div>';

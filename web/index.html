@@ -3341,6 +3341,7 @@
         <div class="dot"></div>
         <span id="t-chat-status">オンライン</span>
         <span id="adult-mode-badge" style="display:none;font-size:12px;background:rgba(139,92,246,0.15);color:#8b5cf6;padding:1px 6px;border-radius:8px;margin-left:4px;" title="Adult mode enabled">&#128274;</span>
+        <span id="conversation-id-badge" style="display:none;font-size:11px;background:rgba(99,102,241,0.1);color:#818cf8;padding:2px 8px;border-radius:8px;margin-left:4px;cursor:pointer;font-family:monospace;" title="Click to copy conversation ID" onclick="copyConversationId()"></span>
         <div class="ch-bar">
           <a class="ch-bar-btn line-bar" id="ch-bar-line" onclick="openChannelLink('line');return false;" href="#">
             <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 4.01 3.44 7.37 8.09 8.25.31.07.74.21.85.48.1.25.06.63.03.88l-.14.82c-.04.25-.2.96.84.52s5.58-3.29 7.61-5.63C21.31 13.51 22 12.07 22 10.5 22 5.81 17.52 2 12 2z" fill="#fff"/></svg>
@@ -5076,6 +5077,7 @@
             webSessionId = d.session_id;
             localStorage.setItem('webSessionId', webSessionId);
             appCurrentConvId = d.conversation_id || null;
+            updateConversationIdDisplay();
             knownMsgCount = 0; syncVersion = 0; _lastSyncTimestamp = null;
             appLoadConversations();
           }
@@ -5787,6 +5789,31 @@
 
     let selectedAgent = 'auto';
     function selectAgent(val) { selectedAgent = val; }
+
+    // Conversation ID display and copy functionality
+    function updateConversationIdDisplay() {
+      const badge = document.getElementById('conversation-id-badge');
+      if (badge && appCurrentConvId) {
+        badge.textContent = 'ID: ' + appCurrentConvId.substring(0, 8) + '...';
+        badge.style.display = '';
+        badge.title = 'Conversation ID: ' + appCurrentConvId + ' (click to copy)';
+      } else if (badge) {
+        badge.style.display = 'none';
+      }
+    }
+
+    function copyConversationId() {
+      if (!appCurrentConvId) return;
+      navigator.clipboard.writeText(appCurrentConvId).then(() => {
+        const badge = document.getElementById('conversation-id-badge');
+        const originalText = badge.textContent;
+        badge.textContent = '✓ Copied!';
+        setTimeout(() => { badge.textContent = originalText; }, 2000);
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        alert('Conversation ID: ' + appCurrentConvId);
+      });
+    }
 
     async function pollDevices() {
       try {
@@ -7596,6 +7623,7 @@
       syncVersion = 0;
       _lastSyncTimestamp = null;
       appCurrentConvId = null;
+      updateConversationIdDisplay();
 
       // Generate new session ID immediately
       webSessionId = 'web:' + crypto.randomUUID();
@@ -7632,6 +7660,7 @@
             webSessionId = d.session_id;
             localStorage.setItem('webSessionId', webSessionId);
             appCurrentConvId = d.conversation_id || null;
+            updateConversationIdDisplay();
             // Restart polling with server session ID
             stopPolling();
             startPolling();
