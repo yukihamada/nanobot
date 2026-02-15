@@ -7501,13 +7501,17 @@
         html = html.replace(/\n/g, '<br>');
       }
 
-      // Replace think tag placeholders with collapsible elements
+      // Replace think tag placeholders with collapsible elements (collapsed by default)
       if (thinkTags.length > 0) {
         thinkTags.forEach((content, index) => {
           const thinkId = 'think-' + Date.now() + '-' + index;
           const lang = document.documentElement.lang || 'ja';
           const label = lang === 'ja' ? '💭 思考過程を表示' : '💭 Show thinking';
-          const collapsible = `<details class="think-details" style="margin:8px 0;background:var(--surface2);border-left:3px solid var(--primary);border-radius:6px;padding:8px 12px;"><summary style="cursor:pointer;user-select:none;font-size:12px;color:var(--muted);font-weight:600;">${label}</summary><div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;">${escapeHtml(content)}</div></details>`;
+          // Details element without 'open' attribute is collapsed by default
+          const collapsible = `<details class="think-details" style="margin:8px 0;background:var(--surface2);border-left:3px solid var(--accent);border-radius:6px;padding:8px 12px;">` +
+            `<summary style="cursor:pointer;user-select:none;font-size:12px;color:var(--muted);font-weight:600;">${label}</summary>` +
+            `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6;">${escapeHtml(content)}</div>` +
+            `</details>`;
           html = html.replace(`__THINK_${index}__`, collapsible);
         });
         hasMarkdown = true;
