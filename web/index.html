@@ -11319,8 +11319,10 @@
           appAddMsg(m.content, m.role === 'user' ? 'user' : 'bot');
         });
         const cta = document.createElement('div');
+        cta.id = 'shared-cta';
         cta.style.cssText = 'padding:24px;text-align:center;';
-        cta.innerHTML = '<a href="/" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#4f8eff,#3b6fd4);color:#fff;border-radius:12px;text-decoration:none;font-size:15px;font-weight:600;">chatweb.ai\u3067\u4f1a\u8a71\u3092\u59cb\u3081\u308b</a>';
+        cta.innerHTML = '<button onclick="showJoinSharedPrompt(\'' + hash + '\',\'' + (d.session_id || '') + '\')" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#4f8eff,#3b6fd4);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;margin-right:8px;">\uD83D\uDCAC Join Conversation</button>'
+          + '<a href="/" style="display:inline-block;padding:12px 32px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:12px;text-decoration:none;font-size:14px;">Start Your Own</a>';
         msgsEl.appendChild(cta);
       } catch(e) {
         document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui;color:#ccc;background:#0d0d0d;"><h1>chatweb.ai</h1><p style="color:#888;">\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f</p><a href="/" style="margin-top:24px;color:#4f8eff;">chatweb.ai\u3067\u4f1a\u8a71\u3092\u59cb\u3081\u308b</a></div>';
@@ -11344,6 +11346,97 @@
       } catch(e) {
         showToast('\u5171\u6709\u306b\u5931\u6557\u3057\u307e\u3057\u305f');
       }
+    }
+
+    // Collaborative shared conversation
+    let _sharedConvHash = null;
+    let _sharedConvSessionId = null;
+    let _sharedSyncInterval = null;
+
+    function showJoinSharedPrompt(hash, sessionId) {
+      _sharedConvHash = hash;
+      _sharedConvSessionId = sessionId;
+
+      const savedName = localStorage.getItem('shared_participant_name') || '';
+      const lang = document.documentElement.lang || 'ja';
+
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:1000;';
+      modal.innerHTML = '<div style="background:var(--surface);border-radius:16px;padding:32px;max-width:400px;width:90%;">'
+        + '<h3 style="margin:0 0 8px;font-size:20px;color:var(--text);">\uD83D\uDCAC ' + (lang === 'ja' ? '会話に参加' : 'Join Conversation') + '</h3>'
+        + '<p style="margin:0 0 20px;font-size:13px;color:var(--muted);">' + (lang === 'ja' ? '名前を入力してリアルタイムチャットに参加' : 'Enter your name to join this real-time chat') + '</p>'
+        + '<input type="text" id="join-name-input" value="' + savedName + '" placeholder="' + (lang === 'ja' ? 'あなたの名前' : 'Your name') + '" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;margin-bottom:16px;">'
+        + '<div style="display:flex;gap:8px;">'
+        + '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="flex:1;padding:12px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:8px;cursor:pointer;">' + (lang === 'ja' ? 'キャンセル' : 'Cancel') + '</button>'
+        + '<button onclick="joinSharedConv()" style="flex:1;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;">' + (lang === 'ja' ? '参加する' : 'Join') + '</button>'
+        + '</div></div>';
+      document.body.appendChild(modal);
+      setTimeout(() => document.getElementById('join-name-input').focus(), 100);
+    }
+
+    async function joinSharedConv() {
+      const nameInput = document.getElementById('join-name-input');
+      const name = nameInput ? nameInput.value.trim() : '';
+      if (!name) return;
+
+      localStorage.setItem('shared_participant_name', name);
+
+      // Close modal
+      const modal = document.querySelector('div[style*="position:fixed"]');
+      if (modal) modal.remove();
+
+      // Quick auth for shared conversation (anonymous)
+      try {
+        const r = await fetch(API + '/api/v1/auth/anonymous', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: name,
+            session_id: _sharedConvSessionId
+          })
+        });
+        const d = await r.json();
+        if (d.token) {
+          authToken = d.token;
+          localStorage.setItem('authToken', d.token);
+        }
+      } catch(e) { /* continue anyway */ }
+
+      // Enable chat input
+      const inputArea = document.querySelector('.app-chat-input-area');
+      if (inputArea) inputArea.style.display = '';
+
+      // Hide CTA
+      const cta = document.getElementById('shared-cta');
+      if (cta) cta.style.display = 'none';
+
+      // Enable app mode fully
+      enterAppMode();
+
+      // Start real-time sync
+      startSharedSync();
+
+      const lang = document.documentElement.lang || 'ja';
+      showToast((lang === 'ja' ? 'ようこそ、' : 'Welcome, ') + name + '!', 2000);
+    }
+
+    function startSharedSync() {
+      if (_sharedSyncInterval) clearInterval(_sharedSyncInterval);
+      if (!_sharedConvSessionId) return;
+
+      _sharedSyncInterval = setInterval(async () => {
+        try {
+          const r = await fetch(API + '/api/v1/sync/poll?session_key=' + encodeURIComponent(_sharedConvSessionId) + '&v=' + syncVersion);
+          const d = await r.json();
+          if (d.messages && d.messages.length > 0) {
+            d.messages.forEach(m => {
+              appAddMsg(m.content, m.role === 'user' ? 'user' : 'bot');
+              knownMsgCount++;
+            });
+            syncVersion = d.version || syncVersion;
+          }
+        } catch(e) { /* ignore */ }
+      }, 2000);
     }
 
     function showToast(msg) {
