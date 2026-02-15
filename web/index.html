@@ -4295,16 +4295,22 @@
     }
 
     // Override localStorage for session_id to be version-specific
-    const _originalGetItem = Storage.prototype.getItem;
-    const _originalSetItem = Storage.prototype.setItem;
-    Storage.prototype.getItem = function(key) {
-      if (key === 'session_id') return _originalGetItem.call(this, versionKey(key));
-      return _originalGetItem.call(this, key);
-    };
-    Storage.prototype.setItem = function(key, val) {
-      if (key === 'session_id') return _originalSetItem.call(this, versionKey(key), val);
-      return _originalSetItem.call(this, key, val);
-    };
+    (function() {
+      const _originalGetItem = Storage.prototype.getItem;
+      const _originalSetItem = Storage.prototype.setItem;
+      const _versionKey = function(key) {
+        return (IS_DEV ? 'dev' : 'prod') + '_' + key;
+      };
+
+      Storage.prototype.getItem = function(key) {
+        if (key === 'session_id') return _originalGetItem.call(this, _versionKey(key));
+        return _originalGetItem.call(this, key);
+      };
+      Storage.prototype.setItem = function(key, val) {
+        if (key === 'session_id') return _originalSetItem.call(this, _versionKey(key), val);
+        return _originalSetItem.call(this, key, val);
+      };
+    })();
 
     // teai.io failover: if API is unreachable, redirect to chatweb.ai
     if (IS_TEAI) {
