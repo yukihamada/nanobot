@@ -12218,6 +12218,90 @@
         localStorage.setItem('last_active_time', lastActiveTime.toString());
       }
     }, 10000); // Every 10 seconds
+
+    // ---------------------------------------------------------------------------
+    // Progressive Ad System for Free Users (10+ min idle)
+    // ---------------------------------------------------------------------------
+    let idleAdTimeout = null;
+    let adLevel = 0;
+    const AD_START_DELAY = 10 * 60 * 1000; // 10 minutes
+    const AD_PROGRESSION_INTERVAL = 30 * 1000; // 30 seconds
+
+    function resetIdleAdTimer() {
+      if (idleAdTimeout) clearTimeout(idleAdTimeout);
+      clearProgressiveAds();
+      idleAdTimeout = setTimeout(startProgressiveAds, AD_START_DELAY);
+    }
+
+    function startProgressiveAds() {
+      // Only for free users
+      const plan = window._userPlan || 'free';
+      if (plan !== 'free') return;
+
+      adLevel = 1;
+      showProgressiveAd();
+
+      // Increase ad coverage every 30 seconds
+      const adInterval = setInterval(() => {
+        if (adLevel < 5) {
+          adLevel++;
+          showProgressiveAd();
+        } else {
+          clearInterval(adInterval);
+        }
+      }, AD_PROGRESSION_INTERVAL);
+
+      window._adInterval = adInterval;
+    }
+
+    function showProgressiveAd() {
+      const existingAd = document.getElementById('progressive-ad-' + adLevel);
+      if (existingAd) return;
+
+      const ad = document.createElement('div');
+      ad.id = 'progressive-ad-' + adLevel;
+      ad.style.cssText = 'position:fixed;background:rgba(0,0,0,0.9);color:#fff;padding:20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.5);z-index:2000;transition:all 0.5s ease;';
+
+      // Position based on level
+      const positions = [
+        'top:20px;right:20px;width:300px;',
+        'bottom:20px;right:20px;width:300px;',
+        'top:20px;left:20px;width:300px;',
+        'bottom:20px;left:20px;width:300px;',
+        'top:50%;left:50%;transform:translate(-50%,-50%);width:400px;'
+      ];
+      ad.style.cssText += positions[adLevel - 1];
+
+      const lang = document.documentElement.lang || 'ja';
+      ad.innerHTML = '<div style="font-size:13px;line-height:1.5;">'
+        + '<strong style="display:block;margin-bottom:8px;">' + (lang === 'ja' ? '💎 Proプランにアップグレード' : '💎 Upgrade to Pro') + '</strong>'
+        + '<p style="margin:0 0 12px;font-size:12px;color:#ccc;">' + (lang === 'ja' ? '広告なしで無制限に利用できます' : 'Unlimited usage without ads') + '</p>'
+        + '<button onclick="window.location.href=\'/pricing\'" style="width:100%;padding:10px;background:linear-gradient(135deg,#4f8eff,#3b6fd4);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;">' + (lang === 'ja' ? 'プランを見る' : 'View Plans') + '</button>'
+        + '<button onclick="this.closest(\'div[id*=progressive-ad]\').remove();resetIdleAdTimer()" style="margin-top:8px;width:100%;padding:8px;background:transparent;color:#888;border:none;font-size:11px;cursor:pointer;">' + (lang === 'ja' ? '×  閉じる' : '×  Close') + '</button>'
+        + '</div>';
+
+      document.body.appendChild(ad);
+    }
+
+    function clearProgressiveAds() {
+      for (let i = 1; i <= 5; i++) {
+        const ad = document.getElementById('progressive-ad-' + i);
+        if (ad) ad.remove();
+      }
+      adLevel = 0;
+      if (window._adInterval) {
+        clearInterval(window._adInterval);
+        window._adInterval = null;
+      }
+    }
+
+    // Reset timer on user activity
+    ['mousedown', 'keydown', 'scroll', 'touchstart'].forEach(event => {
+      document.addEventListener(event, resetIdleAdTimer, { passive: true });
+    });
+
+    // Start the initial timer
+    resetIdleAdTimer();
   </script>
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
 </body>
