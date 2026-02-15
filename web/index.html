@@ -3689,6 +3689,14 @@
             </div>
           </div>
         </div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">🔧 Environment / 環境</div>
+          <div class="settings-item-desc" style="margin-bottom:8px;color:var(--muted);font-size:12px;">開発環境と本番環境を切り替え（別セッション）</div>
+          <select class="settings-select" id="settings-version" onchange="switchVersion()">
+            <option value="prod">Production (chatweb.ai)</option>
+            <option value="dev">Development (dev.chatweb.ai)</option>
+          </select>
+        </div>
       </div>
 
       <!-- Voice Tab -->
@@ -4256,8 +4264,47 @@
   </footer>
 
   <script>
-    const API = location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+    // Version detection: dev.chatweb.ai or localhost
+    const IS_DEV = location.hostname.includes('dev.chatweb.ai') || location.hostname === 'localhost';
     const IS_TEAI = location.hostname.includes('teai.io');
+    const API = location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+    const VERSION_KEY = IS_DEV ? 'dev' : 'prod';
+
+    // Dev banner
+    if (IS_DEV && !sessionStorage.getItem('dev_banner_dismissed')) {
+      const devBanner = document.createElement('div');
+      devBanner.id = 'dev-banner';
+      devBanner.innerHTML = `
+        <div style="background:#f59e0b;color:#000;padding:8px 16px;text-align:center;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:12px;">
+          <span>🚧 開発環境 | Development Environment</span>
+          <button onclick="sessionStorage.setItem('dev_banner_dismissed','1');document.getElementById('dev-banner').remove()" style="background:rgba(0,0,0,0.2);border:none;color:#000;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">閉じる</button>
+        </div>
+      `;
+      document.body.insertBefore(devBanner, document.body.firstChild);
+    }
+
+    // Version-specific storage helpers
+    function versionKey(key) {
+      return VERSION_KEY + '_' + key;
+    }
+    function getVersionStorage(key, defaultVal) {
+      return localStorage.getItem(versionKey(key)) || defaultVal || '';
+    }
+    function setVersionStorage(key, val) {
+      localStorage.setItem(versionKey(key), val);
+    }
+
+    // Override localStorage for session_id to be version-specific
+    const _originalGetItem = Storage.prototype.getItem;
+    const _originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.getItem = function(key) {
+      if (key === 'session_id') return _originalGetItem.call(this, versionKey(key));
+      return _originalGetItem.call(this, key);
+    };
+    Storage.prototype.setItem = function(key, val) {
+      if (key === 'session_id') return _originalSetItem.call(this, versionKey(key), val);
+      return _originalSetItem.call(this, key, val);
+    };
 
     // teai.io failover: if API is unreachable, redirect to chatweb.ai
     if (IS_TEAI) {
@@ -9176,6 +9223,8 @@
       if (sendMethod && saved.sendMethod) sendMethod.value = saved.sendMethod;
       const notifToggle = document.getElementById('settings-notification-toggle');
       if (notifToggle) notifToggle.classList.toggle('active', saved.notificationSound === true);
+      const versionSelect = document.getElementById('settings-version');
+      if (versionSelect) versionSelect.value = IS_DEV ? 'dev' : 'prod';
       initTierSelector();
     }
     function saveGeneralSettings() {
@@ -9188,6 +9237,25 @@
       };
       localStorage.setItem('generalSettings', JSON.stringify(settings));
       applyGeneralSettings(settings);
+    }
+    function switchVersion() {
+      const select = document.getElementById('settings-version');
+      const targetVersion = select.value;
+      const currentVersion = IS_DEV ? 'dev' : 'prod';
+
+      if (targetVersion === currentVersion) return;
+
+      const confirmMsg = targetVersion === 'dev'
+        ? '開発環境に切り替えますか？\n（別セッションになります）\n\nSwitch to development environment?\n(Separate session)'
+        : '本番環境に切り替えますか？\n（別セッションになります）\n\nSwitch to production environment?\n(Separate session)';
+
+      if (!confirm(confirmMsg)) {
+        select.value = currentVersion;
+        return;
+      }
+
+      const targetHost = targetVersion === 'dev' ? 'dev.chatweb.ai' : 'chatweb.ai';
+      window.location.href = 'https://' + targetHost + window.location.pathname + window.location.search;
     }
     function applyGeneralSettings(settings) {
       if (!settings) settings = JSON.parse(localStorage.getItem('generalSettings') || '{}');

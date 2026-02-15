@@ -14717,6 +14717,15 @@ pub async fn serve(addr: &str, state: Arc<AppState>) -> anyhow::Result<()> {
 pub async fn serve_with_auth(addr: &str, state: Arc<AppState>, require_auth: bool) -> anyhow::Result<()> {
     let mut router = create_router(state.clone());
 
+    // Add IP restriction middleware if configured
+    if !state.config.gateway.allowed_ips.is_empty() {
+        info!("Gateway IP restriction enabled ({} entries)", state.config.gateway.allowed_ips.len());
+        router = router.layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            gateway_ip_middleware
+        ));
+    }
+
     // Add authentication middleware if tokens are configured
     if require_auth && !state.config.gateway.api_tokens.is_empty() {
         info!("Gateway authentication enabled ({} tokens configured)", state.config.gateway.api_tokens.len());
@@ -14726,9 +14735,45 @@ pub async fn serve_with_auth(addr: &str, state: Arc<AppState>, require_auth: boo
         ));
     }
 
+    // Check for TLS configuration
+    #[cfg(feature = "http-api")]
+    if let (Some(cert_path), Some(key_path)) = (&state.config.gateway.tls_cert, &state.config.gateway.tls_key) {
+        info!("Starting HTTPS server with TLS (cert: {}, key: {})", cert_path, key_path);
+
+        // Install default crypto provider if not already installed
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
+        // Expand ~ in paths
+        let expand_path = |path: &str| -> String {
+            if path.starts_with("~/") {
+                if let Some(home) = dirs::home_dir() {
+                    return home.join(&path[2..]).to_string_lossy().to_string();
+                }
+            }
+            path.to_string()
+        };
+
+        let cert_expanded = expand_path(cert_path);
+        let key_expanded = expand_path(key_path);
+
+        let config = axum_server::tls_rustls::RustlsConfig::from_pem_file(&cert_expanded, &key_expanded).await?;
+        let bind_addr: std::net::SocketAddr = addr.parse()?;
+
+        info!("HTTPS server listening on {}", addr);
+        axum_server::bind_rustls(bind_addr, config)
+            .serve(router.into_make_service_with_connect_info::<std::net::SocketAddr>())
+            .await?;
+
+        return Ok(());
+    }
+
+    // HTTP mode (no TLS)
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!("HTTP server listening on {}", addr);
-    axum::serve(listener, router).await?;
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>()
+    ).await?;
     Ok(())
 }
 
@@ -14754,6 +14799,44 @@ async fn gateway_auth_middleware(
     // Validate token against configured list
     if !state.config.gateway.api_tokens.contains(&token.to_string()) {
         return Err((StatusCode::UNAUTHORIZED, "Invalid API token".to_string()));
+    }
+
+    Ok(next.run(request).await)
+}
+
+/// Middleware to validate client IP against allowed list.
+async fn gateway_ip_middleware(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // If no IP restrictions, allow all
+    if state.config.gateway.allowed_ips.is_empty() {
+        return Ok(next.run(request).await);
+    }
+
+    let client_ip = addr.ip();
+
+    // Check if client IP matches any allowed IP/CIDR
+    let is_allowed = state.config.gateway.allowed_ips.iter().any(|allowed| {
+        // Try parsing as CIDR range
+        #[cfg(feature = "http-api")]
+        if let Ok(network) = allowed.parse::<ipnet::IpNet>() {
+            return network.contains(&client_ip);
+        }
+
+        // Try parsing as single IP
+        if let Ok(ip) = allowed.parse::<std::net::IpAddr>() {
+            return ip == client_ip;
+        }
+
+        false
+    });
+
+    if !is_allowed {
+        tracing::warn!("Blocked request from unauthorized IP: {}", client_ip);
+        return Err((StatusCode::FORBIDDEN, format!("Access denied from IP: {}", client_ip)));
     }
 
     Ok(next.run(request).await)

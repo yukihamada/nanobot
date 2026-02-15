@@ -362,6 +362,12 @@ pub struct GatewayConfig {
     pub port: u16,
     /// API tokens for HTTP authentication (Bearer tokens)
     pub api_tokens: Vec<String>,
+    /// Allowed IP addresses/CIDR ranges (empty = allow all)
+    pub allowed_ips: Vec<String>,
+    /// TLS certificate path (enables HTTPS)
+    pub tls_cert: Option<String>,
+    /// TLS private key path
+    pub tls_key: Option<String>,
 }
 
 impl Default for GatewayConfig {
@@ -370,6 +376,9 @@ impl Default for GatewayConfig {
             host: "0.0.0.0".to_string(),
             port: 18790,
             api_tokens: Vec::new(),
+            allowed_ips: Vec::new(),
+            tls_cert: None,
+            tls_key: None,
         }
     }
 }
@@ -558,6 +567,22 @@ pub fn load_config_from_env() -> Config {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
+    }
+
+    // Gateway allowed IPs
+    if let Ok(v) = std::env::var("GATEWAY_ALLOWED_IPS") {
+        cfg.gateway.allowed_ips = v.split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+    }
+
+    // Gateway TLS
+    if let Ok(v) = std::env::var("GATEWAY_TLS_CERT") {
+        cfg.gateway.tls_cert = Some(v);
+    }
+    if let Ok(v) = std::env::var("GATEWAY_TLS_KEY") {
+        cfg.gateway.tls_key = Some(v);
     }
 
     cfg

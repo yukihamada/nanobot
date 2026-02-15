@@ -3,6 +3,13 @@ Transform: AWS::Serverless-2016-10-31
 Description: nanobot - Lightweight AI agent framework (Lambda deployment)
 
 Parameters:
+  Environment:
+    Type: String
+    Description: Deployment environment (prod or dev)
+    Default: 'prod'
+    AllowedValues:
+      - prod
+      - dev
   AnthropicApiKey:
     Type: String
     NoEcho: true
@@ -134,22 +141,47 @@ Parameters:
     Description: Amazon Connect source phone number (E.164 format)
     Default: ''
 
+Mappings:
+  EnvironmentConfig:
+    prod:
+      MemorySize: 2048
+      Timeout: 120
+      LogRetention: 30
+    dev:
+      MemorySize: 512
+      Timeout: 60
+      LogRetention: 7
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, 'prod']
+  IsDevelopment: !Equals [!Ref Environment, 'dev']
+
 Globals:
   Function:
-    Timeout: 120
-    MemorySize: 2048
+    Timeout: !FindInMap [EnvironmentConfig, !Ref Environment, Timeout]
+    MemorySize: !FindInMap [EnvironmentConfig, !Ref Environment, MemorySize]
 
 Resources:
+  # ====== CloudWatch Logs ======
+  NanobotLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/nanobot-${Environment}'
+      RetentionInDays: !FindInMap [EnvironmentConfig, !Ref Environment, LogRetention]
+
   # ====== Lambda Function ======
   NanobotFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: nanobot
+      FunctionName: !Sub 'nanobot-${Environment}'
       Handler: bootstrap
       Runtime: provided.al2023
       Architectures:
         - arm64
       CodeUri: ../target/lambda/bootstrap/
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref NanobotLogGroup
       Environment:
         Variables:
           RUST_LOG: nanobot=info
@@ -219,7 +251,7 @@ Resources:
   SessionsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub 'nanobot-sessions-${TenantId}'
+      TableName: !Sub 'nanobot-${Environment}-sessions-${TenantId}'
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: tenant_id
@@ -238,7 +270,7 @@ Resources:
   MemoryTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub 'nanobot-memory-${TenantId}'
+      TableName: !Sub 'nanobot-${Environment}-memory-${TenantId}'
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: tenant_id
@@ -254,7 +286,7 @@ Resources:
   ConfigTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub 'nanobot-config-${TenantId}'
+      TableName: !Sub 'nanobot-${Environment}-config-${TenantId}'
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: tenant_id
