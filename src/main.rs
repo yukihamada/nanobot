@@ -247,6 +247,69 @@ fn show_welcome_banner(session_id: &str, synced: bool, authenticated: bool) {
 }
 
 
+/// Check if input is a mobile-friendly easter egg pattern
+fn check_mobile_easter_egg(input: &str) -> bool {
+    matches!(input,
+        "❤️❤️❤️" | "💕💕💕" | "😊😊😊" |  // Heart patterns
+        "🎉🎉🎉" | "🎊🎊🎊" | "🎁🎁🎁" |  // Celebration
+        "✨✨✨" | "⭐⭐⭐" | "🌟🌟🌟" |  // Stars
+        "🎮🎮🎮" | "🎯🎯🎯" |              // Games
+        "!!!" | "???" | "..." |            // Punctuation
+        "123" | "1234" | "321" |           // Numbers
+        "love" | "LOVE" |                   // Words
+        "ありがとう❤️" | "すごい！！！"     // Japanese + emoji
+    )
+}
+
+/// Show mobile easter egg animation
+fn show_mobile_easter_egg_animation(input: &str, credits_granted: i64, credits_remaining: i64) {
+    use std::io::Write;
+
+    println!();
+
+    // Different animations based on pattern type
+    let (emoji, title, color) = if input.contains('❤') || input.contains('💕') {
+        ("💕", "LOVE BONUS", "35") // Magenta
+    } else if input.contains('🎉') || input.contains('🎊') || input.contains('🎁') {
+        ("🎉", "CELEBRATION BONUS", "33") // Yellow
+    } else if input.contains('✨') || input.contains('⭐') || input.contains('🌟') {
+        ("✨", "STAR BONUS", "36") // Cyan
+    } else if input.contains('🎮') || input.contains('🎯') {
+        ("🎮", "GAMER BONUS", "35") // Magenta
+    } else if input == "..." {
+        ("💭", "THINKING BONUS", "34") // Blue
+    } else if input == "!!!" {
+        ("🔥", "ENERGY BONUS", "31") // Red
+    } else if input.starts_with(char::is_numeric) {
+        ("🔢", "NUMBER BONUS", "32") // Green
+    } else {
+        ("🎁", "SECRET BONUS", "35") // Magenta
+    };
+
+    println!("\x1b[1;{}m╔═══════════════════════════════════════╗\x1b[0m", color);
+    println!("\x1b[1;{}m║                                       ║\x1b[0m", color);
+    println!("\x1b[1;{}m║     {}  {} {}     ║\x1b[0m", color, emoji, title, emoji);
+    println!("\x1b[1;{}m║                                       ║\x1b[0m", color);
+    println!("\x1b[1;{}m║        スマホで発見おめでとう！        ║\x1b[0m", color);
+    println!("\x1b[1;{}m║                                       ║\x1b[0m", color);
+    println!("\x1b[1;{}m╚═══════════════════════════════════════╝\x1b[0m", color);
+    println!();
+
+    // Animated credit count-up
+    let steps = 15;
+    let increment = credits_granted / steps;
+    for i in 1..=steps {
+        let current = if i == steps { credits_granted } else { increment * i };
+        print!("\r\x1b[1;33m  {} +{} credits\x1b[0m", emoji, current);
+        std::io::stdout().flush().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(40));
+    }
+
+    println!();
+    println!("\x1b[1;32m  {} New balance: {} credits\x1b[0m", emoji, credits_remaining);
+    println!();
+}
+
 /// Redeem Konami code via API
 async fn redeem_konami_code(client: &reqwest::Client, api_url: &str, session_id: &str, auth_token: Option<&str>) -> Result<serde_json::Value> {
     let redeem_url = api_url.replace("/api/v1/chat", "/api/v1/coupon/redeem");
@@ -321,6 +384,8 @@ fn show_mobile_help() {
     println!("\x1b[1;33m/m\x1b[0m            よく使うフレーズ");
     println!("\x1b[2m─────────────────────────\x1b[0m");
     println!("\x1b[2m数字だけ: 1-5 でクイックアクション\x1b[0m");
+    println!();
+    println!("\x1b[2;90m💡 ヒント: 絵文字で気持ちを伝えると...\x1b[0m");
     println!();
 }
 
@@ -608,6 +673,32 @@ async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -
             }
             let input = input.trim();
             if input.is_empty() {
+                continue;
+            }
+
+            // Check for mobile easter eggs FIRST (before other commands)
+            if check_mobile_easter_egg(input) {
+                println!();
+                print!("\x1b[2m✨ 隠しボーナス発見中...\x1b[0m");
+                std::io::stdout().flush()?;
+
+                match redeem_konami_code(&client, &api_url, &session_id, auth_token.as_deref()).await {
+                    Ok(result) => {
+                        if result["success"].as_bool().unwrap_or(false) {
+                            let granted = result["credits_granted"].as_i64().unwrap_or(1000);
+                            let remaining = result["credits_remaining"].as_i64().unwrap_or(0);
+                            print!("\r                              \r");
+                            show_mobile_easter_egg_animation(input, granted, remaining);
+                        } else if let Some(_error) = result["error"].as_str() {
+                            println!("\r\x1b[2m(もう使用済みです)\x1b[0m");
+                            println!();
+                        }
+                    }
+                    Err(e) => {
+                        println!("\r\x1b[31mError: {}\x1b[0m", e);
+                    }
+                }
+                println!();
                 continue;
             }
 
