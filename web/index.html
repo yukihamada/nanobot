@@ -1725,6 +1725,11 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       letter-spacing: -0.5px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .app-chat-empty-logo:hover {
+      transform: scale(1.05);
     }
     .app-chat-empty-text { font-size: 15px; color: var(--muted); }
 
@@ -1734,10 +1739,45 @@
       cursor: pointer;
       position: relative;
       border-radius: 50%;
-      transition: transform 0.3s;
+      transition: transform 0.3s, box-shadow 0.3s, filter 0.3s;
     }
     .ai-avatar-container:hover { transform: scale(1.05); }
     .ai-avatar-container canvas { display: block; width: 100%; height: 100%; }
+
+    /* Voice UI Mode States */
+    .ai-avatar-idle {
+      box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
+    }
+    .ai-avatar-listening {
+      box-shadow: 0 0 50px rgba(34, 197, 94, 0.6);
+      animation: pulse-listening 1.5s ease-in-out infinite;
+      transform: scale(1.1);
+    }
+    .ai-avatar-processing {
+      box-shadow: 0 0 40px rgba(245, 158, 11, 0.5);
+      animation: rotate-processing 2s linear infinite;
+    }
+
+    @keyframes pulse-listening {
+      0%, 100% { box-shadow: 0 0 50px rgba(34, 197, 94, 0.6); }
+      50% { box-shadow: 0 0 70px rgba(34, 197, 94, 0.9); }
+    }
+
+    @keyframes rotate-processing {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    /* Easter Egg Modal Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes scaleIn {
+      from { transform: scale(0.5); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
 
     /* Voice hero button - the primary CTA */
     .voice-hero-btn {
@@ -3188,6 +3228,7 @@
     <button class="app-sidebar-toggle" id="app-sidebar-toggle" onclick="toggleSidebar()" style="display:none;" aria-label="Toggle sidebar">&#x2630;</button>
     <a href="/" class="logo" style="text-decoration:none"><span>chat</span>web.ai</a>
     <div class="nav-right">
+      <a href="/features" id="nav-features">Features</a>
       <a href="/pricing" id="nav-pricing">Pricing</a>
       <a href="/settings" id="nav-settings">Settings</a>
       <a href="/status" id="nav-status">Status</a>
@@ -3205,6 +3246,7 @@
       </div>
       <button class="nav-hamburger" onclick="toggleMobileMenu()" aria-label="Menu">&#x2630;</button>
       <div class="nav-mobile-menu" id="mobile-menu">
+        <a href="/features" id="mob-features">Features</a>
         <a href="/pricing" id="mob-pricing">Pricing</a>
         <a href="/settings" id="mob-settings">Settings</a>
         <a href="/status" id="mob-status">Status</a>
@@ -4240,14 +4282,14 @@
     <div class="app-chat">
       <div class="app-chat-messages" id="app-messages">
         <div class="app-chat-empty" id="app-empty">
-          <div class="app-chat-empty-logo">chatweb.ai</div>
+          <div class="app-chat-empty-logo" onclick="showWelcomeAudioFlow()">chatweb.ai</div>
           <div class="ai-avatar-container" id="ai-avatar-container" onclick="toggleVoiceHero()">
             <canvas id="ai-avatar-canvas" width="200" height="200"></canvas>
           </div>
           <button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()" style="display:none;">
             <svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
-          <div class="voice-hero-label" id="voice-hero-label">タップして、話しかけてみて</div>
+          <div class="voice-hero-label" id="voice-hero-label">スペースキーを押して話す / タップして話す</div>
           <div class="app-chat-empty-text" id="app-empty-text">静かなところで、ゆっくり話しましょう</div>
           <div class="voice-chars" id="voice-chars">
             <button class="voice-char active" data-voice="nova" onclick="selectVoiceChar(this)">
@@ -5033,7 +5075,7 @@
       const empty = document.createElement('div');
       empty.className = 'app-chat-empty';
       empty.id = 'app-empty';
-      empty.innerHTML = '<div class="app-chat-empty-logo">chatweb.ai</div>'
+      empty.innerHTML = '<div class="app-chat-empty-logo" onclick="showWelcomeAudioFlow()">chatweb.ai</div>'
         + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
         + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
         + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? 'おかえりなさい。次は何をしましょう？' : 'Welcome back. What shall we do next?') + '</div>'
@@ -7635,7 +7677,7 @@
       const empty = document.createElement('div');
       empty.className = 'app-chat-empty';
       empty.id = 'app-empty';
-      empty.innerHTML = '<div class="app-chat-empty-logo">chatweb.ai</div>'
+      empty.innerHTML = '<div class="app-chat-empty-logo" onclick="showWelcomeAudioFlow()">chatweb.ai</div>'
         + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
         + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
         + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '何でも聞いてください' : 'Ask me anything') + '</div>'
@@ -8105,6 +8147,14 @@
       }
 
       if (!text) return;
+
+      // 🎮 Mobile Easter Eggs - Check before sending
+      if (checkMobileEasterEgg(text)) {
+        textarea.value = '';
+        textarea.style.height = 'auto';
+        await handleMobileEasterEgg(text);
+        return;
+      }
       textarea.value = '';
       textarea.style.height = 'auto';
       touchActivity();
@@ -9098,9 +9148,14 @@
           voiceInitiated = true;
           if (_autoListenEnabled) _voiceConversationActive = true;
           setVoiceState('thinking');
-          appSend();
+          updateAIAvatarState('processing');
+          appSend().finally(function() {
+            // Reset avatar to idle after message is sent
+            setTimeout(function() { updateAIAvatarState('idle'); }, 1000);
+          });
         } else {
           setVoiceState('idle');
+          updateAIAvatarState('idle');
           _voiceConversationActive = false;
         }
         _voiceFinalTranscript = '';
@@ -9149,6 +9204,7 @@
       if (heroBtn) heroBtn.classList.add('recording');
       updateVoiceHeroLabel();
       setVoiceState('listening');
+      updateAIAvatarState('listening');
     }
 
     function stopListening() {
@@ -9180,6 +9236,13 @@
     }
 
     function toggleVoiceHero() {
+      // Check if this is first time and show welcome flow
+      const hasSeenWelcome = localStorage.getItem('chatweb_welcome_audio_shown');
+      if (!hasSeenWelcome && !isRecording) {
+        showWelcomeAudioFlow();
+        return;
+      }
+
       if (isRecording) {
         stopListening();
         _voiceConversationActive = false;
@@ -9187,6 +9250,230 @@
       } else {
         startListening();
       }
+    }
+
+    // 🎮 Mobile Easter Eggs
+    function checkMobileEasterEgg(text) {
+      const patterns = [
+        '❤️❤️❤️', '💕💕💕', '😊😊😊',  // Heart patterns
+        '🎉🎉🎉', '🎊🎊🎊', '🎁🎁🎁',  // Celebration
+        '✨✨✨', '⭐⭐⭐', '🌟🌟🌟',  // Stars
+        '🎮🎮🎮', '🎯🎯🎯',              // Games
+        '!!!', '???', '...',            // Punctuation
+        '123', '1234', '321',           // Numbers
+        'love', 'LOVE',                 // Words
+        'ありがとう❤️', 'すごい！！！'   // Japanese + emoji
+      ];
+      return patterns.includes(text);
+    }
+
+    async function handleMobileEasterEgg(text) {
+      const l = document.documentElement.lang || 'ja';
+
+      // Determine bonus type based on pattern
+      let emoji, title, color;
+      if (text.includes('❤') || text.includes('💕')) {
+        emoji = '💕'; title = 'LOVE BONUS'; color = '#ec4899';
+      } else if (text.includes('🎉') || text.includes('🎊') || text.includes('🎁')) {
+        emoji = '🎉'; title = 'CELEBRATION BONUS'; color = '#f59e0b';
+      } else if (text.includes('✨') || text.includes('⭐') || text.includes('🌟')) {
+        emoji = '✨'; title = 'STAR BONUS'; color = '#06b6d4';
+      } else if (text.includes('🎮') || text.includes('🎯')) {
+        emoji = '🎮'; title = 'GAMER BONUS'; color = '#ec4899';
+      } else if (text === '...') {
+        emoji = '💭'; title = 'THINKING BONUS'; color = '#3b82f6';
+      } else if (text === '!!!') {
+        emoji = '🔥'; title = 'ENERGY BONUS'; color = '#ef4444';
+      } else if (/^\d+$/.test(text)) {
+        emoji = '🔢'; title = 'NUMBER BONUS'; color = '#22c55e';
+      } else {
+        emoji = '🎁'; title = 'SECRET BONUS'; color = '#ec4899';
+      }
+
+      // Show loading
+      showToast(emoji + ' ' + (l === 'ja' ? '隠しボーナス発見中...' : 'Discovering secret bonus...'), 1000);
+
+      try {
+        const hdrs = { 'Content-Type': 'application/json', 'X-Session-Id': webSessionId || '' };
+        if (authToken) hdrs['Authorization'] = 'Bearer ' + authToken;
+
+        const r = await fetch(API + '/api/v1/coupon/redeem', {
+          method: 'POST',
+          headers: hdrs,
+          body: JSON.stringify({ code: 'KONAMI', session_id: webSessionId }),
+        });
+
+        const d = await r.json();
+
+        if (d.success) {
+          if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
+
+          // Show animated modal
+          showEasterEggModal(emoji, title, color, d.credits_granted, d.credits_remaining);
+        } else {
+          showToast(l === 'ja' ? '(もう使用済みです)' : '(Already redeemed)', 2000);
+        }
+      } catch (error) {
+        console.error('Easter egg error:', error);
+        showToast('Error', 2000);
+      }
+    }
+
+    function showEasterEggModal(emoji, title, color, granted, remaining) {
+      const l = document.documentElement.lang || 'ja';
+
+      // Create modal
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        animation: fadeIn 0.3s;
+      `;
+
+      const box = document.createElement('div');
+      box.style.cssText = `
+        background: var(--surface);
+        border: 3px solid ${color};
+        border-radius: 20px;
+        padding: 40px;
+        max-width: 400px;
+        text-align: center;
+        box-shadow: 0 0 40px ${color}40;
+        animation: scaleIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      `;
+
+      box.innerHTML = `
+        <div style="font-size: 60px; margin-bottom: 20px;">${emoji}</div>
+        <div style="font-size: 24px; font-weight: bold; color: ${color}; margin-bottom: 10px;">${title}</div>
+        <div style="font-size: 16px; color: var(--muted); margin-bottom: 30px;">
+          ${l === 'ja' ? 'スマホで発見おめでとう！' : 'Congratulations on finding this!'}
+        </div>
+        <div style="font-size: 32px; font-weight: bold; color: #22c55e; margin-bottom: 10px;" id="easter-credits">
+          ${emoji} +${granted} credits
+        </div>
+        <div style="font-size: 18px; color: var(--text);">
+          ${l === 'ja' ? '残高:' : 'Balance:'} <span style="color: ${color};">${remaining}</span> credits
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" style="
+          margin-top: 30px;
+          padding: 12px 30px;
+          background: ${color};
+          color: white;
+          border: none;
+          border-radius: 10px;
+          font-size: 16px;
+          font-weight: bold;
+          cursor: pointer;
+        ">✨ OK</button>
+      `;
+
+      modal.appendChild(box);
+      document.body.appendChild(modal);
+
+      // Remove on background click
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.remove();
+      });
+
+      // Auto-remove after 10s
+      setTimeout(() => modal.remove(), 10000);
+    }
+
+    // Welcome audio flow
+    async function showWelcomeAudioFlow() {
+      const l = document.documentElement.lang || 'ja';
+
+      // Step 1: Ask permission for audio
+      const enableAudio = confirm(l === 'ja'
+        ? '🎵 音声を有効にしますか？\n\nロゴをクリックすると、作者からのウェルカムメッセージが流れます。'
+        : '🎵 Enable audio?\n\nClick OK to hear a welcome message from the creator.');
+
+      if (!enableAudio) {
+        localStorage.setItem('chatweb_welcome_audio_shown', 'skipped');
+        startListening(); // Fall back to normal voice input
+        return;
+      }
+
+      // Step 2: Play test tone (short music)
+      const audioTestCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioTestCtx.createOscillator();
+      const gainNode = audioTestCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioTestCtx.destination);
+
+      oscillator.frequency.value = 440; // A4 note
+      gainNode.gain.setValueAtTime(0.3, audioTestCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioTestCtx.currentTime + 0.5);
+
+      oscillator.start(audioTestCtx.currentTime);
+      oscillator.stop(audioTestCtx.currentTime + 0.5);
+
+      // Step 3: Wait and ask if they can hear
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      const canHear = confirm(l === 'ja'
+        ? '🔊 聞こえますか？\n\nOKを押すと、ウェルカムメッセージが流れます。'
+        : '🔊 Can you hear?\n\nClick OK to play the welcome message.');
+
+      if (!canHear) {
+        localStorage.setItem('chatweb_welcome_audio_shown', 'skipped');
+        startListening();
+        return;
+      }
+
+      // Step 4: Play welcome message via TTS
+      const welcomeText = l === 'ja'
+        ? 'chatweb利用ありがとうございます。作者のゆうきです。このプロダクトはいろんなLLMっていってChatGPTとかGoogleのGeminiとか世の中にある百を超えたAIの知能とツールを使いこなすオンラインサイトです。日々の悩みや仕事お任せください。このbotがダメな時も人間が裏で作業することも可能です。'
+        : 'Thank you for using chatweb. I\'m Yuki, the creator. This product integrates hundreds of AI models including ChatGPT and Google Gemini. Feel free to ask for help with your daily tasks and work. If the bot can\'t help, humans can assist too.';
+
+      // Show loading toast
+      showToast(l === 'ja' ? '🎤 ウェルカムメッセージを準備中...' : '🎤 Preparing welcome message...', 2000);
+
+      try {
+        // Use ElevenLabs voice for Yuki (you'll need to set the voice ID)
+        const ttsUrl = API + '/api/v1/speech/synthesize';
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+
+        const response = await fetch(ttsUrl, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            text: welcomeText,
+            voice: 'yuki', // Custom voice name (needs backend support)
+            engine: 'elevenlabs',
+            session_id: webSessionId
+          })
+        });
+
+        if (response.ok) {
+          const audioBlob = await response.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+
+          audio.onended = function() {
+            URL.revokeObjectURL(audioUrl);
+            showToast(l === 'ja' ? '✨ ようこそ chatweb へ！' : '✨ Welcome to chatweb!', 2000);
+          };
+
+          await audio.play();
+        } else {
+          // Fallback: just show text
+          alert(welcomeText);
+        }
+      } catch (error) {
+        console.error('Welcome TTS error:', error);
+        // Fallback: show text
+        alert(welcomeText);
+      }
+
+      localStorage.setItem('chatweb_welcome_audio_shown', 'true');
     }
 
     function updateVoiceHeroLabel() {
@@ -10999,7 +11286,14 @@
     let konamiIdx = 0;
     let konamiTaps = 0;
     let konamiTapTimer = null;
+
+    // Voice UI Mode - Push-to-talk with Space key
+    let voiceUIMode = true; // Default to voice mode
+    let isSpacePressed = false;
+    let spaceListenStart = null;
+
     document.addEventListener('keydown', function(e) {
+      // Konami code in topup modal
       if (!document.getElementById('topup-modal').classList.contains('show')) { konamiIdx = 0; return; }
       if (e.key === KONAMI_SEQ[konamiIdx]) {
         konamiIdx++;
@@ -11011,6 +11305,83 @@
         konamiIdx = e.key === KONAMI_SEQ[0] ? 1 : 0;
       }
     });
+
+    // Space key for push-to-talk (only in voice UI mode and when not typing)
+    document.addEventListener('keydown', function(e) {
+      if (e.code === 'Space' && voiceUIMode && !isSpacePressed) {
+        // Check if focus is on input/textarea
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+          return; // Don't interfere with typing
+        }
+
+        e.preventDefault();
+        isSpacePressed = true;
+        spaceListenStart = Date.now();
+        startSpacebarListening();
+      }
+    });
+
+    document.addEventListener('keyup', function(e) {
+      if (e.code === 'Space' && voiceUIMode && isSpacePressed) {
+        e.preventDefault();
+        isSpacePressed = false;
+        const duration = Date.now() - spaceListenStart;
+        stopSpacebarListening(duration);
+      }
+    });
+
+    function startSpacebarListening() {
+      // Update AI avatar to listening state
+      updateAIAvatarState('listening');
+      // Start speech recognition
+      if (typeof startListening === 'function') {
+        startListening();
+      }
+    }
+
+    function stopSpacebarListening(duration) {
+      // Update AI avatar to processing state
+      updateAIAvatarState('processing');
+      // Recognition will auto-stop and trigger message send
+    }
+
+    function updateAIAvatarState(state) {
+      const container = document.getElementById('ai-avatar-container');
+      if (!container) return;
+
+      // Remove all state classes
+      container.classList.remove('ai-avatar-idle', 'ai-avatar-listening', 'ai-avatar-processing');
+
+      // Add new state class
+      container.classList.add('ai-avatar-' + state);
+
+      // Update 3D avatar animation state
+      if (typeof window.setAvatarState === 'function') {
+        window.setAvatarState(state === 'processing' ? 'thinking' : state);
+      }
+
+      // Update label
+      const label = document.getElementById('voice-hero-label');
+      const l = document.documentElement.lang || 'ja';
+      if (label) {
+        if (state === 'listening') {
+          label.textContent = l === 'ja' ? '🎤 リスニング中...' : '🎤 Listening...';
+          label.style.color = '#22c55e';
+        } else if (state === 'processing') {
+          label.textContent = l === 'ja' ? '💭 考え中...' : '💭 Thinking...';
+          label.style.color = '#f59e0b';
+        } else {
+          label.textContent = l === 'ja' ? 'スペースキーを押して話す' : 'Press Space to talk';
+          label.style.color = '';
+        }
+      }
+    }
+
+    // Initialize avatar to idle state on load
+    setTimeout(function() {
+      updateAIAvatarState('idle');
+    }, 100);
     // Mobile: tap the topup modal title 10 times within 5 seconds
     document.addEventListener('click', function(e) {
       if (e.target && e.target.id === 'topup-modal-title') {

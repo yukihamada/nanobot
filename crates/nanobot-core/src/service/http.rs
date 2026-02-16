@@ -2085,6 +2085,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/chat/explore", post(handle_chat_explore))
         // Multi-model race (SSE — ranked by completion order, tier support)
         .route("/api/v1/chat/race", post(handle_chat_race))
+        // Progressive response: first ~200 chars for immediate playback
+        .route("/api/v1/chat/first-chunk", post(handle_first_chunk))
         // Memory (read / clear)
         .route("/api/v1/memory", get(handle_get_memory))
         .route("/api/v1/memory", delete(handle_delete_memory))
@@ -2155,6 +2157,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Pages
         .route("/pricing", get(handle_pricing))
         .route("/welcome", get(handle_welcome))
+        .route("/features", get(handle_features))
         .route("/comparison", get(handle_comparison))
         .route("/docs", get(handle_docs))
         .route("/contact", get(handle_contact))
@@ -6181,11 +6184,21 @@ async fn handle_chat_explore(
     }
 
     // Build messages
-    let mut messages = vec![Message::system(
+    let system_prompt = if let Some(ref prev) = req.previous_chunk {
+        format!(
+            "あなたはChatWeb — chatweb.ai の音声対応AIアシスタントです。\
+             ユーザーの質問に正確かつ詳しく回答してください。\n\n\
+             【重要】以下は既に話した内容です:\n「{}」\n\n\
+             この内容を前提に、自然に続けて詳しく説明してください。\
+             既に話した内容を繰り返さないでください。新しい情報や詳細を追加してください。",
+            prev
+        )
+    } else {
         "あなたはChatWeb — chatweb.ai の音声対応AIアシスタントです。\
          ユーザーの質問に正確かつ詳しく回答してください。\
-         提供された参考情報がある場合は、それを元に回答してください。"
-    )];
+         提供された参考情報がある場合は、それを元に回答してください。".to_string()
+    };
+    let mut messages = vec![Message::system(&system_prompt)];
 
     // Add session history
     {
@@ -6231,14 +6244,14 @@ async fn handle_chat_explore(
     let max_tokens = 2048u32;
     let temperature = 0.7;
 
-    // Run explore — collect all results first, then stream as SSE events
+    // Run explore with race mode (10s timeout, ranked by speed)
     let state_clone = state.clone();
     let session_key_clone = session_key.clone();
     let original_msg = req.message.clone();
 
     let response_stream = futures::stream::once(async move {
         let start = std::time::Instant::now();
-        let results = lb_raw.chat_explore(&messages, None, max_tokens, temperature).await;
+        let results = lb_raw.chat_race(&messages, None, max_tokens, temperature).await;
         let total_time = start.elapsed().as_millis() as u64;
 
         // Deduct credits for each result
@@ -6282,12 +6295,19 @@ async fn handle_chat_explore(
         // Build all SSE events as a single response (API Gateway v2 compatible)
         let mut events_json = Vec::new();
         for (idx, result) in results.iter().enumerate() {
+            // Kimi k2.5 is preferred if it completes within 10 seconds
+            let is_kimi = result.model.to_lowercase().contains("kimi")
+                || result.model.to_lowercase().contains("moonshot");
+            let is_preferred = is_kimi && result.response_time_ms <= 10_000;
+
             events_json.push(serde_json::json!({
                 "model": result.model,
                 "response": result.response,
                 "time_ms": result.response_time_ms,
+                "rank": result.rank,
                 "index": idx,
                 "is_fallback": result.is_fallback,
+                "is_preferred": is_preferred,
                 "credits_used": crate::service::auth::calculate_credits(
                     &result.model, result.input_tokens, result.output_tokens
                 ),
@@ -6311,6 +6331,139 @@ async fn handle_chat_explore(
     Sse::new(response_stream).into_response()
 }
 
+/// Request body for the first-chunk endpoint (progressive response phase 1).
+#[derive(Debug, Deserialize)]
+pub struct FirstChunkRequest {
+    pub message: String,
+    #[serde(default = "default_session_id")]
+    pub session_id: String,
+    pub language: Option<String>,
+}
+
+/// POST /api/v1/chat/first-chunk — Generate first ~200 chars for immediate TTS playback.
+/// This enables natural conversation flow: play opening while generating full response.
+async fn handle_first_chunk(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<FirstChunkRequest>,
+) -> impl IntoResponse {
+    // Input validation
+    if req.message.len() > 32_000 {
+        return Json(serde_json::json!({
+            "error": "Message too long",
+            "first_chunk": "",
+        })).into_response();
+    }
+
+    // Resolve session key
+    let session_key = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                resolve_session_key(dynamo, table, &req.session_id).await
+            } else {
+                req.session_id.clone()
+            }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { req.session_id.clone() }
+    };
+
+    // Check credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let user = get_or_create_user(dynamo, table, &session_key).await;
+            if user.credits_remaining <= 0 {
+                return Json(serde_json::json!({
+                    "error": "No credits remaining",
+                    "action": "upgrade",
+                    "first_chunk": "",
+                })).into_response();
+            }
+        }
+    }
+
+    // Use fast model for immediate response
+    let lb = match &state.lb_provider {
+        Some(lb) => lb.clone(),
+        None => {
+            return Json(serde_json::json!({
+                "error": "No providers available",
+                "first_chunk": "",
+            })).into_response();
+        }
+    };
+
+    // Build prompt that requests opening statement only
+    let lang = req.language.as_deref().unwrap_or("ja");
+    let system_prompt = if lang == "ja" || lang.starts_with("ja") {
+        "あなたはChatWeb — chatweb.ai の音声対応AIアシスタントです。\
+         以下の質問に答えてください。\n\n\
+         【重要】最初の200文字程度で話の導入をしてください。\
+         例: 「ご質問の○○についてですが、まず基本的な考え方からお話ししますね」のように、\
+         後で詳しく話すことを前提とした自然な導入文を生成してください。\
+         200文字を超えないようにしてください。"
+    } else {
+        "You are ChatWeb, a voice-enabled AI assistant at chatweb.ai.\
+         Answer the following question.\n\n\
+         IMPORTANT: Provide only an opening statement (~200 characters).\
+         Example: 'Great question about X. Let me start with the basics...'\
+         Keep it under 200 characters, as this is just the introduction."
+    };
+
+    let messages = vec![
+        Message::system(system_prompt),
+        Message::user(&req.message),
+    ];
+
+    // Generate first chunk with fast model (Gemini Flash or similar)
+    let model = "gemini-2.5-flash"; // Fast and cheap for opening statements
+    let max_tokens = 150u32; // ~200 chars in Japanese/English
+    let temperature = 0.7;
+
+    let result = lb.chat(&messages, None, model, max_tokens, temperature).await;
+
+    match result {
+        Ok(resp) => {
+            let first_chunk = resp.content.unwrap_or_default();
+
+            // Deduct credits
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                    let (credits_used, credits_remaining) = deduct_credits(
+                        dynamo, table, &session_key, model,
+                        resp.usage.prompt_tokens, resp.usage.completion_tokens,
+                    ).await;
+
+                    return Json(serde_json::json!({
+                        "first_chunk": first_chunk,
+                        "model": model,
+                        "input_tokens": resp.usage.prompt_tokens,
+                        "output_tokens": resp.usage.completion_tokens,
+                        "credits_used": credits_used,
+                        "credits_remaining": credits_remaining,
+                    })).into_response();
+                }
+            }
+
+            Json(serde_json::json!({
+                "first_chunk": first_chunk,
+                "model": model,
+                "input_tokens": resp.usage.prompt_tokens,
+                "output_tokens": resp.usage.completion_tokens,
+            })).into_response()
+        }
+        Err(e) => {
+            tracing::error!("First chunk generation failed: {}", e);
+            Json(serde_json::json!({
+                "error": format!("Generation failed: {}", e),
+                "first_chunk": "",
+            })).into_response()
+        }
+    }
+}
+
 /// Request body for the explore endpoint.
 #[derive(Debug, Deserialize)]
 pub struct ExploreRequest {
@@ -6319,6 +6472,8 @@ pub struct ExploreRequest {
     pub session_id: String,
     /// Hierarchical level: 0=direct, 1=step-by-step, 2=expert-deep
     pub level: Option<u32>,
+    /// Previous chunk from phase 1 (for progressive response phase 2)
+    pub previous_chunk: Option<String>,
 }
 
 /// Request body for the race endpoint.
@@ -8078,6 +8233,11 @@ async fn handle_welcome() -> impl IntoResponse {
 /// GET /status — Status page
 async fn handle_status() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/status.html"))
+}
+
+/// GET /features — Features overview page
+async fn handle_features() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/features.html"))
 }
 
 /// GET /comparison — Service comparison page
@@ -13583,9 +13743,19 @@ async fn handle_speech_synthesize(
 
     // If specific engine requested, try only that
     if force_engine == Some("elevenlabs") {
+        // Map voice names to ElevenLabs voice IDs
+        let voice_id = match req.voice.as_str() {
+            "yuki" => {
+                // Get Yuki's voice ID from environment variable or use default
+                std::env::var("ELEVENLABS_YUKI_VOICE_ID")
+                    .unwrap_or_else(|_| req.voice_id.clone().unwrap_or_default())
+            }
+            _ => req.voice_id.clone().unwrap_or_default()
+        };
+
         match try_elevenlabs_tts(
             &req.text,
-            req.voice_id.as_deref().unwrap_or(""),
+            &voice_id,
             req.model_id.as_deref().unwrap_or(""),
         ).await {
             Ok(bytes) => {

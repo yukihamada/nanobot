@@ -158,10 +158,6 @@ impl LoadBalancedProvider {
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
                 key.clone(), Some("https://api.groq.com/openai/v1".to_string()), "llama-3.3-70b-versatile".to_string(),
             )));
-            // Kimi K2 via Groq (kimi family)
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key.clone(), Some("https://api.groq.com/openai/v1".to_string()), "moonshotai/kimi-k2-instruct-0905".to_string(),
-            )));
             // Qwen3 via Groq (qwen family)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
                 key, Some("https://api.groq.com/openai/v1".to_string()), "qwen/qwen3-32b".to_string(),
@@ -177,6 +173,10 @@ impl LoadBalancedProvider {
 
         // OpenRouter keys (backup provider — routes to multiple models)
         for key in Self::read_keys("OPENROUTER_API_KEY") {
+            // Kimi K2.5 via OpenRouter (kimi family)
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "moonshotai/kimi-k2.5".to_string(),
+            )));
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
                 key, Some("https://openrouter.ai/api/v1".to_string()), "openrouter/auto".to_string(),
             )));
@@ -500,7 +500,7 @@ impl LoadBalancedProvider {
                 let start = std::time::Instant::now();
                 let tools_ref = tools.as_deref();
                 match tokio::time::timeout(
-                    std::time::Duration::from_secs(10),
+                    std::time::Duration::from_secs(600),
                     provider.chat(&msgs, tools_ref, &model, max_tokens, temperature),
                 ).await {
                     Ok(Ok(resp)) => {
@@ -575,7 +575,7 @@ impl LoadBalancedProvider {
         // Each tier has a fallback chain: primary → secondary → tertiary
         let candidates: &[&str] = match tier {
             "economy"  => &["gemini-2.5-flash", "qwen/qwen3-32b", "llama-3.3-70b-versatile"],
-            "normal"   => &["moonshotai/kimi-k2-instruct-0905", "llama-3.3-70b-versatile", "gemini-2.5-flash"],
+            "normal"   => &["moonshotai/kimi-k2.5", "llama-3.3-70b-versatile", "gemini-2.5-flash"],
             "powerful" => &["claude-sonnet-4-5-20250929", "gpt-4o", "gemini-2.5-flash"],
             _ => return None,
         };
@@ -744,7 +744,7 @@ impl LlmProvider for LoadBalancedProvider {
             let converted_model = Self::convert_model_for_provider(provider, model);
 
             match tokio::time::timeout(
-                std::time::Duration::from_secs(10),
+                std::time::Duration::from_secs(600),
                 provider.chat_stream(messages, tools, &converted_model, max_tokens, temperature, extra, chunk_tx.clone()),
             ).await {
                 Ok(Ok(resp)) => {

@@ -247,18 +247,22 @@ fn show_welcome_banner(session_id: &str, synced: bool, authenticated: bool) {
 }
 
 
-/// Check if input is a mobile-friendly easter egg pattern
-fn check_mobile_easter_egg(input: &str) -> bool {
-    matches!(input,
-        "❤️❤️❤️" | "💕💕💕" | "😊😊😊" |  // Heart patterns
-        "🎉🎉🎉" | "🎊🎊🎊" | "🎁🎁🎁" |  // Celebration
-        "✨✨✨" | "⭐⭐⭐" | "🌟🌟🌟" |  // Stars
-        "🎮🎮🎮" | "🎯🎯🎯" |              // Games
-        "!!!" | "???" | "..." |            // Punctuation
-        "123" | "1234" | "321" |           // Numbers
-        "love" | "LOVE" |                   // Words
-        "ありがとう❤️" | "すごい！！！"     // Japanese + emoji
-    )
+/// Check if input is a mobile-friendly easter egg pattern and return the code name
+fn check_mobile_easter_egg(input: &str) -> Option<&'static str> {
+    match input {
+        "❤️❤️❤️" | "💕💕💕" | "😊😊😊" => Some("EMOJI_HEART"),
+        "🎉🎉🎉" | "🎊🎊🎊" | "🎁🎁🎁" => Some("EMOJI_CELEBRATION"),
+        "✨✨✨" | "⭐⭐⭐" | "🌟🌟🌟" => Some("EMOJI_STAR"),
+        "🎮🎮🎮" | "🎯🎯🎯" => Some("EMOJI_GAME"),
+        "!!!" => Some("EMOJI_ENERGY"),
+        "???" => Some("EMOJI_QUESTION"),
+        "..." => Some("EMOJI_THINKING"),
+        "123" | "1234" | "321" => Some("EMOJI_NUMBER"),
+        "love" | "LOVE" => Some("EMOJI_LOVE"),
+        "ありがとう❤️" => Some("EMOJI_THANKS"),
+        "すごい！！！" => Some("EMOJI_AMAZING"),
+        _ => None,
+    }
 }
 
 /// Show mobile easter egg animation
@@ -310,12 +314,12 @@ fn show_mobile_easter_egg_animation(input: &str, credits_granted: i64, credits_r
     println!();
 }
 
-/// Redeem Konami code via API
-async fn redeem_konami_code(client: &reqwest::Client, api_url: &str, session_id: &str, auth_token: Option<&str>) -> Result<serde_json::Value> {
+/// Redeem easter egg code via API
+async fn redeem_easter_egg(client: &reqwest::Client, api_url: &str, code: &str, session_id: &str, auth_token: Option<&str>) -> Result<serde_json::Value> {
     let redeem_url = api_url.replace("/api/v1/chat", "/api/v1/coupon/redeem");
 
     let body = serde_json::json!({
-        "code": "KONAMI",
+        "code": code,
         "session_id": session_id,
     });
 
@@ -327,6 +331,11 @@ async fn redeem_konami_code(client: &reqwest::Client, api_url: &str, session_id:
     let resp = req.send().await?;
     let result: serde_json::Value = resp.json().await?;
     Ok(result)
+}
+
+/// Redeem Konami code via API (legacy)
+async fn redeem_konami_code(client: &reqwest::Client, api_url: &str, session_id: &str, auth_token: Option<&str>) -> Result<serde_json::Value> {
+    redeem_easter_egg(client, api_url, "KONAMI", session_id, auth_token).await
 }
 
 /// Show Konami code activation animation
@@ -677,12 +686,12 @@ async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -
             }
 
             // Check for mobile easter eggs FIRST (before other commands)
-            if check_mobile_easter_egg(input) {
+            if let Some(code) = check_mobile_easter_egg(input) {
                 println!();
                 print!("\x1b[2m✨ 隠しボーナス発見中...\x1b[0m");
                 std::io::stdout().flush()?;
 
-                match redeem_konami_code(&client, &api_url, &session_id, auth_token.as_deref()).await {
+                match redeem_easter_egg(&client, &api_url, code, &session_id, auth_token.as_deref()).await {
                     Ok(result) => {
                         if result["success"].as_bool().unwrap_or(false) {
                             let granted = result["credits_granted"].as_i64().unwrap_or(1000);
@@ -690,7 +699,7 @@ async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -
                             print!("\r                              \r");
                             show_mobile_easter_egg_animation(input, granted, remaining);
                         } else if let Some(_error) = result["error"].as_str() {
-                            println!("\r\x1b[2m(もう使用済みです)\x1b[0m");
+                            println!("\r\x1b[2m(このパターンは既に使用済みです)\x1b[0m");
                             println!();
                         }
                     }
