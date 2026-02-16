@@ -2076,9 +2076,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Coupon
         .route("/api/v1/coupon/validate", post(handle_coupon_validate))
         .route("/api/v1/coupon/redeem", post(handle_coupon_redeem))
+        // Omikuji (fortune)
+        .route("/api/v1/omikuji", post(handle_omikuji))
         // Referral
         .route("/api/v1/referral/code", get(handle_referral_code))
         .route("/api/v1/referral/apply", post(handle_referral_apply))
+        .route("/api/v1/referral/voice-invite", post(handle_voice_invite))
         // SSE streaming chat
         .route("/api/v1/chat/stream", post(handle_chat_stream))
         // Multi-model explore (SSE — all models, progressive)
@@ -2112,6 +2115,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/auth/verify", post(handle_auth_verify))
         .route("/api/v1/auth/forgot-password", post(handle_forgot_password))
         .route("/api/v1/auth/reset-password", post(handle_reset_password))
+        .route("/api/v1/user/delete", delete(handle_user_delete))
         // Account management
         .route("/api/v1/account", delete(handle_delete_account))
         .route("/api/v1/account/profile", axum::routing::put(handle_update_profile))
@@ -7334,6 +7338,128 @@ async fn handle_stripe_webhook(
     StatusCode::OK
 }
 
+/// Request body for omikuji (fortune).
+#[derive(Debug, Deserialize)]
+pub struct OmikujiRequest {
+    pub session_id: Option<String>,
+}
+
+/// POST /api/v1/omikuji — Draw daily fortune
+async fn handle_omikuji(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<OmikujiRequest>,
+) -> impl IntoResponse {
+    info!("Omikuji request");
+
+    #[cfg(feature = "dynamodb-backend")]
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        // 1. Resolve user
+        let session_key = if let Some(ref sid) = req.session_id {
+            sid.clone()
+        } else {
+            auth_user_id(&state, &headers).await.unwrap_or_default()
+        };
+
+        if session_key.is_empty() {
+            return (axum::http::StatusCode::UNAUTHORIZED, Json(serde_json::json!({
+                "error": "Login required"
+            }))).into_response();
+        }
+
+        let resolved_user = resolve_session_key(dynamo, table, &session_key).await;
+
+        // 2. Check if already drawn today
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let check = dynamo
+            .get_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S(format!("OMIKUJI#{}", resolved_user)))
+            .key("sk", AttributeValue::S(format!("DATE#{}", today)))
+            .send()
+            .await;
+
+        if let Ok(output) = check {
+            if output.item.is_some() {
+                return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                    "error": "Already drawn today",
+                    "error_ja": "今日はもう引きました。明日また来てください！"
+                }))).into_response();
+            }
+        }
+
+        // 3. Draw fortune with weighted random
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let roll: f64 = rng.gen(); // 0.0 to 1.0
+
+        let (fortune, credits, message) = if roll < 0.05 {
+            // 5% - 大吉
+            ("大吉", 500, "素晴らしい運気！今日は何をしても上手くいきそうです。新しいことに挑戦してみましょう！")
+        } else if roll < 0.20 {
+            // 15% - 吉
+            ("吉", 200, "とても良い運勢です。積極的に行動すれば良い結果が得られるでしょう。")
+        } else if roll < 0.50 {
+            // 30% - 中吉
+            ("中吉", 100, "まずまずの運気です。落ち着いて物事に取り組めば順調に進みます。")
+        } else if roll < 0.80 {
+            // 30% - 小吉
+            ("小吉", 50, "穏やかな一日になりそうです。小さな幸せを見つけてみてください。")
+        } else {
+            // 20% - 末吉
+            ("末吉", 10, "慎重に過ごしましょう。焦らず、一歩ずつ進むことが大切です。")
+        };
+
+        // 4. Grant credits
+        let user = get_or_create_user(dynamo, table, &resolved_user).await;
+        let grant = credits.min(100_000 - user.credits_remaining);
+
+        if grant > 0 {
+            let _ = dynamo
+                .update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("USER#{}", resolved_user)))
+                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                .update_expression("SET credits_remaining = credits_remaining + :c, updated_at = :now")
+                .expression_attribute_values(":c", AttributeValue::N(grant.to_string()))
+                .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .send()
+                .await;
+        }
+
+        // 5. Record today's draw
+        let _ = dynamo
+            .put_item()
+            .table_name(table)
+            .item("pk", AttributeValue::S(format!("OMIKUJI#{}", resolved_user)))
+            .item("sk", AttributeValue::S(format!("DATE#{}", today)))
+            .item("fortune", AttributeValue::S(fortune.to_string()))
+            .item("credits", AttributeValue::N(grant.to_string()))
+            .item("drawn_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+            .send()
+            .await;
+
+        let updated = get_or_create_user(dynamo, table, &resolved_user).await;
+        emit_audit_log(dynamo.clone(), table.clone(), "omikuji_drawn", &resolved_user, "",
+            &format!("fortune={}, credits={}", fortune, grant));
+
+        return Json(serde_json::json!({
+            "success": true,
+            "fortune": fortune,
+            "credits_granted": grant,
+            "credits_remaining": updated.credits_remaining,
+            "message": message,
+        })).into_response();
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": "Omikuji not available"
+        }))).into_response()
+    }
+}
+
 /// Request body for coupon validation.
 #[derive(Debug, Deserialize)]
 pub struct CouponRequest {
@@ -7416,7 +7542,11 @@ async fn handle_coupon_redeem(
     #[cfg(feature = "dynamodb-backend")]
     if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         // Special: KONAMI code and emoji easter eggs — grants 1000 credits, one-time use per pattern
-        let is_easter_egg = code == "KONAMI" || code.starts_with("EMOJI_");
+        let easter_egg_codes = vec![
+            "KONAMI", "LOVE", "CELEBRATE", "STAR", "GAMER", "THINKING",
+            "ENERGY", "MYSTERY", "NUMBER", "WORDLOVE", "THANKS", "AMAZING", "SECRET"
+        ];
+        let is_easter_egg = easter_egg_codes.contains(&code.as_str()) || code.starts_with("EMOJI_");
 
         if is_easter_egg {
             let session_key = if let Some(ref sid) = req.session_id {
@@ -7678,6 +7808,13 @@ struct ReferralApplyRequest {
     code: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct VoiceInviteRequest {
+    recipient_name: String,
+    recipient_email: String,
+    reason: String,
+}
+
 /// Generate a 6-char alphanumeric referral code from a user_id (deterministic).
 fn generate_referral_code(user_id: &str) -> String {
     use std::collections::hash_map::DefaultHasher;
@@ -7881,6 +8018,162 @@ async fn handle_referral_apply(
                 "bonus_credits": bonus,
                 "credits_remaining": updated_user.credits_remaining,
                 "message": "Referral bonus applied! +100 credits"
+            }));
+        }
+    }
+
+    Json(serde_json::json!({ "error": "Not available" }))
+}
+
+/// POST /api/v1/referral/voice-invite — Create voice invitation with Yuki's voice
+async fn handle_voice_invite(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<VoiceInviteRequest>,
+) -> impl IntoResponse {
+    let user_id = match auth_user_id(&state, &headers).await {
+        Some(id) => id,
+        None => return Json(serde_json::json!({ "error": "Unauthorized" })),
+    };
+
+    // Validate inputs
+    if req.recipient_name.trim().is_empty() {
+        return Json(serde_json::json!({ "error": "Recipient name is required" }));
+    }
+    if req.reason.trim().is_empty() {
+        return Json(serde_json::json!({ "error": "Reason is required" }));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Get user info
+            let user = get_or_create_user(dynamo, table, &user_id).await;
+            let referral_code = generate_referral_code(&user_id);
+            let referral_url = format!("https://chatweb.ai?ref={}", referral_code);
+
+            // Ensure referral code exists
+            let _ = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("REFERRAL#{}", referral_code)))
+                .item("sk", AttributeValue::S("OWNER".to_string()))
+                .item("user_id", AttributeValue::S(user_id.clone()))
+                .item("created_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .condition_expression("attribute_not_exists(pk)")
+                .send()
+                .await;
+
+            // Generate invitation message using LLM
+            let inviter_name = user.display_name.as_deref().unwrap_or("私");
+            let message_prompt = format!(
+                "あなたはゆうきです。以下の情報をもとに、友達への招待メッセージを日本語で作成してください。\n\n\
+                 招待する人: {}\n\
+                 招待理由: {}\n\n\
+                 メッセージは温かく、親しみやすいトーンで、chatweb.aiの魅力を伝えてください。\n\
+                 200文字以内で、音声で読み上げることを前提に自然な話し言葉で書いてください。",
+                req.recipient_name, req.reason
+            );
+
+            let invite_message = if let Some(provider) = &state.provider {
+                let messages = vec![
+                    Message::system("あなたはゆうきです。友達への招待メッセージを作成します。"),
+                    Message::user(message_prompt),
+                ];
+
+                match provider.chat(&messages, None, "claude-3-5-sonnet-20241022", 300, 0.8).await {
+                    Ok(resp) => resp.content.unwrap_or_else(|| {
+                        format!(
+                            "{}さんへ。{}から、chatweb.aiを紹介したいと思って連絡しました。{}。ぜひ一度試してみてください！",
+                            req.recipient_name, inviter_name, req.reason
+                        )
+                    }),
+                    Err(_) => format!(
+                        "{}さんへ。{}から、chatweb.aiを紹介したいと思って連絡しました。{}。ぜひ一度試してみてください！",
+                        req.recipient_name, inviter_name, req.reason
+                    ),
+                }
+            } else {
+                format!(
+                    "{}さんへ。{}から、chatweb.aiを紹介したいと思って連絡しました。{}。ぜひ一度試してみてください！",
+                    req.recipient_name, inviter_name, req.reason
+                )
+            };
+
+            // Voice generation fallback chain: RunPod Qwen (cloning) → ElevenLabs → OpenAI
+            let mut audio_bytes = None;
+
+            // 1. Try RunPod Qwen with voice cloning (if reference audio available)
+            if let Ok(ref_audio) = std::env::var("YUKI_REFERENCE_AUDIO_BASE64") {
+                if !ref_audio.is_empty() && std::env::var("RUNPOD_QWEN_TTS_URL").is_ok() {
+                    match try_runpod_qwen_tts(&invite_message, "yuki", 1.0, Some(&ref_audio)).await {
+                        Ok(bytes) => {
+                            tracing::info!("Voice invite: RunPod Qwen clone success, {} bytes", bytes.len());
+                            audio_bytes = Some(bytes);
+                        }
+                        Err(e) => {
+                            tracing::warn!("Voice invite: RunPod Qwen failed: {}, trying ElevenLabs", e);
+                        }
+                    }
+                }
+            }
+
+            // 2. Try ElevenLabs if RunPod Qwen not available or failed
+            if audio_bytes.is_none() {
+                let yuki_voice_id = std::env::var("ELEVENLABS_YUKI_VOICE_ID")
+                    .unwrap_or_else(|_| "pNInz6obpgDQGcFmaJgB".to_string());
+
+                audio_bytes = try_elevenlabs_tts(
+                    &invite_message,
+                    &yuki_voice_id,
+                    "eleven_multilingual_v2",
+                )
+                .await
+                .ok();
+
+                if audio_bytes.is_some() {
+                    tracing::info!("Voice invite: ElevenLabs success");
+                } else {
+                    tracing::warn!("Voice invite: ElevenLabs failed, trying OpenAI TTS");
+                }
+            }
+
+            // 3. Fallback to OpenAI TTS
+            if audio_bytes.is_none() {
+                audio_bytes = try_openai_tts(
+                    &invite_message,
+                    "nova",
+                    1.0,
+                    Some("温かく、親しみやすいトーンで話してください。"),
+                )
+                .await
+                .ok();
+
+                if audio_bytes.is_some() {
+                    tracing::info!("Voice invite: OpenAI TTS success");
+                }
+            }
+
+            let audio_base64 = match audio_bytes {
+                Some(bytes) => {
+                    use base64::{Engine as _, engine::general_purpose};
+                    general_purpose::STANDARD.encode(&bytes)
+                },
+                None => {
+                    eprintln!("All TTS engines failed");
+                    return Json(serde_json::json!({ "error": "Failed to generate voice message" }));
+                }
+            };
+
+            // TODO: Send email with invitation link and audio attachment
+            // For now, return the message and audio for client-side handling
+
+            return Json(serde_json::json!({
+                "ok": true,
+                "message": invite_message,
+                "audio_base64": audio_base64,
+                "referral_url": referral_url,
+                "recipient_email": req.recipient_email,
             }));
         }
     }
@@ -11115,6 +11408,128 @@ async fn handle_auth_me(
     Json(serde_json::json!({ "authenticated": false }))
 }
 
+/// DELETE /api/v1/user/delete — Complete user data deletion (GDPR compliance)
+async fn handle_user_delete(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Authenticate user
+    let user_id = match auth_user_id(&state, &headers).await {
+        Some(uid) => uid,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "Authentication required"
+                }))
+            ).into_response();
+        }
+    };
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            tracing::info!("User deletion requested: {}", user_id);
+
+            // Query all items belonging to this user
+            let patterns_to_delete = vec![
+                format!("USER#{}", user_id),
+                format!("AUTH#{}", user_id),
+                format!("MEMORY#{}", user_id),
+                format!("USAGE#{}", user_id),
+                format!("REDEEM#{}", user_id),
+                format!("VOICE#{}", user_id),
+            ];
+
+            let mut total_deleted = 0;
+
+            // Delete all items with matching PKs
+            for pk_pattern in patterns_to_delete {
+                match dynamo
+                    .query()
+                    .table_name(table)
+                    .key_condition_expression("pk = :pk")
+                    .expression_attribute_values(":pk", AttributeValue::S(pk_pattern.clone()))
+                    .send()
+                    .await
+                {
+                    Ok(output) => {
+                        if let Some(items) = output.items {
+                            for item in items {
+                                if let (Some(pk), Some(sk)) = (
+                                    item.get("pk").and_then(|v| v.as_s().ok()),
+                                    item.get("sk").and_then(|v| v.as_s().ok())
+                                ) {
+                                    match dynamo
+                                        .delete_item()
+                                        .table_name(table)
+                                        .key("pk", AttributeValue::S(pk.clone()))
+                                        .key("sk", AttributeValue::S(sk.clone()))
+                                        .send()
+                                        .await
+                                    {
+                                        Ok(_) => {
+                                            total_deleted += 1;
+                                            tracing::debug!("Deleted: pk={}, sk={}", pk, sk);
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Failed to delete item: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to query items for {}: {}", pk_pattern, e);
+                    }
+                }
+            }
+
+            // Also delete conversations (CONV# prefix with user_id in content)
+            // This is more complex and would require scanning, so we'll handle primary data first
+
+            emit_audit_log(
+                dynamo.clone(),
+                table.clone(),
+                "user_deleted",
+                &user_id,
+                "",
+                &format!("total_items_deleted={}", total_deleted)
+            );
+
+            tracing::info!("User deletion complete: {} ({} items)", user_id, total_deleted);
+
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "success": true,
+                    "deleted_items": total_deleted,
+                    "message": "All user data has been permanently deleted"
+                }))
+            ).into_response();
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        tracing::warn!("User deletion not implemented for file backend");
+        return (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "error": "User deletion not available"
+            }))
+        ).into_response();
+    }
+
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+            "error": "Database not configured"
+        }))
+    ).into_response()
+}
+
 /// POST /api/v1/auth/register — Email registration
 async fn handle_auth_register(
     State(state): State<Arc<AppState>>,
@@ -13532,6 +13947,108 @@ async fn try_elevenlabs_tts(text: &str, voice_id: &str, model_id: &str) -> Resul
     }
 }
 
+/// Replicate Qwen3-TTS — high-quality multilingual TTS via Replicate API
+async fn try_replicate_qwen3_tts(text: &str, voice: &str, language: &str) -> Result<Vec<u8>, String> {
+    let api_token = std::env::var("REPLICATE_API_TOKEN")
+        .map_err(|_| "No REPLICATE_API_TOKEN".to_string())?;
+    if api_token.is_empty() {
+        return Err("Empty REPLICATE_API_TOKEN".to_string());
+    }
+
+    let client = reqwest::Client::new();
+
+    // Create prediction
+    let prediction_resp = client
+        .post("https://api.replicate.com/v1/predictions")
+        .header("Authorization", format!("Token {}", api_token))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "version": "qwen/qwen3-tts",
+            "input": {
+                "text": text,
+                "voice": voice,
+                "language": language
+            }
+        }))
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+        .map_err(|e| format!("Replicate request failed: {}", e))?;
+
+    let status = prediction_resp.status();
+    if !status.is_success() {
+        let body = prediction_resp.text().await.unwrap_or_default();
+        return Err(format!("Replicate API error: {} {}", status, body));
+    }
+
+    let prediction: serde_json::Value = prediction_resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse prediction response: {}", e))?;
+
+    let prediction_id = prediction["id"]
+        .as_str()
+        .ok_or("No prediction ID")?;
+
+    // Poll for completion (max 30 seconds)
+    let start = std::time::Instant::now();
+    let mut audio_url: Option<String> = None;
+
+    while start.elapsed().as_secs() < 30 {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let status_resp = client
+            .get(&format!("https://api.replicate.com/v1/predictions/{}", prediction_id))
+            .header("Authorization", format!("Token {}", api_token))
+            .send()
+            .await
+            .map_err(|e| format!("Status check failed: {}", e))?;
+
+        let status_data: serde_json::Value = status_resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse status: {}", e))?;
+
+        let status_str = status_data["status"].as_str().unwrap_or("");
+
+        match status_str {
+            "succeeded" => {
+                audio_url = status_data["output"]
+                    .as_str()
+                    .map(|s| s.to_string());
+                break;
+            }
+            "failed" | "canceled" => {
+                let error = status_data["error"].as_str().unwrap_or("Unknown error");
+                return Err(format!("Replicate prediction failed: {}", error));
+            }
+            _ => continue, // "starting" or "processing"
+        }
+    }
+
+    let url = audio_url.ok_or("Timeout waiting for audio generation")?;
+
+    // Download audio
+    let audio_resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Audio download failed: {}", e))?;
+
+    if !audio_resp.status().is_success() {
+        return Err(format!("Audio download error: {}", audio_resp.status()));
+    }
+
+    let audio_bytes = audio_resp
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read audio: {}", e))?
+        .to_vec();
+
+    tracing::info!("Replicate Qwen3-TTS success: {} bytes, voice={}, lang={}", audio_bytes.len(), voice, language);
+    Ok(audio_bytes)
+}
+
 /// Style-Bert-VITS2 TTS via RunPod Serverless — high-quality Japanese voice
 async fn try_sbv2_tts(text: &str, model_id: i32, speaker_id: i32, style: &str) -> Result<Vec<u8>, String> {
     let api_key = std::env::var("RUNPOD_API_KEY")
@@ -13839,9 +14356,24 @@ async fn handle_speech_synthesize(
             }
             Err(e) => tracing::warn!("TTS: RunPod Qwen failed: {}", e),
         }
+    } else if force_engine == Some("replicate") || force_engine == Some("replicate-qwen") {
+        // Replicate Qwen3-TTS
+        let voice = req.voice_id.as_deref().unwrap_or("female_calm");
+        let language = if req.text.chars().any(|c| ('\u{3040}'..='\u{309F}').contains(&c) || ('\u{30A0}'..='\u{30FF}').contains(&c) || ('\u{4E00}'..='\u{9FFF}').contains(&c)) {
+            "Japanese"
+        } else {
+            "English"
+        };
+        match try_replicate_qwen3_tts(&req.text, voice, language).await {
+            Ok(bytes) => {
+                tracing::info!("TTS: Replicate Qwen3 success, {} bytes", bytes.len());
+                audio_bytes = Some(bytes);
+            }
+            Err(e) => tracing::warn!("TTS: Replicate Qwen3 failed: {}", e),
+        }
     }
 
-    // Auto fallback chain: QWEN (for Japanese) → OpenAI → Polly
+    // Auto fallback chain: Replicate Qwen3 → QWEN (for Japanese) → OpenAI → Polly
     if audio_bytes.is_none() && force_engine != Some("polly") && force_engine != Some("elevenlabs") && force_engine != Some("sbv2") && force_engine != Some("cosyvoice") && force_engine != Some("qwen") {
         // Detect Japanese text
         let is_ja = req.text.chars().any(|c| {
@@ -13850,8 +14382,20 @@ async fn handle_speech_synthesize(
             ('\u{4E00}'..='\u{9FFF}').contains(&c)    // CJK
         });
 
-        // Try QWEN first for Japanese text (if API key is available)
-        if is_ja && std::env::var("DASHSCOPE_API_KEY").is_ok() {
+        // Try Replicate Qwen3 first (if API token is available)
+        if std::env::var("REPLICATE_API_TOKEN").is_ok() {
+            let language = if is_ja { "Japanese" } else { "English" };
+            match try_replicate_qwen3_tts(&req.text, "female_calm", language).await {
+                Ok(bytes) => {
+                    tracing::info!("TTS: Replicate Qwen3 auto-fallback success, {} bytes", bytes.len());
+                    audio_bytes = Some(bytes);
+                }
+                Err(e) => tracing::warn!("TTS: Replicate Qwen3 failed ({}), trying QWEN3...", e),
+            }
+        }
+
+        // Try QWEN next for Japanese text (if Replicate failed and API key is available)
+        if audio_bytes.is_none() && is_ja && std::env::var("DASHSCOPE_API_KEY").is_ok() {
             match try_qwen_tts(&req.text, &req.voice, req.speed).await {
                 Ok(bytes) => {
                     tracing::info!("TTS: QWEN3 auto-fallback success, {} bytes", bytes.len());

@@ -250,17 +250,17 @@ fn show_welcome_banner(session_id: &str, synced: bool, authenticated: bool) {
 /// Check if input is a mobile-friendly easter egg pattern and return the code name
 fn check_mobile_easter_egg(input: &str) -> Option<&'static str> {
     match input {
-        "❤️❤️❤️" | "💕💕💕" | "😊😊😊" => Some("EMOJI_HEART"),
-        "🎉🎉🎉" | "🎊🎊🎊" | "🎁🎁🎁" => Some("EMOJI_CELEBRATION"),
-        "✨✨✨" | "⭐⭐⭐" | "🌟🌟🌟" => Some("EMOJI_STAR"),
-        "🎮🎮🎮" | "🎯🎯🎯" => Some("EMOJI_GAME"),
-        "!!!" => Some("EMOJI_ENERGY"),
-        "???" => Some("EMOJI_QUESTION"),
-        "..." => Some("EMOJI_THINKING"),
-        "123" | "1234" | "321" => Some("EMOJI_NUMBER"),
-        "love" | "LOVE" => Some("EMOJI_LOVE"),
-        "ありがとう❤️" => Some("EMOJI_THANKS"),
-        "すごい！！！" => Some("EMOJI_AMAZING"),
+        "❤️❤️❤️" | "💕💕💕" | "😊😊😊" => Some("LOVE"),
+        "🎉🎉🎉" | "🎊🎊🎊" | "🎁🎁🎁" => Some("CELEBRATE"),
+        "✨✨✨" | "⭐⭐⭐" | "🌟🌟🌟" => Some("STAR"),
+        "🎮🎮🎮" | "🎯🎯🎯" => Some("GAMER"),
+        "!!!" => Some("ENERGY"),
+        "???" => Some("MYSTERY"),
+        "..." => Some("THINKING"),
+        "123" | "1234" | "321" => Some("NUMBER"),
+        "love" | "LOVE" => Some("WORDLOVE"),
+        "ありがとう❤️" => Some("THANKS"),
+        "すごい！！！" => Some("AMAZING"),
         _ => None,
     }
 }
@@ -314,6 +314,62 @@ fn show_mobile_easter_egg_animation(input: &str, credits_granted: i64, credits_r
     println!();
 }
 
+/// Show omikuji (fortune) animation
+fn show_omikuji_animation(fortune: &str, credits_granted: i64, credits_remaining: i64, message: &str) {
+    use std::io::Write;
+
+    // Spinning animation
+    let spinner = ["🎴", "🎋", "🎐", "🎎"];
+    for _ in 0..10 {
+        for frame in &spinner {
+            print!("\r  {} おみくじを引いています...  ", frame);
+            std::io::stdout().flush().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+    print!("\r                                            \r");
+    std::io::stdout().flush().unwrap();
+
+    println!();
+
+    // Fortune box with color based on result
+    let (color, emoji) = match fortune {
+        "大吉" => ("31", "🌸"),  // Red
+        "吉" => ("33", "🌼"),    // Yellow
+        "中吉" => ("32", "🍀"),  // Green
+        "小吉" => ("36", "☘️"),   // Cyan
+        _ => ("37", "🌿"),       // White
+    };
+
+    println!("\x1b[1;{}m┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\x1b[0m", color);
+    println!("\x1b[1;{}m┃                                   ┃\x1b[0m", color);
+    println!("\x1b[1;{}m┃        {}  本日の運勢  {}        ┃\x1b[0m", color, emoji, emoji);
+    println!("\x1b[1;{}m┃                                   ┃\x1b[0m", color);
+    println!("\x1b[1;{}m┃             【 {} 】             ┃\x1b[0m", color, fortune);
+    println!("\x1b[1;{}m┃                                   ┃\x1b[0m", color);
+    println!("\x1b[1;{}m┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\x1b[0m", color);
+    println!();
+
+    // Fortune message
+    println!("\x1b[2m  {}\x1b[0m", message);
+    println!();
+
+    // Credit count-up
+    if credits_granted > 0 {
+        let steps = 10;
+        let increment = credits_granted / steps;
+        for i in 1..=steps {
+            let current = if i == steps { credits_granted } else { increment * i };
+            print!("\r\x1b[1;33m  {} +{} credits\x1b[0m", emoji, current);
+            std::io::stdout().flush().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        println!();
+        println!("\x1b[1;32m  {} New balance: {} credits\x1b[0m", emoji, credits_remaining);
+    }
+    println!();
+}
+
 /// Redeem easter egg code via API
 async fn redeem_easter_egg(client: &reqwest::Client, api_url: &str, code: &str, session_id: &str, auth_token: Option<&str>) -> Result<serde_json::Value> {
     let redeem_url = api_url.replace("/api/v1/chat", "/api/v1/coupon/redeem");
@@ -336,6 +392,24 @@ async fn redeem_easter_egg(client: &reqwest::Client, api_url: &str, code: &str, 
 /// Redeem Konami code via API (legacy)
 async fn redeem_konami_code(client: &reqwest::Client, api_url: &str, session_id: &str, auth_token: Option<&str>) -> Result<serde_json::Value> {
     redeem_easter_egg(client, api_url, "KONAMI", session_id, auth_token).await
+}
+
+/// Draw omikuji (fortune) via API
+async fn draw_omikuji(client: &reqwest::Client, api_url: &str, session_id: &str, auth_token: Option<&str>) -> Result<serde_json::Value> {
+    let omikuji_url = api_url.replace("/api/v1/chat", "/api/v1/omikuji");
+
+    let body = serde_json::json!({
+        "session_id": session_id,
+    });
+
+    let mut req = client.post(&omikuji_url).json(&body);
+    if let Some(token) = auth_token {
+        req = req.header("Authorization", format!("Bearer {}", token));
+    }
+
+    let resp = req.send().await?;
+    let result: serde_json::Value = resp.json().await?;
+    Ok(result)
 }
 
 /// Show Konami code activation animation
@@ -391,6 +465,7 @@ fn show_mobile_help() {
     println!("\x1b[1;33m/c\x1b[0m            画面クリア");
     println!("\x1b[1;33m/.\x1b[0m            前回メッセージ再送");
     println!("\x1b[1;33m/m\x1b[0m            よく使うフレーズ");
+    println!("\x1b[1;33m/omikuji\x1b[0m      毎日おみくじ（運試し）");
     println!("\x1b[2m─────────────────────────\x1b[0m");
     println!("\x1b[2m数字だけ: 1-5 でクイックアクション\x1b[0m");
     println!();
@@ -788,6 +863,30 @@ async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -
                         }
                     }
                     println!();
+                    continue;
+                }
+                // Omikuji (fortune)
+                "/omikuji" | "/fortune" => {
+                    println!();
+
+                    match draw_omikuji(&client, &api_url, &session_id, auth_token.as_deref()).await {
+                        Ok(result) => {
+                            if result["success"].as_bool().unwrap_or(false) {
+                                let fortune = result["fortune"].as_str().unwrap_or("末吉");
+                                let granted = result["credits_granted"].as_i64().unwrap_or(0);
+                                let remaining = result["credits_remaining"].as_i64().unwrap_or(0);
+                                let message = result["message"].as_str().unwrap_or("今日も良い一日を！");
+                                show_omikuji_animation(fortune, granted, remaining, message);
+                            } else if let Some(error) = result["error"].as_str() {
+                                println!("\x1b[33m{}\x1b[0m", error);
+                                println!();
+                            }
+                        }
+                        Err(e) => {
+                            println!("\x1b[31mError: {}\x1b[0m", e);
+                            println!();
+                        }
+                    }
                     continue;
                 }
                 _ => {}
