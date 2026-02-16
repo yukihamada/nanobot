@@ -1,7 +1,11 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashMap;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use indicatif::{ProgressBar, ProgressStyle};
 
 use nanobot_core::bus::MessageBus;
 use nanobot_core::config::{self, Config};
@@ -190,6 +194,90 @@ fn get_cli_session_id() -> Result<String> {
     }
 }
 
+/// Konami code sequence: ↑↑↓↓←→←→BA
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum KonamiKey {
+    Up,
+    Down,
+    Left,
+    Right,
+    B,
+    A,
+}
+
+/// Check if current key buffer matches Konami code pattern
+fn check_konami_pattern(buffer: &[KonamiKey]) -> bool {
+    use KonamiKey::*;
+    let pattern = [Up, Up, Down, Down, Left, Right, Left, Right, B, A];
+
+    if buffer.len() < pattern.len() {
+        return false;
+    }
+
+    // Check last N keys match pattern
+    let start = buffer.len() - pattern.len();
+    &buffer[start..] == &pattern
+}
+
+/// Convert KeyCode to KonamiKey
+fn key_to_konami(key: KeyCode) -> Option<KonamiKey> {
+    match key {
+        KeyCode::Up => Some(KonamiKey::Up),
+        KeyCode::Down => Some(KonamiKey::Down),
+        KeyCode::Left => Some(KonamiKey::Left),
+        KeyCode::Right => Some(KonamiKey::Right),
+        KeyCode::Char('b') | KeyCode::Char('B') => Some(KonamiKey::B),
+        KeyCode::Char('a') | KeyCode::Char('A') => Some(KonamiKey::A),
+        _ => None,
+    }
+}
+
+/// Redeem Konami code via API
+async fn redeem_konami_code(client: &reqwest::Client, api_url: &str, session_id: &str, auth_token: Option<&str>) -> Result<serde_json::Value> {
+    let redeem_url = api_url.replace("/api/v1/chat", "/api/v1/coupon/redeem");
+
+    let body = serde_json::json!({
+        "code": "KONAMI",
+        "session_id": session_id,
+    });
+
+    let mut req = client.post(&redeem_url).json(&body);
+    if let Some(token) = auth_token {
+        req = req.header("Authorization", format!("Bearer {}", token));
+    }
+
+    let resp = req.send().await?;
+    let result: serde_json::Value = resp.json().await?;
+    Ok(result)
+}
+
+/// Show Konami code activation animation
+fn show_konami_animation(credits_granted: i64, credits_remaining: i64) {
+    use std::io::Write;
+
+    println!();
+    println!("\x1b[1;35m╔═══════════════════════════════════════╗\x1b[0m");
+    println!("\x1b[1;35m║                                       ║\x1b[0m");
+    println!("\x1b[1;35m║     🎮  KONAMI CODE ACTIVATED! 🎮     ║\x1b[0m");
+    println!("\x1b[1;35m║                                       ║\x1b[0m");
+    println!("\x1b[1;35m╚═══════════════════════════════════════╝\x1b[0m");
+    println!();
+
+    // Animated credit count-up
+    let steps = 20;
+    let increment = credits_granted / steps;
+    for i in 1..=steps {
+        let current = if i == steps { credits_granted } else { increment * i };
+        print!("\r\x1b[1;33m  +{} credits\x1b[0m", current);
+        std::io::stdout().flush().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
+
+    println!();
+    println!("\x1b[1;32m  New balance: {} credits\x1b[0m", credits_remaining);
+    println!();
+}
+
 /// Chat with chatweb.ai API directly — no config or API key needed.
 /// Uses SSE streaming for real-time responses with tool progress.
 async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -> Result<()> {
@@ -211,16 +299,22 @@ async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -
         .unwrap_or_default();
 
     if message.is_empty() {
-        // Interactive mode
-        println!("\x1b[1;36m{} chatweb.ai\x1b[0m \x1b[2mv{}\x1b[0m", nanobot_core::LOGO, nanobot_core::VERSION);
+        // Interactive mode with modern styling
+        println!();
+        println!("\x1b[1;36m  {}\x1b[0m \x1b[1mchatweb.ai\x1b[0m \x1b[2mv{}\x1b[0m", nanobot_core::LOGO, nanobot_core::VERSION);
+        println!("\x1b[2m  ─────────────────────────────────────\x1b[0m");
         println!("\x1b[2m  Session: {}\x1b[0m", session_id);
         if sync.is_some() {
-            println!("\x1b[32m  Synced with Web session\x1b[0m");
+            println!("\x1b[32m  ✓ Synced with Web session\x1b[0m");
         }
         if auth_token.is_some() {
-            println!("\x1b[32m  Authenticated\x1b[0m");
+            println!("\x1b[32m  ✓ Authenticated\x1b[0m");
         }
-        println!("\x1b[2m  Type /help for commands, Ctrl+C to exit\x1b[0m");
+        println!();
+        println!("\x1b[2m  Commands:\x1b[0m");
+        println!("\x1b[2m    /help    Show available commands\x1b[0m");
+        println!("\x1b[2m    /konami  Activate secret bonus 🎮\x1b[0m");
+        println!("\x1b[2m    Ctrl+C   Exit\x1b[0m");
         println!();
 
         loop {
@@ -234,6 +328,31 @@ async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -
             }
             let input = input.trim();
             if input.is_empty() {
+                continue;
+            }
+
+            // Check for /konami command
+            if input == "/konami" {
+                println!();
+                print!("\x1b[2mActivating Konami code...\x1b[0m");
+                std::io::stdout().flush()?;
+
+                match redeem_konami_code(&client, &api_url, &session_id, auth_token.as_deref()).await {
+                    Ok(result) => {
+                        if result["success"].as_bool().unwrap_or(false) {
+                            let granted = result["credits_granted"].as_i64().unwrap_or(1000);
+                            let remaining = result["credits_remaining"].as_i64().unwrap_or(0);
+                            print!("\r                              \r"); // Clear loading message
+                            show_konami_animation(granted, remaining);
+                        } else if let Some(error) = result["error"].as_str() {
+                            println!("\r\x1b[31mError: {}\x1b[0m", error);
+                        }
+                    }
+                    Err(e) => {
+                        println!("\r\x1b[31mError: {}\x1b[0m", e);
+                    }
+                }
+                println!();
                 continue;
             }
 
@@ -363,6 +482,7 @@ async fn chat_api_stream(
     let mut buf = String::new();
     let mut got_content = false;
     let mut printed_prefix = false;
+    let mut tool_spinners: HashMap<String, ProgressBar> = HashMap::new();
 
     while let Some(chunk) = resp.chunk().await? {
         let text = String::from_utf8_lossy(&chunk);
@@ -397,26 +517,44 @@ async fn chat_api_stream(
                 match evt_type {
                     "tool_start" => {
                         let tool = evt["tool"].as_str().unwrap_or("tool");
-                        println!("\x1b[2;35m  ⚡ {}...\x1b[0m", tool);
+                        let spinner = ProgressBar::new_spinner();
+                        spinner.set_style(
+                            ProgressStyle::default_spinner()
+                                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+                                .template("{spinner:.cyan} {msg}")
+                                .unwrap()
+                        );
+                        spinner.set_message(format!("{}", tool));
+                        spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+                        tool_spinners.insert(tool.to_string(), spinner);
                     }
                     "tool_result" => {
                         let tool = evt["tool"].as_str().unwrap_or("tool");
                         let ok = evt["success"].as_bool().unwrap_or(true);
-                        let summary = evt["summary"].as_str().or_else(|| evt["result"].as_str());
+
+                        // Finish spinner if exists
+                        if let Some(spinner) = tool_spinners.remove(tool) {
+                            spinner.finish_and_clear();
+                        }
+
+                        // Show result - more concise
                         if ok {
-                            if let Some(s) = summary {
-                                println!("\x1b[32m  ✓ {}: {}\x1b[0m", tool, truncate_str(s, 60));
-                            } else {
-                                println!("\x1b[32m  ✓ {}\x1b[0m", tool);
-                            }
+                            println!("\x1b[2m  ✓ {}\x1b[0m", tool);
                         } else {
-                            println!("\x1b[31m  ✗ {}\x1b[0m", tool);
+                            // Only show details on failure
+                            let summary = evt["summary"].as_str().or_else(|| evt["result"].as_str());
+                            if let Some(s) = summary {
+                                println!("\x1b[31m  ✗ {}: {}\x1b[0m", tool, truncate_str(s, 60));
+                            } else {
+                                println!("\x1b[31m  ✗ {}\x1b[0m", tool);
+                            }
                         }
                     }
                     "thinking" => {
+                        // More subtle thinking display - only show first 40 chars
                         let thought = evt["content"].as_str().unwrap_or("");
-                        if !thought.is_empty() {
-                            println!("\x1b[2;34m  💭 {}\x1b[0m", truncate_str(thought, 80));
+                        if !thought.is_empty() && thought.len() > 10 {
+                            println!("\x1b[2;90m  💭 {}\x1b[0m", truncate_str(thought, 40));
                         }
                     }
                     "content_chunk" => {
@@ -440,9 +578,16 @@ async fn chat_api_stream(
                             // Streaming already printed content, just add newline
                             println!();
                         }
-                        // Show credits if available
+                        // Show credits if available - more prominent
                         if let Some(remaining) = evt["credits_remaining"].as_i64() {
-                            println!("\x1b[2m  Credits: {}\x1b[0m", remaining);
+                            let color = if remaining > 500 {
+                                "\x1b[32m" // green
+                            } else if remaining > 100 {
+                                "\x1b[33m" // yellow
+                            } else {
+                                "\x1b[31m" // red
+                            };
+                            println!("{}  💳 {} credits\x1b[0m", color, remaining);
                         }
                     }
                     "error" => {
@@ -457,6 +602,11 @@ async fn chat_api_stream(
                 }
             }
         }
+    }
+
+    // Clean up any remaining spinners
+    for (_, spinner) in tool_spinners {
+        spinner.finish_and_clear();
     }
 
     if !got_content {
