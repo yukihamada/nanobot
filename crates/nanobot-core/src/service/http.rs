@@ -7415,8 +7415,10 @@ async fn handle_coupon_redeem(
 
     #[cfg(feature = "dynamodb-backend")]
     if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-        // Special: KONAMI code — grants 1000 credits per use, cap at 100,000 total
-        if code == "KONAMI" {
+        // Special: KONAMI code and emoji easter eggs — grants 1000 credits, one-time use per pattern
+        let is_easter_egg = code == "KONAMI" || code.starts_with("EMOJI_");
+
+        if is_easter_egg {
             let session_key = if let Some(ref sid) = req.session_id {
                 sid.clone()
             } else {
@@ -7429,13 +7431,35 @@ async fn handle_coupon_redeem(
             }
             let resolved_user = resolve_session_key(dynamo, table, &session_key).await;
             let user = get_or_create_user(dynamo, table, &resolved_user).await;
+
+            // Check if already redeemed (one-time use per pattern)
+            let redeem_check = dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("REDEEM#{}", resolved_user)))
+                .key("sk", AttributeValue::S(code.clone()))
+                .send()
+                .await;
+
+            if let Ok(output) = redeem_check {
+                if output.item.is_some() {
+                    return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                        "error": "Already redeemed",
+                        "error_ja": "このパターンは既に使用済みです"
+                    }))).into_response();
+                }
+            }
+
             if user.credits_remaining >= 100_000 {
                 return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({
                     "error": "Credit cap reached (100,000)",
                     "error_ja": "クレジット上限（100,000）に達しています"
                 }))).into_response();
             }
+
             let grant = 1000i64.min(100_000 - user.credits_remaining);
+
+            // Grant credits
             let pk = format!("USER#{}", resolved_user);
             let _ = dynamo
                 .update_item()
@@ -7447,9 +7471,21 @@ async fn handle_coupon_redeem(
                 .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
                 .send()
                 .await;
+
+            // Mark as redeemed
+            let _ = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("REDEEM#{}", resolved_user)))
+                .item("sk", AttributeValue::S(code.clone()))
+                .item("redeemed_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .send()
+                .await;
+
             let updated = get_or_create_user(dynamo, table, &resolved_user).await;
-            emit_audit_log(dynamo.clone(), table.clone(), "konami_redeemed", &resolved_user, "",
-                &format!("granted={}, new_balance={}", grant, updated.credits_remaining));
+            emit_audit_log(dynamo.clone(), table.clone(), "easter_egg_redeemed", &resolved_user, "",
+                &format!("code={}, granted={}, new_balance={}", code, grant, updated.credits_remaining));
+
             return Json(serde_json::json!({
                 "success": true,
                 "credits_granted": grant,
