@@ -7453,11 +7453,9 @@ async fn handle_omikuji(
     }
 
     #[cfg(not(feature = "dynamodb-backend"))]
-    {
-        (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-            "error": "Omikuji not available"
-        }))).into_response()
-    }
+    return (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+        "error": "Omikuji not available"
+    }))).into_response();
 }
 
 /// Request body for coupon validation.
