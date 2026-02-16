@@ -7353,6 +7353,7 @@ async fn handle_omikuji(
     info!("Omikuji request");
 
     #[cfg(feature = "dynamodb-backend")]
+    {
     if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         // 1. Resolve user
         let session_key = if let Some(ref sid) = req.session_id {
@@ -7450,6 +7451,7 @@ async fn handle_omikuji(
             "credits_remaining": updated.credits_remaining,
             "message": message,
         })).into_response();
+    }
     }
 
     #[cfg(not(feature = "dynamodb-backend"))]
