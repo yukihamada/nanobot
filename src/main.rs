@@ -1,10 +1,11 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::HashMap;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::terminal::{self, ClearType};
+use crossterm::ExecutableCommand;
 use indicatif::{ProgressBar, ProgressStyle};
 
 use nanobot_core::bus::MessageBus;
@@ -19,11 +20,20 @@ use nanobot_core::provider;
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Voice-first interactive mode (default)
+    Voice {
+        /// API endpoint
+        #[arg(long, default_value = "https://chatweb.ai/api/v1/chat")]
+        api: String,
+        /// Sync with a Web/LINE/Telegram session ID
+        #[arg(long)]
+        sync: Option<String>,
+    },
     /// Chat with AI via chatweb.ai (no config needed)
     Chat {
         /// Message to send (or omit for interactive mode)
@@ -151,17 +161,22 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Chat { message, api, sync } => cmd_chat(message, api, sync).await?,
-        Commands::Link { session_id } => cmd_link(session_id).await?,
-        Commands::Onboard => cmd_onboard()?,
-        Commands::Agent { message, session } => cmd_agent(message, session).await?,
-        Commands::Gateway { port, verbose, http, http_port, auth } => cmd_gateway(port, verbose, http, http_port, auth).await?,
-        Commands::Daemon { interval, api } => cmd_daemon(interval, api).await?,
-        Commands::Status => cmd_status()?,
-        Commands::Channels { command } => match command {
+        None => {
+            // Default to Voice mode when no subcommand specified
+            cmd_voice("https://chatweb.ai/api/v1/chat".to_string(), None).await?
+        }
+        Some(Commands::Voice { api, sync }) => cmd_voice(api, sync).await?,
+        Some(Commands::Chat { message, api, sync }) => cmd_chat(message, api, sync).await?,
+        Some(Commands::Link { session_id }) => cmd_link(session_id).await?,
+        Some(Commands::Onboard) => cmd_onboard()?,
+        Some(Commands::Agent { message, session }) => cmd_agent(message, session).await?,
+        Some(Commands::Gateway { port, verbose, http, http_port, auth }) => cmd_gateway(port, verbose, http, http_port, auth).await?,
+        Some(Commands::Daemon { interval, api }) => cmd_daemon(interval, api).await?,
+        Some(Commands::Status) => cmd_status()?,
+        Some(Commands::Channels { command }) => match command {
             ChannelCommands::Status => cmd_channels_status()?,
         },
-        Commands::Cron { command } => match command {
+        Some(Commands::Cron { command }) => match command {
             CronCommands::List { all } => cmd_cron_list(all)?,
             CronCommands::Add {
                 name,
@@ -171,8 +186,8 @@ async fn main() -> Result<()> {
             } => cmd_cron_add(name, message, every, cron)?,
             CronCommands::Remove { job_id } => cmd_cron_remove(job_id)?,
         },
-        Commands::Earn { model, api } => cmd_earn(model, api).await?,
-        Commands::GenToken => cmd_gen_token(),
+        Some(Commands::Earn { model, api }) => cmd_earn(model, api).await?,
+        Some(Commands::GenToken) => cmd_gen_token(),
     }
 
     Ok(())
@@ -194,43 +209,43 @@ fn get_cli_session_id() -> Result<String> {
     }
 }
 
-/// Konami code sequence: ↑↑↓↓←→←→BA
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum KonamiKey {
-    Up,
-    Down,
-    Left,
-    Right,
-    B,
-    A,
-}
+/// Display welcome banner in Claude Code style
+fn show_welcome_banner(session_id: &str, synced: bool, authenticated: bool) {
+    // Get current directory
+    let current_dir = std::env::current_dir()
+        .ok()
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "~".to_string());
 
-/// Check if current key buffer matches Konami code pattern
-fn check_konami_pattern(buffer: &[KonamiKey]) -> bool {
-    use KonamiKey::*;
-    let pattern = [Up, Up, Down, Down, Left, Right, Left, Right, B, A];
+    // ASCII art banner with nanobot branding
+    println!("\x1b[1;36m ▐▛█▙▟█▛▌\x1b[0m   chatweb v{}", nanobot_core::VERSION);
+    println!("\x1b[1;36m▝▜█████▛▘\x1b[0m  Voice-First AI Assistant");
+    println!("\x1b[1;36m  ▘▘ ▝▝\x1b[0m    {}", current_dir);
+    println!();
 
-    if buffer.len() < pattern.len() {
-        return false;
+    // Status indicators
+    if synced {
+        println!("\x1b[32m  ✓ Synced with Web session\x1b[0m");
+    }
+    if authenticated {
+        println!("\x1b[32m  ✓ Authenticated\x1b[0m");
+    }
+    if synced || authenticated {
+        println!();
     }
 
-    // Check last N keys match pattern
-    let start = buffer.len() - pattern.len();
-    &buffer[start..] == &pattern
+    // Session info
+    println!("\x1b[2m  Session: {}\x1b[0m", session_id);
+    println!();
+
+    // Commands - Mobile-friendly
+    println!("\x1b[2m  📱 スマホ向けコマンド:\x1b[0m");
+    println!("\x1b[2m    ? or /q   クイックメニュー\x1b[0m");
+    println!("\x1b[2m    /h        ヘルプ\x1b[0m");
+    println!("\x1b[2m    /m        よく使うフレーズ\x1b[0m");
+    println!("\x1b[2m    1-5       数字でクイックアクション\x1b[0m");
 }
 
-/// Convert KeyCode to KonamiKey
-fn key_to_konami(key: KeyCode) -> Option<KonamiKey> {
-    match key {
-        KeyCode::Up => Some(KonamiKey::Up),
-        KeyCode::Down => Some(KonamiKey::Down),
-        KeyCode::Left => Some(KonamiKey::Left),
-        KeyCode::Right => Some(KonamiKey::Right),
-        KeyCode::Char('b') | KeyCode::Char('B') => Some(KonamiKey::B),
-        KeyCode::Char('a') | KeyCode::Char('A') => Some(KonamiKey::A),
-        _ => None,
-    }
-}
 
 /// Redeem Konami code via API
 async fn redeem_konami_code(client: &reqwest::Client, api_url: &str, session_id: &str, auth_token: Option<&str>) -> Result<serde_json::Value> {
@@ -278,6 +293,281 @@ fn show_konami_animation(credits_granted: i64, credits_remaining: i64) {
     println!();
 }
 
+/// Show quick action menu (mobile-friendly)
+fn show_quick_menu() {
+    println!();
+    println!("\x1b[1;36m📱 クイックメニュー\x1b[0m");
+    println!("\x1b[2m─────────────────────────\x1b[0m");
+    println!("\x1b[1;32m1\x1b[0m. 📊 ステータス確認");
+    println!("\x1b[1;32m2\x1b[0m. 🎮 コナミコード実行");
+    println!("\x1b[1;32m3\x1b[0m. 🔗 セッション連携");
+    println!("\x1b[1;32m4\x1b[0m. 💬 よく使うフレーズ");
+    println!("\x1b[1;32m5\x1b[0m. 📋 ヘルプ表示");
+    println!("\x1b[2m─────────────────────────\x1b[0m");
+    println!("\x1b[2m数字を入力して選択\x1b[0m");
+    println!();
+}
+
+/// Show mobile-friendly help
+fn show_mobile_help() {
+    println!();
+    println!("\x1b[1;36m📱 スマホ向けコマンド\x1b[0m");
+    println!("\x1b[2m─────────────────────────\x1b[0m");
+    println!("\x1b[1;33m/q\x1b[0m または \x1b[1;33m?\x1b[0m     クイックメニュー");
+    println!("\x1b[1;33m/s\x1b[0m            ステータス表示");
+    println!("\x1b[1;33m/h\x1b[0m            このヘルプ");
+    println!("\x1b[1;33m/c\x1b[0m            画面クリア");
+    println!("\x1b[1;33m/.\x1b[0m            前回メッセージ再送");
+    println!("\x1b[1;33m/m\x1b[0m            よく使うフレーズ");
+    println!("\x1b[2m─────────────────────────\x1b[0m");
+    println!("\x1b[2m数字だけ: 1-5 でクイックアクション\x1b[0m");
+    println!();
+}
+
+/// Show frequently used phrases menu
+fn show_phrases_menu() {
+    println!();
+    println!("\x1b[1;36m💬 よく使うフレーズ\x1b[0m");
+    println!("\x1b[2m─────────────────────────\x1b[0m");
+    println!("\x1b[1;32m1\x1b[0m. こんにちは！");
+    println!("\x1b[1;32m2\x1b[0m. これについて詳しく教えて");
+    println!("\x1b[1;32m3\x1b[0m. わかりやすく説明して");
+    println!("\x1b[1;32m4\x1b[0m. 要約して");
+    println!("\x1b[1;32m5\x1b[0m. ありがとう！");
+    println!("\x1b[2m─────────────────────────\x1b[0m");
+    println!();
+}
+
+/// Get phrase by number
+fn get_phrase(num: &str) -> Option<String> {
+    match num {
+        "1" => Some("こんにちは！".to_string()),
+        "2" => Some("これについて詳しく教えて".to_string()),
+        "3" => Some("わかりやすく説明して".to_string()),
+        "4" => Some("要約して".to_string()),
+        "5" => Some("ありがとう！".to_string()),
+        _ => None,
+    }
+}
+
+/// Voice-first interactive mode with animated character.
+/// Space key for push-to-talk, switch to chat mode with /chat command.
+async fn cmd_voice(api_url: String, sync: Option<String>) -> Result<()> {
+    let session_id = if let Some(ref sid) = sync {
+        sid.clone()
+    } else {
+        get_cli_session_id()?
+    };
+
+    let auth_token = load_auth_token();
+    let stream_url = api_url.replace("/api/v1/chat", "/api/v1/chat/stream");
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(90))
+        .build()
+        .unwrap_or_default();
+
+    // Enter raw mode for character-by-character input
+    terminal::enable_raw_mode()?;
+    let mut stdout = std::io::stdout();
+    stdout.execute(terminal::Clear(ClearType::All))?;
+
+    // Show initial voice UI
+    show_voice_ui(VoiceState::Idle, &session_id, sync.is_some(), auth_token.is_some())?;
+
+    let mut mode = InteractionMode::Voice;
+    let mut input_buffer = String::new();
+    let mut listening_start = None;
+
+    loop {
+        // Poll for keyboard events
+        if event::poll(std::time::Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                // Check Ctrl+C globally
+                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                    break;
+                }
+
+                match mode {
+                    InteractionMode::Voice => {
+                        match key.code {
+                            KeyCode::Char(' ') if key.kind == KeyEventKind::Press => {
+                                // Start listening
+                                listening_start = Some(std::time::Instant::now());
+                                show_voice_ui(VoiceState::Listening, &session_id, sync.is_some(), auth_token.is_some())?;
+                            }
+                            KeyCode::Char(' ') if key.kind == KeyEventKind::Release => {
+                                // Stop listening and process
+                                if let Some(start) = listening_start {
+                                    let duration = start.elapsed();
+                                    show_voice_ui(VoiceState::Processing, &session_id, sync.is_some(), auth_token.is_some())?;
+
+                                    // For now, prompt user to type (real STT would go here)
+                                    terminal::disable_raw_mode()?;
+                                    stdout.execute(terminal::Clear(ClearType::All))?;
+                                    println!("\x1b[2m🎤 リスニング時間: {:.1}秒\x1b[0m", duration.as_secs_f32());
+                                    println!("\x1b[1;33m入力してください:\x1b[0m ");
+
+                                    use std::io::BufRead;
+                                    let mut line = String::new();
+                                    std::io::stdin().lock().read_line(&mut line)?;
+
+                                    if !line.trim().is_empty() {
+                                        // Send to API
+                                        println!();
+                                        chat_api_stream(&client, &stream_url, &api_url, line.trim(), &session_id, auth_token.as_deref()).await?;
+                                        println!();
+                                    }
+
+                                    println!("\x1b[2m[スペースキー] で再度話す | [Ctrl+C] で終了 | [Enter] でチャットモードへ\x1b[0m");
+                                    std::io::stdin().lock().read_line(&mut String::new())?;
+
+                                    terminal::enable_raw_mode()?;
+                                    show_voice_ui(VoiceState::Idle, &session_id, sync.is_some(), auth_token.is_some())?;
+                                    listening_start = None;
+                                }
+                            }
+                            KeyCode::Enter => {
+                                // Switch to chat mode
+                                mode = InteractionMode::Chat;
+                                terminal::disable_raw_mode()?;
+                                stdout.execute(terminal::Clear(ClearType::All))?;
+                                println!("\x1b[1;36m💬 チャットモードに切り替えました\x1b[0m");
+                                println!("\x1b[2m/voice でVoiceモードに戻る | Ctrl+C で終了\x1b[0m");
+                                println!();
+                            }
+                            _ => {}
+                        }
+                    }
+                    InteractionMode::Chat => {
+                        // Handle chat mode input
+                        // Check Ctrl+C first
+                        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                            break;
+                        }
+
+                        match key.code {
+                            KeyCode::Char(c) => {
+                                input_buffer.push(c);
+                                print!("{}", c);
+                                use std::io::Write;
+                                std::io::stdout().flush()?;
+                            }
+                            KeyCode::Enter => {
+                                println!();
+                                if input_buffer.trim() == "/voice" {
+                                    // Switch back to voice mode
+                                    input_buffer.clear();
+                                    mode = InteractionMode::Voice;
+                                    terminal::enable_raw_mode()?;
+                                    show_voice_ui(VoiceState::Idle, &session_id, sync.is_some(), auth_token.is_some())?;
+                                } else if !input_buffer.trim().is_empty() {
+                                    // Send message
+                                    chat_api_stream(&client, &stream_url, &api_url, &input_buffer.trim(), &session_id, auth_token.as_deref()).await?;
+                                    println!();
+                                    print!("\x1b[1;33mYou:\x1b[0m ");
+                                    use std::io::Write;
+                                    std::io::stdout().flush()?;
+                                    input_buffer.clear();
+                                } else {
+                                    print!("\x1b[1;33mYou:\x1b[0m ");
+                                    use std::io::Write;
+                                    std::io::stdout().flush()?;
+                                }
+                            }
+                            KeyCode::Backspace => {
+                                if !input_buffer.is_empty() {
+                                    input_buffer.pop();
+                                    print!("\x08 \x08");
+                                    use std::io::Write;
+                                    std::io::stdout().flush()?;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    terminal::disable_raw_mode()?;
+    stdout.execute(terminal::Clear(ClearType::All))?;
+    println!("\x1b[2mVoice UIを終了しました\x1b[0m");
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum InteractionMode {
+    Voice,
+    Chat,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum VoiceState {
+    Idle,
+    Listening,
+    Processing,
+}
+
+/// Display animated voice UI based on current state
+fn show_voice_ui(state: VoiceState, session_id: &str, synced: bool, authenticated: bool) -> Result<()> {
+    use std::io::Write;
+    let mut stdout = std::io::stdout();
+
+    stdout.execute(terminal::Clear(ClearType::All))?;
+    stdout.execute(crossterm::cursor::MoveTo(0, 0))?;
+
+    println!();
+
+    // Animated character based on state
+    match state {
+        VoiceState::Idle => {
+            println!("\x1b[1;36m     ▐▛█▙▟█▛▌\x1b[0m");
+            println!("\x1b[1;36m    ▝▜█████▛▘\x1b[0m");
+            println!("\x1b[1;36m      ▘▘ ▝▝\x1b[0m");
+            println!();
+            println!("\x1b[2m     chatweb\x1b[0m");
+            println!();
+            println!("\x1b[2;90m  [スペース] を押して話す\x1b[0m");
+        }
+        VoiceState::Listening => {
+            println!("\x1b[1;32m     ▐▛█▙▟█▛▌\x1b[0m  \x1b[1;32m●\x1b[0m");
+            println!("\x1b[1;32m    ▝▜█████▛▘\x1b[0m  \x1b[1;32m●\x1b[0m");
+            println!("\x1b[1;32m      ▘▘ ▝▝\x1b[0m    \x1b[1;32m●\x1b[0m");
+            println!();
+            println!("\x1b[1;32m    🎤 リスニング中...\x1b[0m");
+            println!();
+            println!("\x1b[2;32m  [スペース] を離して送信\x1b[0m");
+        }
+        VoiceState::Processing => {
+            println!("\x1b[1;33m     ▐▛█▙▟█▛▌\x1b[0m");
+            println!("\x1b[1;33m    ▝▜█████▛▘\x1b[0m  \x1b[1;33m⚙\x1b[0m");
+            println!("\x1b[1;33m      ▘▘ ▝▝\x1b[0m");
+            println!();
+            println!("\x1b[1;33m    💭 考え中...\x1b[0m");
+        }
+    }
+
+    println!();
+    println!();
+
+    // Status bar at bottom
+    if synced {
+        println!("\x1b[2m  ✓ Synced\x1b[0m");
+    }
+    if authenticated {
+        println!("\x1b[2m  ✓ Authenticated\x1b[0m");
+    }
+    println!("\x1b[2m  Session: {}\x1b[0m", &session_id[..session_id.len().min(20)]);
+    println!();
+    println!("\x1b[2m  [Enter] チャットモード | [Ctrl+C] 終了\x1b[0m");
+
+    stdout.flush()?;
+    Ok(())
+}
+
 /// Chat with chatweb.ai API directly — no config or API key needed.
 /// Uses SSE streaming for real-time responses with tool progress.
 async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -> Result<()> {
@@ -299,23 +589,13 @@ async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -
         .unwrap_or_default();
 
     if message.is_empty() {
-        // Interactive mode with modern styling
+        // Interactive mode with Claude Code-style banner
         println!();
-        println!("\x1b[1;36m  {}\x1b[0m \x1b[1mchatweb.ai\x1b[0m \x1b[2mv{}\x1b[0m", nanobot_core::LOGO, nanobot_core::VERSION);
-        println!("\x1b[2m  ─────────────────────────────────────\x1b[0m");
-        println!("\x1b[2m  Session: {}\x1b[0m", session_id);
-        if sync.is_some() {
-            println!("\x1b[32m  ✓ Synced with Web session\x1b[0m");
-        }
-        if auth_token.is_some() {
-            println!("\x1b[32m  ✓ Authenticated\x1b[0m");
-        }
+        show_welcome_banner(&session_id, sync.is_some(), auth_token.is_some());
         println!();
-        println!("\x1b[2m  Commands:\x1b[0m");
-        println!("\x1b[2m    /help    Show available commands\x1b[0m");
-        println!("\x1b[2m    /konami  Activate secret bonus 🎮\x1b[0m");
-        println!("\x1b[2m    Ctrl+C   Exit\x1b[0m");
-        println!();
+
+        let mut last_message = String::new();
+        let mut in_phrase_menu = false;
 
         loop {
             use std::io::Write;
@@ -331,33 +611,180 @@ async fn cmd_chat(message: Vec<String>, api_url: String, sync: Option<String>) -
                 continue;
             }
 
-            // Check for /konami command
-            if input == "/konami" {
-                println!();
-                print!("\x1b[2mActivating Konami code...\x1b[0m");
-                std::io::stdout().flush()?;
+            // Mobile-friendly shortcut commands
+            match input {
+                // Quick menu
+                "/q" | "?" => {
+                    show_quick_menu();
+                    continue;
+                }
+                // Status
+                "/s" => {
+                    println!();
+                    println!("\x1b[1;36m📊 ステータス\x1b[0m");
+                    println!("\x1b[2m  Session: {}\x1b[0m", session_id);
+                    if sync.is_some() {
+                        println!("\x1b[32m  ✓ Synced\x1b[0m");
+                    }
+                    if auth_token.is_some() {
+                        println!("\x1b[32m  ✓ Authenticated\x1b[0m");
+                    }
+                    println!();
+                    continue;
+                }
+                // Mobile help
+                "/h" => {
+                    show_mobile_help();
+                    continue;
+                }
+                // Clear screen
+                "/c" => {
+                    print!("\x1b[2J\x1b[H");
+                    std::io::stdout().flush()?;
+                    show_welcome_banner(&session_id, sync.is_some(), auth_token.is_some());
+                    println!();
+                    continue;
+                }
+                // Repeat last message
+                "/." => {
+                    if last_message.is_empty() {
+                        println!("\x1b[2m前回のメッセージがありません\x1b[0m");
+                        println!();
+                        continue;
+                    }
+                    println!("\x1b[2m再送信: {}\x1b[0m", last_message);
+                    println!();
+                    match chat_api_stream(&client, &stream_url, &api_url, &last_message, &session_id, auth_token.as_deref()).await {
+                        Ok(()) => println!(),
+                        Err(e) => eprintln!("\x1b[31mError: {}\x1b[0m\n", e),
+                    }
+                    continue;
+                }
+                // Phrases menu
+                "/m" => {
+                    show_phrases_menu();
+                    in_phrase_menu = true;
+                    continue;
+                }
+                // Konami code
+                "/konami" => {
+                    println!();
+                    print!("\x1b[2mActivating Konami code...\x1b[0m");
+                    std::io::stdout().flush()?;
 
-                match redeem_konami_code(&client, &api_url, &session_id, auth_token.as_deref()).await {
-                    Ok(result) => {
-                        if result["success"].as_bool().unwrap_or(false) {
-                            let granted = result["credits_granted"].as_i64().unwrap_or(1000);
-                            let remaining = result["credits_remaining"].as_i64().unwrap_or(0);
-                            print!("\r                              \r"); // Clear loading message
-                            show_konami_animation(granted, remaining);
-                        } else if let Some(error) = result["error"].as_str() {
-                            println!("\r\x1b[31mError: {}\x1b[0m", error);
+                    match redeem_konami_code(&client, &api_url, &session_id, auth_token.as_deref()).await {
+                        Ok(result) => {
+                            if result["success"].as_bool().unwrap_or(false) {
+                                let granted = result["credits_granted"].as_i64().unwrap_or(1000);
+                                let remaining = result["credits_remaining"].as_i64().unwrap_or(0);
+                                print!("\r                              \r");
+                                show_konami_animation(granted, remaining);
+                            } else if let Some(error) = result["error"].as_str() {
+                                println!("\r\x1b[31mError: {}\x1b[0m", error);
+                            }
+                        }
+                        Err(e) => {
+                            println!("\r\x1b[31mError: {}\x1b[0m", e);
                         }
                     }
-                    Err(e) => {
-                        println!("\r\x1b[31mError: {}\x1b[0m", e);
-                    }
+                    println!();
+                    continue;
                 }
-                println!();
-                continue;
+                _ => {}
             }
 
+            // Handle numeric shortcuts
+            let message_to_send = if input.len() == 1 && input.chars().all(|c| c.is_ascii_digit()) {
+                let num = input;
+
+                // If in phrase menu, use phrase
+                if in_phrase_menu {
+                    in_phrase_menu = false;
+                    if let Some(phrase) = get_phrase(num) {
+                        println!("\x1b[2m→ {}\x1b[0m", phrase);
+                        phrase
+                    } else {
+                        println!("\x1b[31m無効な番号です\x1b[0m");
+                        println!();
+                        continue;
+                    }
+                } else {
+                    // Quick action menu shortcuts
+                    match num {
+                        "1" => {
+                            // Status
+                            println!();
+                            println!("\x1b[1;36m📊 ステータス\x1b[0m");
+                            println!("\x1b[2m  Session: {}\x1b[0m", session_id);
+                            if sync.is_some() {
+                                println!("\x1b[32m  ✓ Synced\x1b[0m");
+                            }
+                            if auth_token.is_some() {
+                                println!("\x1b[32m  ✓ Authenticated\x1b[0m");
+                            }
+                            println!();
+                            continue;
+                        }
+                        "2" => {
+                            // Konami
+                            println!();
+                            print!("\x1b[2mActivating Konami code...\x1b[0m");
+                            std::io::stdout().flush()?;
+
+                            match redeem_konami_code(&client, &api_url, &session_id, auth_token.as_deref()).await {
+                                Ok(result) => {
+                                    if result["success"].as_bool().unwrap_or(false) {
+                                        let granted = result["credits_granted"].as_i64().unwrap_or(1000);
+                                        let remaining = result["credits_remaining"].as_i64().unwrap_or(0);
+                                        print!("\r                              \r");
+                                        show_konami_animation(granted, remaining);
+                                    } else if let Some(error) = result["error"].as_str() {
+                                        println!("\r\x1b[31mError: {}\x1b[0m", error);
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("\r\x1b[31mError: {}\x1b[0m", e);
+                                }
+                            }
+                            println!();
+                            continue;
+                        }
+                        "3" => {
+                            // Link session
+                            println!();
+                            println!("\x1b[1;36m🔗 セッション連携\x1b[0m");
+                            println!("\x1b[2m  Session ID: {}\x1b[0m", session_id);
+                            println!();
+                            println!("\x1b[2mWebやLINE、Telegramと連携するには:\x1b[0m");
+                            println!("\x1b[2m  1. メッセージで \"/link\" と送信\x1b[0m");
+                            println!("\x1b[2m  2. 表示されたコードを他のデバイスで入力\x1b[0m");
+                            println!();
+                            continue;
+                        }
+                        "4" => {
+                            show_phrases_menu();
+                            in_phrase_menu = true;
+                            continue;
+                        }
+                        "5" => {
+                            show_mobile_help();
+                            continue;
+                        }
+                        _ => {
+                            // Not a valid quick action, send as regular message
+                            input.to_string()
+                        }
+                    }
+                }
+            } else {
+                in_phrase_menu = false;
+                input.to_string()
+            };
+
+            // Send message to API
+            last_message = message_to_send.clone();
             println!();
-            match chat_api_stream(&client, &stream_url, &api_url, input, &session_id, auth_token.as_deref()).await {
+            match chat_api_stream(&client, &stream_url, &api_url, &message_to_send, &session_id, auth_token.as_deref()).await {
                 Ok(()) => println!(),
                 Err(e) => eprintln!("\x1b[31mError: {}\x1b[0m\n", e),
             }
