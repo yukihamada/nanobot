@@ -2119,6 +2119,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Account management
         .route("/api/v1/account", delete(handle_delete_account))
         .route("/api/v1/account/profile", axum::routing::put(handle_update_profile))
+        .route("/api/v1/account/reset-data", post(handle_reset_user_data))
         // File upload
         .route("/api/v1/upload/presign", post(handle_upload_presign))
         // Push notifications
@@ -7345,7 +7346,6 @@ pub struct OmikujiRequest {
 }
 
 /// POST /api/v1/omikuji — Draw daily fortune
-#[axum::debug_handler]
 async fn handle_omikuji(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
@@ -7353,9 +7353,13 @@ async fn handle_omikuji(
 ) -> impl IntoResponse {
     info!("Omikuji request");
 
-    #[cfg(feature = "dynamodb-backend")]
+    let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) else {
+        return (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": "Database not configured"
+        }))).into_response();
+    };
+
     {
-    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         // 1. Resolve user
         let session_key = if let Some(ref sid) = req.session_id {
             sid.clone()
@@ -7445,24 +7449,14 @@ async fn handle_omikuji(
         emit_audit_log(dynamo.clone(), table.clone(), "omikuji_drawn", &resolved_user, "",
             &format!("fortune={}, credits={}", fortune, grant));
 
-        return Json(serde_json::json!({
+        Json(serde_json::json!({
             "success": true,
             "fortune": fortune,
             "credits_granted": grant,
             "credits_remaining": updated.credits_remaining,
             "message": message,
-        })).into_response();
-    } else {
-        return (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-            "error": "Database not configured"
-        }))).into_response();
+        })).into_response()
     }
-    }
-
-    #[cfg(not(feature = "dynamodb-backend"))]
-    (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-        "error": "Omikuji not available"
-    }))).into_response()
 }
 
 /// Request body for coupon validation.
@@ -8105,25 +8099,43 @@ async fn handle_voice_invite(
                 )
             };
 
-            // Voice generation fallback chain: RunPod Qwen (cloning) → ElevenLabs → OpenAI
+            // Voice generation fallback chain: Modal CosyVoice → RunPod CosyVoice → ElevenLabs → OpenAI
             let mut audio_bytes = None;
+            let ref_audio = std::env::var("YUKI_REFERENCE_AUDIO_BASE64").ok();
 
-            // 1. Try RunPod Qwen with voice cloning (if reference audio available)
-            if let Ok(ref_audio) = std::env::var("YUKI_REFERENCE_AUDIO_BASE64") {
-                if !ref_audio.is_empty() && std::env::var("RUNPOD_QWEN_TTS_URL").is_ok() {
-                    match try_runpod_qwen_tts(&invite_message, "yuki", 1.0, Some(&ref_audio)).await {
+            // 1. Try Modal CosyVoice with voice cloning (primary)
+            if let Some(ref ref_audio_data) = &ref_audio {
+                if !ref_audio_data.is_empty() && std::env::var("MODAL_COSYVOICE_TTS_URL").is_ok() {
+                    match try_modal_cosyvoice_tts(&invite_message, "zero_shot", Some(ref_audio_data), "こんにちは").await {
                         Ok(bytes) => {
-                            tracing::info!("Voice invite: RunPod Qwen clone success, {} bytes", bytes.len());
+                            tracing::info!("Voice invite: Modal CosyVoice clone success, {} bytes", bytes.len());
                             audio_bytes = Some(bytes);
                         }
                         Err(e) => {
-                            tracing::warn!("Voice invite: RunPod Qwen failed: {}, trying ElevenLabs", e);
+                            tracing::warn!("Voice invite: Modal CosyVoice failed: {}, trying RunPod CosyVoice", e);
                         }
                     }
                 }
             }
 
-            // 2. Try ElevenLabs if RunPod Qwen not available or failed
+            // 2. Try RunPod CosyVoice with voice cloning (failsafe)
+            if audio_bytes.is_none() {
+                if let Some(ref ref_audio_data) = &ref_audio {
+                    if !ref_audio_data.is_empty() && std::env::var("RUNPOD_COSYVOICE_ENDPOINT_ID").is_ok() {
+                        match try_runpod_cosyvoice_tts(&invite_message, "zero_shot", Some(ref_audio_data), "こんにちは").await {
+                            Ok(bytes) => {
+                                tracing::info!("Voice invite: RunPod CosyVoice clone success, {} bytes", bytes.len());
+                                audio_bytes = Some(bytes);
+                            }
+                            Err(e) => {
+                                tracing::warn!("Voice invite: RunPod CosyVoice failed: {}, trying ElevenLabs", e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Try ElevenLabs if Qwen not available or failed
             if audio_bytes.is_none() {
                 let yuki_voice_id = std::env::var("ELEVENLABS_YUKI_VOICE_ID")
                     .unwrap_or_else(|_| "pNInz6obpgDQGcFmaJgB".to_string());
@@ -8143,7 +8155,7 @@ async fn handle_voice_invite(
                 }
             }
 
-            // 3. Fallback to OpenAI TTS
+            // 4. Final fallback to OpenAI TTS
             if audio_bytes.is_none() {
                 audio_bytes = try_openai_tts(
                     &invite_message,
@@ -12619,6 +12631,143 @@ async fn handle_delete_account(
     (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
 }
 
+/// POST /api/v1/account/reset-data — Reset all user data except credits and account info
+async fn handle_reset_user_data(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    if token.is_empty() {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Unauthorized" })));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let user_id = match auth_user_id(&state, &headers).await {
+                Some(id) => id,
+                None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid token" }))),
+            };
+
+            let user_pk = format!("USER#{}", user_id);
+
+            // Delete MEMORY# (long-term and daily logs)
+            let memory_pk = format!("MEMORY#{}", user_id);
+
+            // Query all MEMORY# items
+            if let Ok(memory_query) = dynamo
+                .query()
+                .table_name(table)
+                .key_condition_expression("pk = :pk")
+                .expression_attribute_values(":pk", AttributeValue::S(memory_pk.clone()))
+                .send()
+                .await
+            {
+                if let Some(items) = memory_query.items {
+                    for item in items {
+                        if let (Some(pk), Some(sk)) = (item.get("pk"), item.get("sk")) {
+                            let _ = dynamo.delete_item().table_name(table)
+                                .key("pk", pk.clone())
+                                .key("sk", sk.clone())
+                                .send().await;
+                        }
+                    }
+                }
+            }
+
+            // Delete all conversations (USER#CONV#*)
+            if let Ok(conv_query) = dynamo
+                .query()
+                .table_name(table)
+                .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+                .expression_attribute_values(":pk", AttributeValue::S(user_pk.clone()))
+                .expression_attribute_values(":prefix", AttributeValue::S("CONV#".to_string()))
+                .send()
+                .await
+            {
+                if let Some(items) = conv_query.items {
+                    for item in items {
+                        if let (Some(pk), Some(sk)) = (item.get("pk"), item.get("sk")) {
+                            let _ = dynamo.delete_item().table_name(table)
+                                .key("pk", pk.clone())
+                                .key("sk", sk.clone())
+                                .send().await;
+                        }
+                    }
+                }
+            }
+
+            // Delete all sessions (SESSION#*)
+            if let Ok(session_scan) = dynamo
+                .scan()
+                .table_name(table)
+                .filter_expression("begins_with(pk, :prefix) AND attribute_exists(user_id)")
+                .expression_attribute_values(":prefix", AttributeValue::S("SESSION#".to_string()))
+                .send()
+                .await
+            {
+                if let Some(items) = session_scan.items {
+                    for item in items {
+                        if let Some(item_user_id) = item.get("user_id").and_then(|v| v.as_s().ok()) {
+                            if item_user_id == &user_id {
+                                if let (Some(pk), Some(sk)) = (item.get("pk"), item.get("sk")) {
+                                    let _ = dynamo.delete_item().table_name(table)
+                                        .key("pk", pk.clone())
+                                        .key("sk", sk.clone())
+                                        .send().await;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Delete shared conversation links (CONV_SHARE# and SHARE#)
+            if let Ok(share_query) = dynamo
+                .query()
+                .table_name(table)
+                .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+                .expression_attribute_values(":pk", AttributeValue::S(user_pk.clone()))
+                .expression_attribute_values(":prefix", AttributeValue::S("CONV_SHARE#".to_string()))
+                .send()
+                .await
+            {
+                if let Some(items) = share_query.items {
+                    for item in items {
+                        // Delete CONV_SHARE# entry
+                        if let (Some(pk), Some(sk)) = (item.get("pk"), item.get("sk")) {
+                            let _ = dynamo.delete_item().table_name(table)
+                                .key("pk", pk.clone())
+                                .key("sk", sk.clone())
+                                .send().await;
+                        }
+                        // Delete corresponding SHARE# entry
+                        if let Some(hash) = item.get("hash").and_then(|v| v.as_s().ok()) {
+                            let _ = dynamo.delete_item().table_name(table)
+                                .key("pk", AttributeValue::S(format!("SHARE#{}", hash)))
+                                .key("sk", AttributeValue::S("METADATA".to_string()))
+                                .send().await;
+                        }
+                    }
+                }
+            }
+
+            emit_audit_log(dynamo.clone(), table.clone(), "data_reset", &user_id, "", "user_reset_all_data_except_credits");
+
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "message": "会話履歴、メモリ、セッションを削除しました。クレジットとアカウント情報は保持されています。"
+            })));
+        }
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
 // ---------------------------------------------------------------------------
 // Profile Edit
 // ---------------------------------------------------------------------------
@@ -14115,7 +14264,62 @@ async fn try_sbv2_tts(text: &str, model_id: i32, speaker_id: i32, style: &str) -
     }
 }
 
-/// Qwen3 Voice Cloning via RunPod — high-quality voice synthesis with custom voice cloning
+/// Qwen3 Voice Cloning via Modal — primary endpoint with voice cloning support
+async fn try_modal_qwen_tts(text: &str, voice: &str, speed: f64, reference_audio: Option<&str>) -> Result<Vec<u8>, String> {
+    let endpoint_url = std::env::var("MODAL_QWEN_TTS_URL")
+        .map_err(|_| "No MODAL_QWEN_TTS_URL environment variable set".to_string())?;
+
+    if endpoint_url.is_empty() {
+        return Err("Empty MODAL_QWEN_TTS_URL".to_string());
+    }
+
+    // Detect Japanese text for language selection
+    let is_ja = text.chars().any(|c| {
+        ('\u{3040}'..='\u{309F}').contains(&c) || // hiragana
+        ('\u{30A0}'..='\u{30FF}').contains(&c) || // katakana
+        ('\u{4E00}'..='\u{9FFF}').contains(&c)    // CJK
+    });
+
+    let language = if is_ja { "ja" } else { "en" };
+    let voice_name = if voice.is_empty() { "default" } else { voice };
+
+    let client = reqwest::Client::new();
+    let url = format!("{}/synthesize", endpoint_url.trim_end_matches('/'));
+
+    let mut payload = serde_json::json!({
+        "text": text,
+        "voice": voice_name,
+        "language": language,
+        "speed": speed,
+    });
+
+    // Add reference audio for voice cloning if provided
+    if let Some(ref_audio) = reference_audio {
+        payload["reference_audio"] = serde_json::json!(ref_audio);
+    }
+
+    let resp = client
+        .post(&url)
+        .json(&payload)
+        .timeout(std::time::Duration::from_secs(90))
+        .send()
+        .await
+        .map_err(|e| format!("Modal Qwen TTS request failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Modal Qwen TTS error: {} {}", status, body));
+    }
+
+    // Modal returns MP3 bytes directly
+    let audio_bytes = resp.bytes().await
+        .map_err(|e| format!("Failed to read Modal Qwen response: {}", e))?;
+
+    Ok(audio_bytes.to_vec())
+}
+
+/// Qwen3 Voice Cloning via RunPod — failsafe endpoint with voice cloning support
 async fn try_runpod_qwen_tts(text: &str, voice: &str, speed: f64, reference_audio: Option<&str>) -> Result<Vec<u8>, String> {
     let endpoint_url = std::env::var("RUNPOD_QWEN_TTS_URL")
         .map_err(|_| "No RUNPOD_QWEN_TTS_URL environment variable set".to_string())?;
@@ -14180,7 +14384,105 @@ async fn try_runpod_qwen_tts(text: &str, voice: &str, speed: f64, reference_audi
     Ok(audio)
 }
 
-/// CosyVoice 2 TTS via RunPod Serverless — high-quality multilingual zero-shot voice cloning
+/// CosyVoice 2 TTS via Modal — primary endpoint with voice cloning support
+async fn try_modal_cosyvoice_tts(text: &str, mode: &str, prompt_audio: Option<&str>, prompt_text: &str) -> Result<Vec<u8>, String> {
+    let endpoint_url = std::env::var("MODAL_COSYVOICE_TTS_URL")
+        .map_err(|_| "No MODAL_COSYVOICE_TTS_URL".to_string())?;
+
+    if endpoint_url.is_empty() {
+        return Err("Empty MODAL_COSYVOICE_TTS_URL".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let url = format!("{}/synthesize", endpoint_url.trim_end_matches('/'));
+
+    let mut payload = serde_json::json!({
+        "text": text,
+        "mode": mode,
+        "output_format": "mp3",
+    });
+
+    if let Some(ref_audio) = prompt_audio {
+        payload["prompt_audio"] = serde_json::json!(ref_audio);
+        payload["prompt_text"] = serde_json::json!(prompt_text);
+    }
+
+    let resp = client
+        .post(&url)
+        .json(&payload)
+        .timeout(std::time::Duration::from_secs(90))
+        .send()
+        .await
+        .map_err(|e| format!("Modal CosyVoice request failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Modal CosyVoice error: {} {}", status, body));
+    }
+
+    // Modal returns MP3 bytes directly
+    let audio_bytes = resp.bytes().await
+        .map_err(|e| format!("Failed to read Modal CosyVoice response: {}", e))?;
+
+    Ok(audio_bytes.to_vec())
+}
+
+/// CosyVoice 2 TTS via RunPod Serverless — failsafe endpoint with voice cloning support
+async fn try_runpod_cosyvoice_tts(text: &str, mode: &str, prompt_audio: Option<&str>, prompt_text: &str) -> Result<Vec<u8>, String> {
+    let api_key = std::env::var("RUNPOD_API_KEY")
+        .map_err(|_| "No RUNPOD_API_KEY".to_string())?;
+    let endpoint_id = std::env::var("RUNPOD_COSYVOICE_ENDPOINT_ID")
+        .map_err(|_| "No RUNPOD_COSYVOICE_ENDPOINT_ID".to_string())?;
+
+    if api_key.is_empty() || endpoint_id.is_empty() {
+        return Err("Empty RunPod CosyVoice credentials".to_string());
+    }
+
+    let url = format!("https://api.runpod.ai/v2/{}/runsync", endpoint_id);
+    let client = reqwest::Client::new();
+
+    let mut input = serde_json::json!({
+        "text": text,
+        "mode": mode,
+        "output_format": "mp3",
+    });
+
+    if let Some(ref_audio) = prompt_audio {
+        input["prompt_audio"] = serde_json::json!(ref_audio);
+        input["prompt_text"] = serde_json::json!(prompt_text);
+    }
+
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&serde_json::json!({ "input": input }))
+        .timeout(std::time::Duration::from_secs(90))
+        .send()
+        .await
+        .map_err(|e| format!("RunPod CosyVoice request failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("RunPod CosyVoice error: {} {}", status, body));
+    }
+
+    let body: serde_json::Value = resp.json().await
+        .map_err(|e| format!("RunPod CosyVoice JSON parse error: {}", e))?;
+
+    let audio_b64 = body.get("output")
+        .and_then(|o| o.get("audio_base64").and_then(|v| v.as_str()))
+        .ok_or_else(|| format!("RunPod CosyVoice returned no audio. Response: {}", body))?;
+
+    use base64::Engine as _;
+    let audio = base64::engine::general_purpose::STANDARD.decode(audio_b64)
+        .map_err(|e| format!("RunPod CosyVoice base64 decode error: {}", e))?;
+
+    Ok(audio)
+}
+
+/// CosyVoice 2 TTS via RunPod Serverless (legacy) — high-quality multilingual zero-shot voice cloning
 async fn try_cosyvoice_tts(text: &str, mode: &str, speaker_id: &str) -> Result<Vec<u8>, String> {
     let api_key = std::env::var("RUNPOD_API_KEY")
         .map_err(|_| "No RUNPOD_API_KEY".to_string())?;
