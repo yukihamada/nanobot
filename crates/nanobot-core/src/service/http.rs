@@ -7451,13 +7451,17 @@ async fn handle_omikuji(
             "credits_remaining": updated.credits_remaining,
             "message": message,
         })).into_response();
+    } else {
+        return (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": "Database not configured"
+        }))).into_response();
     }
     }
 
     #[cfg(not(feature = "dynamodb-backend"))]
-    return (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+    (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
         "error": "Omikuji not available"
-    }))).into_response();
+    }))).into_response()
 }
 
 /// Request body for coupon validation.
