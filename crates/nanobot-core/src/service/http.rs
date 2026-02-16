@@ -7353,13 +7353,7 @@ async fn handle_omikuji(
 ) -> impl IntoResponse {
     info!("Omikuji request");
 
-    let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) else {
-        return (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-            "error": "Database not configured"
-        }))).into_response();
-    };
-
-    {
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         // 1. Resolve user
         let session_key = if let Some(ref sid) = req.session_id {
             sid.clone()
@@ -7449,14 +7443,18 @@ async fn handle_omikuji(
         emit_audit_log(dynamo.clone(), table.clone(), "omikuji_drawn", &resolved_user, "",
             &format!("fortune={}, credits={}", fortune, grant));
 
-        Json(serde_json::json!({
+        return Json(serde_json::json!({
             "success": true,
             "fortune": fortune,
             "credits_granted": grant,
             "credits_remaining": updated.credits_remaining,
             "message": message,
-        })).into_response()
+        })).into_response();
     }
+
+    (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+        "error": "Database not available"
+    }))).into_response()
 }
 
 /// Request body for coupon validation.
