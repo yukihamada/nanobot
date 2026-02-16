@@ -7345,6 +7345,7 @@ pub struct OmikujiRequest {
 }
 
 /// POST /api/v1/omikuji — Draw daily fortune
+#[axum::debug_handler]
 async fn handle_omikuji(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
