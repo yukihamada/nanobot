@@ -124,10 +124,40 @@ aws lambda update-alias \
 END_DEPLOY=$(date +%s)
 echo ""
 
-# 6. Health check
+# 6. Health check + provider verification
 echo "--- Health check ---"
 HEALTH=$(curl -sf "https://chatweb.ai/health" 2>&1 || echo "FAILED")
 echo "Health: $HEALTH"
+
+# Verify LLM providers are available (prevent "No providers available" outage)
+PROVIDERS=$(echo "$HEALTH" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('providers',0))" 2>/dev/null || echo "0")
+STATUS=$(echo "$HEALTH" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null || echo "")
+
+if [ "$PROVIDERS" = "0" ] || [ "$STATUS" = "degraded" ]; then
+    echo ""
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo "!! WARNING: No LLM providers configured!            !!"
+    echo "!! Users will see 'AI service unavailable' errors.  !!"
+    echo "!! Set API keys in Lambda environment variables:    !!"
+    echo "!!   ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.        !!"
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo ""
+    echo "Rolling back to previous version..."
+    PREV_VERSION=$((VERSION - 1))
+    aws lambda update-alias \
+        --function-name "$FUNCTION_NAME" \
+        --name "$ALIAS_NAME" \
+        --function-version "$PREV_VERSION" \
+        --region "$REGION" \
+        --output text \
+        --query 'AliasArn' | xargs -I{} echo "Rolled back alias to v$PREV_VERSION: {}"
+    echo ""
+    echo "=== Deploy ROLLED BACK (no providers) ==="
+    rm -f "$ZIP_FILE"
+    exit 1
+fi
+
+echo "Providers: $PROVIDERS configured"
 echo ""
 
 # 7. Summary

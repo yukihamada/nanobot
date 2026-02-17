@@ -23,6 +23,11 @@
   <link rel="canonical" href="https://chatweb.ai/">
   <link rel="alternate" hreflang="ja" href="https://chatweb.ai/">
   <link rel="alternate" hreflang="en" href="https://chatweb.ai/?lang=en">
+  <link rel="alternate" hreflang="zh" href="https://chatweb.ai/?lang=zh">
+  <link rel="alternate" hreflang="ko" href="https://chatweb.ai/?lang=ko">
+  <link rel="alternate" hreflang="es" href="https://chatweb.ai/?lang=es">
+  <link rel="alternate" hreflang="fr" href="https://chatweb.ai/?lang=fr">
+  <link rel="alternate" hreflang="de" href="https://chatweb.ai/?lang=de">
   <link rel="alternate" hreflang="x-default" href="https://chatweb.ai/">
   <meta name="theme-color" content="#6366f1">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -53,7 +58,7 @@
       {"@type": "Offer", "name": "Pro", "price": "29", "priceCurrency": "USD"}
     ],
     "featureList": "Voice Input, Web Search, Multi-Channel (LINE, Telegram, Web), 5+ AI Models, Long-term Memory, TTS, REST API, SSE Streaming, Slash Commands, Conversation Sharing",
-    "inLanguage": ["ja", "en"],
+    "inLanguage": ["ja", "en", "zh", "ko", "es", "fr", "de"],
     "potentialAction": {
       "@type": "SearchAction",
       "target": "https://chatweb.ai/?q={search_term_string}",
@@ -3209,6 +3214,117 @@
 
     /* Demo messages fade when user logs in */
     body.app-mode .demo-msg { display: none; }
+
+    /* Version badge */
+    .version-badge {
+      font-size: 10px;
+      font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+      color: var(--muted);
+      opacity: 0.6;
+      text-align: center;
+      padding: 4px 0;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      user-select: none;
+    }
+    .version-badge:hover { opacity: 1; }
+
+    /* Bug report modal */
+    .bugreport-modal {
+      max-width: 480px;
+      width: 92%;
+      text-align: left;
+    }
+    .bugreport-modal h3 { text-align: center; }
+    .bugreport-modal label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+      margin-top: 12px;
+    }
+    .bugreport-modal select,
+    .bugreport-modal textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+    .bugreport-modal textarea { resize: vertical; min-height: 80px; }
+    .bugreport-modal select:focus,
+    .bugreport-modal textarea:focus { border-color: var(--accent); outline: none; }
+    .bugreport-screenshot-area {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.2s;
+      margin-top: 4px;
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .bugreport-screenshot-area:hover,
+    .bugreport-screenshot-area.dragover { border-color: var(--accent); }
+    .bugreport-screenshot-area img {
+      max-width: 100%;
+      max-height: 120px;
+      border-radius: 4px;
+    }
+    .bugreport-errors {
+      font-size: 11px;
+      font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      max-height: 80px;
+      overflow-y: auto;
+      color: #ef4444;
+      margin-top: 4px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .bugreport-meta {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 8px;
+      padding: 6px 8px;
+      background: var(--bg);
+      border-radius: 6px;
+      font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    }
+    .bugreport-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      justify-content: flex-end;
+    }
+    .bugreport-actions button {
+      padding: 8px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+    .bugreport-cancel { background: var(--border); color: var(--text); }
+    .bugreport-submit { background: var(--accent); color: #fff; }
+    .bugreport-submit:hover { background: var(--accent-hover); }
+    .bugreport-submit:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
   <!--
   <script>
@@ -3233,9 +3349,15 @@
       <a href="/settings" id="nav-settings">Settings</a>
       <a href="/status" id="nav-status">Status</a>
       <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+      <span style="font-size:11px;color:var(--muted);margin-left:8px;opacity:0.6;">v0bd6e74</span>
       <div class="lang-sw" id="lang-sw-nav" style="display:none;">
         <button onclick="setLang('ja')" id="l-ja">JA</button>
         <button onclick="setLang('en')" id="l-en">EN</button>
+        <button onclick="setLang('zh')" id="l-zh">ZH</button>
+        <button onclick="setLang('ko')" id="l-ko">KO</button>
+        <button onclick="setLang('es')" id="l-es">ES</button>
+        <button onclick="setLang('fr')" id="l-fr">FR</button>
+        <button onclick="setLang('de')" id="l-de">DE</button>
       </div>
       <div id="auth-nav">
         <button class="auth-nav-btn" id="login-btn" onclick="openAuthModal()">Login</button>
@@ -3251,8 +3373,14 @@
         <a href="/settings" id="mob-settings">Settings</a>
         <a href="/status" id="mob-status">Status</a>
         <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+        <div style="padding:8px 16px;font-size:11px;color:var(--muted);opacity:0.6;">version: 0bd6e74</div>
         <button onclick="setLang('ja');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇯🇵 日本語</button>
         <button onclick="setLang('en');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇬🇧 English</button>
+        <button onclick="setLang('zh');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇨🇳 中文</button>
+        <button onclick="setLang('ko');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇰🇷 한국어</button>
+        <button onclick="setLang('es');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇪🇸 Español</button>
+        <button onclick="setLang('fr');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇫🇷 Français</button>
+        <button onclick="setLang('de');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇩🇪 Deutsch</button>
       </div>
     </div>
   </nav>
@@ -3269,6 +3397,7 @@
       <div class="sidebar-section-title">⚙️ Settings</div>
       <button class="sidebar-btn" onclick="openWebhookSettings()">🔗 Webhook Settings</button>
       <button class="sidebar-btn" id="line-connect-btn" onclick="toggleLineConnection()">📱 Connect LINE</button>
+      <a class="sidebar-btn" id="admin-btn" href="/admin" style="display:none;text-decoration:none;text-align:left">🛡️ Admin</a>
     </div>
   </div>
   <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" style="display:none;">&#x2630;</button>
@@ -4245,6 +4374,35 @@
     </div>
   </div>
 
+  <!-- Bug Report Modal -->
+  <div class="modal-overlay" id="bugreport-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
+    <div class="modal bugreport-modal" onclick="event.stopPropagation()">
+      <h3>Bug Report</h3>
+      <label for="bugreport-category">Category</label>
+      <select id="bugreport-category">
+        <option value="ui">UI / 表示</option>
+        <option value="voice">Voice / 音声</option>
+        <option value="connection">Connection / 接続</option>
+        <option value="chat">Chat / チャット</option>
+        <option value="other">Other / その他</option>
+      </select>
+      <label for="bugreport-desc">Description</label>
+      <textarea id="bugreport-desc" placeholder="問題の詳細を記入してください..." rows="4" maxlength="4096"></textarea>
+      <label>Screenshot (Cmd+V / Drag & Drop)</label>
+      <div class="bugreport-screenshot-area" id="bugreport-screenshot-area">
+        <span id="bugreport-screenshot-hint">Click to select or paste/drop an image</span>
+        <input type="file" id="bugreport-file-input" accept="image/*" style="display:none;">
+      </div>
+      <label>JS Errors</label>
+      <div class="bugreport-errors" id="bugreport-errors">No errors captured</div>
+      <div class="bugreport-meta" id="bugreport-meta"></div>
+      <div class="bugreport-actions">
+        <button class="bugreport-cancel" onclick="document.getElementById('bugreport-modal').classList.remove('show')">Cancel</button>
+        <button class="bugreport-submit" id="bugreport-submit-btn" onclick="submitBugReport()">Submit</button>
+      </div>
+    </div>
+  </div>
+
   <div class="app-container" id="app-container">
     <div class="app-sidebar-backdrop" id="app-sidebar-backdrop" onclick="document.getElementById('app-sidebar').classList.remove('open');this.classList.remove('show');"></div>
     <div class="app-sidebar" id="app-sidebar">
@@ -4280,6 +4438,7 @@
           <button onclick="showTopupModal()" style="margin-left:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:12px;padding:2px 10px;font-size:11px;cursor:pointer;white-space:nowrap;" title="クレジットをチャージ">+ Top Up</button>
         </div>
         <button id="referral-btn" onclick="showReferralModal()" style="display:none;width:100%;padding:8px 12px;margin-bottom:6px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-align:center;">友達を招待 +100 credits</button>
+        <div class="version-badge" id="version-badge" onclick="openBugReportModal()" title="バグ報告"></div>
         <div class="app-sidebar-user" onclick="logout()">
           <div class="app-sidebar-user-avatar" id="app-user-avatar"></div>
           <div style="flex:1;min-width:0;">
@@ -4435,6 +4594,22 @@
       document.body.insertBefore(devBanner, document.body.firstChild);
     }
 
+    // --- JS Error Collector (for bug reports) ---
+    const _collectedJsErrors = [];
+    window.onerror = function(msg, src, line, col) {
+      _collectedJsErrors.push(`${msg} (${src}:${line}:${col})`);
+      if (_collectedJsErrors.length > 20) _collectedJsErrors.shift();
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      _collectedJsErrors.push('Unhandled rejection: ' + (e.reason && e.reason.message || e.reason || 'unknown'));
+      if (_collectedJsErrors.length > 20) _collectedJsErrors.shift();
+    });
+
+    // --- Version / Bug Report state ---
+    let _appVersion = '';
+    let _appHash = '';
+    let _bugReportScreenshot = null; // base64 data URI
+
     // Version-specific storage helpers
     function versionKey(key) {
       return VERSION_KEY + '_' + key;
@@ -4560,7 +4735,8 @@
         let i = 0;
         function tick() {
           if (i < text.length) {
-            el.insertBefore(document.createTextNode(text[i]), cursor);
+            if (!cursor.parentNode) { resolve(); return; }
+            cursor.parentNode.insertBefore(document.createTextNode(text[i]), cursor);
             i++;
             msgs.scrollTop = msgs.scrollHeight;
             setTimeout(tick, speed);
@@ -5365,6 +5541,296 @@
         uc5Title: 'Persistent Memory', uc5Desc: '"Reply to Bob in my usual tone" — Remembers past conversations and preferences.',
         uc6Title: 'Voice Control, Anywhere', uc6Desc: '"Just tell it by voice" — Same AI responds from Web, LINE, or Telegram. Multi-channel ready.',
         demoQ1: "I can't get motivated", demoA1: "I get it. Motivation doesn't come when you wait for it.\n...But weirdly, it shows up when you start talking to someone.\nSo... feeling a little spark right now? 😏",
+      },
+      zh: {
+        title: 'AI助手，真正为你工作',
+        sub: '只需提问。搜索、代码执行、文件操作、定期监控 — 语音或文本',
+        welcome: '您好！选择下面的任务或输入任何内容',
+        line: '在LINE上使用', tg: '在Telegram上使用',
+        lineDesc: '一键添加好友 → 自动关联', tgDesc: '点击按钮 → 立即开始',
+        lineConnected: '&#x2713; 已连接', tgConnected: '&#x2713; 已连接', chConnected: '&#x2713; 已连接',
+        ph: '问我任何问题...', send: '发送',
+        heroTry: '立即免费试用', pricing: '价格', settings: '设置', status: '状态', comparison: '比较',
+        chatStatus: '在线',
+        statsUptime: '正常运行时间', statsSpeed: '平均响应', statsModels: 'AI模型', statsChannels: '频道', statsTools: '工具',
+        trustSsl: 'SSL加密', trustStripe: 'Stripe支付', trustNocard: '无需信用卡',
+        socialProof: '🇯🇵 日本制造 · 开源 · Web、LINE和Telegram',
+        syncTitle: '同一对话，任意频道',
+        syncDesc: '关联您的Web、LINE和Telegram聊天。随时随地继续',
+        step1Title: '添加好友', step1Desc: '点击上面的LINE/Telegram按钮',
+        step2Title: '自动关联', step2Desc: '只需点击按钮即可自动关联',
+        step3Title: '已同步！', step3Desc: '所有对话已统一',
+        sessionLabel: '您的会话ID：', sessionHint: '点击复制。粘贴到LINE/Telegram以关联',
+        cliTitle: 'CLI', cliSub: '从命令行使用',
+        cliSyncHint: '从CLI同步您的Web对话',
+        bottomTitle: '需要更多功能？',
+        bottomSub: '从每月$9起访问GPT-4o、Claude Sonnet、Claude Opus等',
+        bottomCta: '比较计划',
+        bottomHint: 'Starter $9/月 &middot; Pro $29/月 &middot; 随时取消',
+        agentAuto: '自动（智能路由）',
+        deviceTitle: '已连接设备',
+        deviceDesc: '通过CLI守护进程连接的机器',
+        deviceHint: '安装CLI并运行 <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">chatweb daemon</code> 以连接',
+        capTitle: 'AI + 工具 = 自动化一切',
+        capSub: '内置工具 + 无限MCP扩展',
+        capSearch: '网页搜索', capSearchD: '搜索和收集实时信息',
+        capFetch: '网页获取', capFetchD: '从任何URL检索内容',
+        capCalc: '计算器', capCalcD: '数学、转换和计算',
+        capWeather: '天气', capWeatherD: '全球天气和预报',
+        capFile: '文件操作', capFileD: '读取、写入和编辑文件',
+        capShell: 'Shell执行', capShellD: '运行命令和自动化任务',
+        capBrowser: '浏览器', capBrowserD: '自动化网页',
+        capImage: '图像分析', capImageD: '视觉和多模态AI',
+        capMemory: '记忆', capMemoryD: '跨会话持久记忆',
+        capNote: 'MCP工具通过Model Context Protocol无限扩展',
+        capNoteLink: '询问可用工具 →',
+        voiceLabel: '🎙️ 聆听AI说话',
+        loginBtn: '登录',
+        chatLoginPrompt: '登录以开始聊天',
+        sidebarTitle: '对话',
+        newConv: '+ 新对话',
+        appNewChat: '新聊天',
+        appEmptyText: '问我任何问题',
+        appPlaceholder: '给chatweb.ai发消息...',
+        uc1Title: '文件整理', uc1Desc: '"按类型整理我的下载" — 自动创建文件夹并移动文件',
+        uc2Title: '设置和错误修复', uc2Desc: '"让这个仓库在我的机器上运行" — 自主解决错误直到成功',
+        uc3Title: '定期监控', uc3Desc: '"监控我的服务器是否宕机" — 在夜间检测宕机，重启并报告',
+        uc4Title: 'Web任务自动化', uc4Desc: '"寻找最便宜的航班并添加到日历" — 浏览网站并自动预订',
+        uc5Title: '持久记忆', uc5Desc: '"用我常用的语气回复Bob" — 记住过去的对话和偏好',
+        uc6Title: '语音控制，随时随地', uc6Desc: '"只需语音指令" — 同一AI从Web、LINE或Telegram响应。多频道就绪',
+        demoQ1: '我无法获得动力', demoA1: '我理解。等待不会带来动力。\n...但奇怪的是，当你开始与某人交谈时它就出现了。\n所以...现在感觉到一点火花了吗？😏',
+      },
+      ko: {
+        title: 'AI가 실제로 일을 합니다',
+        sub: '그냥 물어보세요. 검색, 코드 실행, 파일 작업, 예약 모니터링 — 음성 또는 텍스트로',
+        welcome: '안녕하세요! 아래 작업을 선택하거나 무엇이든 입력하세요',
+        line: 'LINE에서 사용', tg: 'Telegram에서 사용',
+        lineDesc: '한 번 탭으로 친구 추가 → 자동 연결', tgDesc: '버튼 탭 → 즉시 시작',
+        lineConnected: '&#x2713; 연결됨', tgConnected: '&#x2713; 연결됨', chConnected: '&#x2713; 연결됨',
+        ph: '무엇이든 물어보세요...', send: '전송',
+        heroTry: '지금 무료로 시도', pricing: '가격', settings: '설정', status: '상태', comparison: '비교',
+        chatStatus: '온라인',
+        statsUptime: '가동 시간', statsSpeed: '평균 응답', statsModels: 'AI 모델', statsChannels: '채널', statsTools: '도구',
+        trustSsl: 'SSL 암호화', trustStripe: 'Stripe 결제', trustNocard: '카드 불필요',
+        socialProof: '🇯🇵 일본제 · 오픈소스 · Web, LINE 및 Telegram',
+        syncTitle: '동일한 대화, 모든 채널',
+        syncDesc: 'Web, LINE 및 Telegram 채팅을 연결하세요. 어디서나 계속하세요',
+        step1Title: '친구 추가', step1Desc: '위의 LINE/Telegram 버튼 탭',
+        step2Title: '자동 연결', step2Desc: '버튼을 탭하면 자동으로 연결됩니다',
+        step3Title: '동기화 완료!', step3Desc: '모든 대화가 통합되었습니다',
+        sessionLabel: '세션 ID:', sessionHint: '클릭하여 복사. LINE/Telegram에 붙여넣어 연결',
+        cliTitle: 'CLI', cliSub: '명령줄에서 사용',
+        cliSyncHint: 'CLI에서 Web 대화와 동기화',
+        bottomTitle: '더 강력한 기능이 필요하신가요?',
+        bottomSub: '월 $9부터 GPT-4o, Claude Sonnet, Claude Opus 등에 액세스',
+        bottomCta: '플랜 비교',
+        bottomHint: 'Starter $9/월 &middot; Pro $29/월 &middot; 언제든지 취소',
+        agentAuto: '자동 (스마트 라우팅)',
+        deviceTitle: '연결된 기기',
+        deviceDesc: 'CLI 데몬을 통해 연결된 머신',
+        deviceHint: 'CLI를 설치하고 <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">chatweb daemon</code>을 실행하여 연결',
+        capTitle: 'AI + 도구 = 모든 것을 자동화',
+        capSub: '내장 도구 + 무제한 MCP 확장',
+        capSearch: '웹 검색', capSearchD: '실시간 정보 검색 및 수집',
+        capFetch: '웹 가져오기', capFetchD: '모든 URL에서 콘텐츠 검색',
+        capCalc: '계산기', capCalcD: '수학, 변환 및 계산',
+        capWeather: '날씨', capWeatherD: '전 세계 날씨 및 예보',
+        capFile: '파일 작업', capFileD: '파일 읽기, 쓰기 및 편집',
+        capShell: 'Shell 실행', capShellD: '명령 실행 및 작업 자동화',
+        capBrowser: '브라우저', capBrowserD: '웹 페이지 자동화',
+        capImage: '이미지 분석', capImageD: '비전 및 멀티모달 AI',
+        capMemory: '메모리', capMemoryD: '세션 간 지속 메모리',
+        capNote: 'MCP 도구는 Model Context Protocol을 통해 무한 확장 가능',
+        capNoteLink: '사용 가능한 도구 문의 →',
+        voiceLabel: '🎙️ AI 음성 듣기',
+        loginBtn: '로그인',
+        chatLoginPrompt: '채팅을 시작하려면 로그인',
+        sidebarTitle: '대화',
+        newConv: '+ 새 대화',
+        appNewChat: '새 채팅',
+        appEmptyText: '무엇이든 물어보세요',
+        appPlaceholder: 'chatweb.ai에 메시지...',
+        uc1Title: '파일 정리', uc1Desc: '"다운로드를 유형별로 정리" — 폴더를 만들고 파일을 자동으로 이동',
+        uc2Title: '설정 및 버그 수정', uc2Desc: '"이 저장소를 내 컴퓨터에서 실행" — 작동할 때까지 자율적으로 오류 해결',
+        uc3Title: '예약 모니터링', uc3Desc: '"서버가 다운되는지 모니터링" — 밤새 다운타임 감지, 재시작 및 보고',
+        uc4Title: '웹 작업 자동화', uc4Desc: '"가장 저렴한 항공편을 찾아 캘린더에 추가" — 사이트를 탐색하고 자동으로 예약',
+        uc5Title: '지속 메모리', uc5Desc: '"Bob에게 내 평소 톤으로 답장" — 과거 대화와 선호도를 기억',
+        uc6Title: '음성 제어, 어디서나', uc6Desc: '"음성으로만 지시" — Web, LINE 또는 Telegram에서 동일한 AI가 응답. 다중 채널 준비',
+        demoQ1: '동기 부여가 되지 않아요', demoA1: '이해해요. 동기는 기다린다고 오지 않죠.\n...하지만 이상하게도 누군가와 대화를 시작하면 나타나요.\n그래서... 지금 작은 불꽃이 느껴지나요? 😏',
+      },
+      es: {
+        title: 'IA que realmente hace el trabajo',
+        sub: 'Solo pregunta. Búsqueda, ejecución de código, operaciones de archivos, monitoreo programado — por voz o texto',
+        welcome: '¡Hola! Elige una tarea a continuación o escribe lo que necesites',
+        line: 'Usar en LINE', tg: 'Usar en Telegram',
+        lineDesc: '1 toque para agregar amigo → enlace automático', tgDesc: 'Solo toca → comienza ahora',
+        lineConnected: '&#x2713; Conectado', tgConnected: '&#x2713; Conectado', chConnected: '&#x2713; Conectado',
+        ph: 'Pregúntame lo que sea...', send: 'Enviar',
+        heroTry: 'Probar Gratis Ahora', pricing: 'Precios', settings: 'Configuración', status: 'Estado', comparison: 'Comparación',
+        chatStatus: 'En línea',
+        statsUptime: 'Tiempo activo', statsSpeed: 'Respuesta promedio', statsModels: 'Modelos de IA', statsChannels: 'Canales', statsTools: 'Herramientas',
+        trustSsl: 'Cifrado SSL', trustStripe: 'Pagos Stripe', trustNocard: 'Sin tarjeta requerida',
+        socialProof: '🇯🇵 Hecho en Japón · Código abierto · Web, LINE y Telegram',
+        syncTitle: 'Misma conversación, cualquier canal',
+        syncDesc: 'Vincula tus chats de Web, LINE y Telegram. Continúa desde cualquier lugar',
+        step1Title: 'Agregar amigo', step1Desc: 'Toca los botones LINE/Telegram arriba',
+        step2Title: 'Enlace automático', step2Desc: 'Solo toca el botón para enlazar automáticamente',
+        step3Title: '¡Sincronizado!', step3Desc: 'Todas las conversaciones están unificadas',
+        sessionLabel: 'Tu ID de sesión:', sessionHint: 'Haz clic para copiar. Pega en LINE/Telegram para vincular',
+        cliTitle: 'CLI', cliSub: 'Usar desde línea de comandos',
+        cliSyncHint: 'Sincroniza con tu conversación Web desde CLI',
+        bottomTitle: '¿Necesitas más potencia?',
+        bottomSub: 'Accede a GPT-4o, Claude Sonnet, Claude Opus y más desde $9/mes',
+        bottomCta: 'Comparar Planes',
+        bottomHint: 'Starter $9/mes &middot; Pro $29/mes &middot; Cancela cuando quieras',
+        agentAuto: 'Auto (enrutamiento inteligente)',
+        deviceTitle: 'Dispositivos Conectados',
+        deviceDesc: 'Máquinas conectadas mediante daemon CLI',
+        deviceHint: 'Instala CLI y ejecuta <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">chatweb daemon</code> para conectar',
+        capTitle: 'IA + Herramientas = Automatizar Todo',
+        capSub: 'Herramientas integradas + extensiones MCP ilimitadas',
+        capSearch: 'Búsqueda Web', capSearchD: 'Buscar y recopilar información en tiempo real',
+        capFetch: 'Obtención Web', capFetchD: 'Recuperar contenido de cualquier URL',
+        capCalc: 'Calculadora', capCalcD: 'Matemáticas, conversiones y cálculos',
+        capWeather: 'Clima', capWeatherD: 'Clima global y pronósticos',
+        capFile: 'Operaciones de Archivos', capFileD: 'Leer, escribir y editar archivos',
+        capShell: 'Ejecución Shell', capShellD: 'Ejecutar comandos y automatizar tareas',
+        capBrowser: 'Navegador', capBrowserD: 'Automatizar páginas web',
+        capImage: 'Análisis de Imágenes', capImageD: 'Visión e IA multimodal',
+        capMemory: 'Memoria', capMemoryD: 'Memoria persistente entre sesiones',
+        capNote: 'Las herramientas MCP son infinitamente extensibles mediante Model Context Protocol',
+        capNoteLink: 'Preguntar sobre herramientas disponibles →',
+        voiceLabel: '🎙️ Escuchar a la IA hablar',
+        loginBtn: 'Iniciar sesión',
+        chatLoginPrompt: 'Inicia sesión para comenzar a chatear',
+        sidebarTitle: 'Conversaciones',
+        newConv: '+ Nueva Conversación',
+        appNewChat: 'Nuevo chat',
+        appEmptyText: 'Pregúntame lo que sea',
+        appPlaceholder: 'Mensaje a chatweb.ai...',
+        uc1Title: 'Organización de Archivos', uc1Desc: '"Organiza mis descargas por tipo" — Crea carpetas y mueve archivos automáticamente',
+        uc2Title: 'Configuración y Corrección de Errores', uc2Desc: '"Haz que este repositorio funcione en mi máquina" — Resuelve errores autónomamente hasta que funcione',
+        uc3Title: 'Monitoreo Programado', uc3Desc: '"Monitorea si mi servidor se cae" — Detecta tiempo de inactividad durante la noche, reinicia y reporta',
+        uc4Title: 'Automatización de Tareas Web', uc4Desc: '"Encuentra los vuelos más baratos y agrégalos a mi calendario" — Navega sitios y reserva automáticamente',
+        uc5Title: 'Memoria Persistente', uc5Desc: '"Responde a Bob en mi tono habitual" — Recuerda conversaciones pasadas y preferencias',
+        uc6Title: 'Control por Voz, en Cualquier Lugar', uc6Desc: '"Solo dilo por voz" — La misma IA responde desde Web, LINE o Telegram. Lista multicanal',
+        demoQ1: 'No puedo motivarme', demoA1: 'Lo entiendo. La motivación no viene cuando la esperas.\n...Pero extrañamente, aparece cuando empiezas a hablar con alguien.\nAsí que... ¿sientes una pequeña chispa ahora? 😏',
+      },
+      fr: {
+        title: 'IA qui fait vraiment le travail',
+        sub: 'Il suffit de demander. Recherche, exécution de code, opérations sur fichiers, surveillance programmée — par voix ou texte',
+        welcome: 'Bonjour ! Choisissez une tâche ci-dessous ou tapez ce dont vous avez besoin',
+        line: 'Utiliser sur LINE', tg: 'Utiliser sur Telegram',
+        lineDesc: '1 tap pour ajouter un ami → lien automatique', tgDesc: 'Il suffit de taper → commencer maintenant',
+        lineConnected: '&#x2713; Connecté', tgConnected: '&#x2713; Connecté', chConnected: '&#x2713; Connecté',
+        ph: 'Demandez-moi n\'importe quoi...', send: 'Envoyer',
+        heroTry: 'Essayer Gratuitement', pricing: 'Tarifs', settings: 'Paramètres', status: 'Statut', comparison: 'Comparaison',
+        chatStatus: 'En ligne',
+        statsUptime: 'Disponibilité', statsSpeed: 'Réponse moyenne', statsModels: 'Modèles IA', statsChannels: 'Canaux', statsTools: 'Outils',
+        trustSsl: 'Cryptage SSL', trustStripe: 'Paiements Stripe', trustNocard: 'Pas de carte requise',
+        socialProof: '🇯🇵 Fabriqué au Japon · Open Source · Web, LINE et Telegram',
+        syncTitle: 'Même conversation, n\'importe quel canal',
+        syncDesc: 'Liez vos discussions Web, LINE et Telegram. Continuez de n\'importe où',
+        step1Title: 'Ajouter un ami', step1Desc: 'Appuyez sur les boutons LINE/Telegram ci-dessus',
+        step2Title: 'Lien automatique', step2Desc: 'Il suffit d\'appuyer sur le bouton pour lier automatiquement',
+        step3Title: 'Synchronisé !', step3Desc: 'Toutes les conversations sont unifiées',
+        sessionLabel: 'Votre ID de session :', sessionHint: 'Cliquez pour copier. Collez dans LINE/Telegram pour lier',
+        cliTitle: 'CLI', cliSub: 'Utiliser depuis la ligne de commande',
+        cliSyncHint: 'Synchronisez avec votre conversation Web depuis CLI',
+        bottomTitle: 'Besoin de plus de puissance ?',
+        bottomSub: 'Accédez à GPT-4o, Claude Sonnet, Claude Opus et plus à partir de 9$/mois',
+        bottomCta: 'Comparer les Plans',
+        bottomHint: 'Starter 9$/mois &middot; Pro 29$/mois &middot; Annulez à tout moment',
+        agentAuto: 'Auto (routage intelligent)',
+        deviceTitle: 'Appareils Connectés',
+        deviceDesc: 'Machines connectées via le daemon CLI',
+        deviceHint: 'Installez CLI et exécutez <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">chatweb daemon</code> pour connecter',
+        capTitle: 'IA + Outils = Automatiser Tout',
+        capSub: 'Outils intégrés + extensions MCP illimitées',
+        capSearch: 'Recherche Web', capSearchD: 'Rechercher et collecter des informations en temps réel',
+        capFetch: 'Récupération Web', capFetchD: 'Récupérer du contenu depuis n\'importe quelle URL',
+        capCalc: 'Calculatrice', capCalcD: 'Mathématiques, conversions et calculs',
+        capWeather: 'Météo', capWeatherD: 'Météo mondiale et prévisions',
+        capFile: 'Opérations sur Fichiers', capFileD: 'Lire, écrire et modifier des fichiers',
+        capShell: 'Exécution Shell', capShellD: 'Exécuter des commandes et automatiser des tâches',
+        capBrowser: 'Navigateur', capBrowserD: 'Automatiser les pages web',
+        capImage: 'Analyse d\'Images', capImageD: 'Vision et IA multimodale',
+        capMemory: 'Mémoire', capMemoryD: 'Mémoire persistante entre sessions',
+        capNote: 'Les outils MCP sont infiniment extensibles via Model Context Protocol',
+        capNoteLink: 'Demander les outils disponibles →',
+        voiceLabel: '🎙️ Écouter l\'IA parler',
+        loginBtn: 'Connexion',
+        chatLoginPrompt: 'Connectez-vous pour commencer à discuter',
+        sidebarTitle: 'Conversations',
+        newConv: '+ Nouvelle Conversation',
+        appNewChat: 'Nouveau chat',
+        appEmptyText: 'Demandez-moi n\'importe quoi',
+        appPlaceholder: 'Message à chatweb.ai...',
+        uc1Title: 'Organisation de Fichiers', uc1Desc: '"Organisez mes téléchargements par type" — Crée des dossiers et déplace les fichiers automatiquement',
+        uc2Title: 'Configuration et Correction de Bugs', uc2Desc: '"Faites fonctionner ce dépôt sur ma machine" — Résout les erreurs de manière autonome jusqu\'à ce que cela fonctionne',
+        uc3Title: 'Surveillance Programmée', uc3Desc: '"Surveillez si mon serveur tombe en panne" — Détecte les temps d\'arrêt pendant la nuit, redémarre et rapporte',
+        uc4Title: 'Automatisation des Tâches Web', uc4Desc: '"Trouvez les vols les moins chers et ajoutez-les à mon calendrier" — Parcourt les sites et réserve automatiquement',
+        uc5Title: 'Mémoire Persistante', uc5Desc: '"Répondez à Bob dans mon ton habituel" — Se souvient des conversations passées et des préférences',
+        uc6Title: 'Contrôle Vocal, Partout', uc6Desc: '"Il suffit de le dire par la voix" — La même IA répond depuis Web, LINE ou Telegram. Prêt multicanal',
+        demoQ1: 'Je ne peux pas me motiver', demoA1: 'Je comprends. La motivation ne vient pas quand on l\'attend.\n...Mais curieusement, elle apparaît quand vous commencez à parler à quelqu\'un.\nAlors... ressentez-vous une petite étincelle maintenant ? 😏',
+      },
+      de: {
+        title: 'KI, die tatsächlich die Arbeit erledigt',
+        sub: 'Einfach fragen. Suche, Code-Ausführung, Dateioperationen, geplante Überwachung — per Sprache oder Text',
+        welcome: 'Hallo! Wählen Sie eine Aufgabe unten oder geben Sie ein, was Sie brauchen',
+        line: 'Auf LINE verwenden', tg: 'Auf Telegram verwenden',
+        lineDesc: '1 Tippen zum Freund hinzufügen → Auto-Link', tgDesc: 'Einfach tippen → jetzt starten',
+        lineConnected: '&#x2713; Verbunden', tgConnected: '&#x2713; Verbunden', chConnected: '&#x2713; Verbunden',
+        ph: 'Fragen Sie mich alles...', send: 'Senden',
+        heroTry: 'Jetzt Kostenlos Testen', pricing: 'Preise', settings: 'Einstellungen', status: 'Status', comparison: 'Vergleich',
+        chatStatus: 'Online',
+        statsUptime: 'Betriebszeit', statsSpeed: 'Durchschn. Antwort', statsModels: 'KI-Modelle', statsChannels: 'Kanäle', statsTools: 'Werkzeuge',
+        trustSsl: 'SSL-verschlüsselt', trustStripe: 'Stripe-Zahlungen', trustNocard: 'Keine Karte erforderlich',
+        socialProof: '🇯🇵 Made in Japan · Open Source · Web, LINE & Telegram',
+        syncTitle: 'Gleiche Konversation, jeder Kanal',
+        syncDesc: 'Verknüpfen Sie Ihre Web-, LINE- und Telegram-Chats. Von überall fortfahren',
+        step1Title: 'Freund hinzufügen', step1Desc: 'Tippen Sie oben auf LINE/Telegram-Buttons',
+        step2Title: 'Auto-Link', step2Desc: 'Einfach auf den Button tippen zum automatischen Verknüpfen',
+        step3Title: 'Synchronisiert!', step3Desc: 'Alle Konversationen sind vereinheitlicht',
+        sessionLabel: 'Ihre Sitzungs-ID:', sessionHint: 'Klicken zum Kopieren. In LINE/Telegram einfügen zum Verknüpfen',
+        cliTitle: 'CLI', cliSub: 'Von der Kommandozeile verwenden',
+        cliSyncHint: 'Mit Ihrer Web-Konversation von CLI synchronisieren',
+        bottomTitle: 'Mehr Leistung benötigt?',
+        bottomSub: 'Zugriff auf GPT-4o, Claude Sonnet, Claude Opus und mehr ab $9/Monat',
+        bottomCta: 'Pläne Vergleichen',
+        bottomHint: 'Starter $9/Mo &middot; Pro $29/Mo &middot; Jederzeit kündbar',
+        agentAuto: 'Auto (intelligentes Routing)',
+        deviceTitle: 'Verbundene Geräte',
+        deviceDesc: 'Über CLI-Daemon verbundene Maschinen',
+        deviceHint: 'Installieren Sie CLI und führen Sie <code style="background:var(--surface);padding:2px 6px;border-radius:4px;">chatweb daemon</code> aus, um zu verbinden',
+        capTitle: 'KI + Werkzeuge = Alles Automatisieren',
+        capSub: 'Integrierte Werkzeuge + unbegrenzte MCP-Erweiterungen',
+        capSearch: 'Websuche', capSearchD: 'Echtzeit-Informationen suchen & sammeln',
+        capFetch: 'Web-Abruf', capFetchD: 'Inhalte von jeder URL abrufen',
+        capCalc: 'Rechner', capCalcD: 'Mathematik, Umrechnungen & Berechnungen',
+        capWeather: 'Wetter', capWeatherD: 'Globales Wetter & Vorhersagen',
+        capFile: 'Dateioperationen', capFileD: 'Dateien lesen, schreiben & bearbeiten',
+        capShell: 'Shell-Ausführung', capShellD: 'Befehle ausführen & Aufgaben automatisieren',
+        capBrowser: 'Browser', capBrowserD: 'Webseiten automatisieren',
+        capImage: 'Bildanalyse', capImageD: 'Vision & multimodale KI',
+        capMemory: 'Speicher', capMemoryD: 'Persistenter sitzungsübergreifender Speicher',
+        capNote: 'MCP-Werkzeuge sind über Model Context Protocol unendlich erweiterbar',
+        capNoteLink: 'Nach verfügbaren Werkzeugen fragen →',
+        voiceLabel: '🎙️ KI sprechen hören',
+        loginBtn: 'Anmelden',
+        chatLoginPrompt: 'Anmelden, um mit dem Chatten zu beginnen',
+        sidebarTitle: 'Konversationen',
+        newConv: '+ Neue Konversation',
+        appNewChat: 'Neuer Chat',
+        appEmptyText: 'Fragen Sie mich alles',
+        appPlaceholder: 'Nachricht an chatweb.ai...',
+        uc1Title: 'Datei-Organisation', uc1Desc: '"Organisiere meine Downloads nach Typ" — Erstellt Ordner und verschiebt Dateien automatisch',
+        uc2Title: 'Setup & Fehlerbehebung', uc2Desc: '"Bringe dieses Repo auf meiner Maschine zum Laufen" — Löst Fehler autonom, bis es funktioniert',
+        uc3Title: 'Geplante Überwachung', uc3Desc: '"Überwache, ob mein Server ausfällt" — Erkennt Ausfallzeiten über Nacht, startet neu und berichtet',
+        uc4Title: 'Web-Aufgabenautomatisierung', uc4Desc: '"Finde die günstigsten Flüge und füge sie zu meinem Kalender hinzu" — Durchsucht Seiten und bucht automatisch',
+        uc5Title: 'Persistenter Speicher', uc5Desc: '"Antworte Bob in meinem üblichen Ton" — Erinnert sich an vergangene Konversationen und Vorlieben',
+        uc6Title: 'Sprachsteuerung, Überall', uc6Desc: '"Einfach per Sprache sagen" — Dieselbe KI antwortet von Web, LINE oder Telegram. Multi-Kanal-bereit',
+        demoQ1: 'Ich kann mich nicht motivieren', demoA1: 'Ich verstehe. Motivation kommt nicht, wenn man darauf wartet.\n...Aber seltsamerweise taucht sie auf, wenn man anfängt, mit jemandem zu sprechen.\nAlso... spüren Sie jetzt einen kleinen Funken? 😏',
       }
     };
 
@@ -5479,10 +5945,11 @@
     function renderVoiceDemo(lang) {
       const grid = document.getElementById('voice-demo-grid');
       grid.innerHTML = '';
+      const voiceLang = lang === 'ja' ? 'ja' : 'en'; // Only ja/en available for voice demos
       DEMO_VOICES.forEach((v, i) => {
         const btn = document.createElement('button');
         btn.className = 'voice-demo-btn';
-        btn.textContent = v.icon + ' ' + (lang === 'ja' ? v.ja : v.en);
+        btn.textContent = v.icon + ' ' + v[voiceLang];
         btn.onclick = () => playDemoVoice(i);
         if (i === demoPlayingIdx) btn.classList.add('playing');
         grid.appendChild(btn);
@@ -5578,7 +6045,8 @@
     function renderRecipes(l) {
       const section = document.getElementById('recipe-section');
       section.innerHTML = '';
-      R[l].categories.forEach(cat => {
+      const recipeLang = R[l] ? l : 'en'; // Fallback to English if language not available
+      R[recipeLang].categories.forEach(cat => {
         const h = document.createElement('div');
         h.className = 'recipes';
         h.innerHTML = '<h2>' + cat.icon + ' ' + cat.title + '</h2>';
@@ -5597,11 +6065,21 @@
     }
 
     function setLang(l) {
-      document.documentElement.lang = l;
-      localStorage.setItem('nl', l);
-      document.getElementById('l-ja').className = l === 'ja' ? 'on' : '';
-      document.getElementById('l-en').className = l === 'en' ? 'on' : '';
-      const t = T[l];
+      // Fallback to English for unsupported languages
+      const supportedLangs = ['ja', 'en', 'zh', 'ko', 'es', 'fr', 'de'];
+      const displayLang = l; // Keep original for HTML lang attribute
+      const translationLang = supportedLangs.includes(l) ? l : 'en';
+
+      document.documentElement.lang = displayLang;
+      localStorage.setItem('nl', displayLang);
+      document.getElementById('l-ja').className = translationLang === 'ja' ? 'on' : '';
+      document.getElementById('l-en').className = translationLang === 'en' ? 'on' : '';
+      document.getElementById('l-zh').className = translationLang === 'zh' ? 'on' : '';
+      document.getElementById('l-ko').className = translationLang === 'ko' ? 'on' : '';
+      document.getElementById('l-es').className = translationLang === 'es' ? 'on' : '';
+      document.getElementById('l-fr').className = translationLang === 'fr' ? 'on' : '';
+      document.getElementById('l-de').className = translationLang === 'de' ? 'on' : '';
+      const t = T[translationLang];
       document.getElementById('t-title').textContent = t.title;
       document.getElementById('t-subtitle').textContent = t.sub;
       const welcomeEl = document.getElementById('t-welcome');
@@ -5717,21 +6195,21 @@
       const appInput = document.getElementById('app-input');
       if (appInput) appInput.placeholder = t.appPlaceholder;
       const appChLabel = document.getElementById('app-channels-label');
-      if (appChLabel) appChLabel.textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
+      if (appChLabel) appChLabel.textContent = translationLang === 'ja' ? 'チャネル連携' : 'Channels';
       const linkCmdTitle = document.getElementById('t-link-cmd-title');
-      if (linkCmdTitle) linkCmdTitle.textContent = l === 'ja' ? 'コマンドで連携' : 'Link via Command';
+      if (linkCmdTitle) linkCmdTitle.textContent = translationLang === 'ja' ? 'コマンドで連携' : 'Link via Command';
       const linkCmdDesc = document.getElementById('t-link-cmd-desc');
-      if (linkCmdDesc) linkCmdDesc.innerHTML = l === 'ja'
+      if (linkCmdDesc) linkCmdDesc.innerHTML = translationLang === 'ja'
         ? 'チャットで <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link</code> と入力するとリンクコードが生成されます。別のチャネル（LINE・Telegram等）で <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link CODE</code> と送信すると連携完了。'
         : 'Type <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link</code> in chat to generate a link code. Send <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:12px;">/link CODE</code> from another channel (LINE, Telegram, etc.) to connect.';
       const linkCmdBtn = document.getElementById('t-link-cmd-btn');
-      if (linkCmdBtn) linkCmdBtn.textContent = l === 'ja' ? '/link コードを生成' : '/link Generate Code';
+      if (linkCmdBtn) linkCmdBtn.textContent = translationLang === 'ja' ? '/link コードを生成' : '/link Generate Code';
       const ttsStopFloat = document.getElementById('tts-stop-float');
-      if (ttsStopFloat) ttsStopFloat.innerHTML = '<span class="tts-pulse-dot"></span> ' + (l === 'ja' ? '読み上げ停止' : 'Stop Speaking');
+      if (ttsStopFloat) ttsStopFloat.innerHTML = '<span class="tts-pulse-dot"></span> ' + (translationLang === 'ja' ? '読み上げ停止' : 'Stop Speaking');
       if (document.body.classList.contains('app-mode')) appRenderSuggestions();
-      renderRecipes(l);
+      renderRecipes(translationLang);
       document.getElementById('t-voice-label').textContent = t.voiceLabel;
-      renderVoiceDemo(l);
+      renderVoiceDemo(translationLang);
       // Update voice character display names for current language
       if (typeof updateVoiceDisplayNames === 'function') updateVoiceDisplayNames();
     }
@@ -6661,6 +7139,7 @@
       document.getElementById('user-menu').style.display = 'none';
       document.getElementById('sidebar-toggle').style.display = 'none';
       document.getElementById('sidebar').classList.remove('open');
+      var ab = document.getElementById('admin-btn'); if (ab) ab.style.display = 'none';
       // Show overlay only if guest trial is exhausted
       if (getGuestTurns() >= GUEST_MAX_TURNS) {
         document.getElementById('chat-login-overlay').classList.remove('hidden');
@@ -6715,6 +7194,11 @@
           const mmToggle = document.getElementById('multi-model-toggle');
           if (mmToggle && d.plan && d.plan !== 'free') {
             mmToggle.style.display = '';
+          }
+          // Show admin button for admin users
+          if (d.is_admin) {
+            const ab = document.getElementById('admin-btn');
+            if (ab) { ab.style.display = ''; ab.href = '/admin?sid=' + encodeURIComponent(d.email || d.user_id); }
           }
           // Apply pending referral code if exists
           const pendingRef = localStorage.getItem('pending_referral');
@@ -9993,7 +10477,14 @@
       var uiLang = settings.uiLanguage || 'auto';
       if (uiLang === 'auto') {
         var browserLang = (navigator.language || 'en').toLowerCase();
-        uiLang = browserLang.startsWith('ja') ? 'ja' : 'en';
+        // Detect language from browser settings
+        if (browserLang.startsWith('ja')) uiLang = 'ja';
+        else if (browserLang.startsWith('zh')) uiLang = 'zh';
+        else if (browserLang.startsWith('ko')) uiLang = 'ko';
+        else if (browserLang.startsWith('es')) uiLang = 'es';
+        else if (browserLang.startsWith('fr')) uiLang = 'fr';
+        else if (browserLang.startsWith('de')) uiLang = 'de';
+        else uiLang = 'en';
       }
       if (typeof setLang === 'function') setLang(uiLang);
       // Font size
@@ -12706,7 +13197,14 @@
           lang = saved;
         } else {
           var browserLang = (navigator.language || 'en').toLowerCase();
-          lang = browserLang.startsWith('ja') ? 'ja' : 'en';
+          // Auto-detect browser language
+          if (browserLang.startsWith('ja')) lang = 'ja';
+          else if (browserLang.startsWith('zh')) lang = 'zh';
+          else if (browserLang.startsWith('ko')) lang = 'ko';
+          else if (browserLang.startsWith('es')) lang = 'es';
+          else if (browserLang.startsWith('fr')) lang = 'fr';
+          else if (browserLang.startsWith('de')) lang = 'de';
+          else lang = 'en';
         }
       }
       setLang(lang);
@@ -13115,6 +13613,163 @@
 
     // Start the initial timer
     resetIdleAdTimer();
+
+    // --- Version Badge & Bug Report ---
+    (async function fetchVersion() {
+      try {
+        const r = await fetch(API + '/api/v1/version');
+        if (r.ok) {
+          const d = await r.json();
+          _appVersion = d.version || '';
+          _appHash = d.hash || '';
+          const badge = document.getElementById('version-badge');
+          if (badge) badge.textContent = 'v' + _appVersion + ' (' + _appHash + ')';
+        }
+      } catch(e) { /* ignore */ }
+    })();
+
+    function openBugReportModal() {
+      _bugReportScreenshot = null;
+      const modal = document.getElementById('bugreport-modal');
+      document.getElementById('bugreport-category').value = 'other';
+      document.getElementById('bugreport-desc').value = '';
+      const area = document.getElementById('bugreport-screenshot-area');
+      document.getElementById('bugreport-screenshot-hint').textContent = 'Click to select or paste/drop an image';
+      const existingImg = area.querySelector('img');
+      if (existingImg) existingImg.remove();
+
+      // Show collected JS errors
+      const errEl = document.getElementById('bugreport-errors');
+      errEl.textContent = _collectedJsErrors.length > 0
+        ? _collectedJsErrors.join('\n')
+        : 'No errors captured';
+
+      // Meta info
+      document.getElementById('bugreport-meta').textContent =
+        'Version: ' + (_appVersion || '?') + ' (' + (_appHash || '?') + ')\n' +
+        'UA: ' + navigator.userAgent.slice(0, 80) + '\n' +
+        'Screen: ' + screen.width + 'x' + screen.height + '\n' +
+        'URL: ' + location.href;
+
+      document.getElementById('bugreport-submit-btn').disabled = false;
+      modal.classList.add('show');
+    }
+
+    // Screenshot: paste
+    document.addEventListener('paste', function(e) {
+      const modal = document.getElementById('bugreport-modal');
+      if (!modal.classList.contains('show')) return;
+      const items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          handleBugReportImage(items[i].getAsFile());
+          break;
+        }
+      }
+    });
+
+    // Screenshot: drag & drop
+    (function() {
+      const area = document.getElementById('bugreport-screenshot-area');
+      if (!area) return;
+      area.addEventListener('dragover', function(e) { e.preventDefault(); area.classList.add('dragover'); });
+      area.addEventListener('dragleave', function() { area.classList.remove('dragover'); });
+      area.addEventListener('drop', function(e) {
+        e.preventDefault();
+        area.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) handleBugReportImage(e.dataTransfer.files[0]);
+      });
+      area.addEventListener('click', function() {
+        document.getElementById('bugreport-file-input').click();
+      });
+      document.getElementById('bugreport-file-input').addEventListener('change', function(e) {
+        if (e.target.files.length > 0) handleBugReportImage(e.target.files[0]);
+        e.target.value = '';
+      });
+    })();
+
+    function handleBugReportImage(file) {
+      if (!file || !file.type.startsWith('image/')) return;
+      if (file.size > 2 * 1024 * 1024) {
+        if (typeof showToast === 'function') showToast('Image must be under 2MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        _bugReportScreenshot = e.target.result;
+        const area = document.getElementById('bugreport-screenshot-area');
+        document.getElementById('bugreport-screenshot-hint').textContent = '';
+        let img = area.querySelector('img');
+        if (!img) {
+          img = document.createElement('img');
+          area.appendChild(img);
+        }
+        img.src = _bugReportScreenshot;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function submitBugReport() {
+      const desc = document.getElementById('bugreport-desc').value.trim();
+      if (!desc) {
+        if (typeof showToast === 'function') showToast('Description is required');
+        return;
+      }
+      const btn = document.getElementById('bugreport-submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+
+      // Prepare screenshot data (strip data URI prefix for base64-only)
+      let screenshotData = null;
+      if (_bugReportScreenshot) {
+        const raw = _bugReportScreenshot;
+        // Only inline if under 300KB base64
+        if (raw.length <= 300 * 1024) {
+          screenshotData = raw;
+        }
+        // For larger images, skip (presign upload could be added later)
+      }
+
+      const body = {
+        category: document.getElementById('bugreport-category').value,
+        description: desc,
+        screenshot_data: screenshotData,
+        js_errors: _collectedJsErrors.slice(-20),
+        user_agent: navigator.userAgent,
+        screen: screen.width + 'x' + screen.height,
+        url: location.href,
+        version: _appVersion,
+        hash: _appHash,
+      };
+
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        const token = localStorage.getItem('auth_token');
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const sid = localStorage.getItem('session_id');
+        if (sid) headers['x-session-id'] = sid;
+
+        const r = await fetch(API + '/api/v1/bug-report', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(body),
+        });
+        if (r.ok) {
+          document.getElementById('bugreport-modal').classList.remove('show');
+          if (typeof showToast === 'function') showToast('Bug report sent. Thank you!');
+        } else {
+          const d = await r.json().catch(() => ({}));
+          if (typeof showToast === 'function') showToast(d.error || 'Failed to send report');
+          btn.disabled = false;
+          btn.textContent = 'Submit';
+        }
+      } catch(e) {
+        if (typeof showToast === 'function') showToast('Network error');
+        btn.disabled = false;
+        btn.textContent = 'Submit';
+      }
+    }
   </script>
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
 </body>

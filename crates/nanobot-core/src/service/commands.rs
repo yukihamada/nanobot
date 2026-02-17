@@ -25,6 +25,8 @@ pub enum SlashCommand<'a> {
     Status,
     /// `/improve <description>` — admin-only self-improvement PR
     Improve(&'a str),
+    /// `/keys` or `/keys <subcommand>` — admin-only API key management
+    Keys(Option<&'a str>),
 }
 
 /// Result of executing a slash command.
@@ -83,6 +85,18 @@ pub fn parse_command(text: &str) -> Option<SlashCommand<'_>> {
     if trimmed.eq_ignore_ascii_case("/improve") {
         // bare /improve with no description — still parse it so we can reply with usage hint
         return Some(SlashCommand::Improve(""));
+    }
+
+    // /keys [subcommand]
+    if trimmed.eq_ignore_ascii_case("/keys") {
+        return Some(SlashCommand::Keys(None));
+    }
+    if let Some(rest) = strip_prefix_ci(trimmed, "/keys ") {
+        let args = rest.trim();
+        if !args.is_empty() {
+            return Some(SlashCommand::Keys(Some(args)));
+        }
+        return Some(SlashCommand::Keys(None));
     }
 
     // /link [CODE] — must come last because of the embedded-code search
@@ -149,6 +163,7 @@ pub async fn execute_command(
         SlashCommand::Share => execute_share(ctx).await,
         SlashCommand::Link(code) => execute_link(code, ctx).await,
         SlashCommand::Improve(desc) => execute_improve(desc, ctx).await,
+        SlashCommand::Keys(args) => execute_keys(args, ctx).await,
     }
 }
 
@@ -165,7 +180,8 @@ fn help_text() -> String {
 /share — 会話の共有リンクを生成\n\
 /link — チャネル連携コードを生成\n\
 /link CODE — 別チャネルとリンク\n\
-/improve <説明> — 改善PRを作成（管理者のみ）"
+/improve <説明> — 改善PRを作成（管理者のみ）\n\
+/keys — APIキー管理（管理者のみ）"
         .to_string()
 }
 
@@ -428,6 +444,295 @@ async fn execute_link(code: Option<&str>, ctx: &CommandContext<'_>) -> CommandRe
         let _ = (code, ctx);
         CommandResult::Reply("リンク機能はDynamoDBバックエンドが必要です。".to_string())
     }
+}
+
+// ---------------------------------------------------------------------------
+// /keys — admin-only API key management
+// ---------------------------------------------------------------------------
+
+async fn execute_keys(args: Option<&str>, ctx: &CommandContext<'_>) -> CommandResult {
+    // Admin check (same pattern as /improve)
+    let is_admin = super::http::is_admin(ctx.channel_key)
+        || ctx.user_id.map_or(false, |uid| super::http::is_admin(uid))
+        || ctx
+            .session_key
+            .starts_with("webchat:")
+            && super::http::is_admin(ctx.session_key);
+
+    if !is_admin {
+        return CommandResult::Reply(
+            "⛔ /keys コマンドは管理者のみ利用できます。".to_string(),
+        );
+    }
+
+    match args.map(|a| a.trim()) {
+        None | Some("") => execute_keys_list(ctx).await,
+        Some("test") => execute_keys_test().await,
+        Some(subcmd) if subcmd.starts_with("set ") => {
+            let rest = subcmd[4..].trim();
+            execute_keys_set(rest, ctx).await
+        }
+        Some(_) => CommandResult::Reply(
+            "使い方:\n\
+             /keys — APIキー一覧を表示\n\
+             /keys test — 各APIキーの疎通テスト\n\
+             /keys set <NAME> <VALUE> — APIキーを設定"
+                .to_string(),
+        ),
+    }
+}
+
+/// `/keys` (no args) — list all API keys with masked values.
+async fn execute_keys_list(_ctx: &CommandContext<'_>) -> CommandResult {
+    let mut lines = vec!["🔑 APIキー一覧:".to_string()];
+
+    for &name in super::http::ADMIN_KEY_NAMES {
+        let val = std::env::var(name).unwrap_or_default();
+        if val.is_empty() {
+            lines.push(format!("  ❌ {} — 未設定", name));
+        } else {
+            let masked = super::http::mask_api_key_admin(&val);
+            lines.push(format!("  ✅ {} — {}", name, masked));
+        }
+    }
+
+    CommandResult::Reply(lines.join("\n"))
+}
+
+/// `/keys set <NAME> <VALUE>` — set an API key via DynamoDB + env.
+async fn execute_keys_set(rest: &str, ctx: &CommandContext<'_>) -> CommandResult {
+    let mut parts = rest.splitn(2, char::is_whitespace);
+    let name = match parts.next() {
+        Some(n) if !n.is_empty() => n,
+        _ => {
+            return CommandResult::Reply(
+                "使い方: /keys set <NAME> <VALUE>\n例: /keys set REPLICATE_API_TOKEN r8_xxx"
+                    .to_string(),
+            );
+        }
+    };
+    let value = match parts.next() {
+        Some(v) if !v.trim().is_empty() => v.trim(),
+        _ => {
+            return CommandResult::Reply(
+                "使い方: /keys set <NAME> <VALUE>\n例: /keys set REPLICATE_API_TOKEN r8_xxx"
+                    .to_string(),
+            );
+        }
+    };
+
+    // Whitelist check
+    if !super::http::ADMIN_KEY_NAMES.contains(&name) {
+        return CommandResult::Reply(format!(
+            "⛔ '{}' は許可されたキー名ではありません。\n許可リスト: {}",
+            name,
+            super::http::ADMIN_KEY_NAMES.join(", ")
+        ));
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let (dynamo, table) = match (ctx.dynamo, ctx.config_table) {
+            (Some(d), Some(t)) => (d, t),
+            _ => {
+                // Fallback: set env var only (no persistence)
+                // SAFETY: Lambda is single-threaded for env var writes at this point
+                unsafe { std::env::set_var(name, value); }
+                return CommandResult::Reply(format!(
+                    "✅ {} を設定しました（メモリのみ、再起動で失われます）。",
+                    name
+                ));
+            }
+        };
+
+        // Load existing keys from DynamoDB
+        let existing = dynamo
+            .get_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S("CONFIG#api_keys".to_string()))
+            .key("sk", AttributeValue::S("LATEST".to_string()))
+            .send()
+            .await;
+
+        let mut item = std::collections::HashMap::new();
+        item.insert("pk".to_string(), AttributeValue::S("CONFIG#api_keys".to_string()));
+        item.insert("sk".to_string(), AttributeValue::S("LATEST".to_string()));
+
+        // Preserve existing keys
+        if let Ok(resp) = &existing {
+            if let Some(existing_item) = resp.item() {
+                for &key_name in super::http::ADMIN_KEY_NAMES {
+                    if let Some(val) = existing_item.get(key_name).and_then(|v| v.as_s().ok()) {
+                        if !val.is_empty() {
+                            item.insert(key_name.to_string(), AttributeValue::S(val.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Set the new key
+        item.insert(name.to_string(), AttributeValue::S(value.to_string()));
+
+        let updated_at = chrono::Utc::now().to_rfc3339();
+        item.insert("updated_at".to_string(), AttributeValue::S(updated_at));
+
+        let result = dynamo
+            .put_item()
+            .table_name(table)
+            .set_item(Some(item))
+            .send()
+            .await;
+
+        match result {
+            Ok(_) => {
+                // Apply to env vars immediately
+                // SAFETY: Lambda is single-threaded for env var writes at this point
+                unsafe { std::env::set_var(name, value); }
+                let masked = super::http::mask_api_key_admin(value);
+                CommandResult::Reply(format!(
+                    "✅ {} を設定しました: {}\nDynamoDBに保存済み。",
+                    name, masked
+                ))
+            }
+            Err(e) => {
+                tracing::error!("/keys set DynamoDB error: {}", e);
+                CommandResult::Reply(format!(
+                    "❌ DynamoDBへの保存に失敗しました: {}",
+                    e
+                ))
+            }
+        }
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (ctx, name, value);
+        CommandResult::Reply("キー管理にはDynamoDBバックエンドが必要です。".to_string())
+    }
+}
+
+/// `/keys test` — test connectivity for each configured API key.
+async fn execute_keys_test() -> CommandResult {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap_or_default();
+
+    let mut lines = vec!["🧪 APIキー疎通テスト:".to_string()];
+
+    // Test definitions: (env_var_name, display_name, test_fn)
+    struct KeyTest {
+        env_name: &'static str,
+        display: &'static str,
+    }
+    let tests = [
+        KeyTest { env_name: "ANTHROPIC_API_KEY", display: "Anthropic" },
+        KeyTest { env_name: "OPENAI_API_KEY", display: "OpenAI" },
+        KeyTest { env_name: "GOOGLE_API_KEY", display: "Google" },
+        KeyTest { env_name: "GEMINI_API_KEY", display: "Gemini" },
+        KeyTest { env_name: "OPENROUTER_API_KEY", display: "OpenRouter" },
+        KeyTest { env_name: "DEEPSEEK_API_KEY", display: "DeepSeek" },
+        KeyTest { env_name: "GROQ_API_KEY", display: "Groq" },
+        KeyTest { env_name: "ELEVENLABS_API_KEY", display: "ElevenLabs" },
+        KeyTest { env_name: "REPLICATE_API_TOKEN", display: "Replicate" },
+    ];
+
+    for test in &tests {
+        let key = std::env::var(test.env_name).unwrap_or_default();
+        if key.is_empty() {
+            lines.push(format!("  ⚪ {} — 未設定", test.display));
+            continue;
+        }
+
+        let start = std::time::Instant::now();
+        let result = match test.env_name {
+            "ANTHROPIC_API_KEY" => {
+                client
+                    .get("https://api.anthropic.com/v1/models")
+                    .header("x-api-key", &key)
+                    .header("anthropic-version", "2023-06-01")
+                    .send()
+                    .await
+            }
+            "GOOGLE_API_KEY" | "GEMINI_API_KEY" => {
+                client
+                    .get(format!(
+                        "https://generativelanguage.googleapis.com/v1/models?key={}",
+                        key
+                    ))
+                    .send()
+                    .await
+            }
+            "ELEVENLABS_API_KEY" => {
+                client
+                    .get("https://api.elevenlabs.io/v1/user")
+                    .header("xi-api-key", &key)
+                    .send()
+                    .await
+            }
+            "REPLICATE_API_TOKEN" => {
+                client
+                    .get("https://api.replicate.com/v1/account")
+                    .header("Authorization", format!("Bearer {}", key))
+                    .send()
+                    .await
+            }
+            // OpenAI, OpenRouter, DeepSeek, Groq all use Bearer + /v1/models
+            "OPENAI_API_KEY" => {
+                client
+                    .get("https://api.openai.com/v1/models")
+                    .header("Authorization", format!("Bearer {}", key))
+                    .send()
+                    .await
+            }
+            "OPENROUTER_API_KEY" => {
+                client
+                    .get("https://openrouter.ai/api/v1/models")
+                    .header("Authorization", format!("Bearer {}", key))
+                    .send()
+                    .await
+            }
+            "DEEPSEEK_API_KEY" => {
+                client
+                    .get("https://api.deepseek.com/v1/models")
+                    .header("Authorization", format!("Bearer {}", key))
+                    .send()
+                    .await
+            }
+            "GROQ_API_KEY" => {
+                client
+                    .get("https://api.groq.com/openai/v1/models")
+                    .header("Authorization", format!("Bearer {}", key))
+                    .send()
+                    .await
+            }
+            _ => continue,
+        };
+        let ms = start.elapsed().as_millis();
+
+        match result {
+            Ok(resp) if resp.status().is_success() => {
+                lines.push(format!("  ✅ {} — OK ({}ms)", test.display, ms));
+            }
+            Ok(resp) if resp.status().as_u16() == 401 || resp.status().as_u16() == 403 => {
+                lines.push(format!("  ❌ {} — 無効なキー ({}ms)", test.display, ms));
+            }
+            Ok(resp) => {
+                lines.push(format!(
+                    "  ⚠️ {} — HTTP {} ({}ms)",
+                    test.display,
+                    resp.status().as_u16(),
+                    ms
+                ));
+            }
+            Err(_) => {
+                lines.push(format!("  ⚠️ {} — タイムアウト ({}ms)", test.display, ms));
+            }
+        }
+    }
+
+    CommandResult::Reply(lines.join("\n"))
 }
 
 // ---------------------------------------------------------------------------
@@ -1042,6 +1347,20 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_keys() {
+        assert_eq!(parse_command("/keys"), Some(SlashCommand::Keys(None)));
+        assert_eq!(parse_command("/KEYS"), Some(SlashCommand::Keys(None)));
+        assert_eq!(
+            parse_command("/keys test"),
+            Some(SlashCommand::Keys(Some("test")))
+        );
+        assert_eq!(
+            parse_command("/keys set OPENAI_API_KEY sk-abc123"),
+            Some(SlashCommand::Keys(Some("set OPENAI_API_KEY sk-abc123")))
+        );
+    }
+
+    #[test]
     fn test_help_text_contains_commands() {
         let text = help_text();
         assert!(text.contains("/help"));
@@ -1049,6 +1368,7 @@ mod tests {
         assert!(text.contains("/share"));
         assert!(text.contains("/link"));
         assert!(text.contains("/improve"));
+        assert!(text.contains("/keys"));
     }
 
     #[test]

@@ -280,7 +280,53 @@ impl Channel for TelegramChannel {
     }
 
     async fn send(&self, msg: &OutboundMessage) -> anyhow::Result<()> {
-        self.send_message(&msg.chat_id, &msg.content).await
+        let url = Self::api_url_with_token(&self.config.token, "sendMessage");
+
+        let mut payload = json!({
+            "chat_id": msg.chat_id,
+            "text": msg.content,
+            "parse_mode": "HTML",
+        });
+
+        // Add reply_to_message_id if specified
+        if let Some(reply_to) = &msg.reply_to {
+            if let Ok(message_id) = reply_to.parse::<i64>() {
+                payload["reply_parameters"] = json!({
+                    "message_id": message_id
+                });
+            }
+        }
+
+        let response = self.client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            // Fallback to plain text without HTML parsing
+            warn!("HTML parse failed, falling back to plain text");
+            let mut fallback_payload = json!({
+                "chat_id": msg.chat_id,
+                "text": msg.content,
+            });
+
+            if let Some(reply_to) = &msg.reply_to {
+                if let Ok(message_id) = reply_to.parse::<i64>() {
+                    fallback_payload["reply_parameters"] = json!({
+                        "message_id": message_id
+                    });
+                }
+            }
+
+            self.client
+                .post(&url)
+                .json(&fallback_payload)
+                .send()
+                .await?;
+        }
+
+        Ok(())
     }
 
     fn is_running(&self) -> bool {

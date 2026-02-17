@@ -1172,6 +1172,43 @@ async fn get_video_job(
     })
 }
 
+/// Deduct a specific amount of credits directly (for Media API)
+#[cfg(feature = "dynamodb-backend")]
+async fn deduct_credits_direct(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    user_id: &str,
+    credits: i64,
+) -> Result<(), String> {
+    use aws_sdk_dynamodb::types::AttributeValue;
+
+    let pk = format!("USER#{}", user_id);
+
+    let result = dynamo
+        .update_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+        .update_expression("SET credits_remaining = credits_remaining - :c, credits_used = credits_used + :c, updated_at = :now")
+        .condition_expression("credits_remaining >= :c")
+        .expression_attribute_values(":c", AttributeValue::N(credits.to_string()))
+        .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+        .send()
+        .await;
+
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            let err_str = format!("{}", e);
+            if err_str.contains("ConditionalCheckFailedException") {
+                Err("Insufficient credits".to_string())
+            } else {
+                Err(format!("Failed to deduct credits: {}", e))
+            }
+        }
+    }
+}
+
 /// Find a user by email address (scan — fallback for webhook when no client_reference_id).
 #[cfg(feature = "dynamodb-backend")]
 async fn find_user_by_email(
@@ -4588,7 +4625,8 @@ async fn handle_telegram_webhook(
                      - 簡潔に要点を伝える（300文字以内）。\
                      - Markdown記法を活用（太字、コードブロック、リンク）。\
                      - ボタン操作を意識した応答。\
-                     - 日本語で質問されたら日本語で、英語なら英語で答えてください。"
+                     - 日本語で質問されたら日本語で、英語なら英語で答えてください。\
+                     - スレッド形式で返信したい場合は、[[reply_to_current]] をメッセージの先頭に含めてください。"
                 ),
             ];
 
@@ -4648,8 +4686,29 @@ async fn handle_telegram_webhook(
         None => "AI provider not configured.".to_string(),
     };
 
+    // Parse reply tags
+    let (clean_reply, reply_tag) = super::tags::parse_reply_tag(&reply);
+    let reply_to_message_id = if reply_tag == Some("current".to_string()) {
+        Some(message.message_id.to_string())
+    } else {
+        None
+    };
+
+    // Send message with optional reply
     let client = reqwest::Client::new();
-    if let Err(e) = TelegramChannel::send_message_static(&client, token, &chat_id, &reply).await {
+    let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
+    let mut payload = serde_json::json!({
+        "chat_id": chat_id,
+        "text": clean_reply,
+    });
+
+    if let Some(msg_id) = reply_to_message_id {
+        payload["reply_parameters"] = serde_json::json!({
+            "message_id": msg_id.parse::<i64>().unwrap_or(0)
+        });
+    }
+
+    if let Err(e) = client.post(&url).json(&payload).send().await {
         tracing::error!("Failed to send Telegram reply: {}", e);
     }
 
@@ -6132,6 +6191,20 @@ async fn handle_chat_stream(
                         });
                     }
                 }
+
+                // Extract reasoning blocks and emit reasoning events
+                let (clean_response_text, reasoning_blocks) = super::tags::extract_reasoning(&response_text);
+                for block in &reasoning_blocks {
+                    send_sse!(serde_json::json!({
+                        "type": "reasoning",
+                        "content": block.content,
+                        "index": block.index,
+                    }));
+                    event_count += 1;
+                }
+
+                // Update response_text to clean version (without <think> tags)
+                let response_text = clean_response_text;
 
                 // Content event (final answer — sent immediately)
                 let stream_cost = crate::provider::pricing::calculate_cost(&stream_used_model, stream_total_input, stream_total_output);
@@ -15484,7 +15557,7 @@ async fn handle_media_image(
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            deduct_credits(dynamo, table, &user_id, credits_to_use).await
+            deduct_credits_direct(dynamo, table, &user_id, credits_to_use).await
                 .map_err(|e| (StatusCode::PAYMENT_REQUIRED, e))?;
         }
     }
@@ -15562,7 +15635,7 @@ async fn handle_media_video(
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            deduct_credits(dynamo, table, &user_id, credits).await
+            deduct_credits_direct(dynamo, table, &user_id, credits).await
                 .map_err(|e| (StatusCode::PAYMENT_REQUIRED, e))?;
         }
     }

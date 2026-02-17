@@ -12,5 +12,8 @@ pub mod http;
 #[cfg(feature = "http-api")]
 pub mod commands;
 
+#[cfg(feature = "http-api")]
+pub mod tags;
+
 #[cfg(feature = "stripe")]
 pub mod stripe;

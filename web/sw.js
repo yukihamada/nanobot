@@ -1,4 +1,4 @@
-const CACHE = 'chatweb-v1';
+const CACHE = 'chatweb-v2';
 const PRECACHE = ['/', '/manifest.json'];
 
 self.addEventListener('install', e => {

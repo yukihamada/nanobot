@@ -412,6 +412,7 @@
       <button class="tab" onclick="showTab('tickets')">Tickets</button>
       <button class="tab" onclick="showTab('infra')">Infrastructure</button>
       <button class="tab" onclick="showTab('sessions')">Sessions</button>
+      <button class="tab" onclick="showTab('keys')">Keys</button>
       <button class="tab" onclick="showTab('costs')">Costs</button>
     </div>
 
@@ -817,6 +818,11 @@
     </div>
 
     <!-- ========== COSTS ========== -->
+    <div id="tab-keys" class="tab-content">
+      <div id="keys-message" style="display:none;padding:10px 16px;margin-bottom:12px;border-radius:6px;background:rgba(34,197,94,0.1);border:1px solid var(--green);color:var(--green);font-size:13px;"></div>
+      <div id="keys-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
     <div id="tab-costs" class="tab-content">
       <div class="cards">
         <div class="card">
@@ -1239,12 +1245,78 @@
       document.getElementById('cost-openai').textContent = '~$5';
     }
 
+    // Load API keys
+    async function loadKeys() {
+      const list = document.getElementById('keys-list');
+      list.innerHTML = '<div style="color:var(--muted);padding:16px;text-align:center">Loading...</div>';
+      try {
+        const r = await fetch(API + '/api/v1/admin/keys?sid=' + encodeURIComponent(SID));
+        if (!r.ok) { list.innerHTML = '<div style="color:var(--red);padding:16px">Failed to load</div>'; return; }
+        const data = await r.json();
+        list.innerHTML = '';
+        (data.keys || []).forEach(k => {
+          const provider = k.name.replace(/_API_KEY$/, '').replace(/_/g, ' ');
+          const dot = k.is_set ? 'green' : 'red';
+          const div = document.createElement('div');
+          div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px';
+          div.innerHTML = '<div style="display:flex;align-items:center;gap:10px">'
+            + '<span class="status-dot ' + dot + '"></span>'
+            + '<span style="font-weight:600;font-size:13px">' + escHtml(provider) + '</span>'
+            + '<span id="key-val-' + k.name + '" style="font-family:monospace;font-size:12px;color:var(--muted)">' + escHtml(k.masked_key || '—') + '</span>'
+            + '</div>'
+            + '<button onclick="editKey(\'' + k.name + '\')" style="padding:4px 12px;font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;cursor:pointer">Edit</button>';
+          list.appendChild(div);
+        });
+      } catch(e) {
+        list.innerHTML = '<div style="color:var(--red);padding:16px">Error: ' + escHtml(e.message) + '</div>';
+      }
+    }
+
+    function editKey(name) {
+      const val = document.getElementById('key-val-' + name);
+      if (!val || val.querySelector('input')) return;
+      const row = val.closest('div[style*="flex"]');
+      const btn = row.querySelector('button');
+      val.innerHTML = '<input type="password" id="key-input-' + name + '" placeholder="新しいキーを入力..." '
+        + 'style="width:220px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:12px;font-family:monospace">';
+      btn.outerHTML = '<div style="display:flex;gap:6px">'
+        + '<button onclick="saveKey(\'' + name + '\')" style="padding:4px 12px;font-size:12px;background:var(--green);border:none;color:#000;border-radius:4px;cursor:pointer;font-weight:600">Save</button>'
+        + '<button onclick="loadKeys()" style="padding:4px 10px;font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:4px;cursor:pointer">Cancel</button>'
+        + '</div>';
+      document.getElementById('key-input-' + name).focus();
+    }
+
+    async function saveKey(name) {
+      const input = document.getElementById('key-input-' + name);
+      if (!input) return;
+      const body = {};
+      body[name] = input.value.trim();
+      try {
+        const r = await fetch(API + '/api/v1/admin/keys?sid=' + encodeURIComponent(SID), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (r.ok) {
+          const msg = document.getElementById('keys-message');
+          msg.style.display = 'block';
+          msg.textContent = data.message || 'Saved';
+          setTimeout(() => { msg.style.display = 'none'; }, 4000);
+          loadKeys();
+        } else {
+          alert(data.error || 'Error');
+        }
+      } catch(e) { alert(e.message); }
+    }
+
     function refreshAll() {
       checkHealth();
       loadAdminStats();
       loadSessions();
       loadUsers();
       loadTickets();
+      loadKeys();
       estimateCosts();
     }
 

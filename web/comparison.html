@@ -7,53 +7,130 @@
   <meta name="description" content="chatweb.ai vs OpenClaw, Picoclaw, Claude Code, ChatGPT — detailed AI agent framework comparison. Voice-first, multi-channel, serverless Rust runtime.">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
   <style>
-    :root{--bg:#0a0a0a;--s:#141414;--b:#1e1e1e;--t:#e5e5e5;--m:#777;--a:#6366f1;--ah:#818cf8;--g:#22c55e;--y:#f59e0b;--r:#ef4444}
+    :root{
+      --bg:#0a0a0a;
+      --s:#141414;
+      --b:#1e1e1e;
+      --t:#e5e5e5;
+      --m:#777;
+      --a:#6366f1;
+      --ah:#818cf8;
+      --g:#22c55e;
+      --y:#f59e0b;
+      --r:#ef4444;
+      --gradient:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;line-height:1.6}
-    nav{padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b)}
+    html{scroll-behavior:smooth}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;
+      background:var(--bg);
+      color:var(--t);
+      min-height:100vh;
+      line-height:1.6;
+      position:relative;
+    }
+    body::before{
+      content:"";
+      position:fixed;
+      top:0;
+      left:0;
+      right:0;
+      height:400px;
+      background:radial-gradient(circle at 50% 0%, rgba(99,102,241,0.15) 0%, transparent 70%);
+      pointer-events:none;
+      z-index:0;
+    }
+    nav{
+      padding:16px 24px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      border-bottom:1px solid var(--b);
+      backdrop-filter:blur(10px);
+      background:rgba(10,10,10,0.8);
+      position:sticky;
+      top:0;
+      z-index:100;
+    }
     .logo{font-size:18px;font-weight:700;text-decoration:none;color:var(--t)}.logo span{color:var(--a)}
-    .nav-links{display:flex;align-items:center;gap:16px}
-    .nav-links a{color:var(--m);text-decoration:none;font-size:14px;font-weight:500}.nav-links a:hover{color:var(--t)}
-    .lang-sw{background:var(--s);border:1px solid var(--b);border-radius:6px;overflow:hidden;display:flex}
-    .lang-sw button{background:none;border:none;color:var(--m);padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer}
+    .nav-links{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+    .nav-links a{color:var(--m);text-decoration:none;font-size:14px;font-weight:500;transition:color .2s}.nav-links a:hover{color:var(--t)}
+    .lang-sw{background:var(--s);border:1px solid var(--b);border-radius:6px;overflow:hidden;display:flex;flex-wrap:wrap;gap:2px;padding:2px}
+    .lang-sw button{background:none;border:none;color:var(--m);padding:4px 8px;font-size:10px;font-weight:600;cursor:pointer;border-radius:4px;transition:all .2s}
+    .lang-sw button:hover{background:rgba(99,102,241,.1)}
     .lang-sw button.on{background:var(--a);color:#fff}
-    .main{max-width:1300px;margin:0 auto;padding:40px 24px 80px}
-    .hero{text-align:center;margin-bottom:48px}
-    .hero h1{font-size:36px;font-weight:800;letter-spacing:-1px;margin-bottom:12px}
-    .hero p{color:var(--m);font-size:16px;max-width:700px;margin:0 auto}
-    .stats{display:flex;justify-content:center;gap:32px;margin:32px 0 48px;flex-wrap:wrap}
-    .stat{text-align:center}
-    .stat .num{font-size:32px;font-weight:800;color:var(--a)}
-    .stat .label{font-size:12px;color:var(--m);margin-top:2px}
-    .tbl{width:100%;border-collapse:collapse;margin-bottom:40px}
-    .tbl th,.tbl td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--b);font-size:13px}
-    .tbl th{color:var(--m);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;background:var(--bg);z-index:2}
-    .tbl td:first-child{font-weight:600;white-space:nowrap}
-    .tbl .hl{background:rgba(99,102,241,.06)}
-    .tbl .hl td:first-child{color:var(--a)}
-    .ck{color:var(--g);font-weight:700}.cx{color:var(--r)}.cp{color:var(--y)}
-    .tbl .cat-row td{background:rgba(99,102,241,.12);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--a);padding:8px 14px;border:none}
-    .diff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;margin:48px 0}
-    .diff-card{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:24px;position:relative;overflow:hidden}
-    .diff-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--a),var(--ah))}
-    .diff-card h3{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-    .diff-card p{font-size:13px;color:#bbb;line-height:1.7}
-    .diff-card .src{font-size:11px;color:var(--m);margin-top:10px;font-family:monospace}
-    .sections{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;margin-bottom:48px}
-    .card{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:24px}
-    .card h3{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-    .card ul{list-style:none;padding:0}
-    .card li{font-size:13px;color:#ccc;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);display:flex;align-items:flex-start;gap:8px}
-    .card li:last-child{border:none}
-    .card li::before{content:"\2713";color:var(--g);font-weight:700;flex-shrink:0;margin-top:1px}
-    .cta{text-align:center;padding:48px 0}
-    .cta-btn{display:inline-block;background:var(--a);color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;transition:all .2s}
-    .cta-btn:hover{background:var(--ah);transform:translateY(-1px)}
-    /* Product overview cards */
-    .products{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:32px 0 48px}
-    .prod{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:20px;text-align:center;transition:border-color .2s}
-    .prod:hover{border-color:var(--a)}
-    .prod.featured{border-color:var(--a);background:rgba(99,102,241,.04)}
+    .main{max-width:1300px;margin:0 auto;padding:40px 24px 80px;position:relative;z-index:1}
+    .hero{text-align:center;margin-bottom:48px;animation:fadeIn 0.6s ease-out}
+    .hero h1{font-size:42px;font-weight:800;letter-spacing:-1px;margin-bottom:16px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .hero p{color:var(--m);font-size:18px;max-width:700px;margin:0 auto;line-height:1.8}
+    .stats{display:flex;justify-content:center;gap:40px;margin:48px 0;flex-wrap:wrap}
+    .stat{text-align:center;animation:fadeInUp 0.6s ease-out;animation-fill-mode:backwards}
+    .stat:nth-child(1){animation-delay:0.1s}
+    .stat:nth-child(2){animation-delay:0.2s}
+    .stat:nth-child(3){animation-delay:0.3s}
+    .stat:nth-child(4){animation-delay:0.4s}
+    .stat:nth-child(5){animation-delay:0.5s}
+    .stat .num{font-size:36px;font-weight:800;background:linear-gradient(135deg, var(--a) 0%, var(--ah) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .stat .label{font-size:12px;color:var(--m);margin-top:4px;text-transform:uppercase;letter-spacing:0.5px}
+
+    /* Quick Jump Navigation */
+    .quick-nav{
+      display:flex;
+      justify-content:center;
+      gap:12px;
+      margin:32px 0;
+      flex-wrap:wrap;
+    }
+    .quick-nav a{
+      padding:8px 16px;
+      background:var(--s);
+      border:1px solid var(--b);
+      border-radius:8px;
+      text-decoration:none;
+      color:var(--m);
+      font-size:13px;
+      font-weight:600;
+      transition:all .2s;
+    }
+    .quick-nav a:hover{
+      background:var(--a);
+      color:#fff;
+      border-color:var(--a);
+      transform:translateY(-2px);
+    }
+
+    /* Products Cards */
+    .products{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:48px 0;animation:fadeInUp 0.8s ease-out}
+    .prod{
+      background:var(--s);
+      border:1px solid var(--b);
+      border-radius:12px;
+      padding:20px;
+      text-align:center;
+      transition:all .3s;
+      cursor:pointer;
+    }
+    .prod:hover{
+      border-color:var(--a);
+      transform:translateY(-4px);
+      box-shadow:0 8px 24px rgba(99,102,241,0.2);
+    }
+    .prod.featured{
+      border-color:var(--a);
+      background:rgba(99,102,241,.04);
+      position:relative;
+      overflow:hidden;
+    }
+    .prod.featured::before{
+      content:"";
+      position:absolute;
+      top:0;
+      left:0;
+      right:0;
+      height:3px;
+      background:var(--gradient);
+    }
     .prod .pname{font-size:16px;font-weight:700;margin-bottom:4px}
     .prod .plang{font-size:11px;color:var(--m);margin-bottom:8px}
     .prod .pstars{font-size:20px;font-weight:800;color:var(--a)}
@@ -62,13 +139,120 @@
     .prod .ptag{font-size:10px;padding:2px 6px;border-radius:4px;background:var(--b);color:var(--m)}
     .prod .ptag.g{background:rgba(34,197,94,.12);color:var(--g)}
     .prod .ptag.r{background:rgba(239,68,68,.12);color:var(--r)}
-    footer{text-align:center;padding:24px;color:var(--m);font-size:12px;border-top:1px solid var(--b)}
-    footer a{color:var(--m);text-decoration:none}footer a:hover{color:var(--t)}
+
+    /* Table */
+    .table-container{overflow-x:auto;margin:48px 0;border-radius:12px;border:1px solid var(--b)}
+    .tbl{width:100%;border-collapse:collapse;min-width:800px}
+    .tbl th,.tbl td{padding:14px 16px;text-align:left;border-bottom:1px solid var(--b);font-size:13px}
+    .tbl th{
+      color:var(--m);
+      font-weight:600;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.5px;
+      position:sticky;
+      top:72px;
+      background:var(--bg);
+      z-index:10;
+      backdrop-filter:blur(10px);
+    }
+    .tbl td:first-child{font-weight:600;white-space:nowrap}
+    .tbl .hl{background:rgba(99,102,241,.06);position:relative}
+    .tbl .hl::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--a)}
+    .tbl .hl td:first-child{color:var(--a);padding-left:20px}
+    .ck{color:var(--g);font-weight:700}.cx{color:var(--r)}.cp{color:var(--y)}
+    .tbl .cat-row td{
+      background:rgba(99,102,241,.12);
+      font-weight:700;
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.5px;
+      color:var(--a);
+      padding:12px 16px;
+      border:none;
+    }
+
+    /* Diff Cards */
+    .diff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;margin:48px 0}
+    .diff-card{
+      background:var(--s);
+      border:1px solid var(--b);
+      border-radius:12px;
+      padding:24px;
+      position:relative;
+      overflow:hidden;
+      transition:all .3s;
+    }
+    .diff-card:hover{
+      transform:translateY(-4px);
+      box-shadow:0 8px 24px rgba(99,102,241,0.15);
+      border-color:var(--a);
+    }
+    .diff-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--a),var(--ah))}
+    .diff-card h3{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+    .diff-card p{font-size:13px;color:#bbb;line-height:1.7}
+    .diff-card .src{font-size:11px;color:var(--m);margin-top:10px;font-family:monospace;opacity:0.7}
+
+    /* Feature Sections */
+    .sections{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;margin-bottom:48px}
+    .card{
+      background:var(--s);
+      border:1px solid var(--b);
+      border-radius:12px;
+      padding:24px;
+      transition:all .3s;
+    }
+    .card:hover{
+      border-color:var(--a);
+      box-shadow:0 4px 12px rgba(99,102,241,0.1);
+    }
+    .card h3{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+    .card ul{list-style:none;padding:0}
+    .card li{font-size:13px;color:#ccc;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);display:flex;align-items:flex-start;gap:8px}
+    .card li:last-child{border:none}
+    .card li::before{content:"\2713";color:var(--g);font-weight:700;flex-shrink:0;margin-top:1px}
+
+    /* CTA */
+    .cta{text-align:center;padding:48px 0}
+    .cta-btn{
+      display:inline-block;
+      background:var(--gradient);
+      color:#fff;
+      padding:16px 40px;
+      border-radius:10px;
+      text-decoration:none;
+      font-weight:700;
+      font-size:16px;
+      transition:all .3s;
+      box-shadow:0 4px 14px rgba(99,102,241,0.4);
+    }
+    .cta-btn:hover{
+      transform:translateY(-2px);
+      box-shadow:0 8px 24px rgba(99,102,241,0.6);
+    }
+
+    /* Footer */
+    footer{text-align:center;padding:32px;color:var(--m);font-size:12px;border-top:1px solid var(--b);margin-top:80px}
+    footer a{color:var(--m);text-decoration:none;transition:color .2s}
+    footer a:hover{color:var(--t)}
+
+    /* Animations */
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+    /* Mobile */
     @media(max-width:768px){
-      .tbl{font-size:10px}.tbl th,.tbl td{padding:6px 4px}
-      .hero h1{font-size:26px}.stats{gap:16px}.stat .num{font-size:24px}
-      .sections{grid-template-columns:1fr}.diff-grid{grid-template-columns:1fr}
+      .hero h1{font-size:28px}
+      .hero p{font-size:16px}
+      .stats{gap:24px}.stat .num{font-size:28px}
+      .tbl{font-size:11px}.tbl th,.tbl td{padding:8px 6px}
+      .sections{grid-template-columns:1fr}
+      .diff-grid{grid-template-columns:1fr}
       .products{grid-template-columns:repeat(2,1fr)}
+      .quick-nav{gap:8px}.quick-nav a{padding:6px 12px;font-size:12px}
+      .table-container{border-radius:0;margin-left:-24px;margin-right:-24px}
+      nav{flex-wrap:wrap;gap:12px}
+      .nav-links{width:100%;justify-content:space-between}
     }
   </style>
 </head>
@@ -81,8 +265,13 @@
     <a href="/pricing" id="nav-pricing">Pricing</a>
     <a href="/contact" id="nav-contact">Contact</a>
     <div class="lang-sw">
-      <button onclick="setLang('ja')" id="btn-ja" class="on">JP</button>
-      <button onclick="setLang('en')" id="btn-en">EN</button>
+      <button onclick="setLang('ja')" id="btn-ja" class="on">🇯🇵</button>
+      <button onclick="setLang('en')" id="btn-en">🇺🇸</button>
+      <button onclick="setLang('zh')" id="btn-zh">🇨🇳</button>
+      <button onclick="setLang('ko')" id="btn-ko">🇰🇷</button>
+      <button onclick="setLang('es')" id="btn-es">🇪🇸</button>
+      <button onclick="setLang('fr')" id="btn-fr">🇫🇷</button>
+      <button onclick="setLang('de')" id="btn-de">🇩🇪</button>
     </div>
   </div>
 </nav>
@@ -90,7 +279,24 @@
 <div class="main">
   <div class="hero">
     <h1 id="t-title">AI Agent Framework 比較</h1>
-    <p id="t-subtitle">chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT &mdash; 音声対応・マルチチャネル・サーバーレスRustランタイム</p>
+    <p id="t-subtitle">chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT — 音声対応・マルチチャネル・サーバーレスRustランタイム</p>
+  </div>
+
+  <!-- Quick Navigation -->
+  <div class="quick-nav">
+    <a href="#stats">📊 Stats</a>
+    <a href="#comparison">📋 Comparison</a>
+    <a href="#differentiators">✨ Key Features</a>
+    <a href="#features">🛠️ All Features</a>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats" id="stats">
+    <div class="stat"><div class="num">35</div><div class="label" id="s-tools">Built-in Tools</div></div>
+    <div class="stat"><div class="num">13</div><div class="label" id="s-channels">Channels</div></div>
+    <div class="stat"><div class="num">7</div><div class="label" id="s-providers">LLM Providers</div></div>
+    <div class="stat"><div class="num">130+</div><div class="label" id="s-api">API Endpoints</div></div>
+    <div class="stat"><div class="num">&lt;50ms</div><div class="label" id="s-cold">Cold Start</div></div>
   </div>
 
   <!-- Product Overview Cards -->
@@ -100,14 +306,14 @@
       <div class="plang">Rust (axum) &bull; AWS Lambda</div>
       <div class="ptags">
         <span class="ptag g">MIT</span>
-        <span class="ptag">14+ Channels</span>
+        <span class="ptag">13 Channels</span>
         <span class="ptag">Voice-First</span>
       </div>
     </div>
     <div class="prod">
       <div class="pname">OpenClaw</div>
       <div class="plang">TypeScript &bull; Node.js</div>
-      <div class="pstars">185K</div><div class="pstars-label">GitHub Stars</div>
+      <div class="pstars">203K</div><div class="pstars-label">GitHub Stars</div>
       <div class="ptags">
         <span class="ptag g">MIT</span>
         <span class="ptag">13+ Channels</span>
@@ -116,7 +322,7 @@
     <div class="prod">
       <div class="pname">Picoclaw</div>
       <div class="plang">Go &bull; Single Binary</div>
-      <div class="pstars">110</div><div class="pstars-label">GitHub Stars</div>
+      <div class="pstars">13.9K</div><div class="pstars-label">GitHub Stars</div>
       <div class="ptags">
         <span class="ptag g">MIT</span>
         <span class="ptag">Lightweight</span>
@@ -124,10 +330,10 @@
     </div>
     <div class="prod">
       <div class="pname">Claude Code</div>
-      <div class="plang">Shell/Python/TS &bull; Anthropic</div>
-      <div class="pstars">66K</div><div class="pstars-label">GitHub Stars</div>
+      <div class="plang">TypeScript &bull; Anthropic</div>
+      <div class="pstars">36K</div><div class="pstars-label">GitHub Stars</div>
       <div class="ptags">
-        <span class="ptag r">Proprietary</span>
+        <span class="ptag g">Apache 2.0</span>
         <span class="ptag">Coding Agent</span>
       </div>
     </div>
@@ -142,17 +348,9 @@
     </div>
   </div>
 
-  <!-- Stats -->
-  <div class="stats">
-    <div class="stat"><div class="num">30+</div><div class="label" id="s-tools">Built-in Tools</div></div>
-    <div class="stat"><div class="num">14+</div><div class="label" id="s-channels">Channels</div></div>
-    <div class="stat"><div class="num">7</div><div class="label" id="s-providers">LLM Providers</div></div>
-    <div class="stat"><div class="num">110+</div><div class="label" id="s-api">API Endpoints</div></div>
-    <div class="stat"><div class="num">&lt;50ms</div><div class="label" id="s-cold">Cold Start</div></div>
-  </div>
-
-  <!-- ===== MAIN COMPARISON TABLE ===== -->
-  <div style="overflow-x:auto;">
+  <!-- Main Comparison Table -->
+  <h2 style="text-align:center;margin:64px 0 32px;font-size:28px;" id="comparison">📋 <span id="t-comparison">詳細比較</span></h2>
+  <div class="table-container">
   <table class="tbl">
     <thead><tr>
       <th id="t-feature">Feature</th>
@@ -169,7 +367,7 @@
         <td class="hl"><span class="ck">Rust</span> (axum)</td>
         <td>TypeScript (Node.js)</td>
         <td>Go</td>
-        <td>Shell/Python/TS</td>
+        <td>TypeScript</td>
         <td>Proprietary (Python)</td></tr>
       <tr><td id="f-deploy">Deployment</td>
         <td class="hl">AWS Lambda (serverless)</td>
@@ -178,16 +376,16 @@
         <td>Local / SaaS</td>
         <td>SaaS only</td></tr>
       <tr><td id="f-cold">Cold Start</td>
-        <td class="hl"><span class="ck">&lt;50ms</span></td>
-        <td>~1s (Node.js)</td>
-        <td>~100ms (Go)</td>
+        <td class="hl"><span class="ck">&lt;50 ms</span></td>
+        <td>~1000 ms (Node.js)</td>
+        <td>&lt;1s (Go)</td>
         <td>N/A</td>
         <td>N/A (cloud)</td></tr>
       <tr><td id="f-license">License</td>
         <td class="hl">MIT</td>
         <td>MIT</td>
         <td>MIT</td>
-        <td>Proprietary</td>
+        <td>Apache 2.0</td>
         <td>Proprietary</td></tr>
       <tr><td id="f-selfhost">Self-hostable</td>
         <td class="hl"><span class="ck">&#x2713;</span> Lambda / Docker / local</td>
@@ -199,9 +397,9 @@
       <!-- Channels -->
       <tr class="cat-row"><td colspan="6" id="cat-channels">Channels</td></tr>
       <tr><td id="f-ch-count">Channel Count</td>
-        <td class="hl"><span class="ck">14+</span> (Web, LINE, Telegram, WhatsApp, Discord, Slack, Teams, Facebook, Signal, Matrix, iMessage...)</td>
+        <td class="hl"><span class="ck">13</span> (Web, LINE, Telegram, Discord, Slack, Teams, Facebook, Zalo, Google Chat, Matrix, Signal, iMessage)</td>
         <td>13+ (WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Teams...)</td>
-        <td>2 (Discord, Slack)</td>
+        <td>5+ (Telegram, Discord, QQ, DingTalk, LINE)</td>
         <td>3 (Terminal, IDE, GitHub)</td>
         <td>4 (Web, iOS, Android, Desktop)</td></tr>
       <tr><td id="f-voice">Voice (STT + TTS)</td>
@@ -226,7 +424,7 @@
         <td>Claude only</td>
         <td>GPT-4o / GPT-5.2</td></tr>
       <tr><td id="f-failover">Auto Failover</td>
-        <td class="hl"><span class="ck">&#x2713;</span> primary &rarr; gpt-4o-mini &rarr; gemini-flash</td>
+        <td class="hl"><span class="ck">&#x2713;</span> Parallel provider racing + fallback</td>
         <td><span class="cx">&#x2717;</span></td>
         <td><span class="cx">&#x2717;</span></td>
         <td><span class="cx">&#x2717;</span></td>
@@ -274,7 +472,7 @@
       <!-- Tools -->
       <tr class="cat-row"><td colspan="6" id="cat-tools">Tools & Agent</td></tr>
       <tr><td id="f-tool-count">Built-in Tools</td>
-        <td class="hl"><span class="ck">30+</span> (web search, code exec, file ops, image/music/video gen, browser, weather, calculator...)</td>
+        <td class="hl"><span class="ck">35</span> (24 core + 11 optional; web search, code exec, file ops, image/music/video gen, browser...)</td>
         <td>50+ (ClawHub skills)</td>
         <td>File ops, workspace tools</td>
         <td>fs, git, shell, MCP</td>
@@ -307,7 +505,7 @@
       <!-- API & Developer -->
       <tr class="cat-row"><td colspan="6" id="cat-api">API & Developer</td></tr>
       <tr><td id="f-rest-api">REST API</td>
-        <td class="hl"><span class="ck">&#x2713;</span> 110+ endpoints</td>
+        <td class="hl"><span class="ck">&#x2713;</span> 130+ endpoints</td>
         <td><span class="cp">&#x25CB;</span> Local Gateway</td>
         <td><span class="cx">&#x2717;</span></td>
         <td><span class="cx">&#x2717;</span></td>
@@ -343,43 +541,43 @@
   </table>
   </div>
 
-  <!-- ===== KEY DIFFERENTIATORS ===== -->
-  <h2 style="text-align:center;margin-bottom:32px;" id="t-diff-title">Key Differentiators</h2>
+  <!-- Key Differentiators -->
+  <h2 style="text-align:center;margin:64px 0 32px;font-size:28px;" id="differentiators">✨ <span id="t-diff-title">主な差別化ポイント</span></h2>
   <div class="diff-grid">
     <div class="diff-card">
-      <h3 id="d-voice">&#x1F3A4; Voice-First</h3>
-      <p id="d-voice-desc">The only open-source AI agent framework with native STT + TTS + push-to-talk UI. Talk to AI like you're on a phone call. Auto-TTS reads responses aloud when voice input is used.</p>
-      <div class="src">web/index.html &mdash; Web Speech API + /api/v1/speech/synthesize</div>
+      <h3>&#x1F3A4; Voice-First</h3>
+      <p id="d-voice-desc">唯一のオープンソースAIエージェントフレームワークで、ネイティブSTT + TTS + Push-to-talk UIを搭載。電話のように話しかけるだけ。音声入力時は応答を自動で音声再生。</p>
+      <div class="src">web/index.html — Web Speech API + /api/v1/speech/synthesize</div>
     </div>
     <div class="diff-card">
-      <h3 id="d-channels">&#x1F4F1; 14+ Channels</h3>
-      <p id="d-channels-desc">LINE, Telegram, WhatsApp, Discord, Slack, Teams, Facebook, Zalo, Feishu, Google Chat, and more. Cross-channel conversation sync via /link command and QR code. OpenClaw has 13+ channels, Picoclaw has 2, ChatGPT has 4.</p>
-      <div class="src">crates/nanobot-core/src/channel/ &mdash; line.rs, telegram.rs, facebook.rs, ...</div>
+      <h3>&#x1F4F1; 13 Channels</h3>
+      <p id="d-channels-desc">LINE, Telegram, Discord, Slack, Teams, Facebook, Zalo, Google Chat, Matrix, Signal, iMessage等。/linkコマンドとQRコードでクロスチャネル会話同期。OpenClawは13+、Picoclawは5+、ChatGPTは4チャネル。</p>
+      <div class="src">crates/nanobot-core/src/channel/ — line.rs, telegram.rs, facebook.rs, ...</div>
     </div>
     <div class="diff-card">
-      <h3 id="d-fast">&#x26A1; Fastest Runtime</h3>
-      <p id="d-fast-desc">Rust on Lambda ARM64 = sub-50ms cold start, &lt;2s response. Picoclaw (Go) starts in ~100ms, OpenClaw (Node.js) in ~1s. No Python overhead. 4.6MB binary, stripped with LTO.</p>
-      <div class="src">crates/nanobot-lambda/ &mdash; Compiled Rust on AWS Lambda</div>
+      <h3>&#x26A1; Fastest Runtime</h3>
+      <p id="d-fast-desc">Rust on Lambda ARM64 = <strong>&lt;50 ms</strong> cold start、&lt;2s応答。Picoclaw (Go)は&lt;1s、OpenClaw (Node.js)は~1000 ms。~24MB binary (ARM64)。</p>
+      <div class="src">crates/nanobot-lambda/ — Compiled Rust on AWS Lambda</div>
     </div>
     <div class="diff-card">
-      <h3 id="d-failover">&#x1F504; Auto Failover</h3>
-      <p id="d-failover-desc">Primary model fails? Automatically retries with gpt-4o-mini, then gemini-2.0-flash-lite. Zero errors shown to user. Load balancing across multiple API keys. No other framework offers this.</p>
-      <div class="src">crates/nanobot-core/src/service/http.rs &mdash; handle_chat() failover logic</div>
+      <h3>&#x1F504; Auto Failover</h3>
+      <p id="d-failover-desc">プライマリモデルが失敗？全プロバイダーを並列レースで自動フォールバック。ユーザーにはエラーゼロ。複数のAPIキーでロードバランシング。他のフレームワークにはこの機能なし。</p>
+      <div class="src">crates/nanobot-core/src/provider/mod.rs — LoadBalancedProvider</div>
     </div>
     <div class="diff-card">
-      <h3 id="d-memory">&#x1F9E0; Long-Term Memory</h3>
-      <p id="d-memory-desc">2-layer memory system: daily conversation logs + long-term facts. Auto-consolidated every 10 entries via cheap LLM. Picoclaw uses SOUL.md files, ChatGPT has cross-conversation memory, but neither auto-consolidates.</p>
-      <div class="src">crates/nanobot-core/src/service/http.rs &mdash; read_memory_context(), append_daily_memory()</div>
+      <h3>&#x1F9E0; Long-Term Memory</h3>
+      <p id="d-memory-desc">2層メモリシステム：デイリー会話ログ + 長期記憶。10エントリーごとに安価なLLMで自動統合。Picoclawは SOUL.md ファイル、ChatGPT はクロス会話メモリがあるが、どちらも自動統合なし。</p>
+      <div class="src">crates/nanobot-core/src/service/http.rs — read_memory_context(), append_daily_memory()</div>
     </div>
     <div class="diff-card">
-      <h3 id="d-serverless">&#x2601;&#xFE0F; Serverless Scale</h3>
-      <p id="d-serverless-desc">Zero-to-infinite scale on AWS Lambda. No VPS to manage. DynamoDB single-table design. OpenClaw and Picoclaw require self-hosting. ChatGPT is cloud-only but not self-hostable.</p>
-      <div class="src">infra/template.yaml &mdash; SAM template for Lambda + DynamoDB + API Gateway</div>
+      <h3>&#x2601;&#xFE0F; Serverless Scale</h3>
+      <p id="d-serverless-desc">AWS Lambdaでゼロから無限にスケール。VPS管理不要。DynamoDB single-table design。OpenClawとPicoclawはセルフホスティング必要。ChatGPTはクラウドのみでセルフホスト不可。</p>
+      <div class="src">infra/template.yaml — SAM template for Lambda + DynamoDB + API Gateway</div>
     </div>
   </div>
 
-  <!-- ===== FEATURE DETAIL CARDS ===== -->
-  <h2 style="text-align:center;margin:48px 0 32px;" id="t-features-title">All Features</h2>
+  <!-- All Features -->
+  <h2 style="text-align:center;margin:64px 0 32px;font-size:28px;" id="features">🛠️ <span id="t-features-title">全機能一覧</span></h2>
   <div class="sections">
     <div class="card">
       <h3>&#x1F9E0; AI Models &amp; Providers</h3>
@@ -396,39 +594,37 @@
       </ul>
     </div>
     <div class="card">
-      <h3>&#x1F6E0; 30+ Built-in Tools</h3>
+      <h3>&#x1F6E0; 35 Built-in Tools (24 core + 11 optional)</h3>
       <ul>
-        <li>Web Search &mdash; Brave/Bing/Jina 3-tier fallback</li>
-        <li>Web Fetch &mdash; Jina Reader for JS-heavy pages</li>
-        <li>Browser &mdash; CSS selector, screenshots, form submit</li>
-        <li>Code Execution &mdash; Sandboxed shell/Python/Node.js</li>
-        <li>File Read/Write/List &mdash; Per-session sandbox</li>
-        <li>Filesystem &mdash; find (glob), grep, diff</li>
-        <li>Image Generate &mdash; OpenAI gpt-image-1</li>
-        <li>Music Generate &mdash; Suno API</li>
-        <li>Video Generate &mdash; Kling API</li>
+        <li>Web Search — Brave/Bing/Jina 3-tier fallback</li>
+        <li>Web Fetch — Jina Reader for JS-heavy pages</li>
+        <li>Browser — CSS selector, screenshots, form submit</li>
+        <li>Code Execution — Sandboxed shell/Python/Node.js</li>
+        <li>File Read/Write/List — Per-session sandbox</li>
+        <li>Filesystem — find (glob), grep</li>
+        <li>Image Generate — OpenAI gpt-image-1</li>
+        <li>Music Generate — Suno API</li>
+        <li>Video Generate — Kling API</li>
         <li>Calculator / Weather / Wikipedia / Translation</li>
         <li>YouTube Transcript / arXiv Search / News Search</li>
         <li>QR Code / DateTime / CSV Analysis</li>
-        <li>Google Calendar / Gmail (OAuth)</li>
-        <li>Slack / Discord / Notion / PostgreSQL</li>
-        <li>Phone Call (Amazon Connect) / Webhook Trigger</li>
-        <li>Web Deploy &mdash; S3/CloudFront subdomain</li>
-        <li>GitHub &mdash; Read/Write files, Create PRs</li>
+        <li>Google Calendar / Gmail (OAuth) — API key required</li>
+        <li>Slack / Discord / Notion / PostgreSQL / Spotify — API key required</li>
+        <li>Phone Call (Amazon Connect) / Webhook Trigger — API key required</li>
+        <li>Web Deploy — S3/CloudFront subdomain — API key required</li>
+        <li>GitHub — Read/Write files, Create PRs — API key required</li>
       </ul>
     </div>
     <div class="card">
-      <h3>&#x1F4F1; 14+ Channels</h3>
+      <h3>&#x1F4F1; 13 Channels</h3>
       <ul>
-        <li>Web &mdash; Voice-first SPA with push-to-talk</li>
-        <li>LINE &mdash; Webhook + auto-link via QR</li>
-        <li>Telegram &mdash; Deep link + /start</li>
+        <li>Web — Voice-first SPA with push-to-talk</li>
+        <li>LINE — Webhook + auto-link via QR</li>
+        <li>Telegram — Deep link + /start</li>
         <li>Facebook Messenger</li>
-        <li>WhatsApp Cloud API</li>
         <li>Discord, Slack, Microsoft Teams</li>
-        <li>Zalo, Feishu/Lark, Google Chat</li>
+        <li>Zalo, Google Chat</li>
         <li>Signal, Matrix, iMessage (BlueBubbles)</li>
-        <li>CLI &mdash; nanobot chat --session sync</li>
         <li>REST API &amp; MCP for AI agents</li>
       </ul>
     </div>
@@ -447,7 +643,7 @@
     <div class="card">
       <h3>&#x1F527; Developer Platform</h3>
       <ul>
-        <li>REST API &mdash; 110+ endpoints</li>
+        <li>REST API — 130+ endpoints</li>
         <li>SSE streaming responses</li>
         <li>MCP server (JSON-RPC 2.0)</li>
         <li>API Playground with shareable results</li>
@@ -462,19 +658,20 @@
       <ul>
         <li>Rust on AWS Lambda ARM64 (&lt;50ms cold start)</li>
         <li>DynamoDB single-table design</li>
-        <li>4.6MB binary (stripped, LTO fat)</li>
+        <li>~24MB binary (ARM64, single binary)</li>
         <li>Stripe billing integration</li>
         <li>Google OAuth authentication</li>
         <li>AI agent discovery (robots.txt, llms.txt, ai-plugin.json)</li>
         <li>Self-hostable (Docker, Lambda, local)</li>
-        <li>MIT License &mdash; 100% open source</li>
+        <li>MIT License — 100% open source</li>
       </ul>
     </div>
   </div>
 
+  <!-- CTA -->
   <div class="cta">
-    <a href="/" class="cta-btn" id="t-cta">Try Free</a>
-    <p style="color:var(--m);font-size:13px;margin-top:12px">
+    <a href="/" class="cta-btn" id="t-cta">無料で試してみる</a>
+    <p style="color:var(--m);font-size:13px;margin-top:16px;line-height:1.8">
       <a href="https://github.com/yukihamada/nanobot" target="_blank" style="color:var(--ah);text-decoration:none">GitHub</a> &middot;
       <a href="/docs" style="color:var(--ah);text-decoration:none">API Docs</a> &middot;
       <a href="/pricing" style="color:var(--ah);text-decoration:none">Pricing</a>
@@ -495,23 +692,61 @@
 const T={
   ja:{
     title:'AI Agent Framework 比較',
-    subtitle:'chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT \u2014 音声対応・マルチチャネル・サーバーレスRustランタイム',
+    subtitle:'chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT — 音声対応・マルチチャネル・サーバーレスRustランタイム',
     feature:'機能',cta:'無料で試してみる',pricing:'料金',contact:'お問い合わせ',
     sTools:'ビルトインツール',sChannels:'チャネル',sProviders:'LLMプロバイダー',sApi:'APIエンドポイント',sCold:'コールドスタート',
-    diffTitle:'主な差別化ポイント',featuresTitle:'全機能一覧',
+    diffTitle:'主な差別化ポイント',featuresTitle:'全機能一覧',comparison:'詳細比較',
   },
   en:{
     title:'AI Agent Framework Comparison',
-    subtitle:'chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT \u2014 Voice-first, multi-channel, serverless Rust runtime',
+    subtitle:'chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT — Voice-first, multi-channel, serverless Rust runtime',
     feature:'Feature',cta:'Try Free',pricing:'Pricing',contact:'Contact',
     sTools:'Built-in Tools',sChannels:'Channels',sProviders:'LLM Providers',sApi:'API Endpoints',sCold:'Cold Start',
-    diffTitle:'Key Differentiators',featuresTitle:'All Features',
+    diffTitle:'Key Differentiators',featuresTitle:'All Features',comparison:'Detailed Comparison',
+  },
+  zh:{
+    title:'AI Agent 框架对比',
+    subtitle:'chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT — 语音优先、多渠道、无服务器 Rust 运行时',
+    feature:'功能',cta:'免费试用',pricing:'价格',contact:'联系我们',
+    sTools:'内置工具',sChannels:'渠道',sProviders:'LLM 提供商',sApi:'API 端点',sCold:'冷启动',
+    diffTitle:'核心差异化优势',featuresTitle:'全部功能',comparison:'详细对比',
+  },
+  ko:{
+    title:'AI Agent 프레임워크 비교',
+    subtitle:'chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT — 음성 우선, 다중 채널, 서버리스 Rust 런타임',
+    feature:'기능',cta:'무료 체험',pricing:'가격',contact:'문의하기',
+    sTools:'내장 도구',sChannels:'채널',sProviders:'LLM 제공업체',sApi:'API 엔드포인트',sCold:'콜드 스타트',
+    diffTitle:'핵심 차별화 요소',featuresTitle:'전체 기능',comparison:'상세 비교',
+  },
+  es:{
+    title:'Comparación de Frameworks de Agentes IA',
+    subtitle:'chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT — Runtime Rust serverless, multicanal, con prioridad de voz',
+    feature:'Función',cta:'Prueba Gratis',pricing:'Precios',contact:'Contacto',
+    sTools:'Herramientas',sChannels:'Canales',sProviders:'Proveedores LLM',sApi:'Endpoints API',sCold:'Inicio en Frío',
+    diffTitle:'Diferenciadores Clave',featuresTitle:'Todas las Funciones',comparison:'Comparación Detallada',
+  },
+  fr:{
+    title:'Comparaison des Frameworks d\'Agents IA',
+    subtitle:'chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT — Runtime Rust serverless, multicanal, voix prioritaire',
+    feature:'Fonction',cta:'Essai Gratuit',pricing:'Tarifs',contact:'Contact',
+    sTools:'Outils Intégrés',sChannels:'Canaux',sProviders:'Fournisseurs LLM',sApi:'Points de Terminaison',sCold:'Démarrage à Froid',
+    diffTitle:'Différenciateurs Clés',featuresTitle:'Toutes les Fonctionnalités',comparison:'Comparaison Détaillée',
+  },
+  de:{
+    title:'Vergleich von KI-Agent-Frameworks',
+    subtitle:'chatweb.ai vs OpenClaw vs Picoclaw vs Claude Code vs ChatGPT — Serverless Rust-Runtime, mehrkanal, sprach-zuerst',
+    feature:'Funktion',cta:'Kostenlos Testen',pricing:'Preise',contact:'Kontakt',
+    sTools:'Integrierte Tools',sChannels:'Kanäle',sProviders:'LLM-Anbieter',sApi:'API-Endpunkte',sCold:'Kaltstart',
+    diffTitle:'Hauptdifferenzierungsmerkmale',featuresTitle:'Alle Funktionen',comparison:'Detaillierter Vergleich',
   }
 };
 function setLang(l){
+  if(!T[l])l='en';
   document.documentElement.lang=l;localStorage.setItem('nl',l);
-  document.getElementById('btn-ja').className=l==='ja'?'on':'';
-  document.getElementById('btn-en').className=l==='en'?'on':'';
+  ['ja','en','zh','ko','es','fr','de'].forEach(lang=>{
+    const btn=document.getElementById('btn-'+lang);
+    if(btn)btn.className=l===lang?'on':'';
+  });
   const t=T[l];
   document.getElementById('t-title').textContent=t.title;
   document.getElementById('t-subtitle').textContent=t.subtitle;
@@ -526,8 +761,39 @@ function setLang(l){
   document.getElementById('s-cold').textContent=t.sCold;
   document.getElementById('t-diff-title').textContent=t.diffTitle;
   document.getElementById('t-features-title').textContent=t.featuresTitle;
+  document.getElementById('t-comparison').textContent=t.comparison;
 }
-setLang(localStorage.getItem('nl')||(navigator.language.startsWith('ja')?'ja':'en'));
+const nav=navigator.language.toLowerCase();
+const autoLang=nav.startsWith('ja')?'ja':nav.startsWith('zh')?'zh':nav.startsWith('ko')?'ko':nav.startsWith('es')?'es':nav.startsWith('fr')?'fr':nav.startsWith('de')?'de':'en';
+setLang(localStorage.getItem('nl')||autoLang);
+
+// Smooth scroll for quick nav
+document.querySelectorAll('.quick-nav a').forEach(anchor => {
+  anchor.addEventListener('click', function (e) {
+    e.preventDefault();
+    const target = document.querySelector(this.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+// Add animation on scroll
+const observerOptions = {
+  threshold: 0.1,
+  rootMargin: '0px 0px -100px 0px'
+};
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.style.animation = 'fadeInUp 0.6s ease-out';
+    }
+  });
+}, observerOptions);
+
+document.querySelectorAll('.diff-card, .card, .prod').forEach(el => {
+  observer.observe(el);
+});
 </script>
 </body>
 </html>
