@@ -3395,6 +3395,7 @@
 
     <div class="sidebar-footer">
       <div class="sidebar-section-title">⚙️ Settings</div>
+      <button class="sidebar-btn" onclick="openApiKeysModal()">🔐 API Keys</button>
       <button class="sidebar-btn" onclick="openWebhookSettings()">🔗 Webhook Settings</button>
       <button class="sidebar-btn" id="line-connect-btn" onclick="toggleLineConnection()">📱 Connect LINE</button>
       <a class="sidebar-btn" id="admin-btn" href="/admin" style="display:none;text-decoration:none;text-align:left">🛡️ Admin</a>
@@ -3859,24 +3860,133 @@
   </div>
 
   <div class="modal-overlay" id="apikey-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
-    <div class="modal apikey-modal" onclick="event.stopPropagation()">
-      <h3 id="apikey-modal-title">API Keys</h3>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;" id="apikey-modal-desc">Use API keys to access chatweb.ai from your applications.</p>
-      <div class="apikey-list" id="apikey-list"></div>
-      <div class="apikey-new-key" id="apikey-new-key" style="display:none;">
-        <div class="apikey-new-key-label" id="apikey-new-label">New API Key Created</div>
-        <div class="apikey-new-key-value" id="apikey-new-value" onclick="navigator.clipboard.writeText(this.textContent);this.style.opacity=0.5;setTimeout(()=>this.style.opacity=1,300)"></div>
-        <div class="apikey-new-key-hint" id="apikey-new-hint">Click to copy. This key will only be shown once.</div>
+    <div class="modal apikey-modal" onclick="event.stopPropagation()" style="max-width:700px;max-height:90vh;overflow-y:auto;">
+      <h3 id="apikey-modal-title">🔐 API Keys</h3>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:8px;">
+        <button class="apikey-tab active" onclick="switchApiKeyTab('chatweb')" id="apikey-tab-chatweb" style="padding:6px 12px;border:none;background:var(--accent);color:white;border-radius:6px;cursor:pointer;font-size:13px;">ChatWeb Keys</button>
+        <button class="apikey-tab" onclick="switchApiKeyTab('external')" id="apikey-tab-external" style="padding:6px 12px;border:1px solid var(--border);background:transparent;color:var(--muted);border-radius:6px;cursor:pointer;font-size:13px;">External Services</button>
       </div>
-      <div class="apikey-create-row">
-        <input type="text" id="apikey-name-input" placeholder="Key name (e.g. my-app)">
-        <button onclick="createApiKey()" id="apikey-create-btn">Create</button>
+
+      <!-- ChatWeb Keys Tab -->
+      <div id="apikey-content-chatweb" style="display:block;">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;" id="apikey-modal-desc">Use API keys to access chatweb.ai from your applications.</p>
+        <div class="apikey-list" id="apikey-list"></div>
+        <div class="apikey-new-key" id="apikey-new-key" style="display:none;">
+          <div class="apikey-new-key-label" id="apikey-new-label">New API Key Created</div>
+          <div class="apikey-new-key-value" id="apikey-new-value" onclick="navigator.clipboard.writeText(this.textContent);this.style.opacity=0.5;setTimeout(()=>this.style.opacity=1,300)"></div>
+          <div class="apikey-new-key-hint" id="apikey-new-hint">Click to copy. This key will only be shown once.</div>
+        </div>
+        <div class="apikey-create-row">
+          <input type="text" id="apikey-name-input" placeholder="Key name (e.g. my-app)">
+          <button onclick="createApiKey()" id="apikey-create-btn">Create</button>
+        </div>
+        <div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:11px;color:var(--muted);line-height:1.6;">
+          <strong>Usage:</strong><br>
+          <code style="color:var(--accent-hover);">curl -H "Authorization: Bearer cw_..." https://api.chatweb.ai/api/v1/chat -d '{"message":"Hello"}'</code>
+        </div>
       </div>
-      <div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:11px;color:var(--muted);line-height:1.6;">
-        <strong>Usage:</strong><br>
-        <code style="color:var(--accent-hover);">curl -H "Authorization: Bearer cw_..." https://api.chatweb.ai/api/v1/chat -d '{"message":"Hello"}'</code>
+
+      <!-- External Services Tab -->
+      <div id="apikey-content-external" style="display:none;">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Configure API keys for external LLM providers and cloud services. Keys are stored securely and used when ChatWeb makes requests on your behalf.</p>
+
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <!-- LLM Providers Section -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;">
+            <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">🤖 LLM Providers</div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">OpenAI API Key</label>
+                <input type="password" id="ext-key-openai" placeholder="sk-..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Anthropic API Key</label>
+                <input type="password" id="ext-key-anthropic" placeholder="sk-ant-..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Google Gemini API Key</label>
+                <input type="password" id="ext-key-gemini" placeholder="AIza..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">DeepSeek API Key</label>
+                <input type="password" id="ext-key-deepseek" placeholder="sk-..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Cloud Providers Section -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;">
+            <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">☁️ Cloud Providers</div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">AWS Access Key ID</label>
+                <input type="password" id="ext-key-aws-access" placeholder="AKIA..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">AWS Secret Access Key</label>
+                <input type="password" id="ext-key-aws-secret" placeholder="..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">GCP Service Account JSON</label>
+                <textarea id="ext-key-gcp" placeholder='{"type":"service_account",...}' style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:11px;font-family:monospace;resize:vertical;min-height:60px;"></textarea>
+              </div>
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Azure Subscription Key</label>
+                <input type="password" id="ext-key-azure" placeholder="..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px;">
+              </div>
+            </div>
+          </div>
+
+          <!-- GPU / Compute Section -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;">
+            <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">🖥️ GPU / Compute</div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Runpod API Key</label>
+                <input type="password" id="ext-key-runpod" placeholder="..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Modal API Token</label>
+                <input type="password" id="ext-key-modal" placeholder="ak-..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px;">
+              </div>
+              <div>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Cloudflare API Token</label>
+                <input type="password" id="ext-key-cloudflare" placeholder="..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:12px;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Fallback Setting -->
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div style="flex:1;">
+                <div style="font-size:13px;font-weight:700;margin-bottom:4px;">🔄 Master Key Fallback</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.5;">Use master keys when your personal keys are not set (recommended)</div>
+              </div>
+              <label style="position:relative;display:inline-block;width:48px;height:24px;flex-shrink:0;">
+                <input type="checkbox" id="ext-key-fallback" checked onchange="toggleFallbackSwitch(this)">
+                <span class="fallback-slider" style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--accent);border-radius:24px;transition:0.3s;"></span>
+                <span class="fallback-knob" style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:0.3s;transform:translateX(24px);"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Save Button -->
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button onclick="saveExternalKeys()" style="padding:10px 20px;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;">💾 Save Keys</button>
+          </div>
+
+          <!-- Info Box -->
+          <div style="padding:10px;background:rgba(99,102,241,0.05);border:1px solid rgba(99,102,241,0.2);border-radius:8px;font-size:11px;color:var(--muted);line-height:1.6;">
+            <strong>🔒 Security:</strong> Keys are encrypted and stored securely. For master accounts (mail@yukihamada.jp, yuki@hamada.tokyo), keys can be managed centrally.
+            <br><strong>🔄 Fallback:</strong> When enabled, missing keys automatically use master keys. Disable to get explicit errors instead.
+          </div>
+        </div>
       </div>
-      <button class="close-btn" onclick="document.getElementById('apikey-modal').classList.remove('show')">Close</button>
+
+      <button class="close-btn" onclick="document.getElementById('apikey-modal').classList.remove('show')" style="margin-top:16px;">Close</button>
     </div>
   </div>
 
@@ -7511,6 +7621,142 @@
         });
         loadApiKeys();
       } catch(e) { /* ignore */ }
+    }
+
+    // External API Keys Management
+    function switchApiKeyTab(tab) {
+      const chatwebTab = document.getElementById('apikey-tab-chatweb');
+      const externalTab = document.getElementById('apikey-tab-external');
+      const chatwebContent = document.getElementById('apikey-content-chatweb');
+      const externalContent = document.getElementById('apikey-content-external');
+
+      if (tab === 'chatweb') {
+        chatwebTab.classList.add('active');
+        chatwebTab.style.background = 'var(--accent)';
+        chatwebTab.style.color = 'white';
+        externalTab.classList.remove('active');
+        externalTab.style.background = 'transparent';
+        externalTab.style.color = 'var(--muted)';
+        chatwebContent.style.display = 'block';
+        externalContent.style.display = 'none';
+      } else {
+        externalTab.classList.add('active');
+        externalTab.style.background = 'var(--accent)';
+        externalTab.style.color = 'white';
+        chatwebTab.classList.remove('active');
+        chatwebTab.style.background = 'transparent';
+        chatwebTab.style.color = 'var(--muted)';
+        externalContent.style.display = 'block';
+        chatwebContent.style.display = 'none';
+        loadExternalKeys();
+      }
+    }
+
+    async function loadExternalKeys() {
+      // Load from localStorage first (for anonymous users)
+      const storedKeys = localStorage.getItem('externalApiKeys');
+      if (storedKeys) {
+        try {
+          const keys = JSON.parse(storedKeys);
+          Object.keys(keys).forEach(key => {
+            const input = document.getElementById('ext-key-' + key);
+            if (input && keys[key]) {
+              input.value = keys[key];
+            }
+          });
+        } catch(e) { /* ignore */ }
+      }
+
+      // Load fallback setting
+      const storedFallback = localStorage.getItem('useMasterKeyFallback');
+      const fallbackCheckbox = document.getElementById('ext-key-fallback');
+      if (storedFallback !== null) {
+        fallbackCheckbox.checked = storedFallback === 'true';
+      } else {
+        fallbackCheckbox.checked = true; // default to true
+      }
+      toggleFallbackSwitch(fallbackCheckbox);
+
+      // Load from server if authenticated
+      if (authToken) {
+        try {
+          const r = await fetch(API + '/api/v1/user/external-keys', {
+            headers: { 'Authorization': 'Bearer ' + authToken }
+          });
+          if (r.ok) {
+            const data = await r.json();
+            if (data.keys) {
+              Object.keys(data.keys).forEach(key => {
+                const input = document.getElementById('ext-key-' + key);
+                if (input && data.keys[key]) {
+                  input.value = data.keys[key];
+                }
+              });
+            }
+            if (data.use_fallback !== undefined) {
+              fallbackCheckbox.checked = data.use_fallback;
+              toggleFallbackSwitch(fallbackCheckbox);
+            }
+          }
+        } catch(e) { /* ignore */ }
+      }
+    }
+
+    function toggleFallbackSwitch(checkbox) {
+      const slider = checkbox.parentElement.querySelector('.fallback-slider');
+      const knob = checkbox.parentElement.querySelector('.fallback-knob');
+      if (checkbox.checked) {
+        slider.style.background = 'var(--accent)';
+        knob.style.transform = 'translateX(24px)';
+      } else {
+        slider.style.background = 'var(--border)';
+        knob.style.transform = 'translateX(0)';
+      }
+    }
+
+    async function saveExternalKeys() {
+      const keys = {
+        'openai': document.getElementById('ext-key-openai').value.trim(),
+        'anthropic': document.getElementById('ext-key-anthropic').value.trim(),
+        'gemini': document.getElementById('ext-key-gemini').value.trim(),
+        'deepseek': document.getElementById('ext-key-deepseek').value.trim(),
+        'aws-access': document.getElementById('ext-key-aws-access').value.trim(),
+        'aws-secret': document.getElementById('ext-key-aws-secret').value.trim(),
+        'gcp': document.getElementById('ext-key-gcp').value.trim(),
+        'azure': document.getElementById('ext-key-azure').value.trim(),
+        'runpod': document.getElementById('ext-key-runpod').value.trim(),
+        'modal': document.getElementById('ext-key-modal').value.trim(),
+        'cloudflare': document.getElementById('ext-key-cloudflare').value.trim(),
+      };
+
+      const useFallback = document.getElementById('ext-key-fallback').checked;
+
+      // Save to localStorage
+      localStorage.setItem('externalApiKeys', JSON.stringify(keys));
+      localStorage.setItem('useMasterKeyFallback', useFallback ? 'true' : 'false');
+
+      // Save to server if authenticated
+      if (authToken) {
+        try {
+          const r = await fetch(API + '/api/v1/user/external-keys', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + authToken
+            },
+            body: JSON.stringify({ keys, use_fallback: useFallback })
+          });
+          if (r.ok) {
+            showToast('✅ API keys saved successfully', 'success');
+          } else {
+            showToast('⚠️ Failed to save keys to server (saved locally)', 'warning');
+          }
+        } catch(e) {
+          showToast('⚠️ Failed to save keys to server (saved locally)', 'warning');
+        }
+      } else {
+        showToast('✅ API keys saved locally', 'success');
+      }
     }
 
     function enterAppMode() {

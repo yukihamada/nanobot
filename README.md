@@ -65,6 +65,7 @@ One conversation, synced everywhere
 Web search · Code execution · File ops
 Image/Music/Video generation
 GitHub · Gmail · Calendar · PostgreSQL
+**Self-improvement**: `/improve` command
 
 </td>
 </tr>

@@ -747,6 +747,13 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
         );
     }
 
+    // Parse --confirm flag
+    let (desc_clean, confirmed) = if desc.starts_with("--confirm ") {
+        (desc.strip_prefix("--confirm ").unwrap(), true)
+    } else {
+        (desc, false)
+    };
+
     // Check admin status
     let is_admin = super::http::is_admin(ctx.channel_key)
         || ctx.user_id.map_or(false, |uid| super::http::is_admin(uid))
@@ -821,35 +828,66 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
     // Collect recent negative feedback
     let feedback_summary = query_recent_feedback(ctx).await;
 
-    // Build improvement prompt
-    let system_prompt = format!(
-        "You are an AI software engineer working on the chatweb.ai codebase (github.com/yukihamada/nanobot).\n\
-         Your task is to create a Pull Request that improves the system based on user feedback and the admin's request.\n\n\
-         ## Admin's improvement request:\n{desc}\n\n\
-         ## Recent user feedback (negative first):\n{feedback_summary}\n\n\
-         ## Instructions:\n\
-         1. Use `github_read_file` to read the relevant source files\n\
-         2. Analyze the code and plan your changes\n\
-         3. Use `github_create_or_update_file` to make changes on a feature branch named `auto-improve/{branch_suffix}`\n\
-         4. Use `github_create_pr` to create a PR with label 'auto-improvement'\n\
-         5. Return the PR URL\n\n\
-         Keep changes minimal and focused. Use claude-sonnet-4-5 quality thinking.\n\
-         Branch name should be descriptive, e.g. `auto-improve/fix-timeout-messages`.",
-        desc = desc,
-        feedback_summary = feedback_summary,
-        branch_suffix = desc.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ' ')
-            .take(30).collect::<String>().trim().replace(' ', "-").to_lowercase(),
-    );
+    // Build improvement prompt (different for preview vs confirmed mode)
+    let system_prompt = if !confirmed {
+        // Preview mode: analysis only
+        format!(
+            "You are an AI software engineer analyzing the chatweb.ai codebase (github.com/yukihamada/nanobot).\n\
+             Your task is to ANALYZE (not implement) the improvement request.\n\n\
+             ## Admin's improvement request:\n{desc}\n\n\
+             ## Recent user feedback (negative first):\n{feedback_summary}\n\n\
+             ## Instructions:\n\
+             1. Use `github_read_file` ONLY to read relevant source files\n\
+             2. Provide:\n\
+                - List of files that would be changed\n\
+                - High-level implementation approach\n\
+                - Risk level (Low/Medium/High)\n\
+                - Estimated PR complexity (lines changed)\n\n\
+             DO NOT make any changes. This is a preview only.\n\
+             To execute this change, use: /improve --confirm {desc}",
+            desc = desc_clean,
+            feedback_summary = feedback_summary,
+        )
+    } else {
+        // Confirmed mode: full PR creation
+        format!(
+            "You are an AI software engineer working on the chatweb.ai codebase (github.com/yukihamada/nanobot).\n\
+             Your task is to create a Pull Request that improves the system based on user feedback and the admin's request.\n\n\
+             ## Admin's improvement request:\n{desc}\n\n\
+             ## Recent user feedback (negative first):\n{feedback_summary}\n\n\
+             ## Instructions:\n\
+             1. Use `github_read_file` to read the relevant source files\n\
+             2. Analyze the code and plan your changes\n\
+             3. Use `github_create_or_update_file` to make changes on a feature branch named `auto-improve/{branch_suffix}`\n\
+             4. Use `github_create_pr` to create a PR with label 'auto-improvement'\n\
+             5. Return the PR URL\n\n\
+             Keep changes minimal and focused. Use claude-sonnet-4-5 quality thinking.\n\
+             Branch name should be descriptive, e.g. `auto-improve/fix-timeout-messages`.",
+            desc = desc_clean,
+            feedback_summary = feedback_summary,
+            branch_suffix = desc_clean.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ' ')
+                .take(30).collect::<String>().trim().replace(' ', "-").to_lowercase(),
+        )
+    };
 
-    // Filter to only GitHub tools
+    // Filter GitHub tools (read-only for preview, all for confirmed)
     let github_tool_defs: Vec<serde_json::Value> = tool_registry.get_definitions()
         .into_iter()
         .filter(|def| {
-            def.get("function")
+            if let Some(name) = def.get("function")
                 .and_then(|f| f.get("name"))
                 .and_then(|n| n.as_str())
-                .map(|name| super::http::GITHUB_TOOL_NAMES.contains(&name))
-                .unwrap_or(false)
+            {
+                if !super::http::GITHUB_TOOL_NAMES.contains(&name) {
+                    return false;
+                }
+                // In preview mode, only allow read operations
+                if !confirmed && (name.contains("create") || name.contains("update") || name.contains("delete")) {
+                    return false;
+                }
+                return true;
+            }
+            false
         })
         .collect();
 
@@ -932,14 +970,33 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
         }
     }
 
-    match pr_url {
-        Some(url) => CommandResult::Reply(format!(
-            "✅ 改善PRを作成しました！\n{}\n\n内容: 「{desc}」\n\n※ マージは手動で行ってください。",
-            url
-        )),
-        None => CommandResult::Reply(format!(
-            "🔧 改善処理を実行しましたが、PRの作成には至りませんでした。\nリクエスト: 「{desc}」\n\n再度お試しください。"
-        )),
+    // Generate response based on mode
+    if !confirmed {
+        // Preview mode: return analysis with confirmation prompt
+        let analysis = conversation.iter()
+            .filter_map(|m| m.content.as_ref())
+            .last()
+            .unwrap_or(&"分析を完了できませんでした。".to_string())
+            .clone();
+
+        CommandResult::Reply(format!(
+            "📋 **改善プレビュー**\n\n{}\n\n---\n\
+             実行するには以下のコマンドを使用してください：\n\
+             `/improve --confirm {}`",
+            analysis, desc_clean
+        ))
+    } else {
+        // Confirmed mode: report PR creation
+        match pr_url {
+            Some(url) => CommandResult::Reply(format!(
+                "✅ 改善PRを作成しました！\n{}\n\n内容: 「{}」\n\n※ マージは手動で行ってください。",
+                url, desc_clean
+            )),
+            None => CommandResult::Reply(format!(
+                "🔧 改善処理を実行しましたが、PRの作成には至りませんでした。\nリクエスト: 「{}」\n\n再度お試しください。",
+                desc_clean
+            )),
+        }
     }
 }
 

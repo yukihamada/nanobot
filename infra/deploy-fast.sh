@@ -38,6 +38,19 @@ echo "Function: $FUNCTION_NAME"
 echo "Region:   $REGION"
 echo ""
 
+# Validate GITHUB_TOKEN is set in SSM Parameter Store
+echo "--- Validating GitHub token ---"
+if ! aws ssm get-parameter --name /nanobot/github-token --region "$REGION" --output text --query 'Parameter.Value' &>/dev/null; then
+    echo "⚠️  GITHUB_TOKEN not found in SSM Parameter Store"
+    echo "    Self-improvement features (/improve) will not work."
+    echo "    To enable: aws ssm put-parameter --name /nanobot/github-token --value '<token>' --type SecureString --region $REGION"
+    echo ""
+    echo "    Continuing deployment without GitHub tools..."
+else
+    echo "✅ GITHUB_TOKEN configured"
+fi
+echo ""
+
 # 1. Build (unless --skip-build)
 if [ "$SKIP_BUILD" = true ]; then
     echo "--- Skipping build (--skip-build) ---"
