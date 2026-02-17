@@ -1,0 +1,33 @@
+# Cargo configuration for nanobot
+# Optimized for AWS Lambda on Graviton3 (ARM64 / Neoverse V1)
+
+[build]
+# Default to 4 parallel jobs (can be overridden with CARGO_BUILD_JOBS)
+jobs = 4
+
+[target.aarch64-unknown-linux-gnu]
+# Graviton3-specific optimizations
+# Neoverse V1 is the CPU core used in Graviton3
+rustflags = [
+    "-C", "target-cpu=neoverse-v1",
+    "-C", "link-arg=-fuse-ld=lld",  # Use LLVM linker (faster than GNU ld)
+]
+
+# If you want even more aggressive optimizations (experimental):
+# rustflags = [
+#     "-C", "target-cpu=neoverse-v1",
+#     "-C", "target-feature=+neon,+fp-armv8,+crc,+lse,+dotprod,+rcpc,+sve,+sve2",
+#     "-C", "link-arg=-fuse-ld=lld",
+# ]
+
+[profile.release]
+# These settings are already in Cargo.toml, but documented here for reference
+# opt-level = 3
+# lto = "fat"
+# codegen-units = 1
+# strip = true
+# panic = "abort"
+
+[net]
+# Use sparse registry for faster dependency resolution
+git-fetch-with-cli = false

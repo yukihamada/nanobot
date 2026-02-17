@@ -69,8 +69,15 @@ if [ "$SKIP_BUILD" = true ]; then
         exit 1
     fi
 else
-    echo "--- Building for aarch64-unknown-linux-gnu ---"
+    echo "--- Building for AWS Graviton3 (ARM64 / Neoverse V1) ---"
     START_BUILD=$(date +%s)
+
+    # Graviton3 optimizations (Neoverse V1 core)
+    # - target-cpu=neoverse-v1: Enable Graviton3-specific instructions
+    # - codegen-units=1: Better optimization (slower compile, faster runtime)
+    # - lto=thin: Link-time optimization
+    export RUSTFLAGS="-C target-cpu=neoverse-v1 -C codegen-units=1 $RUSTFLAGS"
+    echo "✅ Graviton3 optimizations enabled (target-cpu=neoverse-v1)"
 
     # Use sccache if available (3-5x faster on subsequent builds)
     if command -v sccache &>/dev/null; then
