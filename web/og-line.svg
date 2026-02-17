@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#00B900"/>
+      <stop offset="100%" stop-color="#06C755"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <!-- Logo -->
+  <rect x="80" y="60" width="64" height="64" rx="16" fill="rgba(255,255,255,0.2)"/>
+  <text x="112" y="102" text-anchor="middle" font-size="36" font-weight="800" font-family="system-ui,sans-serif" fill="white">cw</text>
+  <text x="160" y="100" font-size="32" font-weight="700" font-family="system-ui,sans-serif" fill="white">chatweb.ai</text>
+  <!-- Chat bubbles -->
+  <rect x="820" y="180" width="300" height="80" rx="20" fill="rgba(255,255,255,0.2)"/>
+  <text x="970" y="228" text-anchor="middle" font-size="22" font-weight="500" font-family="system-ui,sans-serif" fill="white">今日の天気を教えて</text>
+  <rect x="850" y="280" width="320" height="80" rx="20" fill="rgba(255,255,255,0.3)"/>
+  <text x="1010" y="328" text-anchor="middle" font-size="22" font-weight="500" font-family="system-ui,sans-serif" fill="white">東京は晴れ、25°C ☀️</text>
+  <rect x="880" y="380" width="260" height="80" rx="20" fill="rgba(255,255,255,0.2)"/>
+  <text x="1010" y="428" text-anchor="middle" font-size="22" font-weight="500" font-family="system-ui,sans-serif" fill="white">英語に翻訳して</text>
+  <!-- Main heading -->
+  <text x="80" y="260" font-size="60" font-weight="800" font-family="system-ui,sans-serif" fill="white">LINEで</text>
+  <text x="80" y="340" font-size="60" font-weight="800" font-family="system-ui,sans-serif" fill="white">話しかけるだけ。</text>
+  <!-- Subtitle -->
+  <text x="80" y="410" font-size="26" font-weight="400" font-family="system-ui,sans-serif" fill="rgba(255,255,255,0.85)">調べ物も、計算も、翻訳も全部やる。</text>
+  <!-- CTA -->
+  <rect x="80" y="460" width="320" height="56" rx="28" fill="white"/>
+  <text x="240" y="496" text-anchor="middle" font-size="22" font-weight="700" font-family="system-ui,sans-serif" fill="#06C755">友だち追加で100クレジット無料</text>
+</svg>

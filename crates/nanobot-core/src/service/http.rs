@@ -2249,6 +2249,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/chat/stream", post(handle_chat_stream))
         // Multi-model explore (SSE — all models, progressive)
         .route("/api/v1/chat/explore", post(handle_chat_explore))
+        // Manual synthesis of explore results
+        .route("/api/v1/chat/explore/synthesize", post(handle_explore_synthesize))
         // Multi-model race (SSE — ranked by completion order, tier support)
         .route("/api/v1/chat/race", post(handle_chat_race))
         // Progressive response: first ~200 chars for immediate playback
@@ -2432,11 +2434,14 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                         "https://www.wisbee.ai".parse().unwrap(),
                         "https://api.wisbee.ai".parse().unwrap(),
                     ];
-                    // Add custom BASE_URL to CORS if set
-                    if let Ok(base) = std::env::var("BASE_URL") {
-                        if let Ok(v) = base.parse() { origins.push(v); }
+                    // Add custom BASE_URL to CORS if set (only in debug mode for security)
+                    if cfg!(debug_assertions) {
+                        if let Ok(base) = std::env::var("BASE_URL") {
+                            if let Ok(v) = base.parse() { origins.push(v); }
+                        }
                     }
-                    if std::env::var("DEV_MODE").is_ok() || cfg!(debug_assertions) {
+                    // Localhost only in debug builds (compile-time check)
+                    if cfg!(debug_assertions) {
                         origins.push("http://localhost:3000".parse().unwrap());
                     }
                     origins
@@ -2484,6 +2489,32 @@ async fn handle_chat(
     }
 
     let chat_start = std::time::Instant::now();
+
+    // Rate limiting: 60 requests per hour per session (anonymous users)
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let rate_key = format!("chat:{}", &req.session_id);
+            if !check_rate_limit(dynamo, table, &rate_key, 60).await {
+                tracing::warn!("Rate limit exceeded for session: {}", &req.session_id);
+                return Json(ChatResponse {
+                    response: "レート制限に達しました。1時間後に再度お試しください。/ Rate limit exceeded. Please try again in 1 hour.".to_string(),
+                    session_id: req.session_id,
+                    agent: None,
+                    tools_used: None,
+                    credits_used: None,
+                    credits_remaining: None,
+                    model_used: None,
+                    models_consulted: None,
+                    action: None,
+                    input_tokens: None,
+                    output_tokens: None,
+                    estimated_cost_usd: None,
+                    mode: None,
+                });
+            }
+        }
+    }
 
     // Resolve inference mode: request field > host-based default > "auto"
     let chat_host = effective_host(&headers);
@@ -5568,6 +5599,23 @@ async fn handle_chat_stream(
         return Sse::new(err_stream).into_response();
     }
 
+    // Rate limiting: 60 requests per hour per session
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let rate_key = format!("chat_stream:{}", &req.session_id);
+            if !check_rate_limit(dynamo, table, &rate_key, 60).await {
+                tracing::warn!("Rate limit exceeded for session (stream): {}", &req.session_id);
+                let err_stream = stream::once(async {
+                    Ok::<_, Infallible>(Event::default().data(
+                        serde_json::json!({"type":"error","content":"Rate limit exceeded. Please try again in 1 hour."}).to_string()
+                    ))
+                });
+                return Sse::new(err_stream).into_response();
+            }
+        }
+    }
+
     // Resolve session key
     let session_key = {
         #[cfg(feature = "dynamodb-backend")]
@@ -6283,6 +6331,83 @@ async fn handle_chat_stream(
         .into_response()
 }
 
+// ============================================================================
+// Synthesis (Meta-Analysis) Functions
+// ============================================================================
+
+/// Select the smartest available model for synthesis.
+/// Priority: Opus 4.6 > Opus 4.5 > GPT-4o > Gemini Pro > Sonnet 4.5
+fn get_smartest_model() -> &'static str {
+    // Check environment for available models
+    if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+        // Opus 4.6 is the smartest
+        return "claude-opus-4-6";
+    }
+    if std::env::var("OPENAI_API_KEY").is_ok() {
+        return "gpt-4o";
+    }
+    if std::env::var("GEMINI_API_KEY").is_ok() || std::env::var("GOOGLE_API_KEY").is_ok() {
+        return "gemini-2.5-pro";
+    }
+    // Fallback to Sonnet (available in most cases)
+    "claude-sonnet-4-5-20250929"
+}
+
+/// Build synthesis prompt from multiple model results.
+fn build_synthesis_prompt(question: &str, results: &[(String, String)]) -> String {
+    let mut prompt = format!(
+        "以下は「{}」という質問に対する、複数のAIモデルによる回答です:\n\n",
+        question
+    );
+
+    for (model, response) in results {
+        prompt.push_str(&format!("### [{}]\n{}\n\n", model, response));
+    }
+
+    prompt.push_str(
+        "---\n\n\
+        これらの回答を総合的に分析し、以下の観点で統合された意見を述べてください:\n\n\
+        1. **共通する見解**: 全てのモデルが同意している点\n\
+        2. **相違点**: モデル間で意見が分かれている点とその理由\n\
+        3. **信頼性評価**: 最も信頼できる情報はどれか、その根拠\n\
+        4. **総合的な結論**: 全体を踏まえた最終的な回答\n\n\
+        できるだけ具体的に、根拠を示しながら説明してください。"
+    );
+
+    prompt
+}
+
+/// Run synthesis using the smartest available model.
+async fn run_synthesis(
+    lb_provider: &Arc<crate::provider::LoadBalancedProvider>,
+    question: &str,
+    results: &[(String, String)],
+) -> Result<(String, String, u32, u32), String> {
+    let smartest = get_smartest_model();
+
+    let synthesis_prompt = build_synthesis_prompt(question, results);
+    let messages = vec![
+        crate::types::Message::system(
+            "あなたは複数のAI回答を統合分析する専門家です。\
+             客観的かつ批判的に分析し、最も正確な結論を導いてください。"
+        ),
+        crate::types::Message::user(&synthesis_prompt),
+    ];
+
+    match lb_provider.chat(&messages, None, smartest, 3000, 0.7).await {
+        Ok(resp) => {
+            let content = resp.content.unwrap_or_default();
+            Ok((
+                smartest.to_string(),
+                content,
+                resp.usage.prompt_tokens,
+                resp.usage.completion_tokens,
+            ))
+        }
+        Err(e) => Err(format!("Synthesis failed: {}", e)),
+    }
+}
+
 /// POST /api/v1/chat/explore — Multi-model explore with SSE streaming.
 /// Runs all available providers in parallel, streams results as they arrive.
 /// Supports hierarchical re-query: if initial results are insufficient,
@@ -6549,6 +6674,201 @@ async fn handle_chat_explore(
                 "can_escalate": level < 2,
             }).to_string())
         );
+
+        // Auto-synthesis: run meta-analysis with smartest model
+        if req.auto_synthesize && !results_for_session.is_empty() {
+            yield Ok::<_, Infallible>(Event::default()
+                .event("synthesis_start")
+                .data(serde_json::json!({
+                    "type": "synthesis_start",
+                    "message": "統合分析中...",
+                }).to_string())
+            );
+
+            // Extract (model, response) pairs
+            let synthesis_inputs: Vec<(String, String)> = results_for_session
+                .iter()
+                .map(|r| (r.model.clone(), r.response.clone()))
+                .collect();
+
+            match run_synthesis(&lb_raw, &original_msg, &synthesis_inputs).await {
+                Ok((model, content, input_tokens, output_tokens)) => {
+                    // Deduct credits for synthesis
+                    #[cfg(feature = "dynamodb-backend")]
+                    {
+                        if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                            let (credits, remaining) = deduct_credits(
+                                dynamo, table, &session_key_clone, &model,
+                                input_tokens, output_tokens,
+                            ).await;
+                            total_credits += credits;
+                            if remaining.is_some() { last_remaining = remaining; }
+                        }
+                    }
+
+                    yield Ok::<_, Infallible>(Event::default()
+                        .event("synthesis_result")
+                        .data(serde_json::json!({
+                            "type": "synthesis",
+                            "model": model,
+                            "response": content,
+                            "credits_used": crate::service::auth::calculate_credits(
+                                &model, input_tokens, output_tokens
+                            ),
+                            "credits_remaining": last_remaining,
+                        }).to_string())
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Auto synthesis failed: {}", e);
+                    yield Ok::<_, Infallible>(Event::default()
+                        .event("synthesis_error")
+                        .data(serde_json::json!({
+                            "type": "error",
+                            "message": format!("統合分析エラー: {}", e),
+                        }).to_string())
+                    );
+                }
+            }
+        }
+    };
+
+    Sse::new(response_stream).into_response()
+}
+
+
+/// POST /api/v1/chat/explore/synthesize — Manual synthesis of explore results.
+/// Takes multiple model responses and generates a unified meta-analysis.
+async fn handle_explore_synthesize(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ExploreSynthesizeRequest>,
+) -> impl IntoResponse {
+    use axum::response::sse::{Event, Sse};
+    use std::convert::Infallible;
+
+    // Input validation
+    if req.results.is_empty() {
+        let err_stream = futures::stream::once(async {
+            Ok::<_, Infallible>(Event::default()
+                .event("error")
+                .data(serde_json::json!({
+                    "type": "error",
+                    "content": "No results provided",
+                    "error": "No results provided"
+                }).to_string()))
+        });
+        return Sse::new(err_stream).into_response();
+    }
+
+    // Resolve session key
+    let session_key = {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                resolve_session_key(dynamo, table, &req.session_id).await
+            } else {
+                req.session_id.clone()
+            }
+        }
+        #[cfg(not(feature = "dynamodb-backend"))]
+        { req.session_id.clone() }
+    };
+
+    // Check credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let user = get_or_create_user(dynamo, table, &session_key).await;
+            if user.credits_remaining <= 0 {
+                let content = "クレジットを使い切りました 💪 追加購入して続けましょう！";
+                let err_stream = futures::stream::once(async move {
+                    Ok::<_, Infallible>(Event::default()
+                        .event("error")
+                        .data(serde_json::json!({
+                            "type": "error",
+                            "content": content,
+                            "error": content,
+                            "action": "upgrade"
+                        }).to_string()))
+                });
+                return Sse::new(err_stream).into_response();
+            }
+        }
+    }
+
+    let lb_raw = match &state.lb_raw {
+        Some(lb) => lb.clone(),
+        None => {
+            let err_stream = futures::stream::once(async {
+                Ok::<_, Infallible>(Event::default()
+                    .event("error")
+                    .data(serde_json::json!({
+                        "type": "error",
+                        "content": "No providers available",
+                        "error": "No providers available"
+                    }).to_string()))
+            });
+            return Sse::new(err_stream).into_response();
+        }
+    };
+
+    let state_clone = state.clone();
+    let session_key_clone = session_key.clone();
+    let question = req.question.clone();
+    let synthesis_inputs: Vec<(String, String)> = req.results
+        .into_iter()
+        .map(|r| (r.model, r.response))
+        .collect();
+
+    let response_stream = async_stream::stream! {
+        yield Ok::<_, Infallible>(Event::default()
+            .event("synthesis_start")
+            .data(serde_json::json!({
+                "type": "synthesis_start",
+                "message": "統合分析中...",
+            }).to_string())
+        );
+
+        match run_synthesis(&lb_raw, &question, &synthesis_inputs).await {
+            Ok((model, content, input_tokens, output_tokens)) => {
+                let mut last_remaining: Option<i64> = None;
+
+                // Deduct credits
+                #[cfg(feature = "dynamodb-backend")]
+                {
+                    if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                        let (_, remaining) = deduct_credits(
+                            dynamo, table, &session_key_clone, &model,
+                            input_tokens, output_tokens,
+                        ).await;
+                        last_remaining = remaining;
+                    }
+                }
+
+                yield Ok::<_, Infallible>(Event::default()
+                    .event("synthesis_result")
+                    .data(serde_json::json!({
+                        "type": "synthesis",
+                        "model": model,
+                        "response": content,
+                        "credits_used": crate::service::auth::calculate_credits(
+                            &model, input_tokens, output_tokens
+                        ),
+                        "credits_remaining": last_remaining,
+                    }).to_string())
+                );
+            }
+            Err(e) => {
+                tracing::warn!("Manual synthesis failed: {}", e);
+                yield Ok::<_, Infallible>(Event::default()
+                    .event("synthesis_error")
+                    .data(serde_json::json!({
+                        "type": "error",
+                        "message": format!("統合分析エラー: {}", e),
+                    }).to_string())
+                );
+            }
+        }
     };
 
     Sse::new(response_stream).into_response()
@@ -6697,6 +7017,24 @@ pub struct ExploreRequest {
     pub level: Option<u32>,
     /// Previous chunk from phase 1 (for progressive response phase 2)
     pub previous_chunk: Option<String>,
+    /// Auto-synthesize: run meta-analysis with smartest model after collecting all results
+    #[serde(default)]
+    pub auto_synthesize: bool,
+}
+
+/// Request body for manual synthesis of explore results.
+#[derive(Debug, Deserialize)]
+pub struct ExploreSynthesizeRequest {
+    pub question: String,
+    pub results: Vec<SynthesisInput>,
+    #[serde(default = "default_session_id")]
+    pub session_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SynthesisInput {
+    pub model: String,
+    pub response: String,
 }
 
 /// Request body for the race endpoint.
