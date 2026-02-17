@@ -13629,6 +13629,7 @@
     resetIdleAdTimer();
 
     // --- Version Badge & Bug Report ---
+    let _repoUrl = 'https://github.com/yukihamada/nanobot';
     (async function fetchVersion() {
       try {
         const r = await fetch(API + '/api/v1/version');
@@ -13636,8 +13637,14 @@
           const d = await r.json();
           _appVersion = d.version || '';
           _appHash = d.hash || '';
+          const buildNum = d.build || '0';
+          _repoUrl = d.repo || 'https://github.com/yukihamada/nanobot';
+
           const badge = document.getElementById('version-badge');
-          if (badge) badge.textContent = 'v' + _appVersion + ' (' + _appHash + ')';
+          if (badge) {
+            // Display: v0.2.123 (abc1234)
+            badge.innerHTML = `<a href="${_repoUrl}/commit/${_appHash}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;display:block;width:100%;height:100%;" title="View commit on GitHub">v${_appVersion}.${buildNum} (${_appHash})</a>`;
+          }
         }
       } catch(e) { /* ignore */ }
     })();

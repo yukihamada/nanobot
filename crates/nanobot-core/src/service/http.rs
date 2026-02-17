@@ -17792,11 +17792,13 @@ async fn handle_feedback(
     Json(serde_json::json!({ "ok": true })).into_response()
 }
 
-/// GET /api/v1/version — Return version and git hash.
+/// GET /api/v1/version — Return version, git hash, build number, and repo URL.
 async fn handle_version() -> impl IntoResponse {
     Json(serde_json::json!({
         "version": crate::VERSION,
         "hash": crate::GIT_HASH,
+        "build": crate::BUILD_NUMBER,
+        "repo": crate::REPO_URL,
     }))
 }
 

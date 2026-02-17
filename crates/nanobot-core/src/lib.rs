@@ -15,4 +15,6 @@ pub mod mcp;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const GIT_HASH: &str = env!("GIT_HASH");
+pub const BUILD_NUMBER: &str = env!("BUILD_NUMBER");
+pub const REPO_URL: &str = env!("REPO_URL");
 pub const LOGO: &str = "🐈";

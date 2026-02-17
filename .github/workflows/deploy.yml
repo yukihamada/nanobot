@@ -39,6 +39,9 @@ jobs:
           cargo install cargo-zigbuild
           sudo snap install zig --classic --beta
       - name: Build for Lambda ARM64
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           cargo zigbuild --manifest-path crates/nanobot-lambda/Cargo.toml \
             --release --target aarch64-unknown-linux-gnu
