@@ -18,6 +18,10 @@ lambda_http = "0.13"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+serde_json = "1"
+aws-config = "1"
+aws-sdk-dynamodb = "1"
 
 [profile.release]
 opt-level = "z"          # Optimize for size
@@ -25,7 +29,3 @@ lto = "fat"              # Link-time optimization
 codegen-units = 1        # Maximum optimization
 strip = true             # Remove debug symbols
 panic = "abort"          # Remove unwinding code
-anyhow = "1"
-serde_json = "1"
-aws-config = "1"
-aws-sdk-dynamodb = "1"
