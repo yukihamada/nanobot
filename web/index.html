@@ -7564,14 +7564,21 @@
     function showOnboarding() {
       var modal = document.getElementById('onboard-modal');
       if (!modal) return;
+
+      // Early return if required elements don't exist
+      var titleEl = document.getElementById('onboard-title');
+      var descEl = document.getElementById('onboard-desc');
+      var nameEl = document.getElementById('onboard-name');
+      if (!titleEl || !descEl || !nameEl) return;
+
       modal.style.display = '';
       modal.classList.add('show');
       var lang = document.documentElement.lang || 'ja';
-      document.getElementById('onboard-title').textContent = lang === 'ja' ? 'ようこそ、ChatWebへ' : 'Welcome to ChatWeb';
-      document.getElementById('onboard-desc').innerHTML = lang === 'ja'
+      titleEl.textContent = lang === 'ja' ? 'ようこそ、ChatWebへ' : 'Welcome to ChatWeb';
+      descEl.innerHTML = lang === 'ja'
         ? 'あなたの名前を教えてください。<br>声で呼びかけるときに使います。'
         : 'What should I call you?<br>I\'ll use this name when I speak to you.';
-      document.getElementById('onboard-name').placeholder = lang === 'ja' ? 'お名前（ニックネームOK）' : 'Your name (nickname OK)';
+      nameEl.placeholder = lang === 'ja' ? 'お名前（ニックネームOK）' : 'Your name (nickname OK)';
       setTimeout(function() {
         var greeting = lang === 'ja'
           ? 'こんにちは！ChatWebへようこそ。あなたの名前を教えてくれたら嬉しいな。'
@@ -7582,10 +7589,18 @@
 
     function skipToVoiceStep(name) {
       currentUser.display_name = name;
-      document.getElementById('app-user-name').textContent = name;
-      document.getElementById('app-user-avatar').textContent = name.charAt(0).toUpperCase();
-      document.getElementById('onboard-step-1').style.display = 'none';
-      document.getElementById('onboard-step-2').style.display = '';
+
+      // Safely update user name elements
+      var userNameEl = document.getElementById('app-user-name');
+      var userAvatarEl = document.getElementById('app-user-avatar');
+      var step1El = document.getElementById('onboard-step-1');
+      var step2El = document.getElementById('onboard-step-2');
+
+      if (userNameEl) userNameEl.textContent = name;
+      if (userAvatarEl) userAvatarEl.textContent = name.charAt(0).toUpperCase();
+      if (step1El) step1El.style.display = 'none';
+      if (step2El) step2El.style.display = '';
+
       var lang = document.documentElement.lang || 'ja';
       var greeting = lang === 'ja'
         ? name + 'さん、ようこそ！声を選んでね。'
