@@ -471,7 +471,10 @@
                 <div class="credits-info">💰 約 1 credit / 100文字</div>
             </div>
 
-            <button onclick="generateTTS()" id="ttsBtn">🔊 音声を生成</button>
+            <div style="display: flex; gap: 12px;">
+                <button onclick="generateTTS()" id="ttsBtn" style="flex: 1;">🔊 音声を生成</button>
+                <button onclick="playTestAudio()" style="flex: 0 0 auto; background: var(--surface); color: var(--text); border: 1px solid var(--border);">🎧 テスト再生</button>
+            </div>
             <div id="ttsResult"></div>
         </div>
 
@@ -730,6 +733,101 @@
             const duration = document.getElementById('videoDuration').value;
             const credits = duration === '5' ? 50 : 100;
             document.getElementById('videoCredits').textContent = `💰 ${credits} credits`;
+        }
+
+        async function playTestAudio() {
+            const resultDiv = document.getElementById('ttsResult');
+
+            try {
+                // Check if we have a cached test audio
+                let cachedAudio = localStorage.getItem('test_audio_cache');
+
+                if (!cachedAudio) {
+                    // Generate test audio once and cache it
+                    resultDiv.innerHTML = '<div class="result">⏳ テスト音声を準備中...</div>';
+
+                    const token = document.getElementById('authToken').value.trim();
+                    if (!token) {
+                        // If no token, use a simple beep sound (data URI)
+                        // Short 440Hz beep using Web Audio API
+                        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        const oscillator = audioContext.createOscillator();
+                        const gainNode = audioContext.createGain();
+
+                        oscillator.connect(gainNode);
+                        gainNode.connect(audioContext.destination);
+
+                        oscillator.frequency.value = 440;
+                        oscillator.type = 'sine';
+
+                        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+                        oscillator.start(audioContext.currentTime);
+                        oscillator.stop(audioContext.currentTime + 0.5);
+
+                        resultDiv.innerHTML = `
+                            <div class="result success">
+                                <strong>🎧 テスト音声を再生しました</strong>
+                                <div class="result-content">
+                                    認証トークンを入力すると、実際のTTS音声でテストできます
+                                </div>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    // Generate and cache test audio
+                    const response = await fetch(`${API_BASE}/tts`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            text: 'こんにちは。これはテスト音声です。',
+                            voice: 'nova'
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('テスト音声の生成に失敗しました');
+                    }
+
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+
+                    await new Promise((resolve) => {
+                        reader.onloadend = () => {
+                            cachedAudio = reader.result;
+                            localStorage.setItem('test_audio_cache', cachedAudio);
+                            resolve();
+                        };
+                        reader.readAsDataURL(blob);
+                    });
+                }
+
+                // Play cached audio
+                const audio = new Audio(cachedAudio);
+                audio.play();
+
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        <strong>🎧 テスト音声を再生しました</strong>
+                        <div class="result-content">
+                            キャッシュされた音声を再生しています（クレジット消費なし）
+                            <audio controls src="${cachedAudio}"></audio>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <strong>❌ エラーが発生しました</strong>
+                        <div class="result-content">${error.message}</div>
+                    </div>
+                `;
+            }
         }
 
         async function generateTTS() {
