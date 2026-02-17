@@ -36,6 +36,8 @@ use crate::session::store::SessionStore;
 use crate::types::Message;
 #[cfg(feature = "stripe")]
 use crate::service::stripe::{process_webhook_event, verify_webhook_signature};
+#[cfg(feature = "dynamodb-backend")]
+use crate::cache::{check_cache, generate_cache_key, increment_cache_hit, save_to_cache};
 
 #[cfg(feature = "dynamodb-backend")]
 use aws_sdk_dynamodb::types::AttributeValue;
@@ -2406,6 +2408,7 @@ pub struct UserSettings {
     pub ai_nickname: Option<String>,
     pub user_nickname: Option<String>,
     pub onboarding_completed: Option<bool>,
+    pub use_master_key_fallback: Option<bool>,
 }
 
 /// Request body for updating settings (all fields optional for partial update)
@@ -2847,6 +2850,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Status
         .route("/status", get(handle_status))
         .route("/api/v1/status/ping", get(handle_status_ping))
+        .route("/api/v1/status/github", get(handle_github_status))
         // Admin (requires ?sid=<admin session key>)
         .route("/admin", get(handle_admin))
         .route("/api/v1/admin/check", get(handle_admin_check))
@@ -12068,6 +12072,22 @@ async fn handle_status_ping(
 }
 
 // ---------------------------------------------------------------------------
+// GitHub Status API
+// ---------------------------------------------------------------------------
+
+/// GET /api/v1/status/github — Check if GitHub tools are available
+async fn handle_github_status() -> impl IntoResponse {
+    let has_token = std::env::var("GITHUB_TOKEN")
+        .map(|t| !t.is_empty())
+        .unwrap_or(false);
+
+    Json(serde_json::json!({
+        "github_tools_available": has_token,
+        "status": if has_token { "ready" } else { "unconfigured" }
+    }))
+}
+
+// ---------------------------------------------------------------------------
 // Settings API
 // ---------------------------------------------------------------------------
 
@@ -14192,6 +14212,203 @@ async fn handle_update_profile(
     }
 
     (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+// ---------------------------------------------------------------------------
+// External API Keys Management
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct ExternalKeysRequest {
+    keys: serde_json::Value,
+    use_fallback: Option<bool>,
+}
+
+/// Helper function to get API key with master key fallback
+/// Returns (key_value, is_from_master) tuple
+#[cfg(feature = "dynamodb-backend")]
+async fn get_api_key_with_fallback(
+    dynamo: &aws_sdk_dynamodb::Client,
+    table: &str,
+    user_id: &str,
+    key_name: &str,
+    use_fallback: bool,
+) -> Option<(String, bool)> {
+    // Try to get user's own key first
+    if let Ok(result) = dynamo
+        .get_item()
+        .table_name(table)
+        .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+        .key("sk", AttributeValue::S("profile".to_string()))
+        .send()
+        .await
+    {
+        if let Some(item) = result.item {
+            if let Some(external_keys) = item.get("external_keys")
+                .and_then(|v| v.as_s().ok())
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+            {
+                if let Some(key_value) = external_keys.get(key_name).and_then(|v| v.as_str()) {
+                    if !key_value.trim().is_empty() {
+                        return Some((key_value.to_string(), false));
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to master keys if enabled
+    if use_fallback {
+        if let Ok(result) = dynamo
+            .get_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S("MASTER_KEYS".to_string()))
+            .key("sk", AttributeValue::S("global".to_string()))
+            .send()
+            .await
+        {
+            if let Some(item) = result.item {
+                if let Some(master_keys) = item.get("keys")
+                    .and_then(|v| v.as_s().ok())
+                    .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+                {
+                    if let Some(key_value) = master_keys.get(key_name).and_then(|v| v.as_str()) {
+                        if !key_value.trim().is_empty() {
+                            return Some((key_value.to_string(), true));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// GET /api/v1/user/external-keys — Get user's external API keys
+async fn handle_get_external_keys(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let user_id = match auth_user_id(&state, &headers).await {
+                Some(id) => id,
+                None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Unauthorized" }))),
+            };
+
+            // Get user record to retrieve external_keys
+            match dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                .key("sk", AttributeValue::S("profile".to_string()))
+                .send()
+                .await
+            {
+                Ok(result) => {
+                    if let Some(item) = result.item {
+                        let keys = item.get("external_keys")
+                            .and_then(|v| v.as_s().ok())
+                            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+                            .unwrap_or_default();
+                        let use_fallback = item.get("use_master_key_fallback")
+                            .and_then(|v| v.as_bool().ok())
+                            .unwrap_or(true);
+                        return (StatusCode::OK, Json(serde_json::json!({ 
+                            "keys": keys,
+                            "use_fallback": use_fallback
+                        })));
+                    }
+                    return (StatusCode::OK, Json(serde_json::json!({ "keys": {} })));
+                }
+                Err(e) => {
+                    error!("Failed to get external keys: {}", e);
+                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Failed to retrieve keys" })));
+                }
+            }
+        }
+    }
+
+    (StatusCode::NOT_IMPLEMENTED, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+}
+
+/// PUT /api/v1/user/external-keys — Save user's external API keys
+async fn handle_put_external_keys(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<ExternalKeysRequest>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let user_id = match auth_user_id(&state, &headers).await {
+                Some(id) => id,
+                None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Unauthorized" }))),
+            };
+
+            // Get user email to check if master account
+            let user_record = dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                .key("sk", AttributeValue::S("profile".to_string()))
+                .send()
+                .await;
+
+            let is_master = if let Ok(result) = user_record {
+                if let Some(item) = result.item {
+                    let email = item.get("email").and_then(|v| v.as_s().ok()).map(|s| s.as_str());
+                    email == Some("mail@yukihamada.jp") || email == Some("yuki@hamada.tokyo")
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            // For master accounts, save to global MASTER_KEYS record
+            if is_master {
+                let _ = dynamo
+                    .put_item()
+                    .table_name(table)
+                    .item("pk", AttributeValue::S("MASTER_KEYS".to_string()))
+                    .item("sk", AttributeValue::S("global".to_string()))
+                    .item("keys", AttributeValue::S(req.keys.to_string()))
+                    .item("updated_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                    .send()
+                    .await;
+                info!("Master account updated global API keys");
+            }
+
+            // Save to user record
+            match dynamo
+                .update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                .key("sk", AttributeValue::S("profile".to_string()))
+                .update_expression("SET external_keys = :keys, updated_at = :updated")
+                .expression_attribute_values(":keys", AttributeValue::S(req.keys.to_string()))
+                .expression_attribute_values(":updated", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .send()
+                .await
+            {
+                Ok(_) => {
+                    return (StatusCode::OK, Json(serde_json::json!({
+                        "success": true,
+                        "is_master": is_master
+                    })));
+                }
+                Err(e) => {
+                    error!("Failed to save external keys: {}", e);
+                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Failed to save keys" })));
+                }
+            }
+        }
+    }
+
+    (StatusCode::NOT_IMPLEMENTED, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
 }
 
 // ---------------------------------------------------------------------------
@@ -16460,6 +16677,49 @@ async fn handle_voice_clone(
 // ─── Media API — Unified multimodal generation endpoints ───
 
 /// POST /api/v1/media/tts — Text-to-speech (wrapper for existing TTS)
+
+// ─── Media Cache Helper Functions ───
+
+/// Normalize TTS request parameters into deterministic JSON
+fn normalize_tts_params(text: &str, voice: &str, engine: Option<&str>, speed: f32) -> String {
+    serde_json::json!({
+        "engine": engine.unwrap_or("auto"),
+        "speed": speed,
+        "text": text,
+        "voice": voice,
+    }).to_string()
+}
+
+/// Normalize image request parameters
+fn normalize_image_params(prompt: &str, model: &str, size: &str, quality: &str, n: u32) -> String {
+    serde_json::json!({
+        "model": model,
+        "n": n,
+        "prompt": prompt,
+        "quality": quality,
+        "size": size,
+    }).to_string()
+}
+
+/// Normalize music request parameters
+fn normalize_music_params(prompt: &str, type_: &str, duration: u32) -> String {
+    serde_json::json!({
+        "duration": duration,
+        "prompt": prompt,
+        "type": type_,
+    }).to_string()
+}
+
+/// Normalize video request parameters
+fn normalize_video_params(prompt: &str, duration: u32, mode: &str, model: &str) -> String {
+    serde_json::json!({
+        "duration": duration,
+        "mode": mode,
+        "model": model,
+        "prompt": prompt,
+    }).to_string()
+}
+
 async fn handle_media_tts(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
