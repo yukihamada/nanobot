@@ -2,288 +2,229 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIメディア生成 - 画像・音声・動画を簡単作成</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AIメディア生成 - chatweb.ai</title>
+    <meta name="description" content="画像・音声・動画を簡単に生成。DALL-E 3、Flux、Qwen3 TTS、Kling AIを統合したマルチモーダルAPI">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+    <meta name="theme-color" content="#6366f1">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --bg: #09090b;
+            --surface: #18181b;
+            --surface2: #1e1e24;
+            --border: #27272a;
+            --text: #fafafa;
+            --muted: #71717a;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --accent-glow: rgba(99,102,241,0.25);
+            --green: #22c55e;
+            --red: #ef4444;
+            --yellow: #eab308;
         }
-        
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', YuGothic, Meiryo, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
-            padding: 20px;
+            overflow-x: hidden;
         }
-        
-        .container {
+
+        /* Animations */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Nav */
+        nav {
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+        .logo {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            text-decoration: none;
+            color: var(--text);
+        }
+        .logo span {
+            background: linear-gradient(135deg, var(--accent), #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Main */
+        .main {
             max-width: 900px;
             margin: 0 auto;
+            padding: 40px 24px;
         }
-        
+
+        /* Header */
         .header {
-            background: white;
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            margin-bottom: 30px;
             text-align: center;
+            margin-bottom: 48px;
+            animation: fadeUp 0.6s ease-out;
         }
-        
         .header h1 {
-            font-size: 36px;
-            color: #333;
-            margin-bottom: 10px;
+            font-size: 42px;
+            font-weight: 900;
+            letter-spacing: -1.5px;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #fff 0%, #a5a5ff 50%, #fff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        
         .header p {
-            color: #666;
-            font-size: 16px;
+            color: var(--muted);
+            font-size: 17px;
             line-height: 1.6;
         }
-        
+
+        /* Info Box */
+        .info-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+            animation: fadeUp 0.6s ease-out 0.1s both;
+        }
+        .info-box h3 {
+            color: var(--accent);
+            font-size: 16px;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+        .info-box p {
+            color: var(--muted);
+            line-height: 1.8;
+            font-size: 14px;
+        }
+        .info-box code {
+            background: var(--surface2);
+            color: var(--accent);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+        }
+        .info-box a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .info-box a:hover {
+            text-decoration: underline;
+        }
+
+        /* Card */
         .card {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            margin-bottom: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.3s, box-shadow 0.3s;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 24px;
+            transition: transform 0.3s, border-color 0.3s;
+            animation: fadeUp 0.6s ease-out both;
         }
-        
+        .card:nth-child(3) { animation-delay: 0.1s; }
+        .card:nth-child(4) { animation-delay: 0.2s; }
+        .card:nth-child(5) { animation-delay: 0.3s; }
+        .card:nth-child(6) { animation-delay: 0.4s; }
         .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+            border-color: var(--accent);
+            transform: translateY(-2px);
         }
-        
+
         .card-header {
             display: flex;
             align-items: center;
-            margin-bottom: 25px;
-            padding-bottom: 15px;
-            border-bottom: 3px solid #f0f0f0;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
         }
-        
         .card-icon {
-            font-size: 48px;
-            margin-right: 15px;
+            font-size: 40px;
+            margin-right: 16px;
         }
-        
-        .card-title {
-            flex: 1;
-        }
-        
         .card-title h2 {
-            font-size: 24px;
-            color: #333;
-            margin-bottom: 5px;
+            font-size: 22px;
+            color: var(--text);
+            margin-bottom: 4px;
+            font-weight: 700;
         }
-        
         .card-title p {
-            color: #888;
+            color: var(--muted);
             font-size: 14px;
         }
-        
+
+        /* Form */
         .form-group {
             margin-bottom: 20px;
         }
-        
         label {
             display: block;
             font-weight: 600;
-            color: #555;
+            color: var(--text);
             margin-bottom: 8px;
             font-size: 14px;
         }
-        
         .label-badge {
             display: inline-block;
-            background: #667eea;
+            background: var(--accent);
             color: white;
             padding: 2px 8px;
             border-radius: 12px;
             font-size: 11px;
             margin-left: 8px;
-            font-weight: normal;
+            font-weight: 600;
         }
-        
+
         input, textarea, select {
             width: 100%;
-            padding: 14px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
+            padding: 12px 16px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
             font-size: 15px;
-            transition: border-color 0.3s, box-shadow 0.3s;
             font-family: inherit;
+            transition: border-color 0.3s, box-shadow 0.3s;
         }
-        
         input:focus, textarea:focus, select:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
         }
-        
         textarea {
             resize: vertical;
             min-height: 100px;
             line-height: 1.6;
         }
-        
-        .sample-prompts {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 10px;
+        input::placeholder, textarea::placeholder {
+            color: var(--muted);
         }
-        
-        .sample-prompt {
-            background: #f5f5f5;
-            padding: 8px 14px;
-            border-radius: 20px;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.3s;
-            border: 1px solid #e0e0e0;
-        }
-        
-        .sample-prompt:hover {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-            transform: translateY(-2px);
-        }
-        
-        button {
-            width: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 16px;
-            border: none;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-        
-        button:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-        }
-        
-        button:active:not(:disabled) {
-            transform: translateY(0);
-        }
-        
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .loading {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin-right: 8px;
-            vertical-align: middle;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        .result {
-            margin-top: 25px;
-            padding: 20px;
-            border-radius: 12px;
-            background: #f8f9fa;
-            border-left: 4px solid #667eea;
-        }
-        
-        .result.success {
-            background: #d4edda;
-            border-left-color: #28a745;
-        }
-        
-        .result.error {
-            background: #f8d7da;
-            border-left-color: #dc3545;
-        }
-        
-        .result-content {
-            margin-top: 15px;
-        }
-        
-        .generated-image {
-            width: 100%;
-            border-radius: 12px;
-            margin-top: 15px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-        }
-        
-        audio {
-            width: 100%;
-            margin-top: 15px;
-        }
-        
-        .download-btn {
-            display: inline-block;
-            margin-top: 15px;
-            padding: 10px 20px;
-            background: #28a745;
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-        
-        .download-btn:hover {
-            background: #218838;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
-        }
-        
-        .info-box {
-            background: #e3f2fd;
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 25px;
-            border-left: 4px solid #2196f3;
-        }
-        
-        .info-box h3 {
-            color: #1976d2;
-            margin-bottom: 10px;
-            font-size: 16px;
-        }
-        
-        .info-box p {
-            color: #555;
-            line-height: 1.8;
-            font-size: 14px;
-        }
-        
-        .info-box code {
-            background: white;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 13px;
-        }
-        
+
+        /* Token input */
         .token-input {
             position: relative;
         }
-        
         .token-toggle {
             position: absolute;
             right: 14px;
@@ -295,63 +236,193 @@
             font-size: 20px;
             width: auto;
             padding: 5px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
         }
-        
+        .token-toggle:hover {
+            opacity: 1;
+        }
+
+        /* Sample prompts */
+        .sample-prompts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .sample-prompt {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .sample-prompt:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        /* Button */
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 20px var(--accent-glow);
+        }
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px var(--accent-glow);
+        }
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        /* Result */
+        .result {
+            margin-top: 24px;
+            padding: 20px;
+            border-radius: 12px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            animation: fadeUp 0.3s ease-out;
+        }
+        .result.success {
+            border-left: 4px solid var(--green);
+        }
+        .result.error {
+            border-left: 4px solid var(--red);
+        }
+        .result strong {
+            display: block;
+            margin-bottom: 12px;
+            font-size: 15px;
+        }
+        .result-content {
+            margin-top: 15px;
+            color: var(--muted);
+        }
+
+        /* Generated image */
+        .generated-image {
+            width: 100%;
+            border-radius: 12px;
+            margin-top: 16px;
+            border: 1px solid var(--border);
+        }
+
+        /* Audio */
+        audio {
+            width: 100%;
+            margin-top: 16px;
+            border-radius: 8px;
+        }
+
+        /* Download button */
+        .download-btn {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 10px 20px;
+            background: var(--green);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .download-btn:hover {
+            background: #16a34a;
+            transform: translateY(-1px);
+        }
+
+        /* Credits info */
         .credits-info {
             display: inline-block;
-            background: #fff3cd;
-            color: #856404;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--yellow);
             padding: 6px 12px;
             border-radius: 6px;
             font-size: 13px;
             margin-top: 8px;
+            font-weight: 600;
         }
-        
+
+        /* Mobile */
         @media (max-width: 768px) {
             body {
-                padding: 10px;
+                padding-bottom: env(safe-area-inset-bottom);
             }
-            
-            .header {
-                padding: 25px;
+            .main {
+                padding: 24px 16px;
             }
-            
             .header h1 {
-                font-size: 28px;
+                font-size: 32px;
             }
-            
             .card {
                 padding: 20px;
             }
-            
             .card-icon {
-                font-size: 36px;
+                font-size: 32px;
             }
-            
             .card-title h2 {
-                font-size: 20px;
+                font-size: 19px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <nav>
+        <a href="/" class="logo"><span>chatweb.ai</span></a>
+        <div style="font-size: 14px; color: var(--muted);">Media API</div>
+    </nav>
+
+    <div class="main">
         <div class="header">
             <h1>🎨 AIメディア生成</h1>
-            <p>画像・音声・動画を簡単に作成できます</p>
+            <p>画像・音声・動画を簡単に作成</p>
         </div>
 
         <div class="info-box">
             <h3>📖 使い方</h3>
             <p>
-                <strong>ステップ1:</strong> <a href="https://chatweb.ai" target="_blank">chatweb.ai</a> にログインします<br>
-                <strong>ステップ2:</strong> ブラウザの開発者ツール (F12) を開き、Console で <code>localStorage.getItem('auth_token')</code> を実行<br>
-                <strong>ステップ3:</strong> 表示されたトークンをコピーして、下の「認証トークン」欄に貼り付けます<br>
-                <strong>ステップ4:</strong> 好きなメディアを生成！
+                <strong>1.</strong> <a href="https://chatweb.ai" target="_blank">chatweb.ai</a> にログイン<br>
+                <strong>2.</strong> 開発者ツール (F12) → Console で <code>localStorage.getItem('auth_token')</code> を実行<br>
+                <strong>3.</strong> 取得したトークンを下の「認証トークン」欄に貼り付け<br>
+                <strong>4.</strong> 好きなメディアを生成！
             </p>
         </div>
 
-        <!-- 認証トークン -->
+        <!-- Token -->
         <div class="card">
             <div class="card-header">
                 <div class="card-icon">🔑</div>
@@ -371,13 +442,13 @@
             <div class="card-header">
                 <div class="card-icon">🔊</div>
                 <div class="card-title">
-                    <h2>音声生成 (Text-to-Speech)</h2>
+                    <h2>音声生成</h2>
                     <p>テキストを自然な音声に変換</p>
                 </div>
             </div>
-            
+
             <div class="form-group">
-                <label>読み上げるテキスト</label>
+                <label>テキスト</label>
                 <textarea id="ttsText" placeholder="例: こんにちは、今日はいい天気ですね">こんにちは、これはAI音声生成のテストです。自然な日本語で読み上げます。</textarea>
                 <div class="sample-prompts">
                     <div class="sample-prompt" onclick="setTTSText('おはようございます。今日も良い一日をお過ごしください。')">おはよう挨拶</div>
@@ -387,7 +458,7 @@
             </div>
 
             <div class="form-group">
-                <label>音声 <span class="label-badge">自動で最適な声を選択</span></label>
+                <label>音声 <span class="label-badge">自動選択</span></label>
                 <select id="ttsVoice">
                     <option value="Kazuha">Kazuha (日本語・女性・Polly) 推奨</option>
                     <option value="Takumi">Takumi (日本語・男性・Polly)</option>
@@ -400,23 +471,23 @@
                 <div class="credits-info">💰 約 1 credit / 100文字</div>
             </div>
 
-            <button onclick="generateTTS()" id="ttsBtn">🔊 音声を生成する</button>
+            <button onclick="generateTTS()" id="ttsBtn">🔊 音声を生成</button>
             <div id="ttsResult"></div>
         </div>
 
-        <!-- Image Generation -->
+        <!-- Image -->
         <div class="card">
             <div class="card-header">
                 <div class="card-icon">🖼️</div>
                 <div class="card-title">
-                    <h2>画像生成 (AI Image)</h2>
+                    <h2>画像生成</h2>
                     <p>テキストから美しい画像を作成</p>
                 </div>
             </div>
 
             <div class="form-group">
-                <label>画像の説明 <span class="label-badge">プロンプト</span></label>
-                <textarea id="imagePrompt" placeholder="例: 雪の中に座っている可愛い猫、シネマティックライティング">雪の中に座っている可愛い猫、月光の下、シネマティックライティング、4K品質、フォトリアル</textarea>
+                <label>プロンプト</label>
+                <textarea id="imagePrompt" placeholder="例: 雪の中に座っている可愛い猫">雪の中に座っている可愛い猫、月光の下、シネマティックライティング、4K品質、フォトリアル</textarea>
                 <div class="sample-prompts">
                     <div class="sample-prompt" onclick="setImagePrompt('美しい日本庭園、桜が満開、春の朝、柔らかい光')">日本庭園</div>
                     <div class="sample-prompt" onclick="setImagePrompt('未来都市の夜景、ネオンライト、サイバーパンク')">未来都市</div>
@@ -428,9 +499,9 @@
             <div class="form-group">
                 <label>モデル <span class="label-badge">品質と速度</span></label>
                 <select id="imageModel" onchange="updateImageCredits()">
-                    <option value="flux-schnell">Flux Schnell (高速・5 credits) 推奨</option>
-                    <option value="flux-pro">Flux Pro (最高品質・15 credits)</option>
-                    <option value="flux-realism">Flux Realism (超リアル・10 credits)</option>
+                    <option value="flux-schnell">Flux Schnell (高速) 推奨</option>
+                    <option value="flux-pro">Flux Pro (最高品質)</option>
+                    <option value="flux-realism">Flux Realism (超リアル)</option>
                 </select>
             </div>
 
@@ -444,22 +515,22 @@
                 <div class="credits-info" id="imageCredits">💰 5 credits</div>
             </div>
 
-            <button onclick="generateImage()" id="imageBtn">🖼️ 画像を生成する</button>
+            <button onclick="generateImage()" id="imageBtn">🖼️ 画像を生成</button>
             <div id="imageResult"></div>
         </div>
 
-        <!-- Video Generation -->
+        <!-- Video -->
         <div class="card">
             <div class="card-header">
                 <div class="card-icon">🎬</div>
                 <div class="card-title">
-                    <h2>動画生成 (AI Video)</h2>
+                    <h2>動画生成</h2>
                     <p>テキストから短い動画を作成</p>
                 </div>
             </div>
 
             <div class="form-group">
-                <label>動画の説明 <span class="label-badge">プロンプト</span></label>
+                <label>プロンプト</label>
                 <textarea id="videoPrompt" placeholder="例: ゴールデンレトリバーがビーチで走る、夕暮れ">ゴールデンレトリバーが幸せそうにビーチを走る、夕暮れ時、スローモーション、シネマティック</textarea>
                 <div class="sample-prompts">
                     <div class="sample-prompt" onclick="setVideoPrompt('桜の花びらが風に舞う、春の公園、スローモーション')">桜</div>
@@ -471,13 +542,13 @@
             <div class="form-group">
                 <label>長さ <span class="label-badge">生成時間: 約2-3分</span></label>
                 <select id="videoDuration" onchange="updateVideoCredits()">
-                    <option value="5">5秒 (50 credits) 推奨</option>
-                    <option value="10">10秒 (100 credits)</option>
+                    <option value="5">5秒 推奨</option>
+                    <option value="10">10秒</option>
                 </select>
                 <div class="credits-info" id="videoCredits">💰 50 credits</div>
             </div>
 
-            <button onclick="generateVideo()" id="videoBtn">🎬 動画を生成する</button>
+            <button onclick="generateVideo()" id="videoBtn">🎬 動画を生成</button>
             <div id="videoResult"></div>
         </div>
     </div>
@@ -534,7 +605,7 @@
         async function generateTTS() {
             const btn = document.getElementById('ttsBtn');
             const resultDiv = document.getElementById('ttsResult');
-            
+
             btn.disabled = true;
             btn.innerHTML = '<span class="loading"></span>音声生成中...';
             resultDiv.innerHTML = '<div class="result">⏳ 音声を生成しています...</div>';
@@ -554,7 +625,6 @@
                     body: JSON.stringify({
                         text: document.getElementById('ttsText').value,
                         voice: document.getElementById('ttsVoice').value
-                        // engine を指定しない = 自動フォールバック (Polly/OpenAI)
                     })
                 });
 
@@ -565,10 +635,10 @@
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
                 const size = (blob.size / 1024).toFixed(1);
-                
+
                 resultDiv.innerHTML = `
                     <div class="result success">
-                        <strong>✅ 音声生成完了！</strong>
+                        <strong>✅ 音声生成完了</strong>
                         <div class="result-content">
                             ファイルサイズ: ${size} KB
                             <audio controls src="${url}" autoplay></audio>
@@ -585,7 +655,7 @@
                 `;
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = '🔊 音声を生成する';
+                btn.innerHTML = '🔊 音声を生成';
             }
         }
 
@@ -615,7 +685,7 @@
         async function generateImage() {
             const btn = document.getElementById('imageBtn');
             const resultDiv = document.getElementById('imageResult');
-            
+
             btn.disabled = true;
             btn.innerHTML = '<span class="loading"></span>画像生成中 (30-60秒)...';
             resultDiv.innerHTML = '<div class="result">⏳ 画像を生成しています。少々お待ちください...</div>';
@@ -628,10 +698,10 @@
                 });
 
                 const imageUrl = data.images[0].url;
-                
+
                 resultDiv.innerHTML = `
                     <div class="result success">
-                        <strong>✅ 画像生成完了！</strong>
+                        <strong>✅ 画像生成完了</strong>
                         <div class="result-content">
                             モデル: ${data.model} | 使用クレジット: ${data.credits_used}
                             <img src="${imageUrl}" alt="生成された画像" class="generated-image">
@@ -648,14 +718,14 @@
                 `;
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = '🖼️ 画像を生成する';
+                btn.innerHTML = '🖼️ 画像を生成';
             }
         }
 
         async function generateVideo() {
             const btn = document.getElementById('videoBtn');
             const resultDiv = document.getElementById('videoResult');
-            
+
             btn.disabled = true;
             btn.innerHTML = '<span class="loading"></span>動画生成リクエスト送信中...';
             resultDiv.innerHTML = '<div class="result">⏳ 動画生成リクエストを送信しています...</div>';
@@ -670,7 +740,7 @@
                 if (data.video_id) {
                     resultDiv.innerHTML = `
                         <div class="result success">
-                            <strong>✅ 動画生成を開始しました！</strong>
+                            <strong>✅ 動画生成を開始しました</strong>
                             <div class="result-content">
                                 動画ID: ${data.video_id}<br>
                                 ステータス: ${data.status}<br>
@@ -680,7 +750,7 @@
                             </div>
                         </div>
                     `;
-                    
+
                     setTimeout(() => checkVideoStatus(data.video_id), 15000);
                 }
             } catch (error) {
@@ -692,25 +762,25 @@
                 `;
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = '🎬 動画を生成する';
+                btn.innerHTML = '🎬 動画を生成';
             }
         }
 
         async function checkVideoStatus(videoId) {
             const statusDiv = document.getElementById(`videoStatus_${videoId}`);
             const token = document.getElementById('authToken').value.trim();
-            
+
             try {
                 const response = await fetch(`${API_BASE}/video/${videoId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 const data = await response.json();
-                
+
                 if (data.status === 'completed' && data.url) {
                     statusDiv.innerHTML = `
                         <strong>🎉 動画生成完了！</strong><br><br>
-                        ${data.thumbnail_url ? `<img src="${data.thumbnail_url}" alt="サムネイル" style="max-width: 400px; border-radius: 8px; margin-bottom: 10px;">` : ''}
+                        ${data.thumbnail_url ? `<img src="${data.thumbnail_url}" alt="サムネイル" style="max-width: 100%; border-radius: 8px; margin-bottom: 10px;">` : ''}
                         <br><a href="${data.url}" target="_blank" class="download-btn">🎬 動画を再生</a>
                     `;
                 } else if (data.status === 'processing' || data.status === 'queued') {
