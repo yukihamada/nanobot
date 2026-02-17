@@ -3268,7 +3268,7 @@ async fn handle_chat(
     let (cached_user, parallel_memory, parallel_settings) = {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Fetch user with cache (separate from tokio::join! to use state)
-            let user = get_or_create_user_cached(state, &session_key).await;
+            let user = get_or_create_user_cached(&*state, &session_key).await;
             let (memory, settings) = tokio::join!(
                 read_memory_context(dynamo, table, &session_key),
                 get_user_settings(dynamo, table, &session_key)
@@ -6191,7 +6191,7 @@ async fn handle_chat_stream(
     let (stream_user, stream_memory, stream_settings) = {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Fetch user with cache (separate from tokio::join! to use state)
-            let user = get_or_create_user_cached(state, &session_key).await;
+            let user = get_or_create_user_cached(&*state, &session_key).await;
             let (memory, settings) = tokio::join!(
                 read_memory_context(dynamo, table, &session_key),
                 get_user_settings(dynamo, table, &session_key)
@@ -14316,6 +14316,7 @@ async fn handle_get_external_keys(
                             .unwrap_or_default();
                         let use_fallback = item.get("use_master_key_fallback")
                             .and_then(|v| v.as_bool().ok())
+                            .copied()
                             .unwrap_or(true);
                         return (StatusCode::OK, Json(serde_json::json!({ 
                             "keys": keys,
@@ -15627,10 +15628,10 @@ async fn try_openai_tts(text: &str, voice: &str, speed: f64, instructions: Optio
     
     // Get API key using rotation system (with fallback to old env vars)
     let api_key = get_api_key("openai")
-        .or_else(|_| std::env::var("OPENAI_API_KEYS").map(|keys| {
+        .or_else(|| std::env::var("OPENAI_API_KEYS").ok().map(|keys| {
             keys.split(',').next().unwrap_or("").trim().to_string()
         }))
-        .map_err(|_| "No OpenAI API key".to_string())?;
+        .ok_or_else(|| "No OpenAI API key".to_string())?;
 
     if api_key.is_empty() {
         return Err("Empty OpenAI API key".to_string());

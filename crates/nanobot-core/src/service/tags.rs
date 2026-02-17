@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(reply, Some("current".to_string()));
 /// ```
 pub fn parse_reply_tag(response: &str) -> (String, Option<String>) {
-    if let Some(start) = response.find("[[reply_to_current]]") {
+    if response.contains("[[reply_to_current]]") {
         let clean = response.replace("[[reply_to_current]]", "").trim().to_string();
         return (clean, Some("current".to_string()));
     }
@@ -54,7 +54,7 @@ pub fn extract_reasoning(response: &str) -> (String, Vec<ReasoningBlock>) {
     let mut index = 0;
 
     // Manual parsing to handle nested tags gracefully
-    let mut chars: Vec<char> = response.chars().collect();
+    let chars: Vec<char> = response.chars().collect();
     let mut i = 0;
 
     while i < chars.len() {
