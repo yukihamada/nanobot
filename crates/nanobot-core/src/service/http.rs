@@ -90,6 +90,49 @@ fn effective_host(headers: &axum::http::HeaderMap) -> &str {
         .unwrap_or("")
 }
 
+/// Validate session ID format to prevent session fixation attacks.
+///
+/// Valid formats:
+/// - api:uuid (e.g., api:550e8400-e29b-41d4-a716-446655440000)
+/// - webchat:uuid
+/// - tg:username
+/// - line:userid
+/// - admin-test-timestamp
+fn validate_session_id(session_id: &str) -> bool {
+    // Check basic length constraints
+    if session_id.len() < 4 || session_id.len() > 128 {
+        return false;
+    }
+
+    // Must contain at least one colon (prefix:id format)
+    if !session_id.contains(':') {
+        // Exception: admin-test-* format
+        return session_id.starts_with("admin-test-");
+    }
+
+    let parts: Vec<&str> = session_id.splitn(2, ':').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+
+    let prefix = parts[0];
+    let id = parts[1];
+
+    // Validate prefix
+    let valid_prefixes = ["api", "webchat", "tg", "line", "fb", "teams", "discord", "slack"];
+    if !valid_prefixes.contains(&prefix) {
+        return false;
+    }
+
+    // Validate ID part
+    if id.is_empty() || id.len() > 100 {
+        return false;
+    }
+
+    // Check for valid characters (alphanumeric, hyphen, underscore)
+    id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+}
+
 /// Check if a session key, user ID, or email is an admin.
 /// Reads from ADMIN_SESSION_KEYS environment variable (comma-separated).
 /// Supports both session keys (e.g. "webchat:xxx") and emails (e.g. "user@example.com").
@@ -2461,6 +2504,23 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                 ])
                 .max_age(std::time::Duration::from_secs(86400)),
         )
+        // Security headers (XSS, clickjacking, MITM protection)
+        .layer(SetResponseHeaderLayer::overriding(
+            http::header::X_FRAME_OPTIONS,
+            http::HeaderValue::from_static("DENY")
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            http::header::STRICT_TRANSPORT_SECURITY,
+            http::HeaderValue::from_static("max-age=31536000; includeSubDomains")
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            http::header::X_CONTENT_TYPE_OPTIONS,
+            http::HeaderValue::from_static("nosniff")
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            http::header::HeaderName::from_static("content-security-policy"),
+            http::HeaderValue::from_static("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:;")
+        ))
         .with_state(state)
 }
 
@@ -2470,6 +2530,26 @@ async fn handle_chat(
     headers: axum::http::HeaderMap,
     Json(req): Json<ChatRequest>,
 ) -> impl IntoResponse {
+    // Input validation: session ID format
+    if !validate_session_id(&req.session_id) {
+        tracing::warn!("Invalid session ID format: {}", &req.session_id);
+        return Json(ChatResponse {
+            response: "Invalid session ID format".to_string(),
+            session_id: req.session_id.clone(),
+            agent: None,
+            tools_used: None,
+            credits_used: None,
+            credits_remaining: None,
+            model_used: None,
+            models_consulted: None,
+            action: None,
+            input_tokens: None,
+            output_tokens: None,
+            estimated_cost_usd: None,
+            mode: None,
+        });
+    }
+
     // Input validation: message length
     if req.message.len() > 32_000 {
         return Json(ChatResponse {
@@ -5590,7 +5670,18 @@ async fn handle_chat_stream(
 
     let stream_start = std::time::Instant::now();
 
-    // Input validation
+    // Input validation: session ID format
+    if !validate_session_id(&req.session_id) {
+        tracing::warn!("Invalid session ID format (stream): {}", &req.session_id);
+        let err_stream = stream::once(async {
+            Ok::<_, Infallible>(Event::default().data(
+                serde_json::json!({"type":"error","content":"Invalid session ID format"}).to_string()
+            ))
+        });
+        return Sse::new(err_stream).into_response();
+    }
+
+    // Input validation: message length
     if req.message.len() > 32_000 {
         let err_stream = stream::once(async {
             Ok::<_, Infallible>(Event::default().data(
@@ -11889,11 +11980,7 @@ fn hash_password(password: &str, salt: &str) -> String {
     type HmacSha256 = Hmac<Sha256>;
 
     let key = std::env::var("PASSWORD_HMAC_KEY")
-        .or_else(|_| std::env::var("GOOGLE_CLIENT_SECRET"))
-        .unwrap_or_else(|_| {
-            tracing::warn!("PASSWORD_HMAC_KEY not set — using fallback key");
-            "chatweb-default-key-CHANGE-ME".to_string()
-        });
+        .expect("CRITICAL: PASSWORD_HMAC_KEY must be set for password hashing security");
     let mut mac = HmacSha256::new_from_slice(key.as_bytes()).expect("HMAC key");
     mac.update(password.as_bytes());
     mac.update(salt.as_bytes());
