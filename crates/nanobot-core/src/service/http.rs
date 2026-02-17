@@ -2332,6 +2332,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/pricing", get(handle_pricing_api))
         // Pages
         .route("/pricing", get(handle_pricing))
+        .route("/media", get(handle_media_demo))
         .route("/welcome", get(handle_welcome))
         .route("/features", get(handle_features))
         .route("/comparison", get(handle_comparison))
@@ -9113,6 +9114,11 @@ async fn handle_pricing_api() -> impl IntoResponse {
         "media": MEDIA_PRICING,
         "updated_at": "2026-02-14",
     }))
+}
+
+/// GET /media — Media API demo page
+async fn handle_media_demo() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/media.html"))
 }
 
 /// GET /pricing — Pricing page (host-based routing)

@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIメディア生成 - 画像・音声・動画を簡単作成</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', YuGothic, Meiryo, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 36px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #f0f0f0;
+        }
+        
+        .card-icon {
+            font-size: 48px;
+            margin-right: 15px;
+        }
+        
+        .card-title {
+            flex: 1;
+        }
+        
+        .card-title h2 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .card-title p {
+            color: #888;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .label-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-left: 8px;
+            font-weight: normal;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            font-family: inherit;
+        }
+        
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            line-height: 1.6;
+        }
+        
+        .sample-prompts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        .sample-prompt {
+            background: #f5f5f5;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .sample-prompt:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+        
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .result {
+            margin-top: 25px;
+            padding: 20px;
+            border-radius: 12px;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+        }
+        
+        .result.success {
+            background: #d4edda;
+            border-left-color: #28a745;
+        }
+        
+        .result.error {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+        
+        .result-content {
+            margin-top: 15px;
+        }
+        
+        .generated-image {
+            width: 100%;
+            border-radius: 12px;
+            margin-top: 15px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+        
+        audio {
+            width: 100%;
+            margin-top: 15px;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .download-btn:hover {
+            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .info-box h3 {
+            color: #1976d2;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .info-box p {
+            color: #555;
+            line-height: 1.8;
+            font-size: 14px;
+        }
+        
+        .info-box code {
+            background: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        
+        .token-input {
+            position: relative;
+        }
+        
+        .token-toggle {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 20px;
+            width: auto;
+            padding: 5px;
+        }
+        
+        .credits-info {
+            display: inline-block;
+            background: #fff3cd;
+            color: #856404;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .header {
+                padding: 25px;
+            }
+            
+            .header h1 {
+                font-size: 28px;
+            }
+            
+            .card {
+                padding: 20px;
+            }
+            
+            .card-icon {
+                font-size: 36px;
+            }
+            
+            .card-title h2 {
+                font-size: 20px;
+            }
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 AIメディア生成</h1>
+            <p>画像・音声・動画を簡単に作成できます</p>
+        </div>
+
+        <div class="info-box">
+            <h3>📖 使い方</h3>
+            <p>
+                <strong>ステップ1:</strong> <a href="https://chatweb.ai" target="_blank">chatweb.ai</a> にログインします<br>
+                <strong>ステップ2:</strong> ブラウザの開発者ツール (F12) を開き、Console で <code>localStorage.getItem('auth_token')</code> を実行<br>
+                <strong>ステップ3:</strong> 表示されたトークンをコピーして、下の「認証トークン」欄に貼り付けます<br>
+                <strong>ステップ4:</strong> 好きなメディアを生成！
+            </p>
+        </div>
+
+        <!-- 認証トークン -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🔑</div>
+                <div class="card-title">
+                    <h2>認証トークン</h2>
+                    <p>ログイン後に取得したトークンを入力</p>
+                </div>
+            </div>
+            <div class="form-group token-input">
+                <input type="password" id="authToken" placeholder="Bearer token を貼り付けてください">
+                <button type="button" class="token-toggle" onclick="toggleTokenVisibility()">👁️</button>
+            </div>
+        </div>
+
+        <!-- TTS -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🔊</div>
+                <div class="card-title">
+                    <h2>音声生成 (Text-to-Speech)</h2>
+                    <p>テキストを自然な音声に変換</p>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>読み上げるテキスト</label>
+                <textarea id="ttsText" placeholder="例: こんにちは、今日はいい天気ですね">こんにちは、これはAI音声生成のテストです。自然な日本語で読み上げます。</textarea>
+                <div class="sample-prompts">
+                    <div class="sample-prompt" onclick="setTTSText('おはようございます。今日も良い一日をお過ごしください。')">おはよう挨拶</div>
+                    <div class="sample-prompt" onclick="setTTSText('ご注文ありがとうございます。商品は3営業日以内に発送いたします。')">ビジネス</div>
+                    <div class="sample-prompt" onclick="setTTSText('こんにちは！今日は何をして遊ぼうかな？')">子供向け</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>エンジン</label>
+                <select id="ttsEngine">
+                    <option value="kokoro">Kokoro (高品質・高速) 推奨</option>
+                    <option value="openai">OpenAI TTS</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>音声 <span class="label-badge">声の種類</span></label>
+                <select id="ttsVoice">
+                    <option value="nova">Nova (女性・ニュートラル)</option>
+                    <option value="alloy">Alloy (ニュートラル)</option>
+                    <option value="echo">Echo (男性)</option>
+                    <option value="shimmer">Shimmer (女性・明るい)</option>
+                </select>
+                <div class="credits-info">💰 約 1 credit / 100文字</div>
+            </div>
+
+            <button onclick="generateTTS()" id="ttsBtn">🔊 音声を生成する</button>
+            <div id="ttsResult"></div>
+        </div>
+
+        <!-- Image Generation -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🖼️</div>
+                <div class="card-title">
+                    <h2>画像生成 (AI Image)</h2>
+                    <p>テキストから美しい画像を作成</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>画像の説明 <span class="label-badge">プロンプト</span></label>
+                <textarea id="imagePrompt" placeholder="例: 雪の中に座っている可愛い猫、シネマティックライティング">雪の中に座っている可愛い猫、月光の下、シネマティックライティング、4K品質、フォトリアル</textarea>
+                <div class="sample-prompts">
+                    <div class="sample-prompt" onclick="setImagePrompt('美しい日本庭園、桜が満開、春の朝、柔らかい光')">日本庭園</div>
+                    <div class="sample-prompt" onclick="setImagePrompt('未来都市の夜景、ネオンライト、サイバーパンク')">未来都市</div>
+                    <div class="sample-prompt" onclick="setImagePrompt('宇宙飛行士が月面を歩く、地球が見える、リアル')">宇宙</div>
+                    <div class="sample-prompt" onclick="setImagePrompt('可愛い柴犬の子犬、草原で遊ぶ、晴天')">柴犬</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>モデル <span class="label-badge">品質と速度</span></label>
+                <select id="imageModel" onchange="updateImageCredits()">
+                    <option value="flux-schnell">Flux Schnell (高速・5 credits) 推奨</option>
+                    <option value="flux-pro">Flux Pro (最高品質・15 credits)</option>
+                    <option value="flux-realism">Flux Realism (超リアル・10 credits)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>サイズ</label>
+                <select id="imageSize">
+                    <option value="1024x1024">正方形 (1024×1024)</option>
+                    <option value="1792x1024">横長 (1792×1024)</option>
+                    <option value="1024x1792">縦長 (1024×1792)</option>
+                </select>
+                <div class="credits-info" id="imageCredits">💰 5 credits</div>
+            </div>
+
+            <button onclick="generateImage()" id="imageBtn">🖼️ 画像を生成する</button>
+            <div id="imageResult"></div>
+        </div>
+
+        <!-- Video Generation -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🎬</div>
+                <div class="card-title">
+                    <h2>動画生成 (AI Video)</h2>
+                    <p>テキストから短い動画を作成</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>動画の説明 <span class="label-badge">プロンプト</span></label>
+                <textarea id="videoPrompt" placeholder="例: ゴールデンレトリバーがビーチで走る、夕暮れ">ゴールデンレトリバーが幸せそうにビーチを走る、夕暮れ時、スローモーション、シネマティック</textarea>
+                <div class="sample-prompts">
+                    <div class="sample-prompt" onclick="setVideoPrompt('桜の花びらが風に舞う、春の公園、スローモーション')">桜</div>
+                    <div class="sample-prompt" onclick="setVideoPrompt('波が砂浜に打ち寄せる、青い海、リラックス')">海</div>
+                    <div class="sample-prompt" onclick="setVideoPrompt('猫がジャンプする、スローモーション、可愛い')">猫ジャンプ</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>長さ <span class="label-badge">生成時間: 約2-3分</span></label>
+                <select id="videoDuration" onchange="updateVideoCredits()">
+                    <option value="5">5秒 (50 credits) 推奨</option>
+                    <option value="10">10秒 (100 credits)</option>
+                </select>
+                <div class="credits-info" id="videoCredits">💰 50 credits</div>
+            </div>
+
+            <button onclick="generateVideo()" id="videoBtn">🎬 動画を生成する</button>
+            <div id="videoResult"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://api.chatweb.ai/api/v1/media';
+
+        // ページ読み込み時
+        window.addEventListener('load', () => {
+            const savedToken = localStorage.getItem('auth_token') || localStorage.getItem('test_auth_token');
+            if (savedToken) {
+                document.getElementById('authToken').value = savedToken;
+            }
+        });
+
+        // トークン表示切り替え
+        function toggleTokenVisibility() {
+            const input = document.getElementById('authToken');
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+
+        // Token保存
+        document.getElementById('authToken').addEventListener('change', (e) => {
+            if (e.target.value.trim()) {
+                localStorage.setItem('test_auth_token', e.target.value.trim());
+            }
+        });
+
+        // サンプルプロンプト設定
+        function setTTSText(text) {
+            document.getElementById('ttsText').value = text;
+        }
+
+        function setImagePrompt(prompt) {
+            document.getElementById('imagePrompt').value = prompt;
+        }
+
+        function setVideoPrompt(prompt) {
+            document.getElementById('videoPrompt').value = prompt;
+        }
+
+        // クレジット表示更新
+        function updateImageCredits() {
+            const model = document.getElementById('imageModel').value;
+            const credits = {
+                'flux-schnell': 5,
+                'flux-pro': 15,
+                'flux-realism': 10
+            };
+            document.getElementById('imageCredits').textContent = `💰 ${credits[model]} credits`;
+        }
+
+        function updateVideoCredits() {
+            const duration = document.getElementById('videoDuration').value;
+            const credits = duration === '5' ? 50 : 100;
+            document.getElementById('videoCredits').textContent = `💰 ${credits} credits`;
+        }
+
+        // API呼び出し
+        async function apiCall(endpoint, data, expectBlob = false) {
+            const token = document.getElementById('authToken').value.trim();
+            if (!token) {
+                alert('❌ 認証トークンを入力してください');
+                return null;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(text || `HTTP ${response.status}`);
+                }
+
+                return expectBlob ? response.blob() : response.json();
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        // TTS生成
+        async function generateTTS() {
+            const btn = document.getElementById('ttsBtn');
+            const resultDiv = document.getElementById('ttsResult');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>音声生成中...';
+            resultDiv.innerHTML = '<div class="result">⏳ 音声を生成しています...</div>';
+
+            try {
+                const token = document.getElementById('authToken').value.trim();
+                const response = await fetch(`${API_BASE}/tts`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: document.getElementById('ttsText').value,
+                        engine: document.getElementById('ttsEngine').value,
+                        voice: document.getElementById('ttsVoice').value
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const size = (blob.size / 1024).toFixed(1);
+                
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        <strong>✅ 音声生成完了！</strong>
+                        <div class="result-content">
+                            ファイルサイズ: ${size} KB
+                            <audio controls src="${url}"></audio>
+                            <a href="${url}" download="audio.mp3" class="download-btn">💾 ダウンロード</a>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <strong>❌ エラーが発生しました</strong>
+                        <div class="result-content">${error.message}</div>
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🔊 音声を生成する';
+            }
+        }
+
+        // 画像生成
+        async function generateImage() {
+            const btn = document.getElementById('imageBtn');
+            const resultDiv = document.getElementById('imageResult');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>画像生成中 (30-60秒)...';
+            resultDiv.innerHTML = '<div class="result">⏳ 画像を生成しています。少々お待ちください...</div>';
+
+            try {
+                const data = await apiCall('/image', {
+                    prompt: document.getElementById('imagePrompt').value,
+                    model: document.getElementById('imageModel').value,
+                    size: document.getElementById('imageSize').value
+                });
+
+                const imageUrl = data.images[0].url;
+                
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        <strong>✅ 画像生成完了！</strong>
+                        <div class="result-content">
+                            モデル: ${data.model} | 使用クレジット: ${data.credits_used}
+                            <img src="${imageUrl}" alt="生成された画像" class="generated-image">
+                            <a href="${imageUrl}" target="_blank" class="download-btn">🔗 フルサイズで開く</a>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <strong>❌ エラーが発生しました</strong>
+                        <div class="result-content">${error.message}</div>
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🖼️ 画像を生成する';
+            }
+        }
+
+        // 動画生成
+        async function generateVideo() {
+            const btn = document.getElementById('videoBtn');
+            const resultDiv = document.getElementById('videoResult');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>動画生成リクエスト送信中...';
+            resultDiv.innerHTML = '<div class="result">⏳ 動画生成リクエストを送信しています...</div>';
+
+            try {
+                const data = await apiCall('/video', {
+                    prompt: document.getElementById('videoPrompt').value,
+                    duration: parseInt(document.getElementById('videoDuration').value),
+                    mode: 'standard'
+                });
+
+                if (data.video_id) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <strong>✅ 動画生成を開始しました！</strong>
+                            <div class="result-content">
+                                動画ID: ${data.video_id}<br>
+                                ステータス: ${data.status}<br>
+                                推定完了時間: 約${data.estimated_time}秒<br>
+                                使用クレジット: ${data.credits_used}<br><br>
+                                <div id="videoStatus_${data.video_id}">⏳ 処理中... 15秒後に自動で確認します</div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // 自動ポーリング
+                    setTimeout(() => checkVideoStatus(data.video_id), 15000);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <strong>❌ エラーが発生しました</strong>
+                        <div class="result-content">${error.message}</div>
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🎬 動画を生成する';
+            }
+        }
+
+        // 動画ステータス確認
+        async function checkVideoStatus(videoId) {
+            const statusDiv = document.getElementById(`videoStatus_${videoId}`);
+            const token = document.getElementById('authToken').value.trim();
+            
+            try {
+                const response = await fetch(`${API_BASE}/video/${videoId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'completed' && data.url) {
+                    statusDiv.innerHTML = `
+                        <strong>🎉 動画生成完了！</strong><br><br>
+                        ${data.thumbnail_url ? `<img src="${data.thumbnail_url}" alt="サムネイル" style="max-width: 400px; border-radius: 8px; margin-bottom: 10px;">` : ''}
+                        <br><a href="${data.url}" target="_blank" class="download-btn">🎬 動画を再生</a>
+                    `;
+                } else if (data.status === 'processing' || data.status === 'queued') {
+                    statusDiv.innerHTML = `⏳ 処理中 (${data.status})... 15秒後に再確認します`;
+                    setTimeout(() => checkVideoStatus(videoId), 15000);
+                } else if (data.status === 'failed') {
+                    statusDiv.innerHTML = `<strong>❌ 動画生成に失敗しました</strong>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<strong>❌ ステータス確認エラー: ${error.message}</strong>`;
+            }
+        }
+    </script>
+</body>
+</html>
