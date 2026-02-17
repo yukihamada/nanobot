@@ -15907,46 +15907,104 @@ async fn handle_media_image(
         }
     }
 
-    // 4. Generate image using OpenAI API
-    let api_key = std::env::var("OPENAI_API_KEY")
-        .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "OPENAI_API_KEY not configured".to_string()))?;
-
-    let size = req.size.as_deref().unwrap_or("1024x1024");
-    let n = req.n.unwrap_or(1).min(4) as usize;
-
+    // 4. Generate image using appropriate provider
     let client = reqwest::Client::new();
-    let body = serde_json::json!({
-        "model": model,
-        "prompt": req.prompt,
-        "n": n,
-        "size": size,
-        "quality": quality,
-    });
+    let images: Vec<serde_json::Value>;
 
-    let resp = client.post("https://api.openai.com/v1/images/generations")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .json(&body)
-        .timeout(std::time::Duration::from_secs(60))
-        .send()
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("API request failed: {}", e)))?;
+    if model == "flux-pro" || model == "flux-schnell" || model == "flux-realism" {
+        // Use fal.ai for Flux models
+        let fal_key = std::env::var("FAL_KEY")
+            .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "FAL_KEY not configured".to_string()))?;
 
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
-        return Err((status, format!("Image API error: {}", text)));
+        let fal_model = match model {
+            "flux-pro" => "fal-ai/flux-pro",
+            "flux-realism" => "fal-ai/flux-realism",
+            _ => "fal-ai/flux/schnell",
+        };
+
+        let image_size = match req.size.as_deref().unwrap_or("1024x1024") {
+            "1792x1024" => "landscape_16_9",
+            "1024x1792" => "portrait_16_9",
+            _ => "square",
+        };
+
+        let body = serde_json::json!({
+            "prompt": req.prompt,
+            "image_size": image_size,
+            "num_inference_steps": if model == "flux-pro" { 28 } else { 4 },
+            "num_images": req.n.unwrap_or(1).min(4),
+        });
+
+        let resp = client.post(format!("https://fal.run/{}", fal_model))
+            .header("Authorization", format!("Key {}", fal_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(120))
+            .send()
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("fal.ai request failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err((status, format!("fal.ai error: {}", text)));
+        }
+
+        let json: serde_json::Value = resp.json().await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse fal.ai response: {}", e)))?;
+
+        images = json.get("images")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|img| {
+                img.get("url").map(|url| serde_json::json!({
+                    "url": url,
+                    "width": img.get("width"),
+                    "height": img.get("height"),
+                }))
+            }).collect())
+            .unwrap_or_default();
+
+    } else {
+        // Use OpenAI for DALL-E models
+        let api_key = std::env::var("OPENAI_API_KEY")
+            .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "OPENAI_API_KEY not configured".to_string()))?;
+
+        let size = req.size.as_deref().unwrap_or("1024x1024");
+        let n = req.n.unwrap_or(1).min(4) as usize;
+
+        let body = serde_json::json!({
+            "model": model,
+            "prompt": req.prompt,
+            "n": n,
+            "size": size,
+            "quality": quality,
+        });
+
+        let resp = client.post("https://api.openai.com/v1/images/generations")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(60))
+            .send()
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("API request failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err((status, format!("Image API error: {}", text)));
+        }
+
+        let json: serde_json::Value = resp.json().await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse response: {}", e)))?;
+
+        // Extract image URLs from OpenAI response
+        images = json.pointer("/data")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|img| {
+                img.get("url").map(|url| serde_json::json!({"url": url}))
+            }).collect())
+            .unwrap_or_default();
     }
-
-    let json: serde_json::Value = resp.json().await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse response: {}", e)))?;
-
-    // 5. Extract image URLs
-    let images: Vec<serde_json::Value> = json.pointer("/data")
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|img| {
-            img.get("url").map(|url| serde_json::json!({"url": url}))
-        }).collect())
-        .unwrap_or_default();
 
     // 6. Return response
     Ok(Json(serde_json::json!({
