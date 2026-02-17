@@ -72,11 +72,11 @@
   <link rel="dns-prefetch" href="https://chatweb.ai">
   <style>
     :root {
-      --bg: #09090b;
+      --bg: #ffffff;
       --surface: #18181b;
       --surface2: #1e1e24;
       --border: #27272a;
-      --text: #fafafa;
+      --text: #212529;
       --muted: #71717a;
       --accent: #6366f1;
       --accent-hover: #818cf8;
@@ -4350,6 +4350,34 @@
             <div style="font-size:11px;color:var(--muted);">Plan</div>
           </div>
         </div>
+
+        <div class="settings-group-title" style="margin-top:16px;">💳 Billing & Payments</div>
+        <div style="background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border:2px solid var(--accent);border-radius:12px;padding:16px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Current Plan</div>
+              <div style="font-size:18px;font-weight:700;color:var(--accent);" id="billing-plan">Free</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Credit Balance</div>
+              <div style="font-size:24px;font-weight:700;color:var(--text);" id="billing-credits">-</div>
+            </div>
+          </div>
+          <button style="width:100%;padding:10px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:#fff;" onclick="document.getElementById('topup-modal').classList.add('show')">
+            💎 Upgrade / Add Credits
+          </button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+            <span>Credits Used (Total)</span>
+            <span id="billing-total-used">-</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;">
+            <span>Credits Used (Today)</span>
+            <span id="billing-today-used">-</span>
+          </div>
+        </div>
+
         <div class="memory-label">Recent Activity</div>
         <div id="activity-log-list" style="max-height:180px;overflow-y:auto;font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);"></div>
         <button style="width:100%;padding:8px;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;color:var(--muted);" onclick="loadActivityData()">Refresh</button>
@@ -10609,6 +10637,11 @@
         document.getElementById('activity-credits-used').textContent = data.credits_used ?? '-';
         document.getElementById('activity-today-requests').textContent = data.today_requests ?? '-';
         document.getElementById('activity-plan').textContent = (data.plan || 'free').charAt(0).toUpperCase() + (data.plan || 'free').slice(1);
+        // Update billing section
+        document.getElementById('billing-plan').textContent = (data.plan || 'free').charAt(0).toUpperCase() + (data.plan || 'free').slice(1);
+        document.getElementById('billing-credits').textContent = data.credits_remaining ?? '-';
+        document.getElementById('billing-total-used').textContent = data.credits_used ?? '-';
+        document.getElementById('billing-today-used').textContent = data.today_requests ?? '-';
         const list = document.getElementById('activity-log-list');
         if (!data.today_logs || data.today_logs.length === 0) {
           list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);">No activity today</div>';
@@ -11963,6 +11996,11 @@
       display.style.display = '';
       const prev = parseInt(count.textContent) || 0;
       count.textContent = remaining.toLocaleString();
+      // Update billing display in Account tab
+      const billingCredits = document.getElementById('billing-credits');
+      if (billingCredits) billingCredits.textContent = remaining.toLocaleString();
+      const activityCredits = document.getElementById('activity-credits-remaining');
+      if (activityCredits) activityCredits.textContent = remaining.toLocaleString();
       if (prev !== remaining && prev > 0) {
         display.classList.add('credit-flash');
         setTimeout(() => display.classList.remove('credit-flash'), 600);
