@@ -205,10 +205,10 @@ mod tests {
     fn test_personality_section_weaken() {
         let mut section = PersonalitySection::new("tone".to_string(), "friendly".to_string());
         section.weaken(0.3);
-        assert_eq!(section.confidence, 0.2);
+        assert!((section.confidence - 0.2).abs() < 1e-9, "Expected 0.2, got {}", section.confidence);
 
         section.weaken(0.5);
-        assert_eq!(section.confidence, 0.0); // Floored at 0.0
+        assert!((section.confidence - 0.0).abs() < 1e-9, "Expected 0.0 (floored), got {}", section.confidence);
     }
 
     #[test]

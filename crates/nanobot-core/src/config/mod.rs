@@ -757,6 +757,11 @@ mod tests {
 
     #[test]
     fn test_load_config_from_env_full_json() {
+        // Clear individual vars to test JSON config takes precedence
+        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::remove_var("TELEGRAM_BOT_TOKEN");
+        std::env::remove_var("TELEGRAM_ALLOW_FROM");
+
         let json = r#"{
             "providers": {
                 "anthropic": { "apiKey": "sk-env-test" }
@@ -765,6 +770,8 @@ mod tests {
         std::env::set_var("NANOBOT_CONFIG", json);
         let cfg = load_config_from_env();
         assert_eq!(cfg.providers.anthropic.api_key, "sk-env-test");
+
+        // Cleanup
         std::env::remove_var("NANOBOT_CONFIG");
     }
 
