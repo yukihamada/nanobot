@@ -1063,6 +1063,115 @@ async fn find_user_by_stripe_customer(
     None
 }
 
+/// Create a video generation job in DynamoDB.
+#[cfg(feature = "dynamodb-backend")]
+async fn create_video_job(
+    dynamo: &aws_sdk_dynamodb::Client,
+    table: &str,
+    video_id: &str,
+    user_id: &str,
+    prompt: &str,
+    provider: &str,
+    credits: i64,
+) -> Result<(), (StatusCode, String)> {
+    use aws_sdk_dynamodb::types::AttributeValue;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    dynamo.put_item()
+        .table_name(table)
+        .item("pk", AttributeValue::S(format!("VIDEO_JOB#{}", video_id)))
+        .item("sk", AttributeValue::S("METADATA".to_string()))
+        .item("user_id", AttributeValue::S(user_id.to_string()))
+        .item("prompt", AttributeValue::S(prompt.to_string()))
+        .item("provider", AttributeValue::S(provider.to_string()))
+        .item("status", AttributeValue::S("queued".to_string()))
+        .item("credits_used", AttributeValue::N(credits.to_string()))
+        .item("created_at", AttributeValue::S(now.clone()))
+        .item("updated_at", AttributeValue::S(now))
+        .item("ttl", AttributeValue::N((chrono::Utc::now().timestamp() + 604800).to_string())) // 7 days
+        .send()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("DynamoDB error: {}", e)))?;
+
+    Ok(())
+}
+
+/// Update a video generation job status in DynamoDB.
+#[cfg(feature = "dynamodb-backend")]
+async fn update_video_job(
+    dynamo: &aws_sdk_dynamodb::Client,
+    table: &str,
+    video_id: &str,
+    status: &str,
+    url: Option<&str>,
+    thumbnail: Option<&str>,
+) -> Result<(), String> {
+    use aws_sdk_dynamodb::types::AttributeValue;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let mut update_expr = "SET #st = :status, updated_at = :now".to_string();
+    let mut expr_names = std::collections::HashMap::new();
+    expr_names.insert("#st".to_string(), "status".to_string());
+
+    let mut expr_values = std::collections::HashMap::new();
+    expr_values.insert(":status".to_string(), AttributeValue::S(status.to_string()));
+    expr_values.insert(":now".to_string(), AttributeValue::S(now));
+
+    if let Some(u) = url {
+        update_expr.push_str(", #url = :url");
+        expr_names.insert("#url".to_string(), "url".to_string());
+        expr_values.insert(":url".to_string(), AttributeValue::S(u.to_string()));
+    }
+
+    if let Some(t) = thumbnail {
+        update_expr.push_str(", thumbnail_url = :thumb");
+        expr_values.insert(":thumb".to_string(), AttributeValue::S(t.to_string()));
+    }
+
+    dynamo.update_item()
+        .table_name(table)
+        .key("pk", AttributeValue::S(format!("VIDEO_JOB#{}", video_id)))
+        .key("sk", AttributeValue::S("METADATA".to_string()))
+        .update_expression(update_expr)
+        .set_expression_attribute_names(Some(expr_names))
+        .set_expression_attribute_values(Some(expr_values))
+        .send()
+        .await
+        .map_err(|e| format!("DynamoDB error: {}", e))?;
+
+    Ok(())
+}
+
+/// Get a video generation job from DynamoDB.
+#[cfg(feature = "dynamodb-backend")]
+async fn get_video_job(
+    dynamo: &aws_sdk_dynamodb::Client,
+    table: &str,
+    video_id: &str,
+) -> Option<MediaVideoResponse> {
+    use aws_sdk_dynamodb::types::AttributeValue;
+
+    let result = dynamo.get_item()
+        .table_name(table)
+        .key("pk", AttributeValue::S(format!("VIDEO_JOB#{}", video_id)))
+        .key("sk", AttributeValue::S("METADATA".to_string()))
+        .send()
+        .await
+        .ok()?;
+
+    let item = result.item()?;
+
+    Some(MediaVideoResponse {
+        video_id: video_id.to_string(),
+        status: item.get("status")?.as_s().ok()?.clone(),
+        url: item.get("url").and_then(|v| v.as_s().ok()).cloned(),
+        thumbnail_url: item.get("thumbnail_url").and_then(|v| v.as_s().ok()).cloned(),
+        estimated_time: None,
+        credits_used: item.get("credits_used").and_then(|v| v.as_n().ok()?.parse().ok()),
+        created_at: item.get("created_at").and_then(|v| v.as_s().ok()).cloned(),
+    })
+}
+
 /// Find a user by email address (scan — fallback for webhook when no client_reference_id).
 #[cfg(feature = "dynamodb-backend")]
 async fn find_user_by_email(
@@ -2029,11 +2138,28 @@ pub struct FeedbackRequest {
     pub conversation_id: Option<String>,
 }
 
+/// Bug report request body.
+#[derive(Debug, Deserialize)]
+pub struct BugReportRequest {
+    pub category: String,
+    pub description: String,
+    pub screenshot_data: Option<String>,
+    #[serde(default)]
+    pub js_errors: Vec<String>,
+    pub user_agent: Option<String>,
+    pub screen: Option<String>,
+    pub url: Option<String>,
+    pub version: Option<String>,
+    pub hash: Option<String>,
+}
+
 /// Health check response.
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub status: String,
     pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub providers: Option<u32>,
 }
 
 /// Create the axum Router with all API routes.
@@ -2152,6 +2278,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Speech (TTS) — internal + OpenAI-compatible external API
         .route("/api/v1/speech/synthesize", post(handle_speech_synthesize))
         .route("/v1/audio/speech", post(handle_tts_openai_compat))
+        // Media API — unified multimodal generation
+        .route("/api/v1/media/tts", post(handle_media_tts))
+        .route("/api/v1/media/stt", post(handle_media_stt))
+        .route("/api/v1/media/image", post(handle_media_image))
+        .route("/api/v1/media/video", post(handle_media_video))
+        .route("/api/v1/media/video/:id", get(handle_media_video_status))
         // Voice cloning — upload audio sample, get cloned TTS back
         .route("/api/v1/voice/clone", post(handle_voice_clone))
         // Phone (Amazon Connect)
@@ -2180,6 +2312,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/admin/users/{user_id}/conversations", get(handle_admin_user_conversations))
         .route("/api/v1/admin/sessions/{session_key}/messages", get(handle_admin_session_messages))
         .route("/api/v1/admin/logs", get(handle_admin_logs))
+        .route("/api/v1/admin/keys", get(handle_admin_keys_get))
+        .route("/api/v1/admin/keys", axum::routing::put(handle_admin_keys_put))
         .route("/api/v1/admin/feedback", get(handle_admin_feedback))
         .route("/api/v1/admin/tickets", get(handle_admin_tickets))
         .route("/api/v1/admin/tickets/{ticket_id}/respond", post(handle_admin_ticket_respond))
@@ -2187,8 +2321,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Tickets (user-facing)
         .route("/api/v1/tickets", post(handle_create_ticket))
         .route("/api/v1/config/support-status", get(handle_support_status))
-        // Feedback
+        // Feedback & Bug reports
         .route("/api/v1/feedback", post(handle_feedback))
+        .route("/api/v1/version", get(handle_version))
+        .route("/api/v1/bug-report", post(handle_bug_report))
         // OG image
         .route("/og.svg", get(handle_og_svg))
         // API keys
@@ -2217,6 +2353,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // PWA
         .route("/manifest.json", get(handle_manifest_json))
         .route("/sw.js", get(handle_sw_js))
+        .route("/icon-192.svg", get(handle_icon_192))
+        .route("/icon-512.svg", get(handle_icon_512))
         // API docs (path alias)
         .route("/api-docs", get(handle_api_docs))
         // AI agent friendly
@@ -9399,6 +9537,198 @@ async fn handle_admin_logs(
     Json(serde_json::json!({"logs": [], "error": "DynamoDB not configured"})).into_response()
 }
 
+// ---------------------------------------------------------------------------
+// Admin API key management (LLM provider keys stored in DynamoDB)
+// ---------------------------------------------------------------------------
+
+/// Known API key env var names manageable via admin panel.
+pub(crate) const ADMIN_KEY_NAMES: &[&str] = &[
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GEMINI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "GROQ_API_KEY",
+    "ELEVENLABS_API_KEY",
+    "REPLICATE_API_TOKEN",
+];
+
+/// Mask an API key for admin display: show first 6 and last 4 chars.
+pub(crate) fn mask_api_key_admin(key: &str) -> String {
+    if key.len() <= 10 {
+        return "*".repeat(key.len());
+    }
+    format!("{}...{}", &key[..6], &key[key.len() - 4..])
+}
+
+/// GET /api/v1/admin/keys?sid=<admin_key> — List LLM provider API keys (masked)
+async fn handle_admin_keys_get(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<AdminQuery>,
+) -> impl IntoResponse {
+    let sid = q.sid.unwrap_or_default();
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Read CONFIG#api_keys from DynamoDB
+            let db_keys: std::collections::HashMap<String, String> = match dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S("CONFIG#api_keys".to_string()))
+                .key("sk", AttributeValue::S("LATEST".to_string()))
+                .send()
+                .await
+            {
+                Ok(output) => {
+                    let mut map = std::collections::HashMap::new();
+                    if let Some(item) = output.item() {
+                        for &name in ADMIN_KEY_NAMES {
+                            if let Some(val) = item.get(name).and_then(|v| v.as_s().ok()) {
+                                if !val.is_empty() {
+                                    map.insert(name.to_string(), val.clone());
+                                }
+                            }
+                        }
+                    }
+                    map
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to read CONFIG#api_keys: {}", e);
+                    std::collections::HashMap::new()
+                }
+            };
+
+            let keys: Vec<serde_json::Value> = ADMIN_KEY_NAMES.iter().map(|&name| {
+                let env_val = std::env::var(name).unwrap_or_default();
+                let db_val = db_keys.get(name).cloned().unwrap_or_default();
+
+                let (masked, source) = if !db_val.is_empty() {
+                    (mask_api_key_admin(&db_val), "dynamodb")
+                } else if !env_val.is_empty() {
+                    (mask_api_key_admin(&env_val), "env")
+                } else {
+                    (String::new(), "not_set")
+                };
+
+                serde_json::json!({
+                    "name": name,
+                    "masked_key": masked,
+                    "source": source,
+                    "is_set": !masked.is_empty(),
+                })
+            }).collect();
+
+            return Json(serde_json::json!({"keys": keys})).into_response();
+        }
+    }
+
+    // Fallback: show env vars only
+    let keys: Vec<serde_json::Value> = ADMIN_KEY_NAMES.iter().map(|&name| {
+        let val = std::env::var(name).unwrap_or_default();
+        serde_json::json!({
+            "name": name,
+            "masked_key": if val.is_empty() { String::new() } else { mask_api_key_admin(&val) },
+            "source": if val.is_empty() { "not_set" } else { "env" },
+            "is_set": !val.is_empty(),
+        })
+    }).collect();
+    Json(serde_json::json!({"keys": keys})).into_response()
+}
+
+/// PUT /api/v1/admin/keys?sid=<admin_key> — Update LLM provider API keys
+async fn handle_admin_keys_put(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<AdminQuery>,
+    Json(body): Json<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let sid = q.sid.unwrap_or_default();
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Build DynamoDB item: only allow known key names
+            let mut item = std::collections::HashMap::new();
+            item.insert("pk".to_string(), AttributeValue::S("CONFIG#api_keys".to_string()));
+            item.insert("sk".to_string(), AttributeValue::S("LATEST".to_string()));
+            item.insert(
+                "updated_at".to_string(),
+                AttributeValue::S(chrono::Utc::now().to_rfc3339()),
+            );
+            item.insert(
+                "updated_by".to_string(),
+                AttributeValue::S(sid.clone()),
+            );
+
+            let mut saved_keys: Vec<String> = Vec::new();
+            for &name in ADMIN_KEY_NAMES {
+                if let Some(val) = body.get(name) {
+                    if !val.is_empty() {
+                        item.insert(name.to_string(), AttributeValue::S(val.clone()));
+                        saved_keys.push(name.to_string());
+                    }
+                    // Empty string = key removed (not stored)
+                }
+            }
+
+            match dynamo
+                .put_item()
+                .table_name(table)
+                .set_item(Some(item))
+                .send()
+                .await
+            {
+                Ok(_) => {
+                    // Apply to env vars immediately so this Lambda instance uses them
+                    for &name in ADMIN_KEY_NAMES {
+                        if let Some(val) = body.get(name) {
+                            if !val.is_empty() {
+                                // SAFETY: Lambda is single-threaded for env var writes at this point
+                                unsafe { std::env::set_var(name, val); }
+                            } else {
+                                unsafe { std::env::remove_var(name); }
+                            }
+                        }
+                    }
+
+                    // Audit log
+                    emit_audit_log(
+                        dynamo.clone(),
+                        table.clone(),
+                        "admin_keys_updated",
+                        &sid,
+                        &sid,
+                        &format!("Updated keys: {}", saved_keys.join(", ")),
+                    );
+
+                    return Json(serde_json::json!({
+                        "status": "ok",
+                        "saved_keys": saved_keys,
+                        "message": "保存しました。環境変数に即座に反映済みです。",
+                    })).into_response();
+                }
+                Err(e) => {
+                    tracing::error!("Failed to save CONFIG#api_keys: {}", e);
+                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                        "error": format!("Failed to save: {}", e),
+                    }))).into_response();
+                }
+            }
+        }
+    }
+
+    (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+        "error": "DynamoDB not configured",
+    }))).into_response()
+}
+
 /// GET /api/v1/activity — User's own activity log
 /// Shows recent chat history, tool usage, credit changes
 async fn handle_activity(
@@ -9783,10 +10113,24 @@ async fn handle_partner_verify_subscription(
     })))
 }
 
-async fn handle_health() -> impl IntoResponse {
+async fn handle_health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let provider_count = if state.lb_provider.is_some() || state.provider.is_some() {
+        // Count configured provider env vars
+        let mut count = 0u32;
+        if std::env::var("ANTHROPIC_API_KEY").is_ok() { count += 1; }
+        if std::env::var("OPENAI_API_KEY").is_ok() { count += 1; }
+        if std::env::var("GOOGLE_API_KEY").ok().or_else(|| std::env::var("GEMINI_API_KEY").ok()).is_some() { count += 1; }
+        if std::env::var("DEEPSEEK_API_KEY").is_ok() { count += 1; }
+        if std::env::var("OPENROUTER_API_KEY").is_ok() { count += 1; }
+        Some(count)
+    } else {
+        Some(0)
+    };
+    let status = if provider_count == Some(0) { "degraded" } else { "ok" };
     Json(HealthResponse {
-        status: "ok".to_string(),
+        status: status.to_string(),
         version: crate::VERSION.to_string(),
+        providers: provider_count,
     })
 }
 
@@ -9842,6 +10186,20 @@ async fn handle_sw_js() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")],
         include_str!("../../../../web/sw.js"),
+    )
+}
+
+async fn handle_icon_192() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
+        include_str!("../../../../web/icon-192.svg"),
+    )
+}
+
+async fn handle_icon_512() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
+        include_str!("../../../../web/icon-512.svg"),
     )
 }
 
@@ -11401,6 +11759,8 @@ async fn handle_auth_me(
                         state.tool_registry.list_tool_names()
                     };
 
+                    let user_is_admin = is_admin(&email) || is_admin(&user_id);
+
                     return Json(serde_json::json!({
                         "authenticated": true,
                         "user_id": user_id,
@@ -11414,6 +11774,7 @@ async fn handle_auth_me(
                         "available_tools": available_tools,
                         "max_tool_iterations": max_tool_iterations,
                         "has_sandbox": has_sandbox,
+                        "is_admin": user_is_admin,
                     }));
                 }
             }
@@ -13848,6 +14209,53 @@ struct SpeechRequest {
 fn default_tts_voice() -> String { "nova".to_string() }
 fn default_tts_speed() -> f64 { 1.0 }
 
+// ---------------------------------------------------------------------------
+// Media API — Unified multimodal generation endpoints
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct MediaTtsRequest {
+    text: String,
+    voice: Option<String>,      // OpenAI-compatible: nova, alloy, echo, etc.
+    engine: Option<String>,     // kokoro | elevenlabs | openai
+    speed: Option<f32>,         // 0.25 - 4.0
+    format: Option<String>,     // mp3 | wav | opus
+}
+
+#[derive(Debug, Deserialize)]
+struct MediaSttRequest {
+    language: Option<String>,   // ja | en | auto
+    model: Option<String>,      // whisper-1
+}
+
+#[derive(Debug, Deserialize)]
+struct MediaImageRequest {
+    prompt: String,
+    model: Option<String>,      // dalle-3 | flux-schnell | flux-pro
+    size: Option<String>,       // 1024x1024 | 1792x1024 | 1024x1792
+    quality: Option<String>,    // standard | hd
+    n: Option<u32>,             // 1-4
+}
+
+#[derive(Debug, Deserialize)]
+struct MediaVideoRequest {
+    prompt: String,
+    duration: Option<u32>,      // 5 | 10 seconds
+    model: Option<String>,      // kling | runway | sora
+    mode: Option<String>,       // standard | pro
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct MediaVideoResponse {
+    video_id: String,
+    status: String,             // queued | processing | completed | failed
+    url: Option<String>,
+    thumbnail_url: Option<String>,
+    estimated_time: Option<u32>,
+    credits_used: Option<i64>,
+    created_at: Option<String>,
+}
+
 /// Cached Polly client (reuse across requests for speed)
 #[cfg(feature = "dynamodb-backend")]
 static POLLY_CLIENT: once_cell::sync::OnceCell<aws_sdk_polly::Client> = once_cell::sync::OnceCell::new();
@@ -14198,6 +14606,115 @@ async fn try_replicate_qwen3_tts(text: &str, voice: &str, language: &str) -> Res
         .to_vec();
 
     tracing::info!("Replicate Qwen3-TTS success: {} bytes, voice={}, lang={}", audio_bytes.len(), voice, language);
+    Ok(audio_bytes)
+}
+
+/// Replicate CosyVoice2 — voice cloning via Replicate API
+/// Uses chenxwh/cosyvoice2-0.5b model for zero-shot voice cloning
+async fn try_replicate_cosyvoice_clone(tts_text: &str, prompt_text: &str, audio_base64: &str) -> Result<Vec<u8>, String> {
+    let api_token = std::env::var("REPLICATE_API_TOKEN")
+        .map_err(|_| "No REPLICATE_API_TOKEN".to_string())?;
+    if api_token.is_empty() {
+        return Err("Empty REPLICATE_API_TOKEN".to_string());
+    }
+
+    // Convert raw base64 to data URI for Replicate
+    let prompt_audio = if audio_base64.starts_with("data:") {
+        audio_base64.to_string()
+    } else {
+        format!("data:audio/wav;base64,{}", audio_base64)
+    };
+
+    let client = reqwest::Client::new();
+
+    // Create prediction via Models API
+    let prediction_resp = client
+        .post("https://api.replicate.com/v1/models/chenxwh/cosyvoice2-0.5b/predictions")
+        .header("Authorization", format!("Bearer {}", api_token))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "input": {
+                "tts_text": tts_text,
+                "prompt_text": prompt_text,
+                "prompt_audio": prompt_audio
+            }
+        }))
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+        .map_err(|e| format!("Replicate CosyVoice2 request failed: {}", e))?;
+
+    let status = prediction_resp.status();
+    if !status.is_success() {
+        let body = prediction_resp.text().await.unwrap_or_default();
+        return Err(format!("Replicate CosyVoice2 API error: {} {}", status, body));
+    }
+
+    let prediction: serde_json::Value = prediction_resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse CosyVoice2 prediction response: {}", e))?;
+
+    let prediction_id = prediction["id"]
+        .as_str()
+        .ok_or("No prediction ID in CosyVoice2 response")?;
+
+    // Poll for completion (max 60 seconds for GPU cold start)
+    let start = std::time::Instant::now();
+    let mut audio_url: Option<String> = None;
+
+    while start.elapsed().as_secs() < 60 {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let status_resp = client
+            .get(&format!("https://api.replicate.com/v1/predictions/{}", prediction_id))
+            .header("Authorization", format!("Bearer {}", api_token))
+            .send()
+            .await
+            .map_err(|e| format!("CosyVoice2 status check failed: {}", e))?;
+
+        let status_data: serde_json::Value = status_resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse CosyVoice2 status: {}", e))?;
+
+        let status_str = status_data["status"].as_str().unwrap_or("");
+
+        match status_str {
+            "succeeded" => {
+                audio_url = status_data["output"]
+                    .as_str()
+                    .map(|s| s.to_string());
+                break;
+            }
+            "failed" | "canceled" => {
+                let error = status_data["error"].as_str().unwrap_or("Unknown error");
+                return Err(format!("CosyVoice2 prediction failed: {}", error));
+            }
+            _ => continue, // "starting" or "processing"
+        }
+    }
+
+    let url = audio_url.ok_or("Timeout waiting for CosyVoice2 voice clone")?;
+
+    // Download audio
+    let audio_resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("CosyVoice2 audio download failed: {}", e))?;
+
+    if !audio_resp.status().is_success() {
+        return Err(format!("CosyVoice2 audio download error: {}", audio_resp.status()));
+    }
+
+    let audio_bytes = audio_resp
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read CosyVoice2 audio: {}", e))?
+        .to_vec();
+
+    tracing::info!("Replicate CosyVoice2 voice clone success: {} bytes", audio_bytes.len());
     Ok(audio_bytes)
 }
 
@@ -14788,141 +15305,495 @@ async fn handle_voice_clone(
     _headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    let api_key = std::env::var("RUNPOD_API_KEY").unwrap_or_default();
-    let endpoint_id = std::env::var("RUNPOD_COSYVOICE_ENDPOINT_ID").unwrap_or_default();
-
-    // Fallback: if no CosyVoice endpoint, use ElevenLabs voice design or return error
-    if api_key.is_empty() || endpoint_id.is_empty() {
-        // Try to use the audio with a default high-quality voice instead
-        let body_json: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
-        let text = body_json.get("text").and_then(|v| v.as_str()).unwrap_or("こんにちは、これが私の声です。");
-        let voice = body_json.get("voice").and_then(|v| v.as_str()).unwrap_or("nova");
-
-        // Use OpenAI TTS as fallback demo
-        match try_openai_tts(text, voice, 1.0, Some("自然な日本語で、温かく親しみやすいトーンで話してください。")).await {
-            Ok(bytes) => {
-                return (
-                    StatusCode::OK,
-                    [
-                        (axum::http::header::CONTENT_TYPE, "audio/mpeg"),
-                        (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
-                    ],
-                    bytes,
-                );
-            }
-            Err(e) => {
-                return (
-                    StatusCode::BAD_GATEWAY,
-                    [
-                        (axum::http::header::CONTENT_TYPE, "application/json"),
-                        (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
-                    ],
-                    format!("{{\"error\": \"Voice clone unavailable: {}\"}}", e).into_bytes(),
-                );
-            }
-        }
-    }
-
     // Parse JSON body
     let body_json: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
     let audio_b64 = body_json.get("audio_base64").and_then(|v| v.as_str()).unwrap_or("");
     let text = body_json.get("text").and_then(|v| v.as_str()).unwrap_or("こんにちは、これが私の声です。どう？似てる？");
     let prompt_text = body_json.get("prompt_text").and_then(|v| v.as_str()).unwrap_or("");
     let mode = body_json.get("mode").and_then(|v| v.as_str()).unwrap_or("zero_shot");
+    let voice = body_json.get("voice").and_then(|v| v.as_str()).unwrap_or("nova");
 
-    if audio_b64.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            [
-                (axum::http::header::CONTENT_TYPE, "application/json"),
-                (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
-            ],
-            b"{\"error\": \"audio_base64 is required\"}".to_vec(),
-        );
-    }
+    // For actual voice cloning (Replicate / RunPod), audio_base64 is required
+    let has_audio = !audio_b64.is_empty();
 
-    // Call CosyVoice via RunPod
-    let url = format!("https://api.runpod.ai/v2/{}/runsync", endpoint_id);
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .json(&serde_json::json!({
-            "input": {
-                "text": text,
-                "mode": mode,
-                "prompt_text": prompt_text,
-                "prompt_audio": audio_b64,
-                "format": "mp3"
-            }
-        }))
-        .timeout(std::time::Duration::from_secs(120))
-        .send()
-        .await;
-
-    match resp {
-        Ok(r) if r.status().is_success() => {
-            let resp_body: serde_json::Value = r.json().await.unwrap_or_default();
-            let out_b64 = resp_body.get("output")
-                .and_then(|o| o.get("audio_base64").and_then(|v| v.as_str())
-                    .or_else(|| o.as_str()))
-                .unwrap_or("");
-
-            if out_b64.is_empty() {
-                return (
-                    StatusCode::BAD_GATEWAY,
-                    [
-                        (axum::http::header::CONTENT_TYPE, "application/json"),
-                        (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
-                    ],
-                    format!("{{\"error\": \"No audio in response: {}\"}}", resp_body).into_bytes(),
-                );
-            }
-
-            use base64::Engine as _;
-            match base64::engine::general_purpose::STANDARD.decode(out_b64) {
+    // --- Fallback chain ---
+    // 1. Replicate CosyVoice2 (if REPLICATE_API_TOKEN set and audio provided)
+    if has_audio {
+        if std::env::var("REPLICATE_API_TOKEN").unwrap_or_default().len() > 0 {
+            match try_replicate_cosyvoice_clone(text, prompt_text, audio_b64).await {
                 Ok(audio) => {
-                    tracing::info!("Voice clone success: {} bytes", audio.len());
-                    (
+                    return (
                         StatusCode::OK,
                         [
-                            (axum::http::header::CONTENT_TYPE, "audio/mpeg"),
+                            (axum::http::header::CONTENT_TYPE, "audio/wav"),
                             (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
                         ],
                         audio,
-                    )
+                    );
                 }
-                Err(e) => (
-                    StatusCode::BAD_GATEWAY,
-                    [
-                        (axum::http::header::CONTENT_TYPE, "application/json"),
-                        (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
-                    ],
-                    format!("{{\"error\": \"Base64 decode failed: {}\"}}", e).into_bytes(),
-                ),
+                Err(e) => {
+                    tracing::warn!("Replicate CosyVoice2 failed, trying next: {}", e);
+                }
             }
         }
-        Ok(r) => {
-            let status = r.status();
-            let text = r.text().await.unwrap_or_default();
+
+        // 2. RunPod CosyVoice (if RUNPOD_API_KEY + RUNPOD_COSYVOICE_ENDPOINT_ID set)
+        let runpod_api_key = std::env::var("RUNPOD_API_KEY").unwrap_or_default();
+        let runpod_endpoint = std::env::var("RUNPOD_COSYVOICE_ENDPOINT_ID").unwrap_or_default();
+        if !runpod_api_key.is_empty() && !runpod_endpoint.is_empty() {
+            let url = format!("https://api.runpod.ai/v2/{}/runsync", runpod_endpoint);
+            let client = reqwest::Client::new();
+            let resp = client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", runpod_api_key))
+                .json(&serde_json::json!({
+                    "input": {
+                        "text": text,
+                        "mode": mode,
+                        "prompt_text": prompt_text,
+                        "prompt_audio": audio_b64,
+                        "format": "mp3"
+                    }
+                }))
+                .timeout(std::time::Duration::from_secs(120))
+                .send()
+                .await;
+
+            match resp {
+                Ok(r) if r.status().is_success() => {
+                    let resp_body: serde_json::Value = r.json().await.unwrap_or_default();
+                    let out_b64 = resp_body.get("output")
+                        .and_then(|o| o.get("audio_base64").and_then(|v| v.as_str())
+                            .or_else(|| o.as_str()))
+                        .unwrap_or("");
+
+                    if !out_b64.is_empty() {
+                        use base64::Engine as _;
+                        if let Ok(audio) = base64::engine::general_purpose::STANDARD.decode(out_b64) {
+                            tracing::info!("RunPod voice clone success: {} bytes", audio.len());
+                            return (
+                                StatusCode::OK,
+                                [
+                                    (axum::http::header::CONTENT_TYPE, "audio/mpeg"),
+                                    (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+                                ],
+                                audio,
+                            );
+                        }
+                    }
+                    tracing::warn!("RunPod CosyVoice returned empty/invalid audio, trying fallback");
+                }
+                Ok(r) => {
+                    let status = r.status();
+                    let body_text = r.text().await.unwrap_or_default();
+                    tracing::warn!("RunPod CosyVoice error: {} {}, trying fallback", status, body_text);
+                }
+                Err(e) => {
+                    tracing::warn!("RunPod CosyVoice request failed: {}, trying fallback", e);
+                }
+            }
+        }
+    }
+
+    // 3. OpenAI TTS fallback (demo — no actual voice cloning)
+    match try_openai_tts(text, voice, 1.0, Some("自然な日本語で、温かく親しみやすいトーンで話してください。")).await {
+        Ok(bytes) => {
+            (
+                StatusCode::OK,
+                [
+                    (axum::http::header::CONTENT_TYPE, "audio/mpeg"),
+                    (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+                ],
+                bytes,
+            )
+        }
+        Err(e) => {
             (
                 StatusCode::BAD_GATEWAY,
                 [
                     (axum::http::header::CONTENT_TYPE, "application/json"),
                     (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
                 ],
-                format!("{{\"error\": \"CosyVoice error: {} {}\"}}", status, text).into_bytes(),
+                format!("{{\"error\": \"Voice clone unavailable: {}\"}}", e).into_bytes(),
             )
         }
-        Err(e) => (
-            StatusCode::BAD_GATEWAY,
-            [
-                (axum::http::header::CONTENT_TYPE, "application/json"),
-                (axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
-            ],
-            format!("{{\"error\": \"RunPod request failed: {}\"}}", e).into_bytes(),
-        ),
     }
+}
+
+// ─── Media API — Unified multimodal generation endpoints ───
+
+/// POST /api/v1/media/tts — Text-to-speech (wrapper for existing TTS)
+async fn handle_media_tts(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<MediaTtsRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Convert MediaTtsRequest to SpeechRequest and call existing handler
+    let speech_req = SpeechRequest {
+        text: req.text,
+        voice: req.voice.unwrap_or_else(|| "nova".to_string()),
+        speed: req.speed.map(|s| s as f64).unwrap_or(1.0),
+        engine: req.engine,
+        instructions: None,
+        voice_id: None,
+        model_id: None,
+        style: None,
+        reference_audio: None,
+        session_id: None,
+    };
+
+    // Call existing TTS handler
+    let response = handle_speech_synthesize(State(state), headers, Json(speech_req)).await;
+    Ok(response)
+}
+
+/// POST /api/v1/media/stt — Speech-to-text (not yet implemented, placeholder)
+async fn handle_media_stt(
+    State(_state): State<Arc<AppState>>,
+    _headers: axum::http::HeaderMap,
+    _body: axum::body::Bytes,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // TODO: Implement STT using Whisper API
+    Err((
+        StatusCode::NOT_IMPLEMENTED,
+        "STT endpoint not yet implemented".to_string(),
+    ))
+}
+
+/// POST /api/v1/media/image — Image generation
+async fn handle_media_image(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<MediaImageRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // 1. Authenticate
+    let user_id = auth_user_id(&state, &headers).await
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Authentication required".to_string()))?;
+
+    // 2. Calculate credits based on model and quality
+    let model = req.model.as_deref().unwrap_or("dalle-3");
+    let quality = req.quality.as_deref().unwrap_or("standard");
+    let credits_to_use = match (model, quality) {
+        ("dalle-3", "hd") => 20,
+        ("dalle-3", _) => 10,
+        ("flux-pro", _) => 15,
+        _ => 5, // flux-schnell or default
+    };
+
+    // 3. Deduct credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            deduct_credits(dynamo, table, &user_id, credits_to_use).await
+                .map_err(|e| (StatusCode::PAYMENT_REQUIRED, e))?;
+        }
+    }
+
+    // 4. Generate image using OpenAI API
+    let api_key = std::env::var("OPENAI_API_KEY")
+        .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "OPENAI_API_KEY not configured".to_string()))?;
+
+    let size = req.size.as_deref().unwrap_or("1024x1024");
+    let n = req.n.unwrap_or(1).min(4) as usize;
+
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "model": model,
+        "prompt": req.prompt,
+        "n": n,
+        "size": size,
+        "quality": quality,
+    });
+
+    let resp = client.post("https://api.openai.com/v1/images/generations")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(60))
+        .send()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("API request failed: {}", e)))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err((status, format!("Image API error: {}", text)));
+    }
+
+    let json: serde_json::Value = resp.json().await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse response: {}", e)))?;
+
+    // 5. Extract image URLs
+    let images: Vec<serde_json::Value> = json.pointer("/data")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|img| {
+            img.get("url").map(|url| serde_json::json!({"url": url}))
+        }).collect())
+        .unwrap_or_default();
+
+    // 6. Return response
+    Ok(Json(serde_json::json!({
+        "images": images,
+        "model": model,
+        "credits_used": credits_to_use,
+    })))
+}
+
+/// POST /api/v1/media/video — Video generation (async with polling)
+async fn handle_media_video(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<MediaVideoRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // 1. Authenticate
+    let user_id = auth_user_id(&state, &headers).await
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Authentication required".to_string()))?;
+
+    // 2. Calculate credits
+    let duration = req.duration.unwrap_or(5);
+    let mode = req.mode.as_deref().unwrap_or("standard");
+    let credits = match (duration, mode) {
+        (5, "pro") => 150,
+        (10, "pro") => 300,
+        (10, _) => 100,
+        _ => 50, // 5s standard
+    };
+
+    // 3. Deduct credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            deduct_credits(dynamo, table, &user_id, credits).await
+                .map_err(|e| (StatusCode::PAYMENT_REQUIRED, e))?;
+        }
+    }
+
+    // 4. Generate video ID
+    let video_id = uuid::Uuid::new_v4().to_string();
+
+    // 5. Store job in DynamoDB
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            create_video_job(
+                dynamo,
+                table,
+                &video_id,
+                &user_id,
+                &req.prompt,
+                "kling",
+                credits,
+            ).await?;
+        }
+    }
+
+    // 6. Start background polling task
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let dynamo_clone = state.dynamo_client.clone();
+        let table_clone = state.config_table.clone();
+        let video_id_clone = video_id.clone();
+        let prompt_clone = req.prompt.clone();
+        let duration_str = duration.to_string();
+        let mode_str = mode.to_string();
+
+        tokio::spawn(async move {
+            if let (Some(dynamo), Some(table)) = (dynamo_clone, table_clone) {
+                poll_kling_video(
+                    dynamo,
+                    table,
+                    video_id_clone,
+                    prompt_clone,
+                    duration_str,
+                    mode_str,
+                ).await;
+            }
+        });
+    }
+
+    // 7. Return 202 Accepted with job info
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(MediaVideoResponse {
+            video_id: video_id.clone(),
+            status: "queued".to_string(),
+            url: None,
+            thumbnail_url: None,
+            estimated_time: Some(120), // 2 minutes estimate
+            credits_used: Some(credits),
+            created_at: Some(chrono::Utc::now().to_rfc3339()),
+        })
+    ))
+}
+
+/// GET /api/v1/media/video/:id — Get video generation status
+async fn handle_media_video_status(
+    State(state): State<Arc<AppState>>,
+    _headers: axum::http::HeaderMap,
+    axum::extract::Path(video_id): axum::extract::Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Fetch job from DynamoDB
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if let Some(job) = get_video_job(dynamo, table, &video_id).await {
+                return Ok(Json(job));
+            }
+        }
+    }
+
+    Err((StatusCode::NOT_FOUND, "Video job not found".to_string()))
+}
+
+/// Background task to poll Kling API for video generation completion
+#[cfg(feature = "dynamodb-backend")]
+async fn poll_kling_video(
+    dynamo: aws_sdk_dynamodb::Client,
+    table: String,
+    video_id: String,
+    prompt: String,
+    duration: String,
+    mode: String,
+) {
+    let api_key = match std::env::var("KLING_API_KEY") {
+        Ok(k) if !k.is_empty() => k,
+        _ => {
+            tracing::error!("KLING_API_KEY not configured, cannot poll video");
+            let _ = update_video_job(&dynamo, &table, &video_id, "failed", None, None).await;
+            return;
+        }
+    };
+
+    let api_base = std::env::var("KLING_API_BASE")
+        .unwrap_or_else(|_| "https://api.klingai.com".to_string());
+
+    let client = reqwest::Client::new();
+
+    // First, submit the video generation request
+    let body = serde_json::json!({
+        "prompt": prompt,
+        "duration": duration,
+        "mode": mode,
+        "aspect_ratio": "16:9",
+    });
+
+    let submit_resp = match client.post(format!("{}/v1/videos/text2video", api_base))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("Failed to submit video generation: {}", e);
+            let _ = update_video_job(&dynamo, &table, &video_id, "failed", None, None).await;
+            return;
+        }
+    };
+
+    if !submit_resp.status().is_success() {
+        let text = submit_resp.text().await.unwrap_or_default();
+        tracing::error!("Video submission failed: {}", text);
+        let _ = update_video_job(&dynamo, &table, &video_id, "failed", None, None).await;
+        return;
+    }
+
+    let submit_json: serde_json::Value = match submit_resp.json().await {
+        Ok(j) => j,
+        Err(e) => {
+            tracing::error!("Failed to parse submission response: {}", e);
+            let _ = update_video_job(&dynamo, &table, &video_id, "failed", None, None).await;
+            return;
+        }
+    };
+
+    let task_id = match submit_json.pointer("/data/task_id")
+        .and_then(|v| v.as_str())
+        .or_else(|| submit_json.get("task_id").and_then(|v| v.as_str()))
+    {
+        Some(id) => id.to_string(),
+        None => {
+            tracing::error!("No task_id in response: {}", submit_json);
+            let _ = update_video_job(&dynamo, &table, &video_id, "failed", None, None).await;
+            return;
+        }
+    };
+
+    tracing::info!("Video generation submitted: task_id={}", task_id);
+    let _ = update_video_job(&dynamo, &table, &video_id, "processing", None, None).await;
+
+    // Poll for completion (max 5 minutes, 30 attempts x 10 seconds)
+    for attempt in 1..=30 {
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+
+        let poll_resp = match client.get(format!("{}/v1/videos/text2video/{}", api_base, task_id))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("Video poll attempt {} failed: {}", attempt, e);
+                continue;
+            }
+        };
+
+        if !poll_resp.status().is_success() {
+            tracing::warn!("Video poll attempt {} returned {}", attempt, poll_resp.status());
+            continue;
+        }
+
+        let poll_json: serde_json::Value = match poll_resp.json().await {
+            Ok(j) => j,
+            Err(e) => {
+                tracing::warn!("Video poll parse error (attempt {}): {}", attempt, e);
+                continue;
+            }
+        };
+
+        let status = poll_json.pointer("/data/task_status")
+            .or_else(|| poll_json.get("status"))
+            .and_then(|s| s.as_str())
+            .unwrap_or("unknown");
+
+        tracing::debug!("Video poll attempt {}: status={}", attempt, status);
+
+        // Check for completion
+        if status == "succeed" || status == "completed" {
+            // Extract video URL
+            let video_url = poll_json.pointer("/data/task_result/videos/0/url")
+                .or_else(|| poll_json.pointer("/data/works/0/resource/resource"))
+                .or_else(|| poll_json.pointer("/data/url"))
+                .and_then(|u| u.as_str());
+
+            let thumbnail = poll_json.pointer("/data/task_result/videos/0/cover_image_url")
+                .or_else(|| poll_json.pointer("/data/works/0/cover_image_url"))
+                .and_then(|t| t.as_str());
+
+            if let Some(url) = video_url {
+                tracing::info!("Video generation completed: video_id={}, url={}", video_id, url);
+                let _ = update_video_job(&dynamo, &table, &video_id, "completed", Some(url), thumbnail).await;
+                return;
+            } else {
+                tracing::error!("Video completed but no URL found: {}", poll_json);
+                let _ = update_video_job(&dynamo, &table, &video_id, "failed", None, None).await;
+                return;
+            }
+        }
+
+        // Check for failure
+        if status == "failed" {
+            tracing::error!("Video generation failed: {}", poll_json);
+            let _ = update_video_job(&dynamo, &table, &video_id, "failed", None, None).await;
+            return;
+        }
+    }
+
+    // Timeout after 5 minutes
+    tracing::error!("Video generation timed out after 5 minutes: task_id={}", task_id);
+    let _ = update_video_job(&dynamo, &table, &video_id, "failed", None, None).await;
 }
 
 // ─── OpenAI-Compatible TTS API (/v1/audio/speech) ───
@@ -16348,6 +17219,118 @@ async fn handle_feedback(
     }
 
     let _ = &state; // suppress unused warning in non-dynamo builds
+
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+/// GET /api/v1/version — Return version and git hash.
+async fn handle_version() -> impl IntoResponse {
+    Json(serde_json::json!({
+        "version": crate::VERSION,
+        "hash": crate::GIT_HASH,
+    }))
+}
+
+/// POST /api/v1/bug-report — Save bug report to DynamoDB (fire-and-forget).
+async fn handle_bug_report(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<BugReportRequest>,
+) -> impl IntoResponse {
+    // Validate category
+    let valid_categories = ["ui", "voice", "connection", "chat", "other"];
+    if !valid_categories.contains(&req.category.as_str()) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "ok": false, "error": "category must be one of: ui, voice, connection, chat, other"
+        }))).into_response();
+    }
+
+    // Validate description
+    if req.description.is_empty() || req.description.len() > 4096 {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "ok": false, "error": "description is required (max 4096 characters)"
+        }))).into_response();
+    }
+
+    // Validate screenshot_data size (300KB base64 limit)
+    if let Some(ref data) = req.screenshot_data {
+        if data.len() > 300 * 1024 {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "ok": false, "error": "screenshot_data must be under 300KB"
+            }))).into_response();
+        }
+    }
+
+    let user_id = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|t| t.to_string())
+        .unwrap_or_default();
+
+    let session_id = headers.get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("anonymous")
+        .to_string();
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(config_table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let dynamo = dynamo.clone();
+            let config_table = config_table.to_string();
+            let category = req.category.clone();
+            let description = req.description.clone();
+            let screenshot_data = req.screenshot_data.clone();
+            let js_errors = req.js_errors.clone();
+            let user_agent = req.user_agent.clone().unwrap_or_default();
+            let screen = req.screen.clone().unwrap_or_default();
+            let url = req.url.clone().unwrap_or_default();
+            let version = req.version.clone().unwrap_or_default();
+            let hash = req.hash.clone().unwrap_or_default();
+            let session_id_c = session_id.clone();
+            let user_id_c = user_id.clone();
+
+            // Fire-and-forget: write bug report record
+            tokio::spawn(async move {
+                let now = chrono::Utc::now();
+                let date = now.format("%Y-%m-%d").to_string();
+                let ts = now.timestamp_millis().to_string();
+                let uuid_prefix = &uuid::Uuid::new_v4().to_string()[..6];
+                let sk = format!("{}#{}", ts, uuid_prefix);
+                let ttl = (now.timestamp() + 180 * 24 * 3600).to_string();
+
+                let mut put = dynamo
+                    .put_item()
+                    .table_name(&config_table)
+                    .item("pk", AttributeValue::S(format!("BUGREPORT#{}", date)))
+                    .item("sk", AttributeValue::S(sk))
+                    .item("category", AttributeValue::S(category))
+                    .item("description", AttributeValue::S(description))
+                    .item("user_agent", AttributeValue::S(user_agent))
+                    .item("screen", AttributeValue::S(screen))
+                    .item("url", AttributeValue::S(url))
+                    .item("version", AttributeValue::S(version))
+                    .item("hash", AttributeValue::S(hash))
+                    .item("session_id", AttributeValue::S(session_id_c))
+                    .item("user_id", AttributeValue::S(user_id_c))
+                    .item("timestamp", AttributeValue::S(now.to_rfc3339()))
+                    .item("ttl", AttributeValue::N(ttl));
+
+                if let Some(screenshot) = screenshot_data {
+                    put = put.item("screenshot_data", AttributeValue::S(screenshot));
+                }
+
+                if !js_errors.is_empty() {
+                    put = put.item("js_errors", AttributeValue::L(
+                        js_errors.into_iter().map(AttributeValue::S).collect()
+                    ));
+                }
+
+                let _ = put.send().await;
+            });
+        }
+    }
+
+    let _ = &state;
 
     Json(serde_json::json!({ "ok": true })).into_response()
 }
