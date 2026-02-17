@@ -1,15 +1,23 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::memory::backend::MemoryBackend;
 use crate::memory::MemoryStore;
 use crate::skills::SkillsLoader;
 use crate::types::Message;
 
+#[cfg(feature = "dynamodb-backend")]
+use crate::agent::personality::PersonalityBackend;
+
 /// Builds the context (system prompt + messages) for the agent.
 pub struct ContextBuilder {
     workspace: PathBuf,
     memory: Box<dyn MemoryBackend>,
     skills: SkillsLoader,
+    #[cfg(feature = "dynamodb-backend")]
+    personality_backend: Option<Arc<dyn PersonalityBackend>>,
+    #[cfg(feature = "dynamodb-backend")]
+    user_id: Option<String>,
 }
 
 const BOOTSTRAP_FILES: &[&str] = &["AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md"];
@@ -20,6 +28,10 @@ impl ContextBuilder {
             workspace: workspace.to_path_buf(),
             memory: Box::new(MemoryStore::new(workspace)),
             skills: SkillsLoader::new(workspace, None),
+            #[cfg(feature = "dynamodb-backend")]
+            personality_backend: None,
+            #[cfg(feature = "dynamodb-backend")]
+            user_id: None,
         }
     }
 
@@ -29,10 +41,26 @@ impl ContextBuilder {
             workspace: workspace.to_path_buf(),
             memory,
             skills: SkillsLoader::new(workspace, None),
+            #[cfg(feature = "dynamodb-backend")]
+            personality_backend: None,
+            #[cfg(feature = "dynamodb-backend")]
+            user_id: None,
         }
     }
 
-    /// Build the system prompt from bootstrap files, memory, and skills.
+    /// Set personality backend and user ID for behavioral learning
+    #[cfg(feature = "dynamodb-backend")]
+    pub fn with_personality(
+        mut self,
+        backend: Arc<dyn PersonalityBackend>,
+        user_id: String,
+    ) -> Self {
+        self.personality_backend = Some(backend);
+        self.user_id = Some(user_id);
+        self
+    }
+
+    /// Build the system prompt from bootstrap files, memory, personality, and skills.
     pub fn build_system_prompt(&self) -> String {
         let mut parts = Vec::new();
 
@@ -43,6 +71,24 @@ impl ContextBuilder {
         let bootstrap = self.load_bootstrap_files();
         if !bootstrap.is_empty() {
             parts.push(bootstrap);
+        }
+
+        // Learned personality preferences (DynamoDB backend only)
+        #[cfg(feature = "dynamodb-backend")]
+        if let (Some(backend), Some(user_id)) = (&self.personality_backend, &self.user_id) {
+            // Fetch personality asynchronously (blocking in build context)
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                let backend_clone = backend.clone();
+                let user_id_clone = user_id.clone();
+                if let Ok(personality) = std::thread::scope(|_| {
+                    handle.block_on(backend_clone.get_personality(&user_id_clone))
+                }) {
+                    let personality_text = self.format_personality(&personality);
+                    if !personality_text.is_empty() {
+                        parts.push(personality_text);
+                    }
+                }
+            }
         }
 
         // Memory context
@@ -192,5 +238,34 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"#
         messages.push(Message::user(current_message));
 
         messages
+    }
+
+    /// Format personality sections for system prompt
+    #[cfg(feature = "dynamodb-backend")]
+    fn format_personality(&self, personality: &[crate::agent::personality::PersonalitySection]) -> String {
+        let mut lines = vec!["# Learned Preferences".to_string(), String::new()];
+
+        let mut has_confident_traits = false;
+        for section in personality {
+            // Only show traits with confidence >= 0.5
+            if section.confidence >= 0.5 {
+                has_confident_traits = true;
+                lines.push(format!(
+                    "- **{}**: {} (confidence: {:.0}%)",
+                    section.key,
+                    section.value,
+                    section.confidence * 100.0
+                ));
+            }
+        }
+
+        if !has_confident_traits {
+            return String::new();
+        }
+
+        lines.push(String::new());
+        lines.push("*These preferences were learned from your feedback. Adjust your behavior accordingly.*".to_string());
+
+        lines.join("\n")
     }
 }

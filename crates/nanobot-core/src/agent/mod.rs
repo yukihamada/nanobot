@@ -1,4 +1,5 @@
 pub mod context;
+pub mod personality;
 pub mod subagent;
 
 use serde_json::json;

@@ -1,7 +1,7 @@
 //! Integration tests for self-improvement system (/improve command)
 
-use nanobot_core::service::commands::{CommandContext, execute_command};
-use std::sync::Arc;
+// Note: These tests require a full HTTP server setup with mocked dependencies
+// For now, they serve as documentation of expected behavior
 
 #[tokio::test]
 #[cfg(feature = "dynamodb-backend")]

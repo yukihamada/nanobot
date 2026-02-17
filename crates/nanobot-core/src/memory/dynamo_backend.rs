@@ -156,3 +156,127 @@ impl MemoryBackend for DynamoMemoryBackend {
         parts.join("\n\n")
     }
 }
+
+// ---------------------------------------------------------------------------
+// PersonalityBackend implementation for DynamoDB
+// ---------------------------------------------------------------------------
+
+use crate::agent::personality::{PersonalityBackend, PersonalitySection, PersonalityDimension, analyze_feedback_context};
+
+#[async_trait::async_trait]
+impl PersonalityBackend for DynamoMemoryBackend {
+    async fn get_personality(&self, user_id: &str) -> Result<Vec<PersonalitySection>, Box<dyn std::error::Error + Send + Sync>> {
+        let pk = format!("PERSONALITY#{}", user_id);
+
+        let result = self.client
+            .query()
+            .table_name(&self.table_name)
+            .key_condition_expression("pk = :pk")
+            .expression_attribute_values(":pk", AttributeValue::S(pk))
+            .send()
+            .await?;
+
+        let mut sections = Vec::new();
+
+        if let Some(items) = result.items {
+            for item in items {
+                let sk = item.get("sk")
+                    .and_then(|v| v.as_s().ok())
+                    .ok_or("Missing sk")?;
+
+                let value = item.get("value")
+                    .and_then(|v| v.as_s().ok())
+                    .ok_or("Missing value")?
+                    .to_string();
+
+                let confidence = item.get("confidence")
+                    .and_then(|v| v.as_n().ok())
+                    .and_then(|n| n.parse::<f32>().ok())
+                    .unwrap_or(0.5);
+
+                let feedback_count = item.get("feedback_count")
+                    .and_then(|v| v.as_n().ok())
+                    .and_then(|n| n.parse::<i64>().ok())
+                    .unwrap_or(0);
+
+                let updated_at = item.get("updated_at")
+                    .and_then(|v| v.as_s().ok())
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .unwrap_or_else(chrono::Utc::now);
+
+                sections.push(PersonalitySection {
+                    key: sk.to_string(),
+                    value,
+                    confidence,
+                    last_updated: updated_at,
+                    feedback_count,
+                });
+            }
+        }
+
+        // If no personality exists, initialize with defaults
+        if sections.is_empty() {
+            for dimension in PersonalityDimension::all() {
+                sections.push(PersonalitySection::new(
+                    dimension.to_sk(),
+                    dimension.default_value().to_string(),
+                ));
+            }
+        }
+
+        Ok(sections)
+    }
+
+    async fn update_personality(&self, user_id: &str, section: PersonalitySection) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let pk = format!("PERSONALITY#{}", user_id);
+
+        self.client
+            .put_item()
+            .table_name(&self.table_name)
+            .item("pk", AttributeValue::S(pk))
+            .item("sk", AttributeValue::S(section.key))
+            .item("value", AttributeValue::S(section.value))
+            .item("confidence", AttributeValue::N(section.confidence.to_string()))
+            .item("feedback_count", AttributeValue::N(section.feedback_count.to_string()))
+            .item("updated_at", AttributeValue::S(section.last_updated.to_rfc3339()))
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    async fn learn_from_feedback(
+        &self,
+        user_id: &str,
+        rating: &str,
+        context: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Analyze feedback to determine which dimensions to adjust
+        let adjustments = analyze_feedback_context(context, rating);
+
+        if adjustments.is_empty() {
+            // No clear signal, nothing to learn
+            return Ok(());
+        }
+
+        // Get current personality
+        let mut sections = self.get_personality(user_id).await?;
+
+        // Apply adjustments
+        for (dimension, adjustment) in adjustments {
+            if let Some(section) = sections.iter_mut().find(|s| s.key == dimension.to_sk()) {
+                if adjustment > 0.0 {
+                    section.reinforce(adjustment);
+                } else {
+                    section.weaken(-adjustment);
+                }
+
+                // Update in database
+                self.update_personality(user_id, section.clone()).await?;
+            }
+        }
+
+        Ok(())
+    }
+}

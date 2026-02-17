@@ -163,9 +163,6 @@ pub(crate) const GITHUB_TOOL_NAMES: &[&str] = &[
     "github_create_pr",
 ];
 
-/// DynamoDB sort key constant — avoid per-request allocation.
-const SK_PROFILE: &str = "PROFILE";
-
 /// Pre-compiled URL regex for explore mode (avoid per-request regex compilation).
 static URL_REGEX: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r#"https?://[^\s<>"']+"#).unwrap());
@@ -12135,6 +12132,7 @@ async fn handle_get_settings(
             ai_nickname: None,
             user_nickname: None,
             onboarding_completed: None,
+            use_master_key_fallback: None,
         },
         "session_id": id,
     }))
@@ -12228,12 +12226,14 @@ async fn get_user_settings(
             let ai_nickname = item.get("ai_nickname").and_then(|v| v.as_s().ok()).cloned();
             let user_nickname = item.get("user_nickname").and_then(|v| v.as_s().ok()).cloned();
             let onboarding_completed = item.get("onboarding_completed").and_then(|v| v.as_bool().ok()).copied();
+            let use_master_key_fallback = item.get("use_master_key_fallback").and_then(|v| v.as_bool().ok()).copied();
             return UserSettings {
                 preferred_model, temperature, enabled_tools, custom_api_keys, language,
                 adult_mode, age_verified, top_p, frequency_penalty, presence_penalty,
                 custom_system_prompt, streaming_enabled, show_thinking, theme, ui_language,
                 font_size, send_method, tts_speed, show_token_info, show_timestamps, compact_mode,
                 preferred_voice, preferred_tts_provider, ai_nickname, user_nickname, onboarding_completed,
+                use_master_key_fallback,
             };
         }
     }
@@ -12269,6 +12269,7 @@ async fn get_user_settings(
         ai_nickname: None,
         user_nickname: None,
         onboarding_completed: None,
+        use_master_key_fallback: None,
     }
 }
 
