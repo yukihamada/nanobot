@@ -35,6 +35,7 @@ uuid = { version = "1", features = ["v4"] }
 hostname = "0.4"
 crossterm = "0.28"
 indicatif = "0.17"
+mimalloc = "0.1"
 
 # Production build optimized for AWS Graviton3 (ARM64 / Neoverse V1)
 # - Full LTO for maximum optimization

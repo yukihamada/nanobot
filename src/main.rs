@@ -2,6 +2,10 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use anyhow::Result;
+
+// Use mimalloc for better performance
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use clap::{Parser, Subcommand};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{self, ClearType};

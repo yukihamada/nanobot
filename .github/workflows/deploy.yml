@@ -129,6 +129,12 @@ jobs:
             --zip-file "fileb:///tmp/nanobot-lambda.zip" \
             --region $AWS_REGION
 
+          # Wait for Lambda to finish processing the update
+          echo "Waiting for Lambda update to complete..."
+          aws lambda wait function-updated \
+            --function-name nanobot \
+            --region $AWS_REGION
+
       # 新バージョン発行 → カナリア (10%)
       - name: Publish new version & canary 10%
         id: canary
