@@ -3073,12 +3073,8 @@ dependencies = [
 name = "nanobot-lambda"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "aws-config",
- "aws-sdk-dynamodb",
  "lambda_http",
  "nanobot-core",
- "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",

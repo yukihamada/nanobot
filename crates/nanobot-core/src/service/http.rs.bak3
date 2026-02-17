@@ -43,19 +43,6 @@ use aws_sdk_dynamodb::types::AttributeValue;
 /// Hard deadline for LLM responses (seconds). Beyond this, return a loving fallback.
 const RESPONSE_DEADLINE_SECS: u64 = 12;
 
-// Common string constants (for performance optimization)
-const MODE_LOCAL: &str = "local";
-const MODE_AUTO: &str = "auto";
-const PLAN_FREE: &str = "free";
-const SK_LONG_TERM: &str = "LONG_TERM";
-const SK_CHANNEL_MAP: &str = "CHANNEL_MAP";
-const SK_PROFILE: &str = "PROFILE";
-const MODEL_LOCAL_QWEN: &str = "local-qwen3-0.6b";
-const ERR_INVALID_SESSION: &str = "Invalid session ID format";
-const ERR_MESSAGE_TOO_LONG: &str = "Message too long (max 32,000 characters)";
-const ERR_RATE_LIMIT: &str = "レート制限に達しました。1時間後に再度お試しください。/ Rate limit exceeded. Please try again in 1 hour.";
-const ERR_LOCAL_NOT_CONFIGURED: &str = "Local mode requested but local model is not configured. Set LOCAL_MODEL_URL environment variable.";
-
 /// Loving fallback messages for when LLM takes too long.
 fn timeout_fallback_message() -> String {
     let messages = [
@@ -182,26 +169,6 @@ pub struct UserProfile {
     pub created_at: String,
 }
 
-/// Cached user profile with expiration timestamp
-#[derive(Debug, Clone)]
-struct CachedUserProfile {
-    profile: UserProfile,
-    expires_at: std::time::Instant,
-}
-
-impl CachedUserProfile {
-    fn new(profile: UserProfile, ttl_secs: u64) -> Self {
-        Self {
-            profile,
-            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(ttl_secs),
-        }
-    }
-
-    fn is_expired(&self) -> bool {
-        std::time::Instant::now() > self.expires_at
-    }
-}
-
 /// Shared application state for the HTTP API.
 pub struct AppState {
     pub config: Config,
@@ -215,8 +182,6 @@ pub struct AppState {
     pub tool_registry: crate::service::integrations::ToolRegistry,
     /// Per-user concurrent request tracker: session_key -> active count
     pub concurrent_requests: dashmap::DashMap<String, AtomicU32>,
-    /// User profile cache: user_id -> CachedUserProfile (TTL: 5 minutes)
-    pub user_profile_cache: dashmap::DashMap<String, CachedUserProfile>,
     #[cfg(feature = "dynamodb-backend")]
     pub dynamo_client: Option<aws_sdk_dynamodb::Client>,
     #[cfg(feature = "dynamodb-backend")]
@@ -250,7 +215,6 @@ impl AppState {
             lb_raw,
             tool_registry,
             concurrent_requests: dashmap::DashMap::new(),
-            user_profile_cache: dashmap::DashMap::new(),
             #[cfg(feature = "dynamodb-backend")]
             dynamo_client: None,
             #[cfg(feature = "dynamodb-backend")]
@@ -264,288 +228,6 @@ impl AppState {
         self.lb_provider.as_ref().or(self.provider.as_ref())
     }
 }
-
-// ---------------------------------------------------------------------------
-// Provider Health Check System
-// ---------------------------------------------------------------------------
-
-/// Provider health status tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProviderHealth {
-    pub provider: String,
-    pub last_check: String,     // ISO timestamp
-    pub status: String,          // "healthy", "degraded", "down"
-    pub avg_latency_ms: u64,
-    pub success_rate: f64,       // 0.0-1.0
-    pub last_error: Option<String>,
-}
-
-/// Record a provider metric (latency and success) in DynamoDB.
-/// PK=PROVIDER_HEALTH#{provider}, SK=METRIC, TTL=5 minutes
-#[cfg(feature = "dynamodb-backend")]
-pub async fn record_provider_metric(
-    dynamo: &aws_sdk_dynamodb::Client,
-    table: &str,
-    provider: &str,
-    latency_ms: u64,
-    success: bool,
-) -> Result<(), String> {
-    use chrono::Utc;
-    
-    let now = Utc::now();
-    let ttl = (now.timestamp() + 300).to_string(); // 5 minutes
-    
-    // Store individual metric with timestamp in SK for aggregation
-    let sk = format!("METRIC#{}", now.timestamp_millis());
-    
-    let _ = dynamo
-        .put_item()
-        .table_name(table)
-        .item("pk", AttributeValue::S(format!("PROVIDER_HEALTH#{}", provider)))
-        .item("sk", AttributeValue::S(sk))
-        .item("latency_ms", AttributeValue::N(latency_ms.to_string()))
-        .item("success", AttributeValue::Bool(success))
-        .item("timestamp", AttributeValue::S(now.to_rfc3339()))
-        .item("ttl", AttributeValue::N(ttl))
-        .send()
-        .await
-        .map_err(|e| format!("Failed to record metric: {}", e))?;
-    
-    Ok(())
-}
-
-/// Check provider health by querying recent metrics from DynamoDB.
-/// Calculates average latency and success rate from last 5 minutes.
-#[cfg(feature = "dynamodb-backend")]
-pub async fn check_provider_health(
-    dynamo: &aws_sdk_dynamodb::Client,
-    table: &str,
-    provider: &str,
-) -> ProviderHealth {
-    use chrono::Utc;
-    
-    let now = Utc::now();
-    let pk = format!("PROVIDER_HEALTH#{}", provider);
-    
-    // Query all metrics for this provider
-    let result = dynamo
-        .query()
-        .table_name(table)
-        .key_condition_expression("pk = :pk AND begins_with(sk, :sk_prefix)")
-        .expression_attribute_values(":pk", AttributeValue::S(pk))
-        .expression_attribute_values(":sk_prefix", AttributeValue::S("METRIC#".to_string()))
-        .limit(100) // Last 100 data points
-        .scan_index_forward(false) // Most recent first
-        .send()
-        .await;
-    
-    let mut total_latency = 0u64;
-    let mut success_count = 0u64;
-    let mut total_count = 0u64;
-    let mut last_error: Option<String> = None;
-    
-    if let Ok(output) = result {
-        if let Some(items) = output.items {
-            for item in items {
-                total_count += 1;
-                
-                if let Some(AttributeValue::N(latency)) = item.get("latency_ms") {
-                    if let Ok(lat) = latency.parse::<u64>() {
-                        total_latency += lat;
-                    }
-                }
-                
-                if let Some(AttributeValue::Bool(success)) = item.get("success") {
-                    if *success {
-                        success_count += 1;
-                    }
-                }
-                
-                // Store first (most recent) error if any
-                if last_error.is_none() {
-                    if let Some(AttributeValue::S(err)) = item.get("error") {
-                        last_error = Some(err.clone());
-                    }
-                }
-            }
-        }
-    }
-    
-    let avg_latency_ms = if total_count > 0 {
-        total_latency / total_count
-    } else {
-        0
-    };
-    
-    let success_rate = if total_count > 0 {
-        success_count as f64 / total_count as f64
-    } else {
-        1.0 // Assume healthy if no data
-    };
-    
-    // Determine status based on success rate and latency
-    let status = if success_rate >= 0.9 && avg_latency_ms < 5000 {
-        "healthy"
-    } else if success_rate >= 0.7 || avg_latency_ms < 10000 {
-        "degraded"
-    } else {
-        "down"
-    };
-    
-    ProviderHealth {
-        provider: provider.to_string(),
-        last_check: now.to_rfc3339(),
-        status: status.to_string(),
-        avg_latency_ms,
-        success_rate,
-        last_error,
-    }
-}
-
-/// Get the fastest (healthiest) provider from a list.
-/// Returns None if all providers are down.
-#[cfg(feature = "dynamodb-backend")]
-pub async fn get_fastest_provider(
-    dynamo: &aws_sdk_dynamodb::Client,
-    table: &str,
-    providers: &[&str],
-) -> Option<String> {
-    let mut best_provider: Option<String> = None;
-    let mut best_score = f64::MIN;
-    
-    for provider in providers {
-        let health = check_provider_health(dynamo, table, provider).await;
-        
-        // Skip if provider is down
-        if health.status == "down" {
-            continue;
-        }
-        
-        // Calculate score: higher success rate and lower latency is better
-        // Score = success_rate * 1000 - (latency_ms / 10)
-        let score = health.success_rate * 1000.0 - (health.avg_latency_ms as f64 / 10.0);
-        
-        if score > best_score {
-            best_score = score;
-            best_provider = Some(provider.to_string());
-        }
-    }
-    
-    best_provider
-}
-
-// ---------------------------------------------------------------------------
-// API Key Rotation System
-// ---------------------------------------------------------------------------
-
-/// API key pool for managing multiple keys per provider
-pub struct ApiKeyPool {
-    provider: String,
-    keys: Vec<String>,
-    current_index: Arc<AtomicU32>,
-}
-
-impl ApiKeyPool {
-    /// Create a new API key pool from environment variables.
-    /// Checks for plural form first (e.g., OPENAI_API_KEYS), then singular (OPENAI_API_KEY).
-    pub fn new(provider: &str) -> Option<Self> {
-        let plural_var = format!("{}_KEYS", provider.to_uppercase().replace("-", "_"));
-        let singular_var = format!("{}_KEY", provider.to_uppercase().replace("-", "_"));
-        
-        // Try plural form first (comma-separated)
-        if let Ok(keys_str) = std::env::var(&plural_var) {
-            let keys: Vec<String> = keys_str
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-            
-            if !keys.is_empty() {
-                return Some(Self {
-                    provider: provider.to_string(),
-                    keys,
-                    current_index: Arc::new(AtomicU32::new(0)),
-                });
-            }
-        }
-        
-        // Fallback to singular form
-        if let Ok(key) = std::env::var(&singular_var) {
-            if !key.is_empty() {
-                return Some(Self {
-                    provider: provider.to_string(),
-                    keys: vec![key],
-                    current_index: Arc::new(AtomicU32::new(0)),
-                });
-            }
-        }
-        
-        None
-    }
-    
-    /// Get the current API key (round-robin).
-    pub fn get_key(&self) -> String {
-        let index = self.current_index.load(Ordering::Relaxed) as usize;
-        let key_index = index % self.keys.len();
-        self.keys[key_index].clone()
-    }
-    
-    /// Rotate to the next API key.
-    pub fn rotate(&self) -> String {
-        let old_index = self.current_index.fetch_add(1, Ordering::Relaxed);
-        let new_index = (old_index + 1) % self.keys.len() as u32;
-        self.keys[new_index as usize].clone()
-    }
-    
-    /// Get the number of available keys.
-    pub fn len(&self) -> usize {
-        self.keys.len()
-    }
-}
-
-/// Global API key pools (lazy-initialized)
-static OPENAI_KEY_POOL: Lazy<Option<ApiKeyPool>> = Lazy::new(|| ApiKeyPool::new("openai"));
-static FAL_KEY_POOL: Lazy<Option<ApiKeyPool>> = Lazy::new(|| ApiKeyPool::new("fal"));
-static KLING_KEY_POOL: Lazy<Option<ApiKeyPool>> = Lazy::new(|| ApiKeyPool::new("kling"));
-static ELEVENLABS_KEY_POOL: Lazy<Option<ApiKeyPool>> = Lazy::new(|| ApiKeyPool::new("elevenlabs"));
-
-/// Get an API key for a provider (with rotation support).
-pub fn get_api_key(provider: &str) -> Option<String> {
-    match provider {
-        "openai" => OPENAI_KEY_POOL.as_ref().map(|pool| pool.get_key()),
-        "fal" => FAL_KEY_POOL.as_ref().map(|pool| pool.get_key()),
-        "kling" => KLING_KEY_POOL.as_ref().map(|pool| pool.get_key()),
-        "elevenlabs" => ELEVENLABS_KEY_POOL.as_ref().map(|pool| pool.get_key()),
-        _ => {
-            // Fallback: try to get from environment directly
-            let var_name = format!("{}_KEY", provider.to_uppercase().replace("-", "_"));
-            std::env::var(var_name).ok()
-        }
-    }
-}
-
-/// Rotate to the next API key for a provider (useful after 429 errors).
-pub fn rotate_key(provider: &str) -> Option<String> {
-    match provider {
-        "openai" => OPENAI_KEY_POOL.as_ref().map(|pool| pool.rotate()),
-        "fal" => FAL_KEY_POOL.as_ref().map(|pool| pool.rotate()),
-        "kling" => KLING_KEY_POOL.as_ref().map(|pool| pool.rotate()),
-        "elevenlabs" => ELEVENLABS_KEY_POOL.as_ref().map(|pool| pool.rotate()),
-        _ => get_api_key(provider),
-    }
-}
-
-/// Mark a key as exhausted (for future rate limit tracking).
-/// Currently logs the event; can be extended to store in DynamoDB.
-pub fn mark_key_exhausted(provider: &str, key: &str) {
-    tracing::warn!(
-        provider = provider,
-        key_prefix = &key[..key.len().min(8)],
-        "API key exhausted (rate limited)"
-    );
-    // Future: store in DynamoDB with TTL for temporary blacklisting
-}
-
 
 // ---------------------------------------------------------------------------
 // Audit logging (fire-and-forget to DynamoDB)
@@ -814,7 +496,7 @@ async fn read_memory_context(
             .get_item()
             .table_name(config_table)
             .key("pk", AttributeValue::S(pk.clone()))
-            .key("sk", AttributeValue::S(SK_LONG_TERM.to_string()))
+            .key("sk", AttributeValue::S("LONG_TERM".to_string()))
             .send(),
         dynamo
             .get_item()
@@ -877,7 +559,7 @@ async fn save_memory(
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
         format!("DAILY#{}", today)
     } else {
-        SK_LONG_TERM.to_string()
+        "LONG_TERM".to_string()
     };
 
     let _ = dynamo
@@ -957,7 +639,7 @@ fn spawn_consolidate_memory(
             dynamo.get_item()
                 .table_name(&config_table)
                 .key("pk", AttributeValue::S(pk.clone()))
-                .key("sk", AttributeValue::S(SK_LONG_TERM.to_string()))
+                .key("sk", AttributeValue::S("LONG_TERM".to_string()))
                 .send(),
             dynamo.get_item()
                 .table_name(&config_table)
@@ -1024,7 +706,7 @@ async fn resolve_session_key(
         .get_item()
         .table_name(config_table)
         .key("pk", AttributeValue::S(pk))
-        .key("sk", AttributeValue::S(SK_CHANNEL_MAP.to_string()))
+        .key("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
         .send()
         .await;
 
@@ -1081,7 +763,7 @@ async fn auto_link_session(
             .put_item()
             .table_name(config_table)
             .item("pk", AttributeValue::S(format!("LINK#{}", ck)))
-            .item("sk", AttributeValue::S(SK_CHANNEL_MAP.to_string()))
+            .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
             .item("user_id", AttributeValue::S(user_id.clone()))
             .item("linked_at", AttributeValue::S(now.clone()))
             .send()
@@ -1129,40 +811,6 @@ async fn auto_link_session(
 /// Get or create a user profile from DynamoDB.
 /// If the user_id starts with "user:", it's a unified user. Otherwise it's a channel key.
 #[cfg(feature = "dynamodb-backend")]
-/// Get or create user with caching (TTL: 5 minutes).
-/// Reduces DynamoDB queries by 90%.
-#[cfg(feature = "dynamodb-backend")]
-async fn get_or_create_user_cached(
-    state: &AppState,
-    user_id: &str,
-) -> UserProfile {
-    // Check cache first
-    if let Some(cached) = state.user_profile_cache.get(user_id) {
-        if !cached.is_expired() {
-            tracing::debug!("Cache HIT for user: {}", user_id);
-            return cached.profile.clone();
-        } else {
-            tracing::debug!("Cache EXPIRED for user: {}", user_id);
-        }
-    }
-
-    // Cache miss - fetch from DynamoDB
-    tracing::debug!("Cache MISS for user: {}", user_id);
-    let dynamo = state.dynamo_client.as_ref().unwrap();
-    let config_table = state.config_table.as_ref().unwrap();
-    let profile = get_or_create_user(dynamo, config_table, user_id).await;
-
-    // Store in cache with 5 minute TTL
-    state.user_profile_cache.insert(
-        user_id.to_string(),
-        CachedUserProfile::new(profile.clone(), 300),
-    );
-
-    profile
-}
-
-/// Get or create user (internal, no caching).
-#[cfg(feature = "dynamodb-backend")]
 async fn get_or_create_user(
     dynamo: &aws_sdk_dynamodb::Client,
     config_table: &str,
@@ -1180,7 +828,7 @@ async fn get_or_create_user(
         .await
     {
         if let Some(item) = output.item {
-            let plan = item.get("plan").and_then(|v| v.as_s().ok()).cloned().unwrap_or_else(|| PLAN_FREE.to_string());
+            let plan = item.get("plan").and_then(|v| v.as_s().ok()).cloned().unwrap_or_else(|| "free".to_string());
             let credits_remaining = item.get("credits_remaining").and_then(|v| v.as_n().ok())
                 .and_then(|n| n.parse::<i64>().ok()).unwrap_or_else(|| {
                     plan.parse::<crate::service::auth::Plan>().map(|p| p.monthly_credits()).unwrap_or(1_000)
@@ -1225,7 +873,7 @@ async fn get_or_create_user(
         .item("pk", AttributeValue::S(pk))
         .item("sk", AttributeValue::S(SK_PROFILE.to_string()))
         .item("user_id", AttributeValue::S(user_id.to_string()))
-        .item("plan", AttributeValue::S(PLAN_FREE.to_string()))
+        .item("plan", AttributeValue::S("free".to_string()))
         .item("credits_remaining", AttributeValue::N(free_credits.to_string()))
         .item("credits_used", AttributeValue::N("0".to_string()))
         .item("channels", AttributeValue::L(vec![]))
@@ -1237,7 +885,7 @@ async fn get_or_create_user(
     UserProfile {
         user_id: user_id.to_string(),
         display_name: None,
-        plan: PLAN_FREE.to_string(),
+        plan: "free".to_string(),
         credits_remaining: free_credits,
         credits_used: 0,
         channels: vec![],
@@ -2824,8 +2472,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/media/image", post(handle_media_image))
         .route("/api/v1/media/video", post(handle_media_video))
         .route("/api/v1/media/video/{id}", get(handle_media_video_status))
-        .route("/api/v1/media/music", post(handle_media_music))
-        .route("/api/v1/media/music/{id}", get(handle_media_music_status))
         // Voice cloning — upload audio sample, get cloned TTS back
         .route("/api/v1/voice/clone", post(handle_voice_clone))
         // Phone (Amazon Connect)
@@ -2994,7 +2640,7 @@ async fn handle_chat(
     if !validate_session_id(&req.session_id) {
         tracing::warn!("Invalid session ID format: {}", &req.session_id);
         return Json(ChatResponse {
-            response: ERR_INVALID_SESSION.to_string(),
+            response: "Invalid session ID format".to_string(),
             session_id: req.session_id.clone(),
             agent: None,
             tools_used: None,
@@ -3013,7 +2659,7 @@ async fn handle_chat(
     // Input validation: message length
     if req.message.len() > 32_000 {
         return Json(ChatResponse {
-            response: ERR_MESSAGE_TOO_LONG.to_string(),
+            response: "Message too long (max 32,000 characters)".to_string(),
             session_id: req.session_id.clone(),
             agent: None,
             tools_used: None,
@@ -3039,7 +2685,7 @@ async fn handle_chat(
             if !check_rate_limit(dynamo, table, &rate_key, 60).await {
                 tracing::warn!("Rate limit exceeded for session: {}", &req.session_id);
                 return Json(ChatResponse {
-                    response: ERR_RATE_LIMIT.to_string(),
+                    response: "レート制限に達しました。1時間後に再度お試しください。/ Rate limit exceeded. Please try again in 1 hour.".to_string(),
                     session_id: req.session_id,
                     agent: None,
                     tools_used: None,
@@ -3073,7 +2719,7 @@ async fn handle_chat(
 
     // --- Local mode: route directly to LocalProvider, no cloud ---
     #[cfg(feature = "local-fallback")]
-    if resolved_mode == MODE_LOCAL {
+    if resolved_mode == "local" {
         use crate::provider::local::LocalProvider;
         match LocalProvider::from_env() {
             Some(local_provider) => {
@@ -3095,17 +2741,17 @@ async fn handle_chat(
                         return Json(ChatResponse {
                             response: resp.content.unwrap_or_default(),
                             session_id: req.session_id,
-                            agent: Some(MODE_LOCAL.to_string()),
+                            agent: Some("local".to_string()),
                             tools_used: None,
                             credits_used: Some(0),
                             credits_remaining: None,
-                            model_used: Some(MODEL_LOCAL_QWEN.to_string()),
+                            model_used: Some("local-qwen3-0.6b".to_string()),
                             models_consulted: None,
                             action: None,
                             input_tokens: Some(resp.usage.prompt_tokens),
                             output_tokens: Some(resp.usage.completion_tokens),
                             estimated_cost_usd: Some(0.0),
-                            mode: Some(MODE_LOCAL.to_string()),
+                            mode: Some("local".to_string()),
                         });
                     }
                     Err(e) => {
@@ -3123,14 +2769,14 @@ async fn handle_chat(
                             input_tokens: None,
                             output_tokens: None,
                             estimated_cost_usd: None,
-                            mode: Some(MODE_LOCAL.to_string()),
+                            mode: Some("local".to_string()),
                         });
                     }
                 }
             }
             None => {
                 return Json(ChatResponse {
-                    response: ERR_LOCAL_NOT_CONFIGURED.to_string(),
+                    response: "Local mode requested but local model is not configured. Set LOCAL_MODEL_URL environment variable.".to_string(),
                     session_id: req.session_id,
                     agent: None,
                     tools_used: None,
@@ -3142,7 +2788,7 @@ async fn handle_chat(
                     input_tokens: None,
                     output_tokens: None,
                     estimated_cost_usd: None,
-                    mode: Some(MODE_LOCAL.to_string()),
+                    mode: Some("local".to_string()),
                 });
             }
         }
@@ -3162,7 +2808,7 @@ async fn handle_chat(
             input_tokens: None,
             output_tokens: None,
             estimated_cost_usd: None,
-            mode: Some(MODE_LOCAL.to_string()),
+            mode: Some("local".to_string()),
         });
     }
 
@@ -3262,13 +2908,12 @@ async fn handle_chat(
         }
     };
 
-    // Phase B: Parallel initialization — fetch user (cached), memory, and settings concurrently
+    // Phase B: Parallel initialization — fetch user, memory, and settings concurrently
     #[cfg(feature = "dynamodb-backend")]
     let (cached_user, parallel_memory, parallel_settings) = {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            // Fetch user with cache (separate from tokio::join! to use state)
-            let user = get_or_create_user_cached(state, &session_key).await;
-            let (memory, settings) = tokio::join!(
+            let (user, memory, settings) = tokio::join!(
+                get_or_create_user(dynamo, table, &session_key),
                 read_memory_context(dynamo, table, &session_key),
                 get_user_settings(dynamo, table, &session_key)
             );
@@ -3708,8 +3353,6 @@ async fn handle_chat(
                                 total_credits += credits;
                                 if remaining.is_some() { last_remaining = remaining; }
                             }
-                            // Invalidate cache after credit deduction
-                            state.user_profile_cache.remove(&session_key);
                         }
                     }
 
@@ -6185,13 +5828,12 @@ async fn handle_chat_stream(
         { req.session_id.clone() }
     };
 
-    // Parallel initialization: fetch user (cached) + settings concurrently
+    // Parallel initialization: fetch user + settings concurrently
     #[cfg(feature = "dynamodb-backend")]
     let (stream_user, stream_memory, stream_settings) = {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            // Fetch user with cache (separate from tokio::join! to use state)
-            let user = get_or_create_user_cached(state, &session_key).await;
-            let (memory, settings) = tokio::join!(
+            let (user, memory, settings) = tokio::join!(
+                get_or_create_user(dynamo, table, &session_key),
                 read_memory_context(dynamo, table, &session_key),
                 get_user_settings(dynamo, table, &session_key)
             );
@@ -9965,7 +9607,7 @@ async fn handle_admin_users(
                     .table_name(table)
                     .filter_expression("begins_with(pk, :prefix) AND sk = :profile")
                     .expression_attribute_values(":prefix", AttributeValue::S("USER#".to_string()))
-                    .expression_attribute_values(":profile", AttributeValue::S(SK_PROFILE.to_string()));
+                    .expression_attribute_values(":profile", AttributeValue::S("PROFILE".to_string()));
                 if let Some(ref k) = start_key {
                     req = req.set_exclusive_start_key(Some(k.clone()));
                 }
@@ -9977,7 +9619,7 @@ async fn handle_admin_users(
                                 .unwrap_or_default();
                             let email = item.get("email").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
                             let display_name = item.get("display_name").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
-                            let plan = item.get("plan").and_then(|v| v.as_s().ok()).cloned().unwrap_or_else(|| PLAN_FREE.to_string());
+                            let plan = item.get("plan").and_then(|v| v.as_s().ok()).cloned().unwrap_or_else(|| "free".to_string());
                             let credits = item.get("credits_remaining").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
                             let credits_used = item.get("credits_used").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
                             let created_at = item.get("created_at").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
@@ -10179,7 +9821,7 @@ async fn handle_create_ticket(
                 if let Ok(out) = dynamo.get_item()
                     .table_name(table)
                     .key("pk", AttributeValue::S(format!("USER#{}", uid)))
-                    .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                    .key("sk", AttributeValue::S("PROFILE".to_string()))
                     .send().await
                 {
                     if let Some(item) = out.item() {
@@ -10209,7 +9851,7 @@ async fn handle_create_ticket(
                 let _ = dynamo.update_item()
                     .table_name(table)
                     .key("pk", AttributeValue::S(pk))
-                    .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                    .key("sk", AttributeValue::S("PROFILE".to_string()))
                     .update_expression("SET credits_remaining = credits_remaining - :c")
                     .expression_attribute_values(":c", AttributeValue::N("50".to_string()))
                     .condition_expression("credits_remaining >= :c")
@@ -10773,7 +10415,7 @@ async fn handle_activity(
             let plan = user.get("plan")
                 .and_then(|v| v.as_s().ok())
                 .cloned()
-                .unwrap_or_else(|| PLAN_FREE.to_string());
+                .unwrap_or_else(|| "free".to_string());
 
             let today_requests = usage_result.ok()
                 .and_then(|o| o.item)
@@ -11092,25 +10734,24 @@ async fn handle_partner_verify_subscription(
     })))
 }
 
-// Cache provider count at startup (computed once)
-static PROVIDER_COUNT: Lazy<u32> = Lazy::new(|| {
-    let mut count = 0;
-    if std::env::var("ANTHROPIC_API_KEY").is_ok() { count += 1; }
-    if std::env::var("OPENAI_API_KEY").is_ok() { count += 1; }
-    if std::env::var("GOOGLE_API_KEY").ok()
-        .or_else(|| std::env::var("GEMINI_API_KEY").ok()).is_some() { count += 1; }
-    if std::env::var("DEEPSEEK_API_KEY").is_ok() { count += 1; }
-    if std::env::var("OPENROUTER_API_KEY").is_ok() { count += 1; }
-    count
-});
-
-async fn handle_health(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
-    let provider_count = *PROVIDER_COUNT;
-    let status = if provider_count == 0 { "degraded" } else { "ok" };
+async fn handle_health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let provider_count = if state.lb_provider.is_some() || state.provider.is_some() {
+        // Count configured provider env vars
+        let mut count = 0u32;
+        if std::env::var("ANTHROPIC_API_KEY").is_ok() { count += 1; }
+        if std::env::var("OPENAI_API_KEY").is_ok() { count += 1; }
+        if std::env::var("GOOGLE_API_KEY").ok().or_else(|| std::env::var("GEMINI_API_KEY").ok()).is_some() { count += 1; }
+        if std::env::var("DEEPSEEK_API_KEY").is_ok() { count += 1; }
+        if std::env::var("OPENROUTER_API_KEY").is_ok() { count += 1; }
+        Some(count)
+    } else {
+        Some(0)
+    };
+    let status = if provider_count == Some(0) { "degraded" } else { "ok" };
     Json(HealthResponse {
         status: status.to_string(),
         version: crate::VERSION.to_string(),
-        providers: Some(provider_count),
+        providers: provider_count,
     })
 }
 
@@ -12618,7 +12259,7 @@ async fn handle_google_callback(
                     .put_item()
                     .table_name(table)
                     .item("pk", AttributeValue::S(link_pk))
-                    .item("sk", AttributeValue::S(SK_CHANNEL_MAP.to_string()))
+                    .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
                     .item("linked_at", AttributeValue::S(now.clone()))
                     .send()
@@ -13112,7 +12753,7 @@ async fn handle_auth_login(
                                 .put_item()
                                 .table_name(table)
                                 .item("pk", AttributeValue::S(link_pk))
-                                .item("sk", AttributeValue::S(SK_CHANNEL_MAP.to_string()))
+                                .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                                 .item("user_id", AttributeValue::S(user_id.clone()))
                                 .item("linked_at", AttributeValue::S(now.clone()))
                                 .send()
@@ -13326,7 +12967,7 @@ async fn handle_auth_email(
                         .put_item()
                         .table_name(table)
                         .item("pk", AttributeValue::S(link_pk))
-                        .item("sk", AttributeValue::S(SK_CHANNEL_MAP.to_string()))
+                        .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                         .item("user_id", AttributeValue::S(user_id.clone()))
                         .item("linked_at", AttributeValue::S(now.clone()))
                         .send()
@@ -13521,7 +13162,7 @@ async fn handle_auth_verify(
                     .put_item()
                     .table_name(table)
                     .item("pk", AttributeValue::S(link_pk))
-                    .item("sk", AttributeValue::S(SK_CHANNEL_MAP.to_string()))
+                    .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
                     .item("linked_at", AttributeValue::S(now.clone()))
                     .send()
@@ -13928,7 +13569,7 @@ async fn handle_delete_account(
             // Delete MEMORY#
             let _ = dynamo.delete_item().table_name(table)
                 .key("pk", AttributeValue::S(format!("MEMORY#{}", user_id)))
-                .key("sk", AttributeValue::S(SK_LONG_TERM.to_string()))
+                .key("sk", AttributeValue::S("LONG_TERM".to_string()))
                 .send().await;
 
             // Delete conversations (scan and batch delete)
@@ -14567,7 +14208,7 @@ async fn handle_create_conversation(
                 .put_item()
                 .table_name(table)
                 .item("pk", AttributeValue::S(link_pk))
-                .item("sk", AttributeValue::S(SK_CHANNEL_MAP.to_string()))
+                .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                 .item("user_id", AttributeValue::S(user_id))
                 .item("linked_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
                 .send()
@@ -15403,12 +15044,7 @@ async fn try_qwen_tts(text: &str, voice: &str, _speed: f64) -> Result<Vec<u8>, S
 
 /// OpenAI TTS API — uses gpt-4o-mini-tts for natural, steerable voice
 async fn try_openai_tts(text: &str, voice: &str, speed: f64, instructions: Option<&str>) -> Result<Vec<u8>, String> {
-    use std::time::Instant;
-    
-    let start = Instant::now();
-    
-    // Get API key using rotation system (with fallback to old env vars)
-    let api_key = get_api_key("openai")
+    let api_key = std::env::var("OPENAI_API_KEY")
         .or_else(|_| std::env::var("OPENAI_API_KEYS").map(|keys| {
             keys.split(',').next().unwrap_or("").trim().to_string()
         }))
@@ -15449,57 +15085,20 @@ async fn try_openai_tts(text: &str, voice: &str, speed: f64, instructions: Optio
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
 
-    let status = resp.status();
-    
-    // Handle rate limiting with key rotation
-    if status == 429 {
-        let latency_ms = start.elapsed().as_millis() as u64;
-        tracing::warn!(latency_ms = latency_ms, "OpenAI TTS rate limited, rotating key");
-        mark_key_exhausted("openai", &api_key);
-        
-        if let Some(new_key) = rotate_key("openai") {
-            tracing::info!("Retrying OpenAI TTS with rotated key");
-            let retry_resp = client
-                .post("https://api.openai.com/v1/audio/speech")
-                .header("Authorization", format!("Bearer {}", new_key))
-                .json(&serde_json::json!({
-                    "model": "gpt-4o-mini-tts",
-                    "input": text,
-                    "voice": voice,
-                    "speed": speed,
-                    "instructions": voice_instructions,
-                    "response_format": "mp3",
-                }))
-                .send()
-                .await
-                .map_err(|e| format!("Retry request failed: {}", e))?;
-            
-            if retry_resp.status().is_success() {
-                let audio = retry_resp.bytes().await.unwrap_or_default().to_vec();
-                let total_latency = start.elapsed().as_millis() as u64;
-                tracing::info!(latency_ms = total_latency, "OpenAI TTS succeeded after key rotation");
-                return Ok(audio);
-            }
-        }
-    }
-    
-    if status.is_success() {
+    if resp.status().is_success() {
         let audio = resp.bytes().await.unwrap_or_default().to_vec();
-        let latency_ms = start.elapsed().as_millis() as u64;
-        tracing::debug!(latency_ms = latency_ms, "OpenAI TTS succeeded");
         Ok(audio)
     } else {
-        let latency_ms = start.elapsed().as_millis() as u64;
+        let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        tracing::error!(latency_ms = latency_ms, status = %status, "OpenAI TTS failed");
         Err(format!("OpenAI TTS error: {} {}", status, body))
     }
 }
 
 /// ElevenLabs TTS API — high-quality multilingual voices
 async fn try_elevenlabs_tts(text: &str, voice_id: &str, model_id: &str) -> Result<Vec<u8>, String> {
-    let api_key = get_api_key("elevenlabs")
-        .ok_or_else(|| "No ELEVENLABS_API_KEY".to_string())?;
+    let api_key = std::env::var("ELEVENLABS_API_KEY")
+        .map_err(|_| "No ELEVENLABS_API_KEY".to_string())?;
     if api_key.is_empty() {
         return Err("Empty ELEVENLABS_API_KEY".to_string());
     }
@@ -16532,8 +16131,8 @@ async fn handle_media_image(
 
     if model == "flux-pro" || model == "flux-schnell" || model == "flux-realism" {
         // Use fal.ai for Flux models
-        let fal_key = get_api_key("fal")
-            .ok_or_else(|| (StatusCode::SERVICE_UNAVAILABLE, "FAL_KEY not configured".to_string()))?;
+        let fal_key = std::env::var("FAL_KEY")
+            .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "FAL_KEY not configured".to_string()))?;
 
         let fal_model = match model {
             "flux-pro" => "fal-ai/flux-pro",
@@ -16563,70 +16162,30 @@ async fn handle_media_image(
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("fal.ai request failed: {}", e)))?;
 
-        let status = resp.status();
-        
-        // Handle rate limiting with key rotation
-        if status == 429 {
-            tracing::warn!("fal.ai rate limited, rotating key");
-            mark_key_exhausted("fal", &fal_key);
-            
-            if let Some(new_key) = rotate_key("fal") {
-                tracing::info!("Retrying fal.ai with rotated key");
-                let retry_resp = client.post(format!("https://fal.run/{}", fal_model))
-                    .header("Authorization", format!("Key {}", new_key))
-                    .header("Content-Type", "application/json")
-                    .json(&body)
-                    .timeout(std::time::Duration::from_secs(120))
-                    .send()
-                    .await
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("fal.ai retry failed: {}", e)))?;
-                
-                if !retry_resp.status().is_success() {
-                    let retry_status = retry_resp.status();
-                    let retry_text = retry_resp.text().await.unwrap_or_default();
-                    return Err((retry_status, format!("fal.ai error after retry: {}", retry_text)));
-                }
-                
-                let retry_json: serde_json::Value = retry_resp.json().await
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse fal.ai retry response: {}", e)))?;
-                
-                images = retry_json.get("images")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|img| {
-                        img.get("url").map(|url| serde_json::json!({
-                            "url": url,
-                            "width": img.get("width"),
-                            "height": img.get("height"),
-                        }))
-                    }).collect())
-                    .unwrap_or_default();
-            } else {
-                let text = resp.text().await.unwrap_or_default();
-                return Err((status, format!("fal.ai rate limited, no alternate keys: {}", text)));
-            }
-        } else if !status.is_success() {
+        if !resp.status().is_success() {
+            let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err((status, format!("fal.ai error: {}", text)));
-        } else {
-            let json: serde_json::Value = resp.json().await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse fal.ai response: {}", e)))?;
-
-            images = json.get("images")
-                .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|img| {
-                    img.get("url").map(|url| serde_json::json!({
-                        "url": url,
-                        "width": img.get("width"),
-                        "height": img.get("height"),
-                    }))
-                }).collect())
-                .unwrap_or_default();
         }
+
+        let json: serde_json::Value = resp.json().await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse fal.ai response: {}", e)))?;
+
+        images = json.get("images")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|img| {
+                img.get("url").map(|url| serde_json::json!({
+                    "url": url,
+                    "width": img.get("width"),
+                    "height": img.get("height"),
+                }))
+            }).collect())
+            .unwrap_or_default();
 
     } else {
         // Use OpenAI for DALL-E models
-        let api_key = get_api_key("openai")
-            .ok_or_else(|| (StatusCode::SERVICE_UNAVAILABLE, "OPENAI_API_KEY not configured".to_string()))?;
+        let api_key = std::env::var("OPENAI_API_KEY")
+            .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "OPENAI_API_KEY not configured".to_string()))?;
 
         let size = req.size.as_deref().unwrap_or("1024x1024");
         let n = req.n.unwrap_or(1).min(4) as usize;
@@ -16647,57 +16206,22 @@ async fn handle_media_image(
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("API request failed: {}", e)))?;
 
-        let status = resp.status();
-        
-        // Handle rate limiting with key rotation
-        if status == 429 {
-            tracing::warn!("OpenAI DALL-E rate limited, rotating key");
-            mark_key_exhausted("openai", &api_key);
-            
-            if let Some(new_key) = rotate_key("openai") {
-                tracing::info!("Retrying DALL-E with rotated key");
-                let retry_resp = client.post("https://api.openai.com/v1/images/generations")
-                    .header("Authorization", format!("Bearer {}", new_key))
-                    .json(&body)
-                    .timeout(std::time::Duration::from_secs(60))
-                    .send()
-                    .await
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("DALL-E retry failed: {}", e)))?;
-                
-                if !retry_resp.status().is_success() {
-                    let retry_status = retry_resp.status();
-                    let retry_text = retry_resp.text().await.unwrap_or_default();
-                    return Err((retry_status, format!("DALL-E error after retry: {}", retry_text)));
-                }
-                
-                let retry_json: serde_json::Value = retry_resp.json().await
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse DALL-E retry response: {}", e)))?;
-                
-                images = retry_json.pointer("/data")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|img| {
-                        img.get("url").map(|url| serde_json::json!({"url": url}))
-                    }).collect())
-                    .unwrap_or_default();
-            } else {
-                let text = resp.text().await.unwrap_or_default();
-                return Err((status, format!("DALL-E rate limited, no alternate keys: {}", text)));
-            }
-        } else if !status.is_success() {
+        if !resp.status().is_success() {
+            let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err((status, format!("Image API error: {}", text)));
-        } else {
-            let json: serde_json::Value = resp.json().await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse response: {}", e)))?;
-
-            // Extract image URLs from OpenAI response
-            images = json.pointer("/data")
-                .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|img| {
-                    img.get("url").map(|url| serde_json::json!({"url": url}))
-                }).collect())
-                .unwrap_or_default();
         }
+
+        let json: serde_json::Value = resp.json().await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse response: {}", e)))?;
+
+        // Extract image URLs from OpenAI response
+        images = json.pointer("/data")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|img| {
+                img.get("url").map(|url| serde_json::json!({"url": url}))
+            }).collect())
+            .unwrap_or_default();
     }
 
     // 6. Return response
@@ -16824,8 +16348,8 @@ async fn poll_kling_video(
     duration: String,
     mode: String,
 ) {
-    let api_key = match get_api_key("kling") {
-        Some(k) if !k.is_empty() => k,
+    let api_key = match std::env::var("KLING_API_KEY") {
+        Ok(k) if !k.is_empty() => k,
         _ => {
             tracing::error!("KLING_API_KEY not configured, cannot poll video");
             let _ = update_video_job(&dynamo, &table, &video_id, "failed", None, None).await;
@@ -16968,256 +16492,6 @@ async fn poll_kling_video(
 
 // ─── OpenAI-Compatible TTS API (/v1/audio/speech) ───
 
-
-/// Handle music generation request via Stable Audio (fal.ai)
-async fn handle_media_music(
-    State(state): State<Arc<AppState>>,
-    headers: axum::http::HeaderMap,
-    Json(req): Json<MediaMusicRequest>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    // 1. Authenticate
-    let user_id = auth_user_id(&state, &headers).await
-        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Authentication required".to_string()))?;
-
-    // 2. Validate and calculate credits
-    let duration = req.duration.unwrap_or(10);
-    if duration != 10 && duration != 30 && duration != 60 {
-        return Err((StatusCode::BAD_REQUEST, "Duration must be 10, 30, or 60 seconds".to_string()));
-    }
-    
-    let credits = match duration {
-        10 => 10,
-        30 => 20,
-        60 => 40,
-        _ => 10,
-    };
-
-    // 3. Deduct credits
-    #[cfg(feature = "dynamodb-backend")]
-    {
-        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            deduct_credits_direct(dynamo, table, &user_id, credits).await
-                .map_err(|e| (StatusCode::PAYMENT_REQUIRED, e))?;
-        }
-    }
-
-    // 4. Generate music ID
-    let music_id = uuid::Uuid::new_v4().to_string();
-
-    // 5. Store job in DynamoDB
-    let type_ = req.type_.as_deref().unwrap_or("music");
-    #[cfg(feature = "dynamodb-backend")]
-    {
-        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            create_music_job(
-                dynamo,
-                table,
-                &music_id,
-                &user_id,
-                &req.prompt,
-                "stable-audio",
-                type_,
-                duration,
-                credits,
-            ).await?;
-        }
-    }
-
-    // 6. Start background polling task
-    #[cfg(feature = "dynamodb-backend")]
-    {
-        let dynamo_clone = state.dynamo_client.clone();
-        let table_clone = state.config_table.clone();
-        let music_id_clone = music_id.clone();
-        let prompt_clone = req.prompt.clone();
-
-        tokio::spawn(async move {
-            if let (Some(dynamo), Some(table)) = (dynamo_clone, table_clone) {
-                poll_stable_audio(
-                    dynamo,
-                    table,
-                    music_id_clone,
-                    prompt_clone,
-                    duration,
-                ).await;
-            }
-        });
-    }
-
-    // 7. Return 202 Accepted with job info
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(MediaMusicResponse {
-            music_id: music_id.clone(),
-            status: "queued".to_string(),
-            audio_url: None,
-            provider: "stable-audio".to_string(),
-            duration,
-            credits_used: credits,
-            created_at: Some(chrono::Utc::now().to_rfc3339()),
-        })
-    ))
-}
-
-/// Background task to poll Stable Audio API via fal.ai for music generation completion
-#[cfg(feature = "dynamodb-backend")]
-async fn poll_stable_audio(
-    dynamo: aws_sdk_dynamodb::Client,
-    table: String,
-    music_id: String,
-    prompt: String,
-    duration: u32,
-) {
-    let api_key = match get_api_key("fal") {
-        Some(k) if !k.is_empty() => k,
-        _ => {
-            tracing::error!("FAL_KEY not configured, cannot generate music");
-            let _ = update_music_job(&dynamo, &table, &music_id, "failed", None).await;
-            return;
-        }
-    };
-
-    let client = reqwest::Client::new();
-
-    // First, submit the music generation request to fal.ai queue
-    let body = serde_json::json!({
-        "prompt": prompt,
-        "seconds_total": duration,
-        "steps": 100,
-        "cfg_scale": 7.0,
-    });
-
-    tracing::info!("Submitting music generation request: music_id={}, duration={}s", music_id, duration);
-
-    let submit_resp = match client.post("https://queue.fal.run/fal-ai/stable-audio")
-        .header("Authorization", format!("Key {}", api_key))
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .timeout(std::time::Duration::from_secs(30))
-        .send()
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::error!("Failed to submit music generation request: {}", e);
-            let _ = update_music_job(&dynamo, &table, &music_id, "failed", None).await;
-            return;
-        }
-    };
-
-    if !submit_resp.status().is_success() {
-        tracing::error!("Music generation submission failed with status: {}", submit_resp.status());
-        let _ = update_music_job(&dynamo, &table, &music_id, "failed", None).await;
-        return;
-    }
-
-    let submit_json: serde_json::Value = match submit_resp.json().await {
-        Ok(j) => j,
-        Err(e) => {
-            tracing::error!("Failed to parse music generation submission response: {}", e);
-            let _ = update_music_job(&dynamo, &table, &music_id, "failed", None).await;
-            return;
-        }
-    };
-
-    // Extract request_id from fal.ai queue response
-    let request_id = match submit_json.get("request_id").and_then(|r| r.as_str()) {
-        Some(id) => id.to_string(),
-        None => {
-            tracing::error!("No request_id in fal.ai response: {}", submit_json);
-            let _ = update_music_job(&dynamo, &table, &music_id, "failed", None).await;
-            return;
-        }
-    };
-
-    tracing::info!("Music generation queued: music_id={}, request_id={}", music_id, request_id);
-    let _ = update_music_job(&dynamo, &table, &music_id, "processing", None).await;
-
-    // Poll for completion (60 attempts * 10s = 10 minutes max)
-    for attempt in 1..=60 {
-        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-
-        let status_url = format!("https://queue.fal.run/fal-ai/stable-audio/requests/{}", request_id);
-        let poll_resp = match client.get(&status_url)
-            .header("Authorization", format!("Key {}", api_key))
-            .timeout(std::time::Duration::from_secs(10))
-            .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::warn!("Music poll attempt {} failed: {}", attempt, e);
-                continue;
-            }
-        };
-
-        if !poll_resp.status().is_success() {
-            tracing::warn!("Music poll attempt {} returned {}", attempt, poll_resp.status());
-            continue;
-        }
-
-        let poll_json: serde_json::Value = match poll_resp.json().await {
-            Ok(j) => j,
-            Err(e) => {
-                tracing::warn!("Music poll parse error (attempt {}): {}", attempt, e);
-                continue;
-            }
-        };
-
-        let status = poll_json.get("status")
-            .and_then(|s| s.as_str())
-            .unwrap_or("unknown");
-
-        tracing::debug!("Music poll attempt {}: status={}", attempt, status);
-
-        // Check for completion
-        if status == "COMPLETED" {
-            // Extract audio URL
-            let audio_url = poll_json.pointer("/output/audio_file/url")
-                .or_else(|| poll_json.get("audio_file").and_then(|a| a.get("url")))
-                .and_then(|u| u.as_str());
-
-            if let Some(url) = audio_url {
-                tracing::info!("Music generation completed: music_id={}, url={}", music_id, url);
-                let _ = update_music_job(&dynamo, &table, &music_id, "completed", Some(url)).await;
-                return;
-            } else {
-                tracing::error!("Music completed but no URL found: {}", poll_json);
-                let _ = update_music_job(&dynamo, &table, &music_id, "failed", None).await;
-                return;
-            }
-        } else if status == "FAILED" {
-            tracing::error!("Music generation failed: {}", poll_json);
-            let _ = update_music_job(&dynamo, &table, &music_id, "failed", None).await;
-            return;
-        }
-
-        // Continue polling if status is "IN_QUEUE" or "IN_PROGRESS"
-    }
-
-    // Timeout after 10 minutes
-    tracing::error!("Music generation timed out after 60 polling attempts: music_id={}", music_id);
-    let _ = update_music_job(&dynamo, &table, &music_id, "failed", None).await;
-}
-
-/// Get music generation job status
-async fn handle_media_music_status(
-    State(state): State<Arc<AppState>>,
-    _headers: axum::http::HeaderMap,
-    axum::extract::Path(music_id): axum::extract::Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    // Fetch job from DynamoDB
-    #[cfg(feature = "dynamodb-backend")]
-    {
-        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            if let Some(job) = get_music_job(dynamo, table, &music_id).await {
-                return Ok(Json(job));
-            }
-        }
-    }
-
-    Err((StatusCode::NOT_FOUND, "Music job not found".to_string()))
-}
 /// OpenAI-compatible TTS endpoint: POST /v1/audio/speech
 /// Accepts the same format as OpenAI's API: { model, input, voice, speed, response_format }
 /// Authenticates via Bearer token (chatweb.ai auth token) or x-api-key header.
@@ -17413,7 +16687,7 @@ async fn handle_get_memory(
             let (lt_result, daily_result) = tokio::join!(
                 dynamo.get_item().table_name(table)
                     .key("pk", AttributeValue::S(pk.clone()))
-                    .key("sk", AttributeValue::S(SK_LONG_TERM.to_string()))
+                    .key("sk", AttributeValue::S("LONG_TERM".to_string()))
                     .send(),
                 dynamo.get_item().table_name(table)
                     .key("pk", AttributeValue::S(pk))
@@ -17471,7 +16745,7 @@ async fn handle_delete_memory(
             let _ = tokio::join!(
                 dynamo.delete_item().table_name(table)
                     .key("pk", AttributeValue::S(pk.clone()))
-                    .key("sk", AttributeValue::S(SK_LONG_TERM.to_string()))
+                    .key("sk", AttributeValue::S("LONG_TERM".to_string()))
                     .send(),
                 dynamo.delete_item().table_name(table)
                     .key("pk", AttributeValue::S(pk))
@@ -17853,7 +17127,7 @@ async fn handle_sync_push(
                     .put_item()
                     .table_name(table)
                     .item("pk", AttributeValue::S(link_pk))
-                    .item("sk", AttributeValue::S(SK_CHANNEL_MAP.to_string()))
+                    .item("sk", AttributeValue::S("CHANNEL_MAP".to_string()))
                     .item("user_id", AttributeValue::S(user_id.clone()))
                     .item("linked_at", AttributeValue::S(now.clone()))
                     .send()
@@ -19055,7 +18329,7 @@ mod agent_routing_tests {
         let profile = UserProfile {
             user_id: "test-user".to_string(),
             display_name: Some("Test".to_string()),
-            plan: PLAN_FREE.to_string(),
+            plan: "free".to_string(),
             credits_remaining: 100,
             credits_used: 0,
             channels: vec!["web".to_string()],
@@ -19513,7 +18787,7 @@ mod agent_routing_tests {
         let user = UserProfile {
             user_id: "low-cred".to_string(),
             display_name: None,
-            plan: PLAN_FREE.to_string(),
+            plan: "free".to_string(),
             credits_remaining: 50,
             credits_used: 50,
             channels: vec![],
@@ -19530,7 +18804,7 @@ mod agent_routing_tests {
         let user = UserProfile {
             user_id: "low-cred-en".to_string(),
             display_name: None,
-            plan: PLAN_FREE.to_string(),
+            plan: "free".to_string(),
             credits_remaining: 50,
             credits_used: 50,
             channels: vec![],
