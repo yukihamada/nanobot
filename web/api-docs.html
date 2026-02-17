@@ -839,6 +839,59 @@ curl https://api.chatweb.ai/api/v1/media/video/abc123 \
   </div>
 
   <script>
+    // Check login status and show prompt if not logged in
+    async function checkLoginStatus() {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return false;
+
+      try {
+        const response = await fetch('https://api.chatweb.ai/api/v1/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    window.addEventListener('load', async () => {
+      const isLoggedIn = await checkLoginStatus();
+      if (!isLoggedIn) {
+        showLoginPrompt();
+      }
+    });
+
+    function showLoginPrompt() {
+      const banner = document.createElement('div');
+      banner.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(135deg, var(--accent), #7c3aed);
+        color: white;
+        padding: 16px;
+        text-align: center;
+        z-index: 1000;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      `;
+      banner.innerHTML = `
+        <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 16px;">
+          <strong>🔐 API を使用するにはログインが必要です</strong>
+          <a href="https://chatweb.ai" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 20px; border-radius: 8px; font-weight: 600; transition: all 0.2s;">
+            ログイン
+          </a>
+          <button onclick="this.parentElement.parentElement.remove()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;">
+            閉じる
+          </button>
+        </div>
+      `;
+      document.body.prepend(banner);
+      if (window.innerWidth > 768) {
+        document.querySelector('.content').style.paddingTop = '100px';
+      }
+    }
+
     function copyCode(id) {
       const block = document.getElementById(id);
       const text = block.innerText.replace('Copy', '').trim();

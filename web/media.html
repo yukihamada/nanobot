@@ -519,6 +519,49 @@
             <div id="imageResult"></div>
         </div>
 
+        <!-- Music & Sound Effects -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🎵</div>
+                <div class="card-title">
+                    <h2>音楽・効果音生成</h2>
+                    <p>テキストから音楽や効果音を作成</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>タイプ</label>
+                <select id="audioType" onchange="updateAudioPrompts()">
+                    <option value="music">音楽</option>
+                    <option value="sfx">効果音</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>説明</label>
+                <textarea id="audioPrompt" placeholder="例: 明るいピアノ曲、Lo-fi ヒップホップ">アコースティックギターを使った穏やかなカフェミュージック、Lo-fi、リラックス</textarea>
+                <div class="sample-prompts" id="audioSamples">
+                    <div class="sample-prompt" onclick="setAudioPrompt('アコースティックギターを使った穏やかなカフェミュージック、Lo-fi、リラックス')">カフェBGM</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('アップテンポなエレクトロニックミュージック、EDM、エネルギッシュ')">EDM</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('ピアノソロ、感動的、映画のような、ゆっくり')">感動ピアノ</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('ジャズトリオ、サックス、夜のバー、スムーズ')">ジャズ</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>長さ</label>
+                <select id="audioDuration" onchange="updateAudioCredits()">
+                    <option value="10">10秒 推奨</option>
+                    <option value="30">30秒</option>
+                    <option value="60">60秒</option>
+                </select>
+                <div class="credits-info" id="audioCredits">💰 30 credits</div>
+            </div>
+
+            <button onclick="generateAudio()" id="audioBtn">🎵 音楽を生成</button>
+            <div id="audioResult"></div>
+        </div>
+
         <!-- Video -->
         <div class="card">
             <div class="card-header">
@@ -556,12 +599,66 @@
     <script>
         const API_BASE = 'https://api.chatweb.ai/api/v1/media';
 
-        window.addEventListener('load', () => {
+        // Check login status
+        async function checkLoginStatus() {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                return false;
+            }
+
+            try {
+                const response = await fetch('https://api.chatweb.ai/api/v1/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                return response.ok;
+            } catch {
+                return false;
+            }
+        }
+
+        window.addEventListener('load', async () => {
             const savedToken = localStorage.getItem('auth_token') || localStorage.getItem('test_auth_token');
             if (savedToken) {
                 document.getElementById('authToken').value = savedToken;
             }
+
+            // Check if user is logged in
+            const isLoggedIn = await checkLoginStatus();
+            if (!isLoggedIn) {
+                showLoginPrompt();
+            }
         });
+
+        function showLoginPrompt() {
+            const banner = document.createElement('div');
+            banner.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: linear-gradient(135deg, var(--accent), #7c3aed);
+                color: white;
+                padding: 16px;
+                text-align: center;
+                z-index: 1000;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            `;
+            banner.innerHTML = `
+                <div style="max-width: 900px; margin: 0 auto;">
+                    <strong>🔐 ログインが必要です</strong>
+                    <span style="margin: 0 12px;">·</span>
+                    <a href="https://chatweb.ai" style="color: white; text-decoration: underline; font-weight: 600;">
+                        chatweb.ai にログイン
+                    </a>
+                    <span style="margin: 0 12px;">·</span>
+                    <button onclick="this.parentElement.parentElement.remove()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;">
+                        閉じる
+                    </button>
+                </div>
+            `;
+            document.body.prepend(banner);
+            document.querySelector('.main').style.marginTop = '80px';
+        }
 
         function toggleTokenVisibility() {
             const input = document.getElementById('authToken');
@@ -584,6 +681,39 @@
 
         function setVideoPrompt(prompt) {
             document.getElementById('videoPrompt').value = prompt;
+        }
+
+        function setAudioPrompt(prompt) {
+            document.getElementById('audioPrompt').value = prompt;
+        }
+
+        function updateAudioPrompts() {
+            const type = document.getElementById('audioType').value;
+            const samplesDiv = document.getElementById('audioSamples');
+
+            if (type === 'music') {
+                samplesDiv.innerHTML = `
+                    <div class="sample-prompt" onclick="setAudioPrompt('アコースティックギターを使った穏やかなカフェミュージック、Lo-fi、リラックス')">カフェBGM</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('アップテンポなエレクトロニックミュージック、EDM、エネルギッシュ')">EDM</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('ピアノソロ、感動的、映画のような、ゆっくり')">感動ピアノ</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('ジャズトリオ、サックス、夜のバー、スムーズ')">ジャズ</div>
+                `;
+                document.getElementById('audioPrompt').placeholder = '例: 明るいピアノ曲、Lo-fi ヒップホップ';
+            } else {
+                samplesDiv.innerHTML = `
+                    <div class="sample-prompt" onclick="setAudioPrompt('ドアが閉まる音')">ドア</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('雨の音、雷')">雨と雷</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('通知音、ピコーン')">通知音</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('足音、廊下を歩く')">足音</div>
+                `;
+                document.getElementById('audioPrompt').placeholder = '例: ドアが閉まる音、雨の音';
+            }
+        }
+
+        function updateAudioCredits() {
+            const duration = document.getElementById('audioDuration').value;
+            const credits = duration === '10' ? 30 : duration === '30' ? 80 : 150;
+            document.getElementById('audioCredits').textContent = `💰 ${credits} credits`;
         }
 
         function updateImageCredits() {
@@ -719,6 +849,82 @@
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '🖼️ 画像を生成';
+            }
+        }
+
+        async function generateAudio() {
+            const btn = document.getElementById('audioBtn');
+            const resultDiv = document.getElementById('audioResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>音楽生成中 (60-90秒)...';
+            resultDiv.innerHTML = '<div class="result">⏳ 音楽を生成しています。少々お待ちください...</div>';
+
+            try {
+                const token = document.getElementById('authToken').value.trim();
+                if (!token) {
+                    throw new Error('認証トークンを入力してください');
+                }
+
+                const type = document.getElementById('audioType').value;
+                const duration = parseInt(document.getElementById('audioDuration').value);
+
+                // Call music generation API (to be implemented)
+                const response = await fetch(`${API_BASE}/music`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: document.getElementById('audioPrompt').value,
+                        type: type,
+                        duration: duration
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const data = await response.json();
+
+                if (data.audio_url) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <strong>✅ 音楽生成完了</strong>
+                            <div class="result-content">
+                                タイプ: ${type === 'music' ? '音楽' : '効果音'} | 使用クレジット: ${data.credits_used}
+                                <audio controls src="${data.audio_url}" autoplay></audio>
+                                <a href="${data.audio_url}" download="audio.mp3" class="download-btn">💾 ダウンロード</a>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                // If endpoint not implemented yet, show coming soon message
+                if (error.message.includes('404') || error.message.includes('Not Found')) {
+                    resultDiv.innerHTML = `
+                        <div class="result" style="background: #e3f2fd; border-left: 4px solid #2196f3;">
+                            <strong>🚧 この機能は準備中です</strong>
+                            <div class="result-content">
+                                音楽・効果音生成機能は現在開発中です。<br>
+                                近日中にリリース予定です！お楽しみに。<br><br>
+                                <small>利用可能になるサービス: Suno AI, Stable Audio</small>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <strong>❌ エラーが発生しました</strong>
+                            <div class="result-content">${error.message}</div>
+                        </div>
+                    `;
+                }
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🎵 音楽を生成';
             }
         }
 
