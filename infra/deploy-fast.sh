@@ -5,10 +5,19 @@ set -euo pipefail
 # Use this for code-only changes (no infra/parameter changes).
 # ~30s vs ~3min for full SAM deploy.
 #
+# Performance optimizations:
+#   - sccache: compilation cache (3-5x faster on subsequent builds)
+#   - mold linker: faster linking (3-5x faster)
+#   - parallel jobs: uses all CPU cores
+#
 # Usage:
 #   ./infra/deploy-fast.sh                # build (release) + deploy
 #   ./infra/deploy-fast.sh --fast         # build (release-fast: thin LTO) + deploy (~40% faster)
 #   ./infra/deploy-fast.sh --skip-build   # deploy only (reuse last build)
+#
+# First-time setup (optional, for maximum speed):
+#   brew install sccache mold    # macOS
+#   cargo install sccache        # or via cargo
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -63,22 +72,49 @@ else
     echo "--- Building for aarch64-unknown-linux-gnu ---"
     START_BUILD=$(date +%s)
 
+    # Use sccache if available (3-5x faster on subsequent builds)
+    if command -v sccache &>/dev/null; then
+        export RUSTC_WRAPPER=sccache
+        echo "✅ Using sccache for compilation cache"
+    fi
+
+    # Use mold linker if available (3-5x faster linking)
+    if command -v mold &>/dev/null; then
+        export RUSTFLAGS="-C link-arg=-fuse-ld=mold $RUSTFLAGS"
+        echo "✅ Using mold linker"
+    fi
+
+    # Parallel jobs (use all CPU cores)
+    JOBS=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo "4")
+    export CARGO_BUILD_JOBS=$JOBS
+    echo "Parallel jobs: $JOBS"
     echo "Profile: $CARGO_PROFILE"
+
     if command -v cargo-zigbuild &>/dev/null; then
         RUSTUP_TOOLCHAIN=stable \
         RUSTC="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc" \
         cargo zigbuild --manifest-path "$PROJECT_ROOT/crates/nanobot-lambda/Cargo.toml" \
-            --profile "$CARGO_PROFILE" --target aarch64-unknown-linux-gnu
+            --profile "$CARGO_PROFILE" --target aarch64-unknown-linux-gnu \
+            -j "$JOBS"
     elif command -v cross &>/dev/null; then
         cross build --manifest-path "$PROJECT_ROOT/crates/nanobot-lambda/Cargo.toml" \
-            --profile "$CARGO_PROFILE" --target aarch64-unknown-linux-gnu
+            --profile "$CARGO_PROFILE" --target aarch64-unknown-linux-gnu \
+            -j "$JOBS"
     else
         echo "ERROR: Neither cargo-zigbuild nor cross found."
+        echo "Install with: cargo install cargo-zigbuild"
         exit 1
     fi
 
     END_BUILD=$(date +%s)
     echo "Build time: $((END_BUILD - START_BUILD))s"
+
+    # Show sccache stats if available
+    if command -v sccache &>/dev/null; then
+        echo ""
+        echo "--- sccache stats ---"
+        sccache --show-stats | grep -E "(Hits|Misses|Cache size)"
+    fi
 fi
 
 BINARY_SIZE=$(du -h "$BINARY" | cut -f1)

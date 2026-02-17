@@ -11,6 +11,8 @@ concurrency:
 env:
   AWS_REGION: ap-northeast-1
   STACK_NAME: nanobot
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: sccache
 
 jobs:
   # ---- Stage 1: テスト ----
@@ -20,11 +22,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - run: cargo test -p nanobot-core
 
-  # ---- Stage 2: ビルド ----
+  # ---- Stage 2: ビルド (並列実行) ----
   build:
-    needs: test
+    # needs: test を削除 → Test と並列実行で高速化
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,24 +36,49 @@ jobs:
         with:
           targets: aarch64-unknown-linux-gnu
       - uses: Swatinem/rust-cache@v2
-      - name: Install cross-compile deps
+
+      # sccache でコンパイルキャッシュを強化
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+
+      # mold linker で高速リンク (3-5x高速化)
+      - name: Install mold linker
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y mold gcc-aarch64-linux-gnu
+
+      # cargo-zigbuild と zig のキャッシュ
+      - name: Cache cargo-zigbuild
+        id: cache-zigbuild
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-zigbuild
+            /snap/zig
+          key: zigbuild-${{ runner.os }}-v1
+
+      - name: Install cargo-zigbuild and zig
+        if: steps.cache-zigbuild.outputs.cache-hit != 'true'
+        run: |
           cargo install cargo-zigbuild
           sudo snap install zig --classic --beta
+
+      # ARM64ビルド (moldリンカー使用)
       - name: Build for Lambda ARM64
         env:
           BUILD_NUMBER: ${{ github.run_number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
         run: |
           cargo zigbuild --manifest-path crates/nanobot-lambda/Cargo.toml \
             --release --target aarch64-unknown-linux-gnu
+
       - name: Package bootstrap
         run: |
           mkdir -p target/lambda/bootstrap
           cp target/aarch64-unknown-linux-gnu/release/bootstrap target/lambda/bootstrap/
           chmod +x target/lambda/bootstrap/bootstrap
+
       - uses: actions/upload-artifact@v4
         with:
           name: lambda-bootstrap
@@ -57,7 +86,7 @@ jobs:
 
   # ---- Stage 3: カナリアデプロイ (10%トラフィック) ----
   canary:
-    needs: build
+    needs: [test, build]  # Test と Build の両方が完了したら開始
     runs-on: ubuntu-latest
     environment: canary
     steps:
@@ -72,29 +101,16 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - uses: aws-actions/setup-sam@v2
 
-      # デプロイ (新バージョン発行)
-      - name: SAM Deploy
+      # 高速デプロイ: Lambda直接更新 (SAMスキップ)
+      - name: Fast Deploy to Lambda
         run: |
-          sam deploy \
-            --template-file infra/template.yaml \
-            --stack-name $STACK_NAME \
-            --region $AWS_REGION \
-            --capabilities CAPABILITY_IAM \
-            --resolve-s3 \
-            --no-confirm-changeset \
-            --no-fail-on-empty-changeset \
-            --parameter-overrides \
-              "OpenaiApiKey=${{ secrets.OPENAI_API_KEY }}" \
-              "BraveApiKey=${{ secrets.BRAVE_API_KEY }}" \
-              "GoogleApiKey=${{ secrets.GOOGLE_API_KEY }}" \
-              "DeepseekApiKey=${{ secrets.DEEPSEEK_API_KEY }}" \
-              "ResendApiKey=${{ secrets.RESEND_API_KEY }}" \
-              "GoogleClientId=${{ secrets.GOOGLE_CLIENT_ID }}" \
-              "GoogleClientSecret=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
-              "GitHubToken=${{ secrets.GITHUB_TOKEN }}" \
-              "NanobotModel=openai/gpt-4o"
+          cd target/lambda/bootstrap
+          zip -j /tmp/nanobot-lambda.zip bootstrap
+          aws lambda update-function-code \
+            --function-name nanobot \
+            --zip-file "fileb:///tmp/nanobot-lambda.zip" \
+            --region $AWS_REGION
 
       # 新バージョン発行 → カナリア (10%)
       - name: Publish new version & canary 10%
@@ -129,14 +145,10 @@ jobs:
       # ヘルスチェック (5回)
       - name: Health check (canary)
         run: |
-          API_URL=$(aws cloudformation describe-stacks \
-            --stack-name $STACK_NAME \
-            --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
-            --output text)
-          echo "Checking $API_URL/health ..."
+          echo "Checking https://api.chatweb.ai/health ..."
           PASS=0
           for i in 1 2 3 4 5; do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/health" || echo "000")
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://api.chatweb.ai/health" || echo "000")
             if [ "$CODE" = "200" ]; then
               PASS=$((PASS+1))
             fi
@@ -151,11 +163,7 @@ jobs:
       # チャットAPIスモークテスト
       - name: Smoke test (chat API)
         run: |
-          API_URL=$(aws cloudformation describe-stacks \
-            --stack-name $STACK_NAME \
-            --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
-            --output text)
-          RESP=$(curl -s -X POST "$API_URL/api/v1/chat" \
+          RESP=$(curl -s -X POST "https://api.chatweb.ai/api/v1/chat" \
             -H "Content-Type: application/json" \
             -d '{"message":"ping"}')
           echo "Response: $RESP"
