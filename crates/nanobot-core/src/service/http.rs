@@ -2320,7 +2320,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/media/stt", post(handle_media_stt))
         .route("/api/v1/media/image", post(handle_media_image))
         .route("/api/v1/media/video", post(handle_media_video))
-        .route("/api/v1/media/video/:id", get(handle_media_video_status))
+        .route("/api/v1/media/video/{id}", get(handle_media_video_status))
         // Voice cloning — upload audio sample, get cloned TTS back
         .route("/api/v1/voice/clone", post(handle_voice_clone))
         // Phone (Amazon Connect)
@@ -6460,26 +6460,29 @@ async fn handle_chat_explore(
     let max_tokens = 2048u32;
     let temperature = 0.7;
 
-    // Run explore with race mode (10s timeout, ranked by speed)
+    // Run explore with streaming race mode (results arrive as they complete)
     let state_clone = state.clone();
     let session_key_clone = session_key.clone();
     let original_msg = req.message.clone();
 
-    let response_stream = futures::stream::once(async move {
+    let response_stream = async_stream::stream! {
         let start = std::time::Instant::now();
-        let results = lb_raw.chat_race(&messages, None, max_tokens, temperature).await;
-        let total_time = start.elapsed().as_millis() as u64;
+        let mut rx = lb_raw.chat_race_stream(&messages, None, max_tokens, temperature).await;
 
-        // Deduct credits for each result
-        #[allow(unused_mut)]
+        let mut results_for_session = Vec::new();
         let mut total_credits: i64 = 0;
-        #[allow(unused_mut)]
         let mut last_remaining: Option<i64> = None;
+        let mut result_count = 0;
 
-        #[cfg(feature = "dynamodb-backend")]
-        {
-            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
-                for result in &results {
+        // Stream each result as it arrives
+        while let Some(result) = rx.recv().await {
+            results_for_session.push(result.clone());
+            result_count += 1;
+
+            // Deduct credits for this result
+            #[cfg(feature = "dynamodb-backend")]
+            {
+                if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                     let (credits, remaining) = deduct_credits(
                         dynamo, table, &session_key_clone, &result.model,
                         result.input_tokens, result.output_tokens,
@@ -6488,16 +6491,41 @@ async fn handle_chat_explore(
                     if remaining.is_some() { last_remaining = remaining; }
                 }
             }
+
+            // Kimi k2.5 is preferred if it completes within 10 seconds
+            let is_kimi = result.model.to_lowercase().contains("kimi")
+                || result.model.to_lowercase().contains("moonshot");
+            let is_preferred = is_kimi && result.response_time_ms <= 10_000;
+
+            // Send individual result event immediately
+            yield Ok::<_, Infallible>(Event::default()
+                .event("explore_result")
+                .data(serde_json::json!({
+                    "model": result.model,
+                    "response": result.response,
+                    "time_ms": result.response_time_ms,
+                    "rank": result.rank,
+                    "index": result_count - 1,
+                    "is_fallback": result.is_fallback,
+                    "is_preferred": is_preferred,
+                    "credits_used": crate::service::auth::calculate_credits(
+                        &result.model, result.input_tokens, result.output_tokens
+                    ),
+                    "credits_remaining": last_remaining,
+                }).to_string())
+            );
         }
 
-        // Save to session
+        let total_time = start.elapsed().as_millis() as u64;
+
+        // Save to session after all results collected
         {
             let mut sessions = state_clone.sessions.lock().await;
             let session = sessions.get_or_create(&session_key_clone);
             session.add_message_from_channel("user", &original_msg, "web");
-            if let Some(best) = results.first() {
+            if let Some(best) = results_for_session.first() {
                 session.add_message_from_channel("assistant",
-                    &format!("[Explore: {} models] {}", results.len(), best.response), "web");
+                    &format!("[Explore: {} models] {}", results_for_session.len(), best.response), "web");
             }
             sessions.save_by_key(&session_key_clone);
         }
@@ -6508,41 +6536,20 @@ async fn handle_chat_explore(
             }
         }
 
-        // Build all SSE events as a single response (API Gateway v2 compatible)
-        let mut events_json = Vec::new();
-        for (idx, result) in results.iter().enumerate() {
-            // Kimi k2.5 is preferred if it completes within 10 seconds
-            let is_kimi = result.model.to_lowercase().contains("kimi")
-                || result.model.to_lowercase().contains("moonshot");
-            let is_preferred = is_kimi && result.response_time_ms <= 10_000;
-
-            events_json.push(serde_json::json!({
-                "model": result.model,
-                "response": result.response,
-                "time_ms": result.response_time_ms,
-                "rank": result.rank,
-                "index": idx,
-                "is_fallback": result.is_fallback,
-                "is_preferred": is_preferred,
-                "credits_used": crate::service::auth::calculate_credits(
-                    &result.model, result.input_tokens, result.output_tokens
-                ),
-            }));
-        }
-
-        Ok::<_, Infallible>(Event::default().data(
-            serde_json::json!({
-                "type": "explore_results",
-                "results": events_json,
-                "total_models": results.len(),
+        // Send done event with summary
+        yield Ok::<_, Infallible>(Event::default()
+            .event("explore_done")
+            .data(serde_json::json!({
+                "type": "done",
+                "total_models": results_for_session.len(),
                 "total_time_ms": total_time,
                 "total_credits_used": total_credits,
                 "credits_remaining": last_remaining,
                 "level": level,
                 "can_escalate": level < 2,
-            }).to_string()
-        ))
-    });
+            }).to_string())
+        );
+    };
 
     Sse::new(response_stream).into_response()
 }
@@ -15698,7 +15705,7 @@ async fn handle_media_video(
     ))
 }
 
-/// GET /api/v1/media/video/:id — Get video generation status
+/// GET /api/v1/media/video/{id} — Get video generation status
 async fn handle_media_video_status(
     State(state): State<Arc<AppState>>,
     _headers: axum::http::HeaderMap,

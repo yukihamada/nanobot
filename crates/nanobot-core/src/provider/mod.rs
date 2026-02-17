@@ -569,6 +569,97 @@ impl LoadBalancedProvider {
         results
     }
 
+    /// Race mode with streaming: run all providers in parallel and stream results as they arrive.
+    /// Returns a Receiver that yields RaceResult in completion order (fastest first).
+    /// Use this for real-time SSE streaming in explore mode.
+    pub async fn chat_race_stream(
+        &self,
+        messages: &[Message],
+        tools: Option<&[serde_json::Value]>,
+        max_tokens: u32,
+        temperature: f64,
+    ) -> tokio::sync::mpsc::Receiver<RaceResult> {
+        let parallel_models = self.available_parallel_models();
+        let rank_counter = Arc::new(AtomicUsize::new(1));
+        let (tx, rx) = tokio::sync::mpsc::channel::<RaceResult>(parallel_models.len() + 1);
+        let msgs = messages.to_vec();
+        let tools_owned: Option<Vec<serde_json::Value>> = tools.map(|t| t.to_vec());
+
+        for (model_name, idx) in &parallel_models {
+            let provider = self.providers[*idx].clone();
+            let model = model_name.clone();
+            let msgs = msgs.clone();
+            let tools = tools_owned.clone();
+            let tx = tx.clone();
+            let rank_counter = rank_counter.clone();
+            tokio::spawn(async move {
+                let start = std::time::Instant::now();
+                let tools_ref = tools.as_deref();
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(600),
+                    provider.chat(&msgs, tools_ref, &model, max_tokens, temperature),
+                ).await {
+                    Ok(Ok(resp)) => {
+                        let elapsed = start.elapsed().as_millis() as u64;
+                        let rank = rank_counter.fetch_add(1, Ordering::SeqCst);
+                        tracing::info!("Race stream: {} finished rank={} in {}ms", model, rank, elapsed);
+                        let _ = tx.send(RaceResult {
+                            model: model.clone(),
+                            response: resp.content.unwrap_or_default(),
+                            response_time_ms: elapsed,
+                            input_tokens: resp.usage.prompt_tokens,
+                            output_tokens: resp.usage.completion_tokens,
+                            rank,
+                            is_fallback: false,
+                        }).await;
+                    }
+                    Ok(Err(e)) => {
+                        tracing::warn!("Race stream: {} failed: {}", model, e);
+                    }
+                    Err(_) => {
+                        tracing::warn!("Race stream: {} timed out (10s)", model);
+                    }
+                }
+            });
+        }
+
+        // Also run local fallback if available
+        #[cfg(feature = "local-fallback")]
+        {
+            if let Some(local_provider) = local::LocalProvider::from_env() {
+                let msgs = msgs.clone();
+                let tx = tx.clone();
+                let rank_counter = rank_counter.clone();
+                tokio::spawn(async move {
+                    let start = std::time::Instant::now();
+                    match local_provider.chat(&msgs, None, "local-qwen3-0.6b", max_tokens.min(512), temperature).await {
+                        Ok(resp) => {
+                            let elapsed = start.elapsed().as_millis() as u64;
+                            let rank = rank_counter.fetch_add(1, Ordering::SeqCst);
+                            let _ = tx.send(RaceResult {
+                                model: "local-qwen3-0.6b".to_string(),
+                                response: resp.content.unwrap_or_default(),
+                                response_time_ms: elapsed,
+                                input_tokens: resp.usage.prompt_tokens,
+                                output_tokens: resp.usage.completion_tokens,
+                                rank,
+                                is_fallback: true,
+                            }).await;
+                        }
+                        Err(e) => {
+                            tracing::warn!("Race stream: local fallback failed: {}", e);
+                        }
+                    }
+                });
+            }
+        }
+
+        // Drop tx so that rx closes when all spawned tasks complete
+        drop(tx);
+
+        rx
+    }
+
     /// Get a specific provider for a single-model tier request.
     /// Returns (provider, model_name) or None if not found.
     pub fn get_tier_model(&self, tier: &str) -> Option<(Arc<dyn LlmProvider>, String)> {
