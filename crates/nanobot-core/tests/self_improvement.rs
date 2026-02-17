@@ -3,8 +3,12 @@
 // Note: These tests require a full HTTP server setup with mocked dependencies
 // For now, they serve as documentation of expected behavior
 
+#[cfg(feature = "http-api")]
+use nanobot_core::service::commands::{CommandContext, SlashCommand};
+
 #[tokio::test]
-#[cfg(feature = "dynamodb-backend")]
+#[cfg(all(feature = "dynamodb-backend", feature = "http-api"))]
+#[ignore = "Test infrastructure not yet implemented"]
 async fn test_improve_requires_admin() {
     // Setup: non-admin user context
     let ctx = create_test_context(false).await;
@@ -17,7 +21,8 @@ async fn test_improve_requires_admin() {
 }
 
 #[tokio::test]
-#[cfg(feature = "dynamodb-backend")]
+#[cfg(all(feature = "dynamodb-backend", feature = "http-api"))]
+#[ignore = "Test infrastructure not yet implemented"]
 async fn test_improve_preview_mode() {
     // Setup: admin user context with GitHub token
     let ctx = create_test_context_with_github(true).await;
@@ -39,7 +44,8 @@ async fn test_improve_preview_mode() {
 }
 
 #[tokio::test]
-#[cfg(feature = "dynamodb-backend")]
+#[cfg(all(feature = "dynamodb-backend", feature = "http-api"))]
+#[ignore = "Test infrastructure not yet implemented"]
 async fn test_improve_with_confirm() {
     // Setup: admin user context with GitHub token
     let ctx = create_test_context_with_github(true).await;
@@ -65,7 +71,8 @@ async fn test_improve_with_confirm() {
 }
 
 #[tokio::test]
-#[cfg(feature = "dynamodb-backend")]
+#[cfg(all(feature = "dynamodb-backend", feature = "http-api"))]
+#[ignore = "Test infrastructure not yet implemented"]
 async fn test_improve_rate_limit() {
     // Setup: admin context
     let ctx = create_test_context_with_github(true).await;
@@ -94,6 +101,8 @@ async fn test_improve_rate_limit() {
 }
 
 #[tokio::test]
+#[cfg(feature = "http-api")]
+#[ignore = "Test infrastructure not yet implemented"]
 async fn test_improve_without_github_token() {
     // Setup: admin context WITHOUT GitHub token
     std::env::remove_var("GITHUB_TOKEN");
@@ -115,7 +124,13 @@ async fn test_improve_without_github_token() {
 
 // Helper functions
 
-#[cfg(feature = "dynamodb-backend")]
+#[cfg(feature = "http-api")]
+#[allow(dead_code)]
+async fn execute_command<'a>(_command: &str, _ctx: &CommandContext<'a>) -> Result<String, String> {
+    unimplemented!("execute_command requires test infrastructure")
+}
+
+#[cfg(all(feature = "dynamodb-backend", feature = "http-api"))]
 async fn create_test_context(is_admin: bool) -> CommandContext<'static> {
     // TODO: Implement proper test context creation
     // This requires:
@@ -127,7 +142,7 @@ async fn create_test_context(is_admin: bool) -> CommandContext<'static> {
     unimplemented!("Test context creation requires mocking infrastructure")
 }
 
-#[cfg(feature = "dynamodb-backend")]
+#[cfg(all(feature = "dynamodb-backend", feature = "http-api"))]
 async fn create_test_context_with_github(is_admin: bool) -> CommandContext<'static> {
     // Set mock GitHub token
     std::env::set_var("GITHUB_TOKEN", "ghp_test_token_for_integration_tests");
@@ -135,14 +150,16 @@ async fn create_test_context_with_github(is_admin: bool) -> CommandContext<'stat
     create_test_context(is_admin).await
 }
 
-#[cfg(not(feature = "dynamodb-backend"))]
-async fn create_test_context(_is_admin: bool) -> CommandContext<'static> {
-    unimplemented!("Tests require dynamodb-backend feature")
+#[cfg(not(all(feature = "dynamodb-backend", feature = "http-api")))]
+#[allow(dead_code)]
+async fn create_test_context(_is_admin: bool) -> String {
+    unimplemented!("Tests require dynamodb-backend and http-api features")
 }
 
-#[cfg(not(feature = "dynamodb-backend"))]
-async fn create_test_context_with_github(_is_admin: bool) -> CommandContext<'static> {
-    unimplemented!("Tests require dynamodb-backend feature")
+#[cfg(not(all(feature = "dynamodb-backend", feature = "http-api")))]
+#[allow(dead_code)]
+async fn create_test_context_with_github(_is_admin: bool) -> String {
+    unimplemented!("Tests require dynamodb-backend and http-api features")
 }
 
 // TODO: Add helper to mock DynamoDB responses for rate limiting tests
