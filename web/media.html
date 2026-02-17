@@ -332,10 +332,6 @@
                 font-size: 20px;
             }
         }
-        
-        .hidden {
-            display: none;
-        }
     </style>
 </head>
 <body>
@@ -391,20 +387,12 @@
             </div>
 
             <div class="form-group">
-                <label>エンジン</label>
-                <select id="ttsEngine">
-                    <option value="kokoro">Kokoro (高品質・高速) 推奨</option>
-                    <option value="openai">OpenAI TTS</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>音声 <span class="label-badge">声の種類</span></label>
+                <label>音声 <span class="label-badge">自動で最適な声を選択</span></label>
                 <select id="ttsVoice">
-                    <option value="nova">Nova (女性・ニュートラル)</option>
-                    <option value="alloy">Alloy (ニュートラル)</option>
-                    <option value="echo">Echo (男性)</option>
-                    <option value="shimmer">Shimmer (女性・明るい)</option>
+                    <option value="Kazuha">Kazuha (日本語・女性) 推奨</option>
+                    <option value="Takumi">Takumi (日本語・男性)</option>
+                    <option value="Mizuki">Mizuki (日本語・女性)</option>
+                    <option value="nova">Nova (英語・女性)</option>
                 </select>
                 <div class="credits-info">💰 約 1 credit / 100文字</div>
             </div>
@@ -494,7 +482,6 @@
     <script>
         const API_BASE = 'https://api.chatweb.ai/api/v1/media';
 
-        // ページ読み込み時
         window.addEventListener('load', () => {
             const savedToken = localStorage.getItem('auth_token') || localStorage.getItem('test_auth_token');
             if (savedToken) {
@@ -502,20 +489,17 @@
             }
         });
 
-        // トークン表示切り替え
         function toggleTokenVisibility() {
             const input = document.getElementById('authToken');
             input.type = input.type === 'password' ? 'text' : 'password';
         }
 
-        // Token保存
         document.getElementById('authToken').addEventListener('change', (e) => {
             if (e.target.value.trim()) {
                 localStorage.setItem('test_auth_token', e.target.value.trim());
             }
         });
 
-        // サンプルプロンプト設定
         function setTTSText(text) {
             document.getElementById('ttsText').value = text;
         }
@@ -528,7 +512,6 @@
             document.getElementById('videoPrompt').value = prompt;
         }
 
-        // クレジット表示更新
         function updateImageCredits() {
             const model = document.getElementById('imageModel').value;
             const credits = {
@@ -545,36 +528,6 @@
             document.getElementById('videoCredits').textContent = `💰 ${credits} credits`;
         }
 
-        // API呼び出し
-        async function apiCall(endpoint, data, expectBlob = false) {
-            const token = document.getElementById('authToken').value.trim();
-            if (!token) {
-                alert('❌ 認証トークンを入力してください');
-                return null;
-            }
-
-            try {
-                const response = await fetch(`${API_BASE}${endpoint}`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                });
-
-                if (!response.ok) {
-                    const text = await response.text();
-                    throw new Error(text || `HTTP ${response.status}`);
-                }
-
-                return expectBlob ? response.blob() : response.json();
-            } catch (error) {
-                throw error;
-            }
-        }
-
-        // TTS生成
         async function generateTTS() {
             const btn = document.getElementById('ttsBtn');
             const resultDiv = document.getElementById('ttsResult');
@@ -585,6 +538,10 @@
 
             try {
                 const token = document.getElementById('authToken').value.trim();
+                if (!token) {
+                    throw new Error('認証トークンを入力してください');
+                }
+
                 const response = await fetch(`${API_BASE}/tts`, {
                     method: 'POST',
                     headers: {
@@ -593,8 +550,8 @@
                     },
                     body: JSON.stringify({
                         text: document.getElementById('ttsText').value,
-                        engine: document.getElementById('ttsEngine').value,
                         voice: document.getElementById('ttsVoice').value
+                        // engine を指定しない = 自動フォールバック (Polly/OpenAI)
                     })
                 });
 
@@ -611,7 +568,7 @@
                         <strong>✅ 音声生成完了！</strong>
                         <div class="result-content">
                             ファイルサイズ: ${size} KB
-                            <audio controls src="${url}"></audio>
+                            <audio controls src="${url}" autoplay></audio>
                             <a href="${url}" download="audio.mp3" class="download-btn">💾 ダウンロード</a>
                         </div>
                     </div>
@@ -629,7 +586,29 @@
             }
         }
 
-        // 画像生成
+        async function apiCall(endpoint, data) {
+            const token = document.getElementById('authToken').value.trim();
+            if (!token) {
+                throw new Error('認証トークンを入力してください');
+            }
+
+            const response = await fetch(`${API_BASE}${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || `HTTP ${response.status}`);
+            }
+
+            return response.json();
+        }
+
         async function generateImage() {
             const btn = document.getElementById('imageBtn');
             const resultDiv = document.getElementById('imageResult');
@@ -670,7 +649,6 @@
             }
         }
 
-        // 動画生成
         async function generateVideo() {
             const btn = document.getElementById('videoBtn');
             const resultDiv = document.getElementById('videoResult');
@@ -700,7 +678,6 @@
                         </div>
                     `;
                     
-                    // 自動ポーリング
                     setTimeout(() => checkVideoStatus(data.video_id), 15000);
                 }
             } catch (error) {
@@ -716,7 +693,6 @@
             }
         }
 
-        // 動画ステータス確認
         async function checkVideoStatus(videoId) {
             const statusDiv = document.getElementById(`videoStatus_${videoId}`);
             const token = document.getElementById('authToken').value.trim();
