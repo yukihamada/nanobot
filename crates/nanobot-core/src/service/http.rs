@@ -15525,12 +15525,12 @@ async fn handle_media_stt(
     State(_state): State<Arc<AppState>>,
     _headers: axum::http::HeaderMap,
     _body: axum::body::Bytes,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> impl IntoResponse {
     // TODO: Implement STT using Whisper API
-    Err((
+    (
         StatusCode::NOT_IMPLEMENTED,
-        "STT endpoint not yet implemented".to_string(),
-    ))
+        Json(serde_json::json!({"error": "STT endpoint not yet implemented"}))
+    )
 }
 
 /// POST /api/v1/media/image — Image generation

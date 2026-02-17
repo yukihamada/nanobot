@@ -8899,6 +8899,20 @@
               thinkEl.textContent = lang === 'ja' ? '結果を分析中...' : 'Analyzing results...';
               thinkEl.className = 'thinking-step';
               p.appendChild(thinkEl);
+            } else if (evt.type === 'reasoning') {
+              const p = ensureAgentProgress();
+              const reasonEl = document.createElement('details');
+              reasonEl.className = 'reasoning-block';
+              reasonEl.style.cssText = 'padding:6px 0;margin:4px 0;color:var(--text,#333);';
+              const summary = document.createElement('summary');
+              summary.style.cssText = 'cursor:pointer;color:var(--primary,#4f46e5);font-weight:500;padding:4px 0;';
+              summary.textContent = (lang === 'ja' ? '💭 思考過程' : '💭 Reasoning') + ' #' + (evt.index + 1);
+              const content = document.createElement('div');
+              content.style.cssText = 'margin:8px 0 0 20px;padding:8px;background:var(--code-bg,#f5f5f5);border-left:3px solid var(--primary,#4f46e5);border-radius:4px;font-size:14px;white-space:pre-wrap;word-break:break-word;';
+              content.textContent = evt.content;
+              reasonEl.appendChild(summary);
+              reasonEl.appendChild(content);
+              p.appendChild(reasonEl);
             } else if (evt.type === 'content_chunk' && !gotContent) {
               // Progressive streaming: create message on first chunk, append on subsequent
               if (!streamingEl) {
