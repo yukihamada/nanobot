@@ -155,11 +155,16 @@ enum CronCommands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Default to warn level for cleaner CLI output, unless RUST_LOG is set
+    let default_filter = if std::env::var("RUST_LOG").is_ok() {
+        tracing_subscriber::EnvFilter::from_default_env()
+    } else {
+        tracing_subscriber::EnvFilter::from_default_env()
+            .add_directive("nanobot=warn".parse().unwrap())
+    };
+
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("nanobot=info".parse().unwrap()),
-        )
+        .with_env_filter(default_filter)
         .init();
 
     let cli = Cli::parse();

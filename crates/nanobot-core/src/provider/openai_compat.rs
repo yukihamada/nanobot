@@ -132,7 +132,15 @@ impl LlmProvider for OpenAiCompatProvider {
             });
         }
 
-        let data: serde_json::Value = response.json().await?;
+        // Get response text for better error reporting
+        let response_text = response.text().await?;
+        let data: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
+            tracing::error!("Failed to parse JSON response. Error: {}, Body (first 500 chars): {}", e, &response_text.chars().take(500).collect::<String>());
+            ProviderError::Api {
+                status: status.as_u16(),
+                message: format!("JSON parse error: {}. Body preview: {}", e, &response_text.chars().take(200).collect::<String>()),
+            }
+        })?;
         parse_openai_response(&data)
     }
 
@@ -217,7 +225,15 @@ impl LlmProvider for OpenAiCompatProvider {
             });
         }
 
-        let data: serde_json::Value = response.json().await?;
+        // Get response text for better error reporting
+        let response_text = response.text().await?;
+        let data: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
+            tracing::error!("Failed to parse JSON response. Error: {}, Body (first 500 chars): {}", e, &response_text.chars().take(500).collect::<String>());
+            ProviderError::Api {
+                status: status.as_u16(),
+                message: format!("JSON parse error: {}. Body preview: {}", e, &response_text.chars().take(200).collect::<String>()),
+            }
+        })?;
         parse_openai_response(&data)
     }
 

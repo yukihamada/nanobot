@@ -25,6 +25,12 @@ impl Config {
     /// Get expanded workspace path.
     pub fn workspace_path(&self) -> PathBuf {
         let path = &self.agents.defaults.workspace;
+
+        // In Lambda, use /tmp as base directory for all paths
+        if std::env::var("AWS_LAMBDA_FUNCTION_NAME").is_ok() {
+            return PathBuf::from("/tmp").join(".nanobot/workspace");
+        }
+
         if path.starts_with("~/") || path.starts_with("~\\") {
             if let Some(home) = dirs::home_dir() {
                 return home.join(&path[2..]);
@@ -590,17 +596,28 @@ pub fn load_config_from_env() -> Config {
 
 /// Get the default configuration file path.
 pub fn get_config_path() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+    // In Lambda, use /tmp as it's the only writable directory
+    let base_dir = if std::env::var("AWS_LAMBDA_FUNCTION_NAME").is_ok() {
+        PathBuf::from("/tmp")
+    } else {
+        dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
+    };
+
+    base_dir
         .join(".nanobot")
         .join("config.json")
 }
 
 /// Get the nanobot data directory.
 pub fn get_data_dir() -> PathBuf {
-    let path = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".nanobot");
+    // In Lambda, use /tmp as it's the only writable directory
+    let base_dir = if std::env::var("AWS_LAMBDA_FUNCTION_NAME").is_ok() {
+        PathBuf::from("/tmp")
+    } else {
+        dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
+    };
+
+    let path = base_dir.join(".nanobot");
     std::fs::create_dir_all(&path).ok();
     path
 }
