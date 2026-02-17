@@ -11,8 +11,6 @@ concurrency:
 env:
   AWS_REGION: ap-northeast-1
   STACK_NAME: nanobot
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: sccache
 
 jobs:
   # ---- Stage 1: テスト ----
@@ -22,8 +20,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Run sccache-cache
+      - name: Run sccache-cache (optional)
         uses: mozilla-actions/sccache-action@v0.0.3
+        continue-on-error: true
+      - name: Setup sccache if available
+        run: |
+          if command -v sccache &>/dev/null && sccache --version &>/dev/null; then
+            echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+            echo "✅ sccache enabled"
+          else
+            echo "⚠️ sccache not available, using standard compilation"
+          fi
       - run: cargo test -p nanobot-core
 
   # ---- Stage 2: ビルド (並列実行) ----
@@ -37,9 +44,19 @@ jobs:
           targets: aarch64-unknown-linux-gnu
       - uses: Swatinem/rust-cache@v2
 
-      # sccache でコンパイルキャッシュを強化
-      - name: Run sccache-cache
+      # sccache でコンパイルキャッシュを強化 (オプショナル)
+      - name: Run sccache-cache (optional)
         uses: mozilla-actions/sccache-action@v0.0.3
+        continue-on-error: true
+
+      - name: Setup sccache if available
+        run: |
+          if command -v sccache &>/dev/null && sccache --version &>/dev/null; then
+            echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+            echo "✅ sccache enabled"
+          else
+            echo "⚠️ sccache not available, using standard compilation"
+          fi
 
       # mold linker で高速リンク (3-5x高速化)
       - name: Install mold linker
