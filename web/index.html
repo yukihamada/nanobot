@@ -3872,6 +3872,17 @@
           </select>
           <div class="settings-item-desc">読み上げ音声エンジンを選択</div>
         </div>
+        <div class="settings-item" id="settings-openai-voice" style="flex-direction:column;align-items:stretch;display:none;">
+          <div class="settings-item-label" style="margin-bottom:6px;">OpenAI Voice</div>
+          <select class="settings-select" id="settings-openai-voice-select" onchange="setOpenAIVoice(this.value)">
+            <option value="nova">Nova (default)</option>
+            <option value="shimmer">Shimmer (soft)</option>
+            <option value="alloy">Alloy (neutral)</option>
+            <option value="echo">Echo (male)</option>
+            <option value="fable">Fable (expressive)</option>
+            <option value="onyx">Onyx (deep)</option>
+          </select>
+        </div>
         <div class="settings-item" id="settings-elevenlabs-voice" style="flex-direction:column;align-items:stretch;display:none;">
           <div class="settings-item-label" style="margin-bottom:6px;">ElevenLabs Voice</div>
           <select class="settings-select" id="settings-el-voice" onchange="setElevenLabsVoice(this.value)">
@@ -4124,6 +4135,7 @@
 
         <div class="settings-group-title" style="margin-top:16px;">Data</div>
         <button class="settings-btn" onclick="exportConversationData()" style="margin-bottom:8px;">&#128229; データエクスポート / Export Data</button>
+        <button class="settings-btn settings-btn-danger" onclick="resetUserData()" style="margin-bottom:8px;">&#128260; 会話・メモリをリセット / Reset Data (Keep Credits)</button>
         <button class="settings-btn settings-btn-danger" onclick="deleteAllData()" style="margin-bottom:8px;">&#128465; 全データ削除 / Delete All Data</button>
         <button class="settings-btn" onclick="handleLogout()" style="margin-bottom:8px;">&#128682; ログアウト / Logout</button>
 
@@ -6422,24 +6434,73 @@
 
     // --- Account Deletion ---
     async function deleteAccount() {
-      const confirmed = prompt('アカウントを完全に削除します。確認のため「DELETE」と入力してください:');
-      if (confirmed !== 'DELETE') return;
+      const l = document.documentElement.lang || 'ja';
+
+      // First confirmation
+      const confirmed1 = confirm(
+        l === 'ja'
+          ? '⚠️ 警告: この操作は取り消せません。\n\nすべてのデータ（会話履歴、メモリ、設定）が完全に削除されます。\n\n本当に削除しますか？'
+          : '⚠️ Warning: This action cannot be undone.\n\nAll data (conversations, memory, settings) will be permanently deleted.\n\nAre you sure?'
+      );
+      if (!confirmed1) return;
+
+      // Second confirmation with typing
+      const confirmText = prompt(
+        l === 'ja'
+          ? '最終確認：アカウントを完全に削除するには「DELETE」と入力してください。'
+          : 'Final confirmation: Type "DELETE" to permanently delete your account.'
+      );
+      if (confirmText !== 'DELETE') {
+        showToast(l === 'ja' ? 'キャンセルされました' : 'Cancelled', 2000);
+        return;
+      }
+
       const token = localStorage.getItem('authToken');
-      if (!token) return showToast('ログインしてください');
+      if (!token) {
+        showToast(l === 'ja' ? 'ログインしてください' : 'Please log in', 2000);
+        return;
+      }
+
+      // Show loading
+      showToast(l === 'ja' ? '🗑️ データを削除中...' : '🗑️ Deleting data...', 3000);
+
       try {
-        const r = await fetch(API + '/api/v1/account', {
+        const r = await fetch(API + '/api/v1/user/delete', {
           method: 'DELETE',
           headers: {'Authorization': 'Bearer ' + token}
         });
+
         const d = await r.json();
-        if (d.ok) {
-          localStorage.removeItem('authToken');
-          showToast('アカウントが削除されました', 5000);
-          location.reload();
+
+        if (r.ok && d.success) {
+          // Clear all local storage
+          localStorage.clear();
+          sessionStorage.clear();
+
+          // Clear cookies
+          document.cookie.split(";").forEach(function(c) {
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+          });
+
+          // Show success message
+          showToast(
+            l === 'ja'
+              ? `✅ アカウントが削除されました (${d.deleted_items}項目)`
+              : `✅ Account deleted (${d.deleted_items} items)`,
+            5000
+          );
+
+          // Redirect to home page after delay
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 2000);
         } else {
-          showToast(d.error || 'Error');
+          showToast(d.error || (l === 'ja' ? 'エラーが発生しました' : 'Error occurred'), 3000);
         }
-      } catch(e) { showToast('Network error'); }
+      } catch(e) {
+        console.error('Delete account error:', e);
+        showToast(l === 'ja' ? 'ネットワークエラー' : 'Network error', 3000);
+      }
     }
 
     // --- File Upload ---
@@ -7844,6 +7905,20 @@
       return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // Translate backend error messages to user-friendly Japanese/English
+    function friendlyError(msg) {
+      var l = document.documentElement.lang || 'ja';
+      var map = {
+        'No providers available': { ja: 'AIサービスに一時的に接続できません。しばらくしてからお試しください。', en: 'AI service temporarily unavailable. Please try again shortly.' },
+        'No providers available for parallel mode': { ja: 'AIサービスに一時的に接続できません。しばらくしてからお試しください。', en: 'AI service temporarily unavailable. Please try again shortly.' },
+        'AI provider not configured': { ja: 'AIサービスが設定されていません。管理者にお問い合わせください。', en: 'AI service is not configured. Please contact the administrator.' },
+        'Message too long': { ja: 'メッセージが長すぎます。短くしてから再送信してください。', en: 'Message is too long. Please shorten it and try again.' },
+        'Invalid tier': { ja: '無効なモデル選択です。もう一度お試しください。', en: 'Invalid model selection. Please try again.' },
+      };
+      if (map[msg]) return map[msg][l] || map[msg].ja;
+      return msg;
+    }
+
     // Simplify model names for display
     function simplifyModelName(fullModel) {
       if (fullModel.includes('claude')) {
@@ -8149,12 +8224,20 @@
       if (!text) return;
 
       // 🎮 Mobile Easter Eggs - Check before sending
+      console.log('[DEBUG] Checking easter egg for:', text);
       if (checkMobileEasterEgg(text)) {
+        console.log('[DEBUG] Easter egg detected!', text);
         textarea.value = '';
         textarea.style.height = 'auto';
-        await handleMobileEasterEgg(text);
+        try {
+          await handleMobileEasterEgg(text);
+        } catch (error) {
+          console.error('[ERROR] Easter egg failed:', error);
+          showToast('エラーが発生しました', 2000);
+        }
         return;
       }
+      console.log('[DEBUG] Not an easter egg, proceeding with normal send');
       textarea.value = '';
       textarea.style.height = 'auto';
       touchActivity();
@@ -8427,12 +8510,12 @@
               if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
               touchActivity();
               autoPlayTTS(evt.content);
-            } else if (evt.type === 'error') {
+            } else if (evt.type === 'error' || (!evt.type && evt.error)) {
               clearTimeout(frontendTimeout);
               clearInterval(statusInterval);
               stopThinkingAmbient();
               thinking.remove();
-              var errMsg = evt.content || 'Error';
+              var errMsg = friendlyError(evt.content || evt.error || 'Error');
               appAddMsg(errMsg, 'bot');
               if (evt.action === 'upgrade') {
                 appendUpgradeButton();
@@ -8593,7 +8676,7 @@
             }
 
             if (data.error) {
-              pending.textContent = data.error;
+              pending.textContent = friendlyError(data.error);
             }
           } catch {}
         }
@@ -8794,7 +8877,7 @@
               if (data.error) {
                 clearInterval(statusInterval);
                 thinking.remove();
-                appAddMsg(escapeHtml(data.error), 'bot');
+                appAddMsg(friendlyError(data.error), 'bot');
                 if (data.action === 'upgrade') {
                   appendUpgradeButton();
                   setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800);
@@ -9026,7 +9109,7 @@
     const _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    const SILENCE_MS = 1500; // 1.5s silence timeout for Japanese
+    const SILENCE_MS = 600; // 600ms silence threshold for responsive conversation
     const RELISTEN_DELAY_MS = 400; // Delay before re-listening (avoid picking up TTS tail)
 
     function setVoiceState(state) {
@@ -9109,6 +9192,13 @@
       } else {
         speechRecognition.continuous = true;
       }
+
+      // Interrupt AI speech when user starts speaking
+      speechRecognition.onstart = function() {
+        if (ttsPlaying || (currentAudio && !currentAudio.paused)) {
+          stopTTS();
+        }
+      };
 
       speechRecognition.onresult = function(e) {
         clearTimeout(_silenceTimer);
@@ -9270,24 +9360,32 @@
     async function handleMobileEasterEgg(text) {
       const l = document.documentElement.lang || 'ja';
 
-      // Determine bonus type based on pattern
-      let emoji, title, color;
+      // Determine bonus type and unique coupon code based on pattern
+      let emoji, title, color, couponCode;
       if (text.includes('❤') || text.includes('💕')) {
-        emoji = '💕'; title = 'LOVE BONUS'; color = '#ec4899';
+        emoji = '💕'; title = 'LOVE BONUS'; color = '#ec4899'; couponCode = 'LOVE';
       } else if (text.includes('🎉') || text.includes('🎊') || text.includes('🎁')) {
-        emoji = '🎉'; title = 'CELEBRATION BONUS'; color = '#f59e0b';
+        emoji = '🎉'; title = 'CELEBRATION BONUS'; color = '#f59e0b'; couponCode = 'CELEBRATE';
       } else if (text.includes('✨') || text.includes('⭐') || text.includes('🌟')) {
-        emoji = '✨'; title = 'STAR BONUS'; color = '#06b6d4';
+        emoji = '✨'; title = 'STAR BONUS'; color = '#06b6d4'; couponCode = 'STAR';
       } else if (text.includes('🎮') || text.includes('🎯')) {
-        emoji = '🎮'; title = 'GAMER BONUS'; color = '#ec4899';
+        emoji = '🎮'; title = 'GAMER BONUS'; color = '#ec4899'; couponCode = 'GAMER';
       } else if (text === '...') {
-        emoji = '💭'; title = 'THINKING BONUS'; color = '#3b82f6';
+        emoji = '💭'; title = 'THINKING BONUS'; color = '#3b82f6'; couponCode = 'THINKING';
       } else if (text === '!!!') {
-        emoji = '🔥'; title = 'ENERGY BONUS'; color = '#ef4444';
+        emoji = '🔥'; title = 'ENERGY BONUS'; color = '#ef4444'; couponCode = 'ENERGY';
+      } else if (text === '???') {
+        emoji = '❓'; title = 'MYSTERY BONUS'; color = '#8b5cf6'; couponCode = 'MYSTERY';
       } else if (/^\d+$/.test(text)) {
-        emoji = '🔢'; title = 'NUMBER BONUS'; color = '#22c55e';
+        emoji = '🔢'; title = 'NUMBER BONUS'; color = '#22c55e'; couponCode = 'NUMBER';
+      } else if (text === 'love' || text === 'LOVE') {
+        emoji = '💖'; title = 'WORD BONUS'; color = '#ec4899'; couponCode = 'WORDLOVE';
+      } else if (text.includes('ありがとう')) {
+        emoji = '🙏'; title = 'THANKS BONUS'; color = '#f59e0b'; couponCode = 'THANKS';
+      } else if (text.includes('すごい')) {
+        emoji = '🌟'; title = 'AMAZING BONUS'; color = '#06b6d4'; couponCode = 'AMAZING';
       } else {
-        emoji = '🎁'; title = 'SECRET BONUS'; color = '#ec4899';
+        emoji = '🎁'; title = 'SECRET BONUS'; color = '#ec4899'; couponCode = 'SECRET';
       }
 
       // Show loading
@@ -9300,7 +9398,7 @@
         const r = await fetch(API + '/api/v1/coupon/redeem', {
           method: 'POST',
           headers: hdrs,
-          body: JSON.stringify({ code: 'KONAMI', session_id: webSessionId }),
+          body: JSON.stringify({ code: couponCode, session_id: webSessionId }),
         });
 
         const d = await r.json();
@@ -9924,6 +10022,27 @@
       }
       const autoSendToggle = document.getElementById('settings-voice-autosend-toggle');
       if (autoSendToggle) autoSendToggle.classList.toggle('active', _voiceAutoSend);
+
+      // Load TTS engine selection
+      const engine = localStorage.getItem('ttsEngine') || 'openai';
+      const engineSelect = document.getElementById('settings-tts-engine');
+      if (engineSelect) engineSelect.value = engine;
+
+      // Load OpenAI voice selection
+      const openaiVoice = localStorage.getItem('ttsVoice') || 'nova';
+      const openaiVoiceSelect = document.getElementById('settings-openai-voice-select');
+      if (openaiVoiceSelect) openaiVoiceSelect.value = openaiVoice;
+
+      // Load ElevenLabs voice
+      const elVoice = localStorage.getItem('elVoiceId') || 'pNInz6obpgDQGcFmaJgB';
+      const elVoiceSelect = document.getElementById('settings-el-voice');
+      if (elVoiceSelect) elVoiceSelect.value = elVoice;
+
+      // Show/hide voice selectors based on engine
+      const openaiSection = document.getElementById('settings-openai-voice');
+      if (openaiSection) openaiSection.style.display = engine === 'openai' ? '' : 'none';
+      const elSection = document.getElementById('settings-elevenlabs-voice');
+      if (elSection) elSection.style.display = engine === 'elevenlabs' ? '' : 'none';
     }
     function saveVoiceSettings() {
       const settings = {
@@ -10019,6 +10138,54 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
+    async function resetUserData() {
+      const lang = document.documentElement.lang || 'ja';
+      const msg = lang === 'ja'
+        ? '会話履歴・メモリ・セッションをリセットしますか？\nクレジットとアカウント情報は保持されます。\nこの操作は取り消せません。'
+        : 'Reset conversations, memory, and sessions?\nCredits and account info will be kept.\nThis cannot be undone.';
+      if (!confirm(msg)) return;
+
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        alert(lang === 'ja' ? 'ログインが必要です' : 'Login required');
+        return;
+      }
+
+      try {
+        const r = await fetch(API + '/api/v1/account/reset-data', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        const data = await r.json();
+
+        if (r.ok) {
+          // Clear local conversation data
+          appConversations = [];
+          const convList = document.getElementById('app-conv-list');
+          if (convList) convList.innerHTML = '';
+
+          // Clear message history but keep auth token
+          appMessages = [];
+          document.getElementById('app-messages').innerHTML = '';
+
+          // Show success message
+          alert(data.message || (lang === 'ja' ? 'データをリセットしました' : 'Data reset successfully'));
+
+          // Reload to refresh UI
+          location.reload();
+        } else {
+          alert(data.error || (lang === 'ja' ? 'リセットに失敗しました' : 'Reset failed'));
+        }
+      } catch(e) {
+        console.error('Reset error:', e);
+        alert(lang === 'ja' ? 'エラーが発生しました' : 'Error occurred');
+      }
+    }
+
     async function deleteAllData() {
       const lang = document.documentElement.lang || 'ja';
       const msg = lang === 'ja'
@@ -10825,10 +10992,19 @@
     function setTTSEngine(engine) {
       _ttsEngine = engine;
       localStorage.setItem('ttsEngine', engine);
+      // Show/hide OpenAI voice selector
+      const openaiSection = document.getElementById('settings-openai-voice');
+      if (openaiSection) openaiSection.style.display = engine === 'openai' ? '' : 'none';
       // Show/hide ElevenLabs voice selector
       const elSection = document.getElementById('settings-elevenlabs-voice');
       if (elSection) elSection.style.display = engine === 'elevenlabs' ? '' : 'none';
       // Clear TTS cache when switching engine
+      ttsCache.clear();
+    }
+
+    function setOpenAIVoice(voice) {
+      localStorage.setItem('ttsVoice', voice);
+      selectedVoice = voice;
       ttsCache.clear();
     }
 
@@ -11120,12 +11296,15 @@
         + (l==='ja' ? '友達が登録すると、あなたも友達も <b style="color:#10b981;">+100クレジット</b> 獲得!' : 'When your friend signs up, you both get <b style="color:#10b981;">+100 credits</b>!')
         + '</p>'
         + '<div style="background:var(--surface,#0a0a1a);border-radius:10px;padding:12px;margin-bottom:12px;font-family:monospace;font-size:16px;text-align:center;letter-spacing:2px;color:#fbbf24;">' + code + '</div>'
-        + '<div style="display:flex;gap:8px;">'
+        + '<div style="display:flex;gap:8px;margin-bottom:12px;">'
         + '<button id="ref-copy-url" style="flex:1;padding:10px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;">'
         + (l==='ja' ? 'URLをコピー' : 'Copy URL') + '</button>'
         + '<button id="ref-share" style="flex:1;padding:10px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;">'
         + (l==='ja' ? 'SNSで共有' : 'Share') + '</button>'
         + '</div>'
+        + '<button id="ref-voice-invite" style="width:100%;padding:12px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">'
+        + '<span style="font-size:18px;">🎤</span>'
+        + (l==='ja' ? '僕の声で招待' : 'Voice Invite') + '</button>'
         + '</div>';
       document.body.appendChild(modal);
       modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
@@ -11142,6 +11321,240 @@
           navigator.share({ title: 'chatweb.ai', text: text, url: url }).catch(function(){});
         } else {
           const twitterUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text + ' ' + url);
+          window.open(twitterUrl, '_blank');
+        }
+      });
+      document.getElementById('ref-voice-invite').addEventListener('click', function() {
+        modal.remove();
+        showVoiceInviteModal();
+      });
+    }
+
+    // Voice invite modal - Voice conversation flow
+    // ---------------------------------------------------------------------------
+    async function showVoiceInviteModal() {
+      if (!authToken) return;
+      const l = document.documentElement.lang || 'ja';
+      const existing = document.getElementById('voice-invite-modal');
+      if (existing) existing.remove();
+
+      let step = 0;
+      let answers = { name: '', reason: '' };
+      let recognition = null;
+
+      const questions = l === 'ja' ? [
+        '誰に招待したいですか？',
+        'なぜこの人を招待したいですか？'
+      ] : [
+        'Who do you want to invite?',
+        'Why do you want to invite them?'
+      ];
+
+      const modal = document.createElement('div');
+      modal.id = 'voice-invite-modal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);';
+      modal.innerHTML = '<div style="background:var(--bg-secondary,#1a1a2e);border-radius:16px;padding:32px;max-width:500px;width:90%;color:#e2e8f0;text-align:center;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">'
+        + '<h3 style="margin:0;font-size:18px;display:flex;align-items:center;gap:8px;"><span style="font-size:22px;">🎤</span>' + (l==='ja' ? '音声で招待' : 'Voice Invite') + '</h3>'
+        + '<button onclick="document.getElementById(\'voice-invite-modal\').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">&times;</button>'
+        + '</div>'
+        + '<div id="voice-question" style="font-size:20px;font-weight:600;margin-bottom:32px;min-height:60px;display:flex;align-items:center;justify-content:center;">' + questions[0] + '</div>'
+        + '<button id="voice-mic-btn" style="width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#fff;font-size:48px;cursor:pointer;margin:0 auto 24px;display:block;box-shadow:0 8px 24px rgba(245,158,11,0.4);transition:all 0.3s;">🎤</button>'
+        + '<div id="voice-status" style="font-size:14px;color:var(--muted);margin-bottom:16px;">' + (l==='ja' ? 'マイクボタンをタップして話してください' : 'Tap mic to speak') + '</div>'
+        + '<div id="voice-transcript" style="font-size:16px;min-height:60px;padding:16px;background:var(--surface,#0a0a1a);border-radius:8px;margin-bottom:16px;line-height:1.5;"></div>'
+        + '<div id="voice-error" style="display:none;color:#ef4444;font-size:13px;margin-bottom:12px;"></div>'
+        + '</div>';
+      document.body.appendChild(modal);
+      modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+
+      const micBtn = document.getElementById('voice-mic-btn');
+      const statusDiv = document.getElementById('voice-status');
+      const transcriptDiv = document.getElementById('voice-transcript');
+      const questionDiv = document.getElementById('voice-question');
+      const errorDiv = document.getElementById('voice-error');
+
+      // Check for speech recognition support
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        errorDiv.textContent = l==='ja' ? 'このブラウザは音声認識に対応していません' : 'Speech recognition not supported';
+        errorDiv.style.display = 'block';
+        micBtn.disabled = true;
+        return;
+      }
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.lang = l === 'ja' ? 'ja-JP' : 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = function() {
+        micBtn.style.transform = 'scale(1.1)';
+        micBtn.style.boxShadow = '0 0 0 8px rgba(245,158,11,0.3)';
+        statusDiv.textContent = l==='ja' ? '聞いています...' : 'Listening...';
+        errorDiv.style.display = 'none';
+      };
+
+      recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        transcriptDiv.textContent = transcript;
+
+        if (step === 0) {
+          answers.name = transcript;
+          setTimeout(function() {
+            step = 1;
+            questionDiv.textContent = questions[1];
+            transcriptDiv.textContent = '';
+            statusDiv.textContent = l==='ja' ? 'マイクボタンをタップして話してください' : 'Tap mic to speak';
+          }, 1000);
+        } else if (step === 1) {
+          answers.reason = transcript;
+          submitVoiceInvite();
+        }
+      };
+
+      recognition.onerror = function(event) {
+        errorDiv.textContent = l==='ja' ? '音声認識エラー: ' + event.error : 'Speech error: ' + event.error;
+        errorDiv.style.display = 'block';
+        micBtn.style.transform = 'scale(1)';
+        micBtn.style.boxShadow = '0 8px 24px rgba(245,158,11,0.4)';
+        statusDiv.textContent = l==='ja' ? 'マイクボタンをタップして話してください' : 'Tap mic to speak';
+      };
+
+      recognition.onend = function() {
+        micBtn.style.transform = 'scale(1)';
+        micBtn.style.boxShadow = '0 8px 24px rgba(245,158,11,0.4)';
+      };
+
+      micBtn.addEventListener('click', function() {
+        recognition.start();
+      });
+
+      async function submitVoiceInvite() {
+        statusDiv.textContent = l==='ja' ? '音声メッセージを作成中...' : 'Creating voice message...';
+        micBtn.disabled = true;
+        micBtn.style.opacity = '0.5';
+
+        try {
+          const r = await fetch(API + '/api/v1/referral/voice-invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+            body: JSON.stringify({ recipient_name: answers.name, recipient_email: '', reason: answers.reason }),
+          });
+          const d = await r.json();
+          if (d.ok) {
+            modal.remove();
+            showVoiceInviteResult(d, answers.name, '');
+          } else {
+            errorDiv.textContent = d.error || (l==='ja' ? '送信に失敗しました' : 'Failed to send invite');
+            errorDiv.style.display = 'block';
+            micBtn.disabled = false;
+            micBtn.style.opacity = '1';
+            statusDiv.textContent = l==='ja' ? 'マイクボタンをタップして話してください' : 'Tap mic to speak';
+          }
+        } catch(e) {
+          errorDiv.textContent = l==='ja' ? 'エラーが発生しました' : 'An error occurred';
+          errorDiv.style.display = 'block';
+          micBtn.disabled = false;
+          micBtn.style.opacity = '1';
+          statusDiv.textContent = l==='ja' ? 'マイクボタンをタップして話してください' : 'Tap mic to speak';
+        }
+      }
+    }
+
+    // Voice invite result modal
+    // ---------------------------------------------------------------------------
+    function showVoiceInviteResult(data, recipientName, recipientEmail) {
+      const l = document.documentElement.lang || 'ja';
+      const existing = document.getElementById('voice-invite-result-modal');
+      if (existing) existing.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'voice-invite-result-modal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);';
+      modal.innerHTML = '<div style="background:var(--bg-secondary,#1a1a2e);border-radius:16px;padding:24px;max-width:500px;width:90%;color:#e2e8f0;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+        + '<h3 style="margin:0;font-size:18px;display:flex;align-items:center;gap:8px;"><span style="font-size:22px;">✨</span>' + (l==='ja' ? '音声招待メッセージ完成' : 'Voice Invite Created') + '</h3>'
+        + '<button onclick="document.getElementById(\'voice-invite-result-modal\').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">&times;</button>'
+        + '</div>'
+        + '<div style="background:var(--surface,#0a0a1a);border-radius:12px;padding:16px;margin-bottom:16px;">'
+        + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">'
+        + '<button id="play-invite-audio" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">▶️</button>'
+        + '<div style="flex:1;">'
+        + '<div style="font-size:13px;color:var(--muted);margin-bottom:4px;">' + (l==='ja' ? 'ゆうきの音声メッセージ' : 'Yuki\'s voice message') + '</div>'
+        + '<div style="font-size:12px;color:var(--muted);" id="audio-status">' + (l==='ja' ? 'クリックして再生' : 'Click to play') + '</div>'
+        + '</div>'
+        + '</div>'
+        + '<div style="font-size:14px;line-height:1.6;color:#e2e8f0;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:12px;">' + data.message + '</div>'
+        + '</div>'
+        + '<div style="margin-bottom:16px;">'
+        + '<label style="display:block;font-size:13px;margin-bottom:6px;color:var(--muted);">' + (l==='ja' ? '招待リンク' : 'Invitation Link') + '</label>'
+        + '<div style="display:flex;gap:8px;">'
+        + '<input id="invite-url-input" type="text" value="' + data.referral_url + '" readonly style="flex:1;padding:10px;background:var(--surface,#0a0a1a);border:1px solid var(--border,#333);border-radius:8px;color:#e2e8f0;font-size:13px;">'
+        + '<button id="copy-invite-url" style="padding:10px 16px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;white-space:nowrap;">' + (l==='ja' ? 'コピー' : 'Copy') + '</button>'
+        + '</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;">'
+        + '<button id="send-email-btn" style="flex:1;padding:12px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:14px;">' + (l==='ja' ? 'メールで送信' : 'Send Email') + '</button>'
+        + '<button id="share-invite-btn" style="flex:1;padding:12px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:14px;">' + (l==='ja' ? 'シェア' : 'Share') + '</button>'
+        + '</div>'
+        + '</div>';
+      document.body.appendChild(modal);
+      modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+
+      // Audio playback
+      let audio = null;
+      const playBtn = document.getElementById('play-invite-audio');
+      const audioStatus = document.getElementById('audio-status');
+
+      playBtn.addEventListener('click', function() {
+        if (audio && !audio.paused) {
+          audio.pause();
+          audio.currentTime = 0;
+          playBtn.textContent = '▶️';
+          audioStatus.textContent = l==='ja' ? 'クリックして再生' : 'Click to play';
+        } else {
+          if (!audio) {
+            audio = new Audio('data:audio/mp3;base64,' + data.audio_base64);
+            audio.addEventListener('ended', function() {
+              playBtn.textContent = '▶️';
+              audioStatus.textContent = l==='ja' ? '再生完了' : 'Finished';
+            });
+          }
+          audio.play();
+          playBtn.textContent = '⏸️';
+          audioStatus.textContent = l==='ja' ? '再生中...' : 'Playing...';
+        }
+      });
+
+      // Copy URL
+      document.getElementById('copy-invite-url').addEventListener('click', function() {
+        const input = document.getElementById('invite-url-input');
+        input.select();
+        navigator.clipboard.writeText(data.referral_url).then(function() {
+          showToast(l==='ja' ? 'URLをコピーしました' : 'URL copied!');
+        });
+      });
+
+      // Send email
+      document.getElementById('send-email-btn').addEventListener('click', function() {
+        const subject = encodeURIComponent(l==='ja' ? 'chatweb.aiへの招待' : 'Invitation to chatweb.ai');
+        const body = encodeURIComponent(
+          (l==='ja' ?
+            `${recipientName}さんへ\n\n${data.message}\n\n招待リンク: ${data.referral_url}\n\n` :
+            `Hi ${recipientName},\n\n${data.message}\n\nInvitation link: ${data.referral_url}\n\n`)
+        );
+        window.open(`mailto:${recipientEmail}?subject=${subject}&body=${body}`, '_blank');
+      });
+
+      // Share
+      document.getElementById('share-invite-btn').addEventListener('click', function() {
+        const text = (l==='ja' ?
+          `${recipientName}さんへの招待: ${data.message}` :
+          `Invitation to ${recipientName}: ${data.message}`);
+        if (navigator.share) {
+          navigator.share({ title: 'chatweb.ai', text: text, url: data.referral_url }).catch(function(){});
+        } else {
+          const twitterUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text + ' ' + data.referral_url);
           window.open(twitterUrl, '_blank');
         }
       });

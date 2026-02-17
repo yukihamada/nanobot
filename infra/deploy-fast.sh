@@ -6,8 +6,9 @@ set -euo pipefail
 # ~30s vs ~3min for full SAM deploy.
 #
 # Usage:
-#   ./infra/deploy-fast.sh           # build + deploy
-#   ./infra/deploy-fast.sh --skip-build  # deploy only (reuse last build)
+#   ./infra/deploy-fast.sh                # build (release) + deploy
+#   ./infra/deploy-fast.sh --fast         # build (release-fast: thin LTO) + deploy (~40% faster)
+#   ./infra/deploy-fast.sh --skip-build   # deploy only (reuse last build)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -16,14 +17,20 @@ FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:-nanobot}"
 REGION="${AWS_REGION:-ap-northeast-1}"
 ALIAS_NAME="live"
 SKIP_BUILD=false
+CARGO_PROFILE="release"
 
 for arg in "$@"; do
     case "$arg" in
         --skip-build) SKIP_BUILD=true ;;
+        --fast) CARGO_PROFILE="release-fast" ;;
     esac
 done
 
-BINARY="$PROJECT_ROOT/target/aarch64-unknown-linux-gnu/release/bootstrap"
+if [ "$CARGO_PROFILE" = "release-fast" ]; then
+    BINARY="$PROJECT_ROOT/target/aarch64-unknown-linux-gnu/release-fast/bootstrap"
+else
+    BINARY="$PROJECT_ROOT/target/aarch64-unknown-linux-gnu/release/bootstrap"
+fi
 ZIP_FILE="/tmp/nanobot-lambda.zip"
 
 echo "=== nanobot Fast Deploy ==="
@@ -43,14 +50,15 @@ else
     echo "--- Building for aarch64-unknown-linux-gnu ---"
     START_BUILD=$(date +%s)
 
+    echo "Profile: $CARGO_PROFILE"
     if command -v cargo-zigbuild &>/dev/null; then
         RUSTUP_TOOLCHAIN=stable \
         RUSTC="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc" \
         cargo zigbuild --manifest-path "$PROJECT_ROOT/crates/nanobot-lambda/Cargo.toml" \
-            --release --target aarch64-unknown-linux-gnu
+            --profile "$CARGO_PROFILE" --target aarch64-unknown-linux-gnu
     elif command -v cross &>/dev/null; then
         cross build --manifest-path "$PROJECT_ROOT/crates/nanobot-lambda/Cargo.toml" \
-            --release --target aarch64-unknown-linux-gnu
+            --profile "$CARGO_PROFILE" --target aarch64-unknown-linux-gnu
     else
         echo "ERROR: Neither cargo-zigbuild nor cross found."
         exit 1

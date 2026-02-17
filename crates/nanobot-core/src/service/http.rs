@@ -2077,7 +2077,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/coupon/validate", post(handle_coupon_validate))
         .route("/api/v1/coupon/redeem", post(handle_coupon_redeem))
         // Omikuji (fortune)
-        .route("/api/v1/omikuji", post(handle_omikuji))
+        //         .route("/api/v1/omikuji", post(handle_omikuji))
         // Referral
         .route("/api/v1/referral/code", get(handle_referral_code))
         .route("/api/v1/referral/apply", post(handle_referral_apply))
@@ -6089,7 +6089,7 @@ async fn handle_chat_explore(
         let err_stream = futures::stream::once(async {
             Ok::<_, Infallible>(Event::default()
                 .event("error")
-                .data(serde_json::json!({"error": "Message too long"}).to_string()))
+                .data(serde_json::json!({"type":"error","content":"Message too long","error":"Message too long"}).to_string()))
         });
         return Sse::new(err_stream).into_response();
     }
@@ -6122,7 +6122,7 @@ async fn handle_chat_explore(
                 let err_stream = futures::stream::once(async move {
                     Ok::<_, Infallible>(Event::default()
                         .event("error")
-                        .data(serde_json::json!({"error": content, "action": "upgrade"}).to_string()))
+                        .data(serde_json::json!({"type":"error","content": content,"error": content, "action": "upgrade"}).to_string()))
                 });
                 return Sse::new(err_stream).into_response();
             }
@@ -6137,7 +6137,7 @@ async fn handle_chat_explore(
             let err_stream = futures::stream::once(async {
                 Ok::<_, Infallible>(Event::default()
                     .event("error")
-                    .data(serde_json::json!({"error": "No providers available"}).to_string()))
+                    .data(serde_json::json!({"type":"error","content":"No providers available","error":"No providers available"}).to_string()))
             });
             return Sse::new(err_stream).into_response();
         }
@@ -6507,7 +6507,7 @@ async fn handle_chat_race(
         let err_stream = futures::stream::once(async {
             Ok::<_, Infallible>(Event::default()
                 .event("error")
-                .data(serde_json::json!({"error": "Message too long"}).to_string()))
+                .data(serde_json::json!({"type":"error","content":"Message too long","error":"Message too long"}).to_string()))
         });
         return Sse::new(err_stream).into_response();
     }
@@ -6518,7 +6518,7 @@ async fn handle_chat_race(
             let err_stream = futures::stream::once(async {
                 Ok::<_, Infallible>(Event::default()
                     .event("error")
-                    .data(serde_json::json!({"error": "Invalid tier"}).to_string()))
+                    .data(serde_json::json!({"type":"error","content":"Invalid tier","error":"Invalid tier"}).to_string()))
             });
             return Sse::new(err_stream).into_response();
         }
@@ -6552,7 +6552,7 @@ async fn handle_chat_race(
                 let err_stream = futures::stream::once(async move {
                     Ok::<_, Infallible>(Event::default()
                         .event("error")
-                        .data(serde_json::json!({"error": content, "action": "upgrade"}).to_string()))
+                        .data(serde_json::json!({"type":"error","content": content,"error": content, "action": "upgrade"}).to_string()))
                 });
                 return Sse::new(err_stream).into_response();
             }
@@ -6568,7 +6568,7 @@ async fn handle_chat_race(
             let err_stream = futures::stream::once(async {
                 Ok::<_, Infallible>(Event::default()
                     .event("error")
-                    .data(serde_json::json!({"error": "レースリクエストが多すぎます。少し待ってからお試しください。"}).to_string()))
+                    .data(serde_json::json!({"type":"error","content":"レースリクエストが多すぎます。少し待ってからお試しください。","error":"レースリクエストが多すぎます。少し待ってからお試しください。"}).to_string()))
             });
             return Sse::new(err_stream).into_response();
         }
@@ -6584,7 +6584,7 @@ async fn handle_chat_race(
             let err_stream = futures::stream::once(async {
                 Ok::<_, Infallible>(Event::default()
                     .event("error")
-                    .data(serde_json::json!({"error": "No providers available"}).to_string()))
+                    .data(serde_json::json!({"type":"error","content":"No providers available","error":"No providers available"}).to_string()))
             });
             return Sse::new(err_stream).into_response();
         }
@@ -6734,14 +6734,14 @@ async fn handle_chat_race(
                         tracing::error!("Race tier '{}' model failed: {}", tier_name, e);
                         return Ok::<_, Infallible>(Event::default()
                             .event("error")
-                            .data(serde_json::json!({"error": "サービスが一時的に利用できません。しばらくしてからお試しください。"}).to_string()));
+                            .data(serde_json::json!({"type":"error","content":"サービスが一時的に利用できません。しばらくしてからお試しください。","error":"サービスが一時的に利用できません。しばらくしてからお試しください。"}).to_string()));
                     }
                 }
             } else {
                 tracing::warn!("Race: tier '{}' has no available provider", tier_name);
                 return Ok::<_, Infallible>(Event::default()
                     .event("error")
-                    .data(serde_json::json!({"error": "選択されたモデルが現在利用できません。Auto Raceをお試しください。"}).to_string()));
+                    .data(serde_json::json!({"type":"error","content":"選択されたモデルが現在利用できません。Auto Raceをお試しください。","error":"選択されたモデルが現在利用できません。Auto Raceをお試しください。"}).to_string()));
             }
         }
 
@@ -6815,7 +6815,7 @@ async fn handle_chat_race(
             // If we get here, all fallback attempts also failed
             return Ok::<_, Infallible>(Event::default()
                 .event("error")
-                .data(serde_json::json!({"error": "全てのモデルが応答できませんでした。しばらくしてからお試しください。"}).to_string()));
+                .data(serde_json::json!({"type":"error","content":"全てのモデルが応答できませんでした。しばらくしてからお試しください。","error":"全てのモデルが応答できませんでした。しばらくしてからお試しください。"}).to_string()));
         }
 
         // Deduct credits for each result

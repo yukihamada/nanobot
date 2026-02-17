@@ -42,3 +42,10 @@ lto = "fat"
 codegen-units = 1
 strip = true
 panic = "abort"
+
+# Fast release build for development deploys (~40% faster)
+# Use: cargo zigbuild --profile release-fast --target aarch64-unknown-linux-gnu
+[profile.release-fast]
+inherits = "release"
+lto = "thin"
+codegen-units = 4
