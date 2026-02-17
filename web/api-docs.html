@@ -261,6 +261,12 @@
       <a class="nav-item" href="#integrations">Integrations</a>
       <a class="nav-item" href="#health">Health</a>
 
+      <h3>Media API</h3>
+      <a class="nav-item" href="#media">Overview</a>
+      <a class="nav-item" href="#media-tts">Text-to-Speech</a>
+      <a class="nav-item" href="#media-image">Image Generation</a>
+      <a class="nav-item" href="#media-video">Video Generation</a>
+
       <h3>Billing</h3>
       <a class="nav-item" href="#billing">Checkout</a>
       <a class="nav-item" href="#portal">Billing Portal</a>
@@ -517,6 +523,204 @@ curl https://api.chatweb.ai/health
         </div>
       </div>
 
+      <!-- Media API -->
+      <h2 id="media">Media API</h2>
+      <p>Generate images, audio, and video using state-of-the-art AI models. The Media API provides unified access to DALL-E 3, Flux, Qwen3 TTS, Polly, and Kling AI.</p>
+
+      <div class="alert info">
+        🎨 Try the <a href="/media" style="color:var(--accent-hover);font-weight:600;">interactive demo</a> to test all Media API features with a visual interface.
+      </div>
+
+      <h3>Credit Costs</h3>
+      <table>
+        <tr><th>Service</th><th>Credits</th><th>Notes</th></tr>
+        <tr><td>TTS (100 chars)</td><td>1</td><td>Polly, OpenAI, Qwen3</td></tr>
+        <tr><td>STT (per request)</td><td>1</td><td>Whisper</td></tr>
+        <tr><td>Image - Standard</td><td>5-10</td><td>Flux Schnell, DALL-E 3</td></tr>
+        <tr><td>Image - HD</td><td>15-20</td><td>Flux Pro, DALL-E 3 HD</td></tr>
+        <tr><td>Video - 5s</td><td>50</td><td>Kling AI Standard</td></tr>
+        <tr><td>Video - 10s</td><td>100</td><td>Kling AI Standard</td></tr>
+      </table>
+
+      <!-- TTS -->
+      <h2 id="media-tts">Text-to-Speech</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/tts</span>
+          <span class="endpoint-desc">Convert text to natural-sounding speech</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Supports multiple TTS engines with automatic fallback: Polly (AWS), OpenAI TTS, Qwen3.</p>
+
+          <h3>Request Body</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+            <tr><td><code>text</code></td><td>string</td><td>Yes</td><td>Text to convert to speech (max 4096 chars)</td></tr>
+            <tr><td><code>voice</code></td><td>string</td><td>No</td><td>Voice name. Default: <code>Kazuha</code></td></tr>
+            <tr><td><code>speed</code></td><td>number</td><td>No</td><td>Playback speed (0.25-4.0). Default: 1.0</td></tr>
+          </table>
+
+          <h3>Available Voices</h3>
+          <table>
+            <tr><th>Voice</th><th>Language</th><th>Gender</th><th>Engine</th></tr>
+            <tr><td><code>Kazuha</code></td><td>Japanese</td><td>Female</td><td>Polly (recommended)</td></tr>
+            <tr><td><code>Takumi</code></td><td>Japanese</td><td>Male</td><td>Polly</td></tr>
+            <tr><td><code>Mizuki</code></td><td>Japanese</td><td>Female</td><td>Polly</td></tr>
+            <tr><td><code>female_calm</code></td><td>Japanese</td><td>Female</td><td>Qwen3</td></tr>
+            <tr><td><code>male_calm</code></td><td>Japanese</td><td>Male</td><td>Qwen3</td></tr>
+            <tr><td><code>nova</code></td><td>English</td><td>Female</td><td>OpenAI</td></tr>
+            <tr><td><code>alloy</code></td><td>English</td><td>Neutral</td><td>OpenAI</td></tr>
+          </table>
+
+          <h3>Response</h3>
+          <p>Returns audio file as <code>audio/mpeg</code> (MP3 format).</p>
+
+          <h3>Example</h3>
+          <div class="code-block" id="code-tts">
+            <button class="copy-btn" onclick="copyCode('code-tts')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/media/tts \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "text": "こんにちは、これはテストです",
+    "voice": "Kazuha",
+    "speed": 1.0
+  }'</span> \
+  --output audio.mp3
+          </div>
+        </div>
+      </div>
+
+      <!-- Image Generation -->
+      <h2 id="media-image">Image Generation</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/image</span>
+          <span class="endpoint-desc">Generate images from text descriptions</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Generate high-quality images using DALL-E 3, Flux Pro, Flux Schnell, or Flux Realism models.</p>
+
+          <h3>Request Body</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+            <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>Description of the image to generate</td></tr>
+            <tr><td><code>model</code></td><td>string</td><td>No</td><td>Model: <code>flux-schnell</code> (default), <code>flux-pro</code>, <code>flux-realism</code>, <code>dalle-3</code></td></tr>
+            <tr><td><code>size</code></td><td>string</td><td>No</td><td><code>1024x1024</code> (default), <code>1792x1024</code>, <code>1024x1792</code></td></tr>
+            <tr><td><code>quality</code></td><td>string</td><td>No</td><td><code>standard</code> (default), <code>hd</code> (DALL-E 3 only)</td></tr>
+          </table>
+
+          <h3>Models</h3>
+          <table>
+            <tr><th>Model</th><th>Credits</th><th>Speed</th><th>Quality</th></tr>
+            <tr><td><code>flux-schnell</code></td><td>5</td><td>Fast (~15s)</td><td>Good</td></tr>
+            <tr><td><code>flux-realism</code></td><td>10</td><td>Medium (~30s)</td><td>Very Realistic</td></tr>
+            <tr><td><code>flux-pro</code></td><td>15</td><td>Slow (~60s)</td><td>Best</td></tr>
+            <tr><td><code>dalle-3</code></td><td>10 (20 HD)</td><td>Medium (~30s)</td><td>Excellent</td></tr>
+          </table>
+
+          <h3>Response</h3>
+          <div class="code-block">
+{
+  <span class="key">"images"</span>: [{
+    <span class="key">"url"</span>: <span class="string">"https://..."</span>
+  }],
+  <span class="key">"model"</span>: <span class="string">"flux-schnell"</span>,
+  <span class="key">"credits_used"</span>: <span class="number">5</span>
+}
+          </div>
+
+          <h3>Example</h3>
+          <div class="code-block" id="code-image">
+            <button class="copy-btn" onclick="copyCode('code-image')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/media/image \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "prompt": "a cute cat in the snow, cinematic lighting, 4k",
+    "model": "flux-schnell",
+    "size": "1024x1024"
+  }'</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Generation -->
+      <h2 id="media-video">Video Generation</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/video</span>
+          <span class="endpoint-desc">Generate short videos from text (async)</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Generate 5-10 second videos using Kling AI. Video generation is asynchronous - the API returns immediately with a video_id that you can poll for completion.</p>
+
+          <h3>Request Body</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+            <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>Description of the video scene</td></tr>
+            <tr><td><code>duration</code></td><td>number</td><td>No</td><td><code>5</code> (default) or <code>10</code> seconds</td></tr>
+            <tr><td><code>mode</code></td><td>string</td><td>No</td><td><code>standard</code> (default) or <code>pro</code></td></tr>
+          </table>
+
+          <h3>Response (202 Accepted)</h3>
+          <div class="code-block">
+{
+  <span class="key">"video_id"</span>: <span class="string">"abc123..."</span>,
+  <span class="key">"status"</span>: <span class="string">"queued"</span>,
+  <span class="key">"estimated_time"</span>: <span class="number">120</span>,
+  <span class="key">"credits_used"</span>: <span class="number">50</span>
+}
+          </div>
+
+          <h3>Example</h3>
+          <div class="code-block" id="code-video">
+            <button class="copy-btn" onclick="copyCode('code-video')">Copy</button>
+<span class="comment"># 1. Create video generation job</span>
+curl -X POST https://api.chatweb.ai/api/v1/media/video \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "prompt": "a dog running on the beach at sunset",
+    "duration": 5
+  }'</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/media/video/{id}</span>
+          <span class="endpoint-desc">Check video generation status</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Poll this endpoint to check if your video is ready. Status progresses: <code>queued</code> → <code>processing</code> → <code>completed</code> or <code>failed</code>.</p>
+
+          <h3>Response</h3>
+          <div class="code-block">
+{
+  <span class="key">"video_id"</span>: <span class="string">"abc123..."</span>,
+  <span class="key">"status"</span>: <span class="string">"completed"</span>,
+  <span class="key">"url"</span>: <span class="string">"https://..."</span>,
+  <span class="key">"thumbnail_url"</span>: <span class="string">"https://..."</span>,
+  <span class="key">"created_at"</span>: <span class="string">"2026-02-17T12:00:00Z"</span>
+}
+          </div>
+
+          <h3>Example</h3>
+          <div class="code-block" id="code-video-status">
+            <button class="copy-btn" onclick="copyCode('code-video-status')">Copy</button>
+<span class="comment"># 2. Check status (poll every 15 seconds)</span>
+curl https://api.chatweb.ai/api/v1/media/video/abc123 \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Billing -->
       <h2 id="billing">Billing - Checkout</h2>
       <div class="endpoint">
@@ -699,7 +903,12 @@ curl https://api.chatweb.ai/health
           links: 'リンク',
           checkout: 'チェックアウト',
           billingPortal: '課金ポータル',
-          channelLinking: 'チャネル連携'
+          channelLinking: 'チャネル連携',
+          mediaApi: 'メディアAPI',
+          media: 'メディアAPI概要',
+          mediaTts: 'テキスト読み上げ',
+          mediaImage: '画像生成',
+          mediaVideo: '動画生成'
         },
         en: {
           title: 'chatweb.ai API',
@@ -735,7 +944,12 @@ curl https://api.chatweb.ai/health
           links: 'Links',
           checkout: 'Checkout',
           billingPortal: 'Billing Portal',
-          channelLinking: 'Channel Linking'
+          channelLinking: 'Channel Linking',
+          mediaApi: 'Media API',
+          media: 'Media API Overview',
+          mediaTts: 'Text-to-Speech',
+          mediaImage: 'Image Generation',
+          mediaVideo: 'Video Generation'
         }
       };
       var s = t[l];
@@ -749,7 +963,8 @@ curl https://api.chatweb.ai/health
       var headingMap = {
         auth: s.auth, quickstart: s.quickstart, chat: s.chat, sessions: s.sessions,
         account: s.account, usage: s.usage, providers: s.providers, integrations: s.integrations,
-        health: s.health, billing: s.billing, portal: s.portal, coupons: s.coupons,
+        health: s.health, media: s.media, 'media-tts': s.mediaTts, 'media-image': s.mediaImage,
+        'media-video': s.mediaVideo, billing: s.billing, portal: s.portal, coupons: s.coupons,
         line: s.line, telegram: s.telegram, linking: s.linking
       };
       for (var id in headingMap) {
@@ -759,7 +974,7 @@ curl https://api.chatweb.ai/health
 
       // Sidebar nav headings (h3 in sidebar)
       var sidebarH3 = document.querySelectorAll('.sidebar h3');
-      var h3Keys = ['gettingStarted', 'chat', 'account', 'platform', 'billing', 'channels', 'links'];
+      var h3Keys = ['gettingStarted', 'chat', 'account', 'platform', 'mediaApi', 'billing', 'channels', 'links'];
       sidebarH3.forEach(function(h, i) { if (s[h3Keys[i]]) h.textContent = s[h3Keys[i]]; });
 
       // Sidebar nav items
@@ -768,6 +983,7 @@ curl https://api.chatweb.ai/health
         '#chat': s.sendMessage, '#sessions': s.sessions,
         '#account': s.accountInfo, '#usage': s.usage,
         '#providers': s.providers, '#integrations': s.integrations, '#health': s.health,
+        '#media': s.media, '#media-tts': s.mediaTts, '#media-image': s.mediaImage, '#media-video': s.mediaVideo,
         '#billing': s.checkout, '#portal': s.billingPortal, '#coupons': s.coupons,
         '#line': s.line, '#telegram': s.telegram, '#linking': s.channelLinking
       };
