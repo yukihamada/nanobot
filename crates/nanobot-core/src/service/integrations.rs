@@ -5475,6 +5475,194 @@ mod tests {
         let result = registry.execute("nonexistent", &params).await;
         assert!(result.contains("Unknown tool"));
     }
+
+    // -----------------------------------------------------------------------
+    // New tools: memory_log, knowledge_graph, tavily_search
+    // -----------------------------------------------------------------------
+
+    #[test]
+    #[cfg(feature = "http-api")]
+    fn test_new_tools_registered() {
+        std::env::remove_var("GITHUB_TOKEN");
+        std::env::remove_var("CONNECT_INSTANCE_ID");
+        std::env::remove_var("SLACK_BOT_TOKEN");
+        std::env::remove_var("NOTION_API_KEY");
+        std::env::remove_var("DISCORD_WEBHOOK_URL");
+        std::env::remove_var("SPOTIFY_CLIENT_ID");
+        std::env::remove_var("POSTGRES_URL");
+        std::env::remove_var("TAVILY_API_KEY");
+        let registry = ToolRegistry::with_builtins();
+        let defs = registry.get_definitions();
+        let names: Vec<&str> = defs.iter()
+            .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
+            .collect();
+        assert!(names.contains(&"memory_log"), "memory_log should be registered");
+        assert!(names.contains(&"knowledge_graph"), "knowledge_graph should be registered");
+        // tavily_search should NOT be registered without API key
+        assert!(!names.contains(&"tavily_search"), "tavily_search should not be registered without TAVILY_API_KEY");
+    }
+
+    #[test]
+    #[cfg(feature = "http-api")]
+    fn test_tavily_registered_with_key() {
+        std::env::set_var("TAVILY_API_KEY", "test-key");
+        let registry = ToolRegistry::with_builtins();
+        let defs = registry.get_definitions();
+        let names: Vec<&str> = defs.iter()
+            .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
+            .collect();
+        assert!(names.contains(&"tavily_search"), "tavily_search should be registered with TAVILY_API_KEY");
+        std::env::remove_var("TAVILY_API_KEY");
+    }
+
+    #[tokio::test]
+    async fn test_memory_log_requires_content() {
+        let tool = MemoryLogTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("log_error"));
+        // no content
+        let result = tool.execute(params).await;
+        assert!(result.contains("content is required"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_memory_log_content_limit() {
+        let tool = MemoryLogTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("log_learning"));
+        params.insert("content".to_string(), serde_json::json!("x".repeat(4097)));
+        let result = tool.execute(params).await;
+        assert!(result.contains("4096"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_memory_log_list_no_dynamo() {
+        let tool = MemoryLogTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("list"));
+        let result = tool.execute(params).await;
+        // Without DynamoDB configured, should return fallback message
+        assert!(!result.starts_with("[TOOL_ERROR]"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_memory_log_write_no_dynamo() {
+        let tool = MemoryLogTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("log_error"));
+        params.insert("content".to_string(), serde_json::json!("test error message"));
+        params.insert("_session_key".to_string(), serde_json::json!("test-session"));
+        let result = tool.execute(params).await;
+        // Should succeed (either logged or graceful fallback)
+        assert!(!result.starts_with("[TOOL_ERROR]"), "got: {result}");
+        assert!(result.contains("ERROR") || result.contains("Logged"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_knowledge_graph_requires_name() {
+        let tool = KnowledgeGraphTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("create"));
+        params.insert("entity_type".to_string(), serde_json::json!("Person"));
+        // no name
+        let result = tool.execute(params).await;
+        assert!(result.contains("name is required"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_knowledge_graph_name_limit() {
+        let tool = KnowledgeGraphTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("create"));
+        params.insert("entity_type".to_string(), serde_json::json!("Person"));
+        params.insert("name".to_string(), serde_json::json!("a".repeat(257)));
+        let result = tool.execute(params).await;
+        assert!(result.contains("256"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_knowledge_graph_link_relation_validation() {
+        let tool = KnowledgeGraphTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("link"));
+        params.insert("entity_id".to_string(), serde_json::json!("abc123"));
+        params.insert("target_id".to_string(), serde_json::json!("def456"));
+        params.insert("relation".to_string(), serde_json::json!("bad relation!!")); // invalid
+        let result = tool.execute(params).await;
+        assert!(result.contains("alphanumeric"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_knowledge_graph_create_no_dynamo() {
+        let tool = KnowledgeGraphTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("create"));
+        params.insert("entity_type".to_string(), serde_json::json!("Project"));
+        params.insert("name".to_string(), serde_json::json!("nanobot"));
+        params.insert("properties".to_string(), serde_json::json!({"lang": "Rust"}));
+        params.insert("_session_key".to_string(), serde_json::json!("test-session"));
+        let result = tool.execute(params).await;
+        assert!(!result.starts_with("[TOOL_ERROR]"), "got: {result}");
+        assert!(result.contains("Created") || result.contains("nanobot"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_tavily_search_requires_query() {
+        let tool = TavilySearchTool;
+        let params = HashMap::new();
+        let result = tool.execute(params).await;
+        assert!(result.contains("query is required"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_tavily_search_query_limit() {
+        let tool = TavilySearchTool;
+        let mut params = HashMap::new();
+        params.insert("query".to_string(), serde_json::json!("q".repeat(401)));
+        let result = tool.execute(params).await;
+        assert!(result.contains("400"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_tavily_search_no_api_key() {
+        std::env::remove_var("TAVILY_API_KEY");
+        let tool = TavilySearchTool;
+        let mut params = HashMap::new();
+        params.insert("query".to_string(), serde_json::json!("test query"));
+        let result = tool.execute(params).await;
+        assert!(result.contains("TAVILY_API_KEY"), "got: {result}");
+    }
+
+    #[test]
+    fn test_memory_log_tool_name_and_params() {
+        let tool = MemoryLogTool;
+        assert_eq!(tool.name(), "memory_log");
+        let params = tool.parameters();
+        let actions = params.pointer("/properties/action/enum").unwrap();
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("log_error")));
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("log_learning")));
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("list")));
+    }
+
+    #[test]
+    fn test_knowledge_graph_tool_name_and_params() {
+        let tool = KnowledgeGraphTool;
+        assert_eq!(tool.name(), "knowledge_graph");
+        let params = tool.parameters();
+        let actions = params.pointer("/properties/action/enum").unwrap();
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("create")));
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("link")));
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("query")));
+    }
+
+    #[test]
+    fn test_tavily_search_tool_name_and_params() {
+        let tool = TavilySearchTool;
+        assert_eq!(tool.name(), "tavily_search");
+        let params = tool.parameters();
+        assert!(params.pointer("/properties/query").is_some());
+        assert!(params.pointer("/properties/topic/enum").is_some());
+    }
 }
 
 // ---------------------------------------------------------------------------
