@@ -2714,6 +2714,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/account/{id}", get(handle_account))
         .route("/api/v1/providers", get(handle_providers))
         .route("/api/v1/integrations", get(handle_integrations))
+        // Skills
+        .route("/api/v1/skills", get(handle_list_skills))
+        .route("/api/v1/skills/search", post(handle_search_skills))
+        .route("/api/v1/skills/:name", get(handle_get_skill))
         // Agents
         .route("/api/v1/agents", get(handle_agents))
         // Devices
@@ -2837,6 +2841,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Pages
         .route("/pricing", get(handle_pricing))
         .route("/media", get(handle_media_demo))
+        .route("/skill", get(handle_skill_marketplace))
         .route("/welcome", get(handle_welcome))
         .route("/features", get(handle_features))
         .route("/comparison", get(handle_comparison))
@@ -9634,6 +9639,127 @@ async fn handle_providers(
     }))
 }
 
+/// GET /api/v1/skills — List all available skills
+async fn handle_list_skills(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let workspace = state.config.workspace_path();
+    let builtin_skills = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.join("skills")));
+
+    let loader = crate::skills::SkillsLoader::new(&workspace, builtin_skills);
+    let all_skills = loader.list_skills(false);
+
+    let skills_json: Vec<_> = all_skills.iter().map(|skill| {
+        let metadata = loader.get_skill_metadata(&skill.name);
+        let description = metadata
+            .as_ref()
+            .and_then(|m| m.get("description"))
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| skill.name.clone());
+
+        serde_json::json!({
+            "name": skill.name,
+            "description": description,
+            "source": skill.source,
+            "path": skill.path.display().to_string(),
+        })
+    }).collect();
+
+    Json(serde_json::json!({
+        "skills": skills_json,
+        "count": all_skills.len(),
+    }))
+}
+
+/// GET /api/v1/skills/:name — Get specific skill details
+async fn handle_get_skill(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let workspace = state.config.workspace_path();
+    let builtin_skills = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.join("skills")));
+
+    let loader = crate::skills::SkillsLoader::new(&workspace, builtin_skills);
+
+    match loader.load_skill(&name) {
+        Some(content) => {
+            let metadata = loader.get_skill_metadata(&name);
+            let description = metadata
+                .as_ref()
+                .and_then(|m| m.get("description"))
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| name.clone());
+
+            Json(serde_json::json!({
+                "name": name,
+                "description": description,
+                "content": content,
+                "metadata": metadata,
+            })).into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "Skill not found",
+                "name": name,
+            }))
+        ).into_response()
+    }
+}
+
+#[derive(Deserialize)]
+struct SearchSkillsRequest {
+    query: String,
+}
+
+/// POST /api/v1/skills/search — Search skills by query
+async fn handle_search_skills(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<SearchSkillsRequest>,
+) -> impl IntoResponse {
+    let workspace = state.config.workspace_path();
+    let builtin_skills = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.join("skills")));
+
+    let loader = crate::skills::SkillsLoader::new(&workspace, builtin_skills);
+    let all_skills = loader.list_skills(false);
+
+    let query_lower = payload.query.to_lowercase();
+
+    let matched_skills: Vec<_> = all_skills.iter().filter_map(|skill| {
+        let metadata = loader.get_skill_metadata(&skill.name);
+        let description = metadata
+            .as_ref()
+            .and_then(|m| m.get("description"))
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| skill.name.clone());
+
+        // Simple text matching in name or description
+        if skill.name.to_lowercase().contains(&query_lower) ||
+           description.to_lowercase().contains(&query_lower) {
+            Some(serde_json::json!({
+                "name": skill.name,
+                "description": description,
+                "source": skill.source,
+                "path": skill.path.display().to_string(),
+            }))
+        } else {
+            None
+        }
+    }).collect();
+
+    Json(serde_json::json!({
+        "query": payload.query,
+        "results": matched_skills,
+        "count": matched_skills.len(),
+    }))
+}
+
 /// GET /api/v1/integrations — List available integrations
 async fn handle_integrations(
     State(state): State<Arc<AppState>>,
@@ -9676,6 +9802,11 @@ async fn handle_pricing_api() -> impl IntoResponse {
 /// GET /media — Media API demo page
 async fn handle_media_demo() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/media.html"))
+}
+
+/// GET /skill — Skill marketplace page
+async fn handle_skill_marketplace() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/skill.html"))
 }
 
 /// GET /pricing — Pricing page (host-based routing)

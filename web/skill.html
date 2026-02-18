@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill Marketplace - chatweb.ai</title>
+  <meta name="description" content="Discover and install skills for nanobot - extend your AI assistant with specialized capabilities">
+  <meta property="og:title" content="Skill Marketplace - chatweb.ai">
+  <meta property="og:description" content="Discover and install skills for nanobot">
+  <meta property="og:image" content="https://chatweb.ai/og.svg">
+  <meta property="og:url" content="https://chatweb.ai/skill">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #1e1e1e;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --green: #22c55e;
+      --orange: #fb923c;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    nav {
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      text-decoration: none;
+      color: var(--text);
+    }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 16px; }
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .nav-links a:hover { color: var(--text); }
+
+    .main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .hero {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .hero h1 {
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 640px;
+      margin: 0 auto 32px;
+    }
+
+    .search-bar {
+      max-width: 600px;
+      margin: 0 auto 48px;
+      position: relative;
+    }
+    .search-bar input {
+      width: 100%;
+      padding: 16px 48px 16px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .search-bar input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    .search-bar::after {
+      content: "🔍";
+      position: absolute;
+      right: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 18px;
+      opacity: 0.5;
+    }
+
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 48px;
+    }
+    .stat {
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+      display: block;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 24px;
+      margin-bottom: 48px;
+    }
+    .skill-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .skill-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.3);
+      border-color: var(--accent);
+    }
+    .skill-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--orange));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .skill-card:hover::before {
+      opacity: 1;
+    }
+    .skill-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .skill-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .skill-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .skill-badge.builtin {
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--accent);
+    }
+    .skill-badge.workspace {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--green);
+    }
+    .skill-description {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    .skill-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .skill-meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .spinner {
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--muted);
+    }
+    .empty-state-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+    .empty-state h3 {
+      font-size: 20px;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .modal.active {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-content {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      max-width: 700px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .modal-close {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 28px;
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .modal-close:hover {
+      background: var(--border);
+      color: var(--text);
+    }
+    .modal-header h2 {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+    .modal-content pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text);
+      margin: 16px 0;
+    }
+    .modal-content code {
+      font-family: 'Monaco', 'Menlo', monospace;
+    }
+
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 32px; }
+      .skills-grid {
+        grid-template-columns: 1fr;
+      }
+      .stats {
+        flex-direction: column;
+        gap: 16px;
+      }
+      .modal-content {
+        padding: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo">chat<span>web</span>.ai</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/skill" style="color: var(--accent);">Skills</a>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="hero">
+      <h1>Skill Marketplace</h1>
+      <p>Extend nanobot with specialized skills. From code execution to API integrations, discover tools that enhance your AI assistant.</p>
+    </div>
+
+    <div class="search-bar">
+      <input type="text" id="search-input" placeholder="Search skills..." autocomplete="off">
+    </div>
+
+    <div class="stats" id="stats">
+      <div class="stat">
+        <span class="stat-num" id="total-skills">-</span>
+        <span class="stat-label">Total Skills</span>
+      </div>
+      <div class="stat">
+        <span class="stat-num" id="builtin-skills">-</span>
+        <span class="stat-label">Built-in</span>
+      </div>
+      <div class="stat">
+        <span class="stat-num" id="workspace-skills">-</span>
+        <span class="stat-label">Workspace</span>
+      </div>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Loading skills...</p>
+    </div>
+
+    <div class="skills-grid" id="skills-grid"></div>
+
+    <div class="empty-state" id="empty-state" style="display: none;">
+      <div class="empty-state-icon">📦</div>
+      <h3>No skills found</h3>
+      <p>Try a different search term</p>
+    </div>
+  </div>
+
+  <div class="modal" id="skill-modal">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeModal()">×</button>
+      <div class="modal-header">
+        <h2 id="modal-title"></h2>
+        <p id="modal-description" style="color: var(--muted); margin-top: 8px;"></p>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script>
+    let allSkills = [];
+
+    async function loadSkills() {
+      try {
+        const response = await fetch('/api/v1/skills');
+        const data = await response.json();
+        allSkills = data.skills || [];
+
+        // Update stats
+        document.getElementById('total-skills').textContent = data.count || 0;
+        const builtin = allSkills.filter(s => s.source === 'builtin').length;
+        const workspace = allSkills.filter(s => s.source === 'workspace').length;
+        document.getElementById('builtin-skills').textContent = builtin;
+        document.getElementById('workspace-skills').textContent = workspace;
+
+        // Hide loading
+        document.getElementById('loading').style.display = 'none';
+
+        // Display skills
+        displaySkills(allSkills);
+      } catch (error) {
+        console.error('Failed to load skills:', error);
+        document.getElementById('loading').innerHTML = '<p style="color: var(--muted);">Failed to load skills</p>';
+      }
+    }
+
+    function displaySkills(skills) {
+      const grid = document.getElementById('skills-grid');
+      const emptyState = document.getElementById('empty-state');
+
+      if (skills.length === 0) {
+        grid.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+      grid.innerHTML = skills.map(skill => `
+        <div class="skill-card" onclick="openSkillModal('${skill.name}')">
+          <div class="skill-header">
+            <div class="skill-name">${escapeHtml(skill.name)}</div>
+            <span class="skill-badge ${skill.source}">${skill.source}</span>
+          </div>
+          <div class="skill-description">${escapeHtml(skill.description)}</div>
+          <div class="skill-meta">
+            <span>📁 ${escapeHtml(skill.path.split('/').pop())}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function openSkillModal(name) {
+      const modal = document.getElementById('skill-modal');
+      const title = document.getElementById('modal-title');
+      const description = document.getElementById('modal-description');
+      const body = document.getElementById('modal-body');
+
+      title.textContent = name;
+      description.textContent = 'Loading...';
+      body.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+      modal.classList.add('active');
+
+      try {
+        const response = await fetch(`/api/v1/skills/${encodeURIComponent(name)}`);
+        const data = await response.json();
+
+        description.textContent = data.description;
+        body.innerHTML = `
+          <h3 style="margin-top: 24px; margin-bottom: 12px; font-size: 16px;">Content</h3>
+          <pre><code>${escapeHtml(data.content || 'No content available')}</code></pre>
+          ${data.metadata ? `
+            <h3 style="margin-top: 24px; margin-bottom: 12px; font-size: 16px;">Metadata</h3>
+            <pre><code>${escapeHtml(JSON.stringify(data.metadata, null, 2))}</code></pre>
+          ` : ''}
+        `;
+      } catch (error) {
+        body.innerHTML = '<p style="color: var(--muted);">Failed to load skill details</p>';
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('skill-modal').classList.remove('active');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Search functionality
+    const searchInput = document.getElementById('search-input');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        const query = e.target.value.trim();
+
+        if (!query) {
+          displaySkills(allSkills);
+          return;
+        }
+
+        const filtered = allSkills.filter(skill =>
+          skill.name.toLowerCase().includes(query.toLowerCase()) ||
+          skill.description.toLowerCase().includes(query.toLowerCase())
+        );
+
+        displaySkills(filtered);
+      }, 300);
+    });
+
+    // Close modal on escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    // Close modal on backdrop click
+    document.getElementById('skill-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'skill-modal') closeModal();
+    });
+
+    // Load skills on page load
+    loadSkills();
+  </script>
+</body>
+</html>
