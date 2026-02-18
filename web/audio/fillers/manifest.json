@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "generated": "2026-02-15T16:07:46.026Z",
+  "fillers": {
+    "ja": [
+      {
+        "text": "ええっと、それはですね",
+        "file": "ja-01-eetto.mp3",
+        "voice": "alloy"
+      },
+      {
+        "text": "うーん、ちょっと考えますね",
+        "file": "ja-02-uun.mp3",
+        "voice": "alloy"
+      },
+      {
+        "text": "なるほど、それでは",
+        "file": "ja-03-naruhodo.mp3",
+        "voice": "alloy"
+      },
+      {
+        "text": "そうですね、まず",
+        "file": "ja-04-soudesune.mp3",
+        "voice": "alloy"
+      },
+      {
+        "text": "いい質問ですね",
+        "file": "ja-05-iishitsumon.mp3",
+        "voice": "alloy"
+      },
+      {
+        "text": "ちょっと待ってくださいね",
+        "file": "ja-06-chotto.mp3",
+        "voice": "alloy"
+      },
+      {
+        "text": "えーっと、どうだったかな",
+        "file": "ja-07-eetto2.mp3",
+        "voice": "alloy"
+      }
+    ],
+    "en": [
+      {
+        "text": "Let me think about that",
+        "file": "en-01-think.mp3",
+        "voice": "nova"
+      },
+      {
+        "text": "Hmm, that's interesting",
+        "file": "en-02-hmm.mp3",
+        "voice": "nova"
+      },
+      {
+        "text": "Well, let's see",
+        "file": "en-03-well.mp3",
+        "voice": "nova"
+      },
+      {
+        "text": "Good question",
+        "file": "en-04-good.mp3",
+        "voice": "nova"
+      },
+      {
+        "text": "One moment please",
+        "file": "en-05-moment.mp3",
+        "voice": "nova"
+      }
+    ]
+  }
+}

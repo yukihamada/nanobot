@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Status - chatweb.ai</title>
+  <meta name="description" content="Real-time service status and live latency for chatweb.ai AI platform.">
+  <link rel="canonical" href="https://chatweb.ai/status">
+  <!-- OGP -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://chatweb.ai/status">
+  <meta property="og:title" content="Service Status - chatweb.ai">
+  <meta property="og:description" content="Real-time service status and live latency for chatweb.ai AI platform. OpenAI, Anthropic, Gemini, Groq and more.">
+  <meta property="og:image" content="https://chatweb.ai/og.svg">
+  <meta property="og:site_name" content="chatweb.ai">
+  <meta property="og:locale" content="ja_JP">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Service Status - chatweb.ai">
+  <meta name="twitter:description" content="Real-time service status and live latency for chatweb.ai AI platform.">
+  <meta name="twitter:image" content="https://chatweb.ai/og.svg">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #27272a;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --gray: #52525b;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    nav {
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo { font-size: 20px; font-weight: 800; text-decoration: none; color: var(--text); }
+    .logo span { background: linear-gradient(135deg, var(--accent), #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    nav a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    nav a:hover { color: var(--text); }
+
+    .main { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+    h1 { font-size: 32px; font-weight: 800; margin-bottom: 8px; }
+    .subtitle { color: var(--muted); font-size: 15px; margin-bottom: 32px; }
+
+    .overall-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 20px 24px;
+      border-radius: 14px;
+      margin-bottom: 32px;
+      transition: background 0.3s, border-color 0.3s;
+    }
+    .overall-status.ok {
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.2);
+    }
+    .overall-status.degraded {
+      background: rgba(234,179,8,0.08);
+      border: 1px solid rgba(234,179,8,0.2);
+    }
+    .overall-status.down {
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.2);
+    }
+    .overall-status.loading {
+      background: rgba(113,113,122,0.08);
+      border: 1px solid rgba(113,113,122,0.2);
+    }
+    .overall-status .dot {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .overall-status .label { font-size: 16px; font-weight: 700; }
+    .overall-status .time { font-size: 13px; color: var(--muted); margin-left: auto; }
+
+    .section-title { font-size: 14px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+    .service-list { margin-bottom: 32px; }
+    .service-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 8px;
+      transition: border-color 0.2s;
+    }
+    .service-item:hover { border-color: var(--accent); }
+    .service-item .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-green { background: var(--green); }
+    .dot-yellow { background: var(--yellow); }
+    .dot-red { background: var(--red); }
+    .dot-gray { background: var(--gray); }
+    .dot-pulse { animation: pulse 1.5s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .service-item .name { font-size: 15px; font-weight: 600; flex: 1; }
+    .service-item .latency {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .latency-ok { background: rgba(34,197,94,0.15); color: var(--green); }
+    .latency-slow { background: rgba(234,179,8,0.15); color: var(--yellow); }
+    .latency-bad { background: rgba(239,68,68,0.15); color: var(--red); }
+    .latency-na { background: rgba(113,113,122,0.15); color: var(--muted); }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+    .feature-item {
+      padding: 14px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .feature-item .feat-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+    .feature-item .feat-desc { font-size: 11px; color: var(--muted); }
+    .feature-item .feat-status { font-size: 10px; font-weight: 700; margin-top: 4px; }
+    .feat-status.done { color: var(--green); }
+    .feat-status.wip { color: var(--yellow); }
+    .feat-status.todo { color: var(--muted); }
+
+    .version-info {
+      padding: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-bottom: 32px;
+    }
+    .version-info h3 { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+    .version-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 13px;
+    }
+    .version-row .key { color: var(--muted); }
+
+    .title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .title-row h1 { margin-bottom: 0; }
+    .share-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    .share-btn:hover { border-color: var(--accent); color: var(--text); }
+    .share-btn svg { width: 14px; height: 14px; }
+    .share-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px;
+      min-width: 180px;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .share-menu.open { display: block; }
+    .share-menu a, .share-menu button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 12px;
+      background: none;
+      border: none;
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .share-menu a:hover, .share-menu button:hover { background: rgba(99,102,241,0.12); }
+    .share-menu svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .share-wrap { position: relative; }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 200;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    footer { text-align: center; padding: 24px; font-size: 12px; color: var(--muted); }
+    footer a { color: var(--muted); }
+
+    @media (max-width: 600px) {
+      .feature-grid { grid-template-columns: 1fr; }
+      .title-row { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>chat</span>web.ai</a>
+    <div style="display:flex;gap:16px;align-items:center;">
+      <a href="/">Home</a>
+      <a href="/pricing">Pricing</a>
+      <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="title-row">
+      <h1>Service Status</h1>
+      <div class="share-wrap">
+        <button class="share-btn" id="share-toggle" aria-label="Share">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share
+        </button>
+        <div class="share-menu" id="share-menu">
+          <button id="copy-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+            Copy Link
+          </button>
+          <a id="share-x" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            Post on X
+          </a>
+          <a id="share-line" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 3.77 3.01 6.96 7.12 7.87.28.06.66.18.75.42.09.21.06.55.03.77l-.12.73c-.04.22-.16.86.75.47s4.98-2.93 6.8-5.02C19.42 13.42 22 12.07 22 10.5 22 5.81 17.52 2 12 2z"/></svg>
+            LINE
+          </a>
+        </div>
+      </div>
+    </div>
+    <p class="subtitle">chatweb.ai platform status and live latency</p>
+    <div class="toast" id="toast">Link copied!</div>
+
+    <div class="overall-status loading" id="overall">
+      <div class="dot dot-gray dot-pulse" id="overall-dot"></div>
+      <div class="label" id="overall-label">Checking...</div>
+      <div class="time" id="check-time"></div>
+    </div>
+
+    <div class="section-title">Services</div>
+    <div class="service-list" id="service-list">
+      <div class="service-item">
+        <div class="dot dot-gray dot-pulse"></div>
+        <div class="name">Loading...</div>
+        <div class="latency latency-na">--</div>
+      </div>
+    </div>
+
+    <div class="section-title">Features</div>
+    <div class="feature-grid">
+      <div class="feature-item">
+        <div class="feat-name">AI Chat</div>
+        <div class="feat-desc">GPT-4o, Claude, Gemini</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Channel Sync (/link)</div>
+        <div class="feat-desc">Web + LINE + Telegram unified</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">QR Code Linking</div>
+        <div class="feat-desc">Scan to link channels</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Session Persistence</div>
+        <div class="feat-desc">DynamoDB cross-channel memory</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Real-time Polling</div>
+        <div class="feat-desc">3s sync from other channels</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Channel Badges</div>
+        <div class="feat-desc">See which device sent msg</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Coupon Codes</div>
+        <div class="feat-desc">LAUNCH2026, WELCOME</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Welcome Messages</div>
+        <div class="feat-desc">LINE follow + TG /start</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Unified User ID</div>
+        <div class="feat-desc">Single identity across channels</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Credit Tracking</div>
+        <div class="feat-desc">Per-user usage metering</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">API Load Balancing</div>
+        <div class="feat-desc">Multi-provider failover</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Provider API</div>
+        <div class="feat-desc">List active AI providers</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Slash Commands</div>
+        <div class="feat-desc">/help /status /share /link /improve</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Share Conversations</div>
+        <div class="feat-desc">Public read-only links via /c/{hash}</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">API Playground</div>
+        <div class="feat-desc">Interactive API explorer + shareable URLs</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">MCP Endpoint</div>
+        <div class="feat-desc">AI agent tool use via JSON-RPC</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">AI Agent Friendly</div>
+        <div class="feat-desc">robots.txt, llms.txt, ai-plugin.json</div>
+        <div class="feat-status done">LIVE</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Discord Integration</div>
+        <div class="feat-desc">Discord bot channel</div>
+        <div class="feat-status todo">PLANNED</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">External API Tools</div>
+        <div class="feat-desc">Gmail, Calendar, Notion</div>
+        <div class="feat-status todo">PLANNED</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Custom Agents</div>
+        <div class="feat-desc">Per-use-case AI personas</div>
+        <div class="feat-status todo">PLANNED</div>
+      </div>
+      <div class="feature-item">
+        <div class="feat-name">Team Dashboard</div>
+        <div class="feat-desc">Admin panel for teams</div>
+        <div class="feat-status todo">PLANNED</div>
+      </div>
+    </div>
+
+    <div class="section-title">Infrastructure</div>
+    <div class="version-info" style="margin-bottom: 12px;">
+      <h3>Server Locations</h3>
+      <div class="version-row"><span class="key">Primary Region</span><span>AWS ap-northeast-1 (Tokyo, Japan)</span></div>
+      <div class="version-row"><span class="key">Compute</span><span>AWS Lambda (Serverless, ARM64 Graviton2)</span></div>
+      <div class="version-row"><span class="key">Database</span><span>Amazon DynamoDB (Tokyo)</span></div>
+      <div class="version-row"><span class="key">API Gateway</span><span>Amazon API Gateway (Tokyo)</span></div>
+      <div class="version-row"><span class="key">Backup Region</span><span>Fly.io nrt (Narita, Japan)</span></div>
+      <div class="version-row"><span class="key">DNS / CDN</span><span>Cloudflare (Global Edge)</span></div>
+    </div>
+
+    <div class="version-info" style="margin-bottom: 12px;">
+      <h3>Redundancy &amp; High Availability</h3>
+      <div class="version-row"><span class="key">Auto Scaling</span><span>AWS Lambda scales to 1,000+ concurrent</span></div>
+      <div class="version-row"><span class="key">DynamoDB</span><span>On-Demand capacity, 3-AZ replication</span></div>
+      <div class="version-row"><span class="key">API Gateway</span><span>Multi-AZ, auto-failover</span></div>
+      <div class="version-row"><span class="key">Backup Compute</span><span>Fly.io (Narita) as warm standby</span></div>
+      <div class="version-row"><span class="key">Deploy Strategy</span><span>Canary 10% &rarr; Production 100%</span></div>
+      <div class="version-row"><span class="key">Cold Start</span><span>&lt; 200ms (Rust ARM64 binary)</span></div>
+      <div class="version-row"><span class="key">SLA Target</span><span>99.9% uptime</span></div>
+    </div>
+
+    <div class="version-info">
+      <h3>Deployment Info</h3>
+      <div class="version-row"><span class="key">Lambda Version</span><span>v111</span></div>
+      <div class="version-row"><span class="key">Runtime</span><span>Rust (ARM64 Graviton2)</span></div>
+      <div class="version-row"><span class="key">CI/CD</span><span>GitHub Actions &rarr; Test &rarr; Build &rarr; Canary &rarr; Production</span></div>
+      <div class="version-row"><span class="key">Last Deploy</span><span id="deploy-time">2026-02-09</span></div>
+      <div class="version-row"><span class="key">Uptime</span><span>99.9%</span></div>
+    </div>
+  </div>
+
+    <div class="section-title">Deploy Your Own</div>
+    <div class="version-info">
+      <h3>One-Click Deploy</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">nanobot is open source. Deploy your own instance anywhere:</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+        <a href="https://railway.app/template/nanobot?referralCode=chatweb" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Railway</a>
+        <a href="https://render.com/deploy?repo=https://github.com/yukihamada/nanobot" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#46e3b7;color:#000;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Render</a>
+        <a href="https://app.koyeb.com/deploy?type=git&repository=yukihamada/nanobot" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#3b82f6;color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Koyeb</a>
+      </div>
+      <div class="version-row"><span class="key">RunPod (GPU)</span><span><code style="font-size:12px;background:var(--bg);padding:2px 8px;border-radius:4px;">runpodctl deploy --gpu 0 --image ghcr.io/yukihamada/nanobot</code></span></div>
+      <div class="version-row"><span class="key">Docker</span><span><code style="font-size:12px;background:var(--bg);padding:2px 8px;border-radius:4px;">docker run -p 3000:3000 ghcr.io/yukihamada/nanobot</code></span></div>
+      <div class="version-row"><span class="key">Fly.io</span><span><code style="font-size:12px;background:var(--bg);padding:2px 8px;border-radius:4px;">fly launch && fly deploy</code></span></div>
+      <div class="version-row"><span class="key">AWS Lambda</span><span><code style="font-size:12px;background:var(--bg);padding:2px 8px;border-radius:4px;">sam deploy --guided</code></span></div>
+      <div class="version-row"><span class="key">Local</span><span><code style="font-size:12px;background:var(--bg);padding:2px 8px;border-radius:4px;">cargo run -- gateway --http --http-port 3000</code></span></div>
+    </div>
+  </div>
+
+  <div class="main" style="padding-top:0;">
+    <div class="section-title">Related Services</div>
+    <div class="version-info" style="margin-bottom: 12px;">
+      <h3 style="display:flex;align-items:center;gap:8px;">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#10b981;border-radius:6px;font-size:14px;font-weight:800;color:#fff;">te</span>
+        teai.io
+      </h3>
+      <p style="font-size:13px;color:var(--muted);margin:8px 0 12px;">AI Agent for Developers. Multi-model AI assistant with MCP tools, REST API, and code generation. Ship faster from your terminal or browser.</p>
+      <div class="version-row"><span class="key">URL</span><span><a href="https://teai.io" target="_blank" style="color:var(--green);text-decoration:none;">teai.io</a></span></div>
+      <div class="version-row"><span class="key">Target</span><span>Developers &amp; Engineers</span></div>
+      <div class="version-row"><span class="key">Models</span><span>GPT-4o, Claude 4.5 Sonnet, Gemini 2.5, Groq, DeepSeek</span></div>
+      <div class="version-row"><span class="key">Features</span><span>MCP Tools, REST API, Code Gen, Web Search, 14+ Channels</span></div>
+      <div class="version-row"><span class="key">Pricing</span><span>Free / Developer $19/mo / Team $49/mo</span></div>
+    </div>
+
+    <div class="version-info">
+      <h3 style="display:flex;align-items:center;gap:8px;">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:6px;font-size:14px;font-weight:800;color:#fff;">E</span>
+        ElioChat (chatweb.ai)
+      </h3>
+      <p style="font-size:13px;color:var(--muted);margin:8px 0 12px;">Voice-first, multi-channel AI assistant. Push-to-talk voice interface with STT/TTS, LINE/Telegram/Facebook integration, and real-time streaming.</p>
+      <div class="version-row"><span class="key">URL</span><span><a href="https://chatweb.ai" target="_blank" style="color:var(--green);text-decoration:none;">chatweb.ai</a></span></div>
+      <div class="version-row"><span class="key">Target</span><span>General users (Japan-first)</span></div>
+      <div class="version-row"><span class="key">Voice</span><span>Push-to-talk STT (Web Speech API) + TTS (OpenAI Nova)</span></div>
+      <div class="version-row"><span class="key">Channels</span><span>Web, LINE, Telegram, Facebook Messenger</span></div>
+      <div class="version-row"><span class="key">Features</span><span>SSE Streaming, Slash Commands, Share Links, Long-term Memory</span></div>
+      <div class="version-row"><span class="key">Pricing</span><span>Free 1,000cr / Starter $9/mo / Pro $29/mo</span></div>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/">Home</a> &middot;
+    <a href="/pricing">Pricing</a> &middot;
+    <a href="https://teai.io" target="_blank">teai.io</a> &middot;
+    <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
+    <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
+    chatweb.ai &copy; 2025-2026
+  </footer>
+
+  <script>
+    function updateTime() {
+      document.getElementById('check-time').textContent = 'Checked: ' + new Date().toLocaleTimeString();
+    }
+
+    function dotClass(svc) {
+      if (svc.status === 'not_configured') return 'dot-gray';
+      if (svc.status === 'error') return 'dot-red';
+      if (svc.status === 'ok') {
+        if (svc.latency_ms > 1000) return 'dot-red';
+        if (svc.latency_ms > 500) return 'dot-yellow';
+        return 'dot-green';
+      }
+      return 'dot-gray';
+    }
+
+    function latencyClass(svc) {
+      if (svc.status === 'not_configured') return 'latency-na';
+      if (svc.status === 'error') return 'latency-bad';
+      if (svc.latency_ms > 1000) return 'latency-bad';
+      if (svc.latency_ms > 500) return 'latency-slow';
+      return 'latency-ok';
+    }
+
+    function latencyText(svc) {
+      if (svc.status === 'not_configured') return 'Not Configured';
+      if (svc.status === 'error') return 'Error';
+      return svc.latency_ms + ' ms';
+    }
+
+    function renderServices(data) {
+      var list = document.getElementById('service-list');
+      var html = '';
+      var services = data.services || [];
+      for (var i = 0; i < services.length; i++) {
+        var s = services[i];
+        html += '<div class="service-item">'
+          + '<div class="dot ' + dotClass(s) + '"></div>'
+          + '<div class="name">' + s.name + '</div>'
+          + '<div class="latency ' + latencyClass(s) + '">' + latencyText(s) + '</div>'
+          + '</div>';
+      }
+      list.innerHTML = html;
+
+      // Overall status
+      var el = document.getElementById('overall');
+      var dot = document.getElementById('overall-dot');
+      var label = document.getElementById('overall-label');
+
+      var hasError = false;
+      var hasSlow = false;
+      for (var i = 0; i < services.length; i++) {
+        var s = services[i];
+        if (s.status === 'not_configured') continue;
+        if (s.status === 'error' || s.latency_ms > 1000) hasError = true;
+        else if (s.latency_ms > 500) hasSlow = true;
+      }
+
+      el.classList.remove('ok', 'degraded', 'down', 'loading');
+      dot.classList.remove('dot-green', 'dot-yellow', 'dot-red', 'dot-gray', 'dot-pulse');
+
+      if (hasError) {
+        el.classList.add('down');
+        dot.classList.add('dot-red');
+        dot.style.boxShadow = '0 0 8px rgba(239,68,68,0.5)';
+        label.textContent = 'Degraded Performance';
+      } else if (hasSlow) {
+        el.classList.add('degraded');
+        dot.classList.add('dot-yellow');
+        dot.style.boxShadow = '0 0 8px rgba(234,179,8,0.5)';
+        label.textContent = 'Partial Slowdown';
+      } else {
+        el.classList.add('ok');
+        dot.classList.add('dot-green');
+        dot.style.boxShadow = '0 0 8px rgba(34,197,94,0.5)';
+        label.textContent = 'All Systems Operational';
+      }
+
+      if (data.cached) {
+        label.textContent += ' (cached)';
+      }
+
+      updateTime();
+    }
+
+    function fetchPing() {
+      var startTime = performance.now();
+      fetch('/api/v1/status/ping')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var elapsed = Math.round(performance.now() - startTime);
+          document.getElementById('check-time').textContent = 'Checked: ' + new Date().toLocaleTimeString() + ' (' + elapsed + 'ms)';
+          renderServices(data);
+        })
+        .catch(function() {
+          var el = document.getElementById('overall');
+          var dot = document.getElementById('overall-dot');
+          var label = document.getElementById('overall-label');
+          el.classList.remove('ok', 'degraded', 'loading');
+          el.classList.add('down');
+          dot.classList.remove('dot-green', 'dot-yellow', 'dot-gray', 'dot-pulse');
+          dot.classList.add('dot-red');
+          dot.style.boxShadow = '0 0 8px rgba(239,68,68,0.5)';
+          label.textContent = 'Service Disruption';
+          updateTime();
+        });
+    }
+
+    // Initial fetch + 30s interval
+    fetchPing();
+    setInterval(fetchPing, 30000);
+
+    // --- Share ---
+    var shareUrl = location.href;
+    var shareText = 'chatweb.ai Service Status';
+    document.getElementById('share-x').href =
+      'https://x.com/intent/tweet?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(shareText);
+    document.getElementById('share-line').href =
+      'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(shareUrl);
+
+    var menu = document.getElementById('share-menu');
+    document.getElementById('share-toggle').addEventListener('click', function(e) {
+      e.stopPropagation();
+      menu.classList.toggle('open');
+    });
+    document.addEventListener('click', function() { menu.classList.remove('open'); });
+    menu.addEventListener('click', function(e) { e.stopPropagation(); });
+
+    document.getElementById('copy-link').addEventListener('click', function() {
+      navigator.clipboard.writeText(shareUrl).then(function() {
+        var t = document.getElementById('toast');
+        t.classList.add('show');
+        setTimeout(function() { t.classList.remove('show'); }, 2000);
+      });
+      menu.classList.remove('open');
+    });
+  </script>
+</body>
+</html>

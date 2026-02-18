@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>chatweb.ai API Documentation</title>
+  <meta name="description" content="API documentation for chatweb.ai - AI chat API with multi-channel support">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface2: #1a1a1a;
+      --border: #1e1e1e;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --blue: #3b82f6;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: var(--accent-hover); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Layout */
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 260px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      overflow-y: auto;
+      padding: 20px 0;
+      z-index: 10;
+    }
+    .sidebar-logo {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .sidebar-logo a {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+    .sidebar-logo a span { color: var(--accent); }
+    .sidebar-logo .api-badge {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .sidebar h3 {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      padding: 12px 20px 6px;
+    }
+    .sidebar a.nav-item {
+      display: block;
+      padding: 6px 20px;
+      font-size: 13px;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+    .sidebar a.nav-item:hover { color: var(--text); background: rgba(255,255,255,0.03); text-decoration: none; }
+    .sidebar a.nav-item.active { color: var(--accent-hover); border-right: 2px solid var(--accent); }
+
+    .content {
+      margin-left: 260px;
+      flex: 1;
+      padding: 40px 60px 80px;
+      max-width: 900px;
+    }
+
+    /* Typography */
+    h1 { font-size: 32px; font-weight: 800; letter-spacing: -1px; margin-bottom: 12px; }
+    h2 { font-size: 22px; font-weight: 700; margin-top: 48px; margin-bottom: 16px; padding-top: 24px; border-top: 1px solid var(--border); }
+    h3 { font-size: 16px; font-weight: 600; margin-top: 24px; margin-bottom: 8px; }
+    p { margin-bottom: 12px; color: var(--text); font-size: 14px; }
+    .subtitle { color: var(--muted); font-size: 16px; margin-bottom: 32px; }
+
+    /* Method badges */
+    .method {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-right: 8px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .method.get { background: rgba(34,197,94,0.15); color: var(--green); }
+    .method.post { background: rgba(99,102,241,0.15); color: var(--accent-hover); }
+    .method.delete { background: rgba(239,68,68,0.15); color: var(--red); }
+
+    /* Endpoint */
+    .endpoint {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .endpoint-header {
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .endpoint-header:hover { background: rgba(255,255,255,0.02); }
+    .endpoint-path {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .endpoint-desc {
+      font-size: 12px;
+      color: var(--muted);
+      margin-left: auto;
+    }
+    .endpoint-body {
+      padding: 18px;
+    }
+    .endpoint-body p { font-size: 13px; }
+
+    /* Code blocks */
+    .code-block {
+      background: #0d0d0d;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      overflow-x: auto;
+      margin: 12px 0;
+      position: relative;
+    }
+    .code-block .comment { color: var(--muted); }
+    .code-block .string { color: #a5d6a7; }
+    .code-block .key { color: #90caf9; }
+    .code-block .number { color: #ffcc80; }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    th { text-align: left; font-weight: 600; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    td code { background: rgba(99,102,241,0.1); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--accent-hover); }
+
+    /* Alert */
+    .alert {
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+    .alert.info { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); }
+    .alert.warn { background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.2); }
+
+    /* Base URL bar */
+    .base-url {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 14px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .base-url .label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; }
+
+    /* Mobile */
+    .menu-toggle { display: none; }
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .sidebar.show { display: block; width: 100%; z-index: 100; }
+      .content { margin-left: 0; padding: 20px; }
+      .menu-toggle {
+        display: block;
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 200;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+    }
+  </style>
+</head>
+<body>
+  <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('show')">Menu</button>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <div class="sidebar-logo" style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <a href="https://chatweb.ai"><span>chat</span>web.ai</a>
+          <span class="api-badge">API</span>
+        </div>
+        <button onclick="setLang(document.documentElement.lang==='ja'?'en':'ja')" style="background:none;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;" id="lang-btn">EN</button>
+      </div>
+
+      <h3>Getting Started</h3>
+      <a class="nav-item" href="#overview">Overview</a>
+      <a class="nav-item" href="#auth">Authentication</a>
+      <a class="nav-item" href="#quickstart">Quick Start</a>
+
+      <h3>Chat</h3>
+      <a class="nav-item" href="#chat">Send Message</a>
+      <a class="nav-item" href="#sessions">Sessions</a>
+
+      <h3>Account</h3>
+      <a class="nav-item" href="#account">Account Info</a>
+      <a class="nav-item" href="#usage">Usage</a>
+
+      <h3>Platform</h3>
+      <a class="nav-item" href="#providers">Providers</a>
+      <a class="nav-item" href="#integrations">Integrations</a>
+      <a class="nav-item" href="#health">Health</a>
+
+      <h3>Media API</h3>
+      <a class="nav-item" href="#media">Overview</a>
+      <a class="nav-item" href="#media-tts">Text-to-Speech</a>
+      <a class="nav-item" href="#media-image">Image Generation</a>
+      <a class="nav-item" href="#media-video">Video Generation</a>
+
+      <h3>Billing</h3>
+      <a class="nav-item" href="#billing">Checkout</a>
+      <a class="nav-item" href="#portal">Billing Portal</a>
+      <a class="nav-item" href="#coupons">Coupons</a>
+
+      <h3>Channels</h3>
+      <a class="nav-item" href="#line">LINE Webhook</a>
+      <a class="nav-item" href="#telegram">Telegram Webhook</a>
+      <a class="nav-item" href="#linking">Channel Linking</a>
+
+      <h3>Links</h3>
+      <a class="nav-item" href="https://chatweb.ai">chatweb.ai</a>
+      <a class="nav-item" href="https://chatweb.ai/pricing">Pricing</a>
+      <a class="nav-item" href="https://chatweb.ai/status">Status</a>
+      <a class="nav-item" href="https://github.com/yukihamada/nanobot">GitHub</a>
+    </nav>
+
+    <main class="content">
+      <h1 id="overview">chatweb.ai API</h1>
+      <p class="subtitle">Multi-channel AI chat API with load balancing, tool calling, and unified billing.</p>
+
+      <div class="base-url">
+        <span class="label">Base URL</span>
+        <span>https://api.chatweb.ai</span>
+      </div>
+
+      <p>The chatweb.ai API lets you send messages to AI models (GPT-4o, Claude, Gemini) via a single unified endpoint. Features include session management, cross-channel sync (Web/LINE/Telegram), tool calling (web search, weather, calculator), and credit-based billing.</p>
+
+      <!-- Authentication -->
+      <h2 id="auth">Authentication</h2>
+      <p>All API requests require an API key passed in the <code>Authorization</code> header.</p>
+      <div class="code-block">
+<span class="key">Authorization</span>: Bearer <span class="string">nb_live_a1b2c3d4e5f6g7h8i9j0</span>
+      </div>
+      <p>Get your API key by signing up at <a href="https://chatweb.ai/pricing">chatweb.ai/pricing</a>. Free tier includes 1,000 credits/month.</p>
+
+      <div class="alert info">Free tier: No API key needed for basic chat. Send requests to <code>/api/v1/chat</code> with a session_id to get started.</div>
+
+      <!-- Quick Start -->
+      <h2 id="quickstart">Quick Start</h2>
+      <p>Send your first message in seconds:</p>
+      <div class="code-block" id="code-quick">
+        <button class="copy-btn" onclick="copyCode('code-quick')">Copy</button>
+<span class="comment"># Send a chat message</span>
+curl -X POST https://api.chatweb.ai/api/v1/chat \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{
+    "message": "Hello!",
+    "session_id": "my-session-1"
+  }'</span>
+      </div>
+      <p>Response:</p>
+      <div class="code-block">
+{
+  <span class="key">"response"</span>: <span class="string">"Hello! How can I help you today?"</span>,
+  <span class="key">"session_id"</span>: <span class="string">"my-session-1"</span>
+}
+      </div>
+
+      <!-- Chat -->
+      <h2 id="chat">Send Message</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/chat</span>
+          <span class="endpoint-desc">Send a message and get AI response</span>
+        </div>
+        <div class="endpoint-body">
+          <h3>Request Body</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+            <tr><td><code>message</code></td><td>string</td><td>Yes</td><td>The message to send</td></tr>
+            <tr><td><code>session_id</code></td><td>string</td><td>No</td><td>Session identifier for conversation history. Default: <code>api:default</code></td></tr>
+            <tr><td><code>channel</code></td><td>string</td><td>No</td><td>Channel identifier. Default: <code>api</code></td></tr>
+          </table>
+
+          <h3>Response</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+            <tr><td><code>response</code></td><td>string</td><td>AI-generated response. May include tool call results.</td></tr>
+            <tr><td><code>session_id</code></td><td>string</td><td>Session ID used for this conversation</td></tr>
+          </table>
+
+          <h3>Example</h3>
+          <div class="code-block" id="code-chat">
+            <button class="copy-btn" onclick="copyCode('code-chat')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/chat \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "message": "What is the weather in Tokyo?",
+    "session_id": "user-123"
+  }'</span>
+          </div>
+          <div class="alert info">Tool calling is automatic. When you ask about weather, search, or calculations, the AI will use built-in tools and return the results.</div>
+        </div>
+      </div>
+
+      <!-- Sessions -->
+      <h2 id="sessions">Sessions</h2>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/sessions</span>
+          <span class="endpoint-desc">List all sessions</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Returns an array of all session keys with metadata.</p>
+          <div class="code-block" id="code-sessions">
+            <button class="copy-btn" onclick="copyCode('code-sessions')">Copy</button>
+curl https://api.chatweb.ai/api/v1/sessions \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/sessions/{id}</span>
+          <span class="endpoint-desc">Get session with message history</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Returns full message history for a session. If the session is linked to other channels, messages from all channels are included.</p>
+          <h3>Response</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+            <tr><td><code>key</code></td><td>string</td><td>Original session key</td></tr>
+            <tr><td><code>resolved_key</code></td><td>string</td><td>Unified session key (if linked)</td></tr>
+            <tr><td><code>messages</code></td><td>array</td><td>Message history with role, content, channel</td></tr>
+            <tr><td><code>message_count</code></td><td>number</td><td>Total message count</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/api/v1/sessions/{id}</span>
+          <span class="endpoint-desc">Delete a session</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Permanently deletes a session and its message history.</p>
+        </div>
+      </div>
+
+      <!-- Account -->
+      <h2 id="account">Account</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/account/{id}</span>
+          <span class="endpoint-desc">Get user profile and billing info</span>
+        </div>
+        <div class="endpoint-body">
+          <h3>Response</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+            <tr><td><code>user_id</code></td><td>string</td><td>Unified user identifier</td></tr>
+            <tr><td><code>plan</code></td><td>string</td><td>Current plan: free, starter, pro</td></tr>
+            <tr><td><code>credits_remaining</code></td><td>number</td><td>Available credits</td></tr>
+            <tr><td><code>credits_used</code></td><td>number</td><td>Total credits consumed</td></tr>
+            <tr><td><code>channels</code></td><td>array</td><td>Linked channels</td></tr>
+            <tr><td><code>allowed_models</code></td><td>array</td><td>Models available on current plan</td></tr>
+          </table>
+          <div class="code-block" id="code-account">
+            <button class="copy-btn" onclick="copyCode('code-account')">Copy</button>
+curl https://api.chatweb.ai/api/v1/account/my-session \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Usage -->
+      <h2 id="usage">Usage</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/usage</span>
+          <span class="endpoint-desc">Get usage statistics</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Pass <code>X-User-Id</code> header to get usage for a specific user.</p>
+          <h3>Response</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+            <tr><td><code>credits_used</code></td><td>number</td><td>Credits consumed</td></tr>
+            <tr><td><code>credits_remaining</code></td><td>number</td><td>Credits available</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Providers -->
+      <h2 id="providers">Providers</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/providers</span>
+          <span class="endpoint-desc">List available AI providers</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Returns a list of configured AI providers with their models and load balancing status.</p>
+          <h3>Response</h3>
+          <div class="code-block">
+{
+  <span class="key">"providers"</span>: [
+    { <span class="key">"id"</span>: <span class="string">"openai"</span>, <span class="key">"name"</span>: <span class="string">"OpenAI"</span>, <span class="key">"models"</span>: [<span class="string">"gpt-4o"</span>, <span class="string">"gpt-4o-mini"</span>] },
+    { <span class="key">"id"</span>: <span class="string">"anthropic"</span>, <span class="key">"name"</span>: <span class="string">"Anthropic"</span>, <span class="key">"models"</span>: [<span class="string">"claude-sonnet"</span>, <span class="string">"claude-opus"</span>] }
+  ],
+  <span class="key">"load_balanced"</span>: <span class="number">true</span>,
+  <span class="key">"total_providers"</span>: <span class="number">2</span>
+}
+          </div>
+        </div>
+      </div>
+
+      <!-- Integrations -->
+      <h2 id="integrations">Integrations</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/integrations</span>
+          <span class="endpoint-desc">List available tools and integrations</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Built-in tools are called automatically during chat when the AI determines they are needed.</p>
+          <h3>Active Tools</h3>
+          <table>
+            <tr><th>Tool</th><th>Description</th></tr>
+            <tr><td><code>web_search</code></td><td>Search the web using DuckDuckGo</td></tr>
+            <tr><td><code>weather</code></td><td>Get current weather for any location (Open-Meteo)</td></tr>
+            <tr><td><code>calculator</code></td><td>Evaluate mathematical expressions</td></tr>
+            <tr><td><code>web_fetch</code></td><td>Fetch and extract content from URLs</td></tr>
+          </table>
+          <h3>Coming Soon</h3>
+          <p>Gmail, Google Calendar, Notion, Slack, GitHub integrations via OAuth.</p>
+        </div>
+      </div>
+
+      <!-- Health -->
+      <h2 id="health">Health Check</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/health</span>
+          <span class="endpoint-desc">System health status</span>
+        </div>
+        <div class="endpoint-body">
+          <div class="code-block">
+curl https://api.chatweb.ai/health
+<span class="comment"># {"status":"ok","version":"0.1.0"}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Media API -->
+      <h2 id="media">Media API</h2>
+      <p>Generate images, audio, and video using state-of-the-art AI models. The Media API provides unified access to DALL-E 3, Flux, Qwen3 TTS, Polly, and Kling AI.</p>
+
+      <div class="alert info">
+        🎨 Try the <a href="/media" style="color:var(--accent-hover);font-weight:600;">interactive demo</a> to test all Media API features with a visual interface.
+      </div>
+
+      <h3>Credit Costs</h3>
+      <table>
+        <tr><th>Service</th><th>Credits</th><th>Notes</th></tr>
+        <tr><td>TTS (100 chars)</td><td>1</td><td>Polly, OpenAI, Qwen3</td></tr>
+        <tr><td>STT (per request)</td><td>1</td><td>Whisper</td></tr>
+        <tr><td>Image - Standard</td><td>5-10</td><td>Flux Schnell, DALL-E 3</td></tr>
+        <tr><td>Image - HD</td><td>15-20</td><td>Flux Pro, DALL-E 3 HD</td></tr>
+        <tr><td>Video - 5s</td><td>50</td><td>Kling AI Standard</td></tr>
+        <tr><td>Video - 10s</td><td>100</td><td>Kling AI Standard</td></tr>
+      </table>
+
+      <!-- TTS -->
+      <h2 id="media-tts">Text-to-Speech</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/tts</span>
+          <span class="endpoint-desc">Convert text to natural-sounding speech</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Supports multiple TTS engines with automatic fallback: Polly (AWS), OpenAI TTS, Qwen3.</p>
+
+          <h3>Request Body</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+            <tr><td><code>text</code></td><td>string</td><td>Yes</td><td>Text to convert to speech (max 4096 chars)</td></tr>
+            <tr><td><code>voice</code></td><td>string</td><td>No</td><td>Voice name. Default: <code>Kazuha</code></td></tr>
+            <tr><td><code>speed</code></td><td>number</td><td>No</td><td>Playback speed (0.25-4.0). Default: 1.0</td></tr>
+          </table>
+
+          <h3>Available Voices</h3>
+          <table>
+            <tr><th>Voice</th><th>Language</th><th>Gender</th><th>Engine</th></tr>
+            <tr><td><code>Kazuha</code></td><td>Japanese</td><td>Female</td><td>Polly (recommended)</td></tr>
+            <tr><td><code>Takumi</code></td><td>Japanese</td><td>Male</td><td>Polly</td></tr>
+            <tr><td><code>Mizuki</code></td><td>Japanese</td><td>Female</td><td>Polly</td></tr>
+            <tr><td><code>female_calm</code></td><td>Japanese</td><td>Female</td><td>Qwen3</td></tr>
+            <tr><td><code>male_calm</code></td><td>Japanese</td><td>Male</td><td>Qwen3</td></tr>
+            <tr><td><code>nova</code></td><td>English</td><td>Female</td><td>OpenAI</td></tr>
+            <tr><td><code>alloy</code></td><td>English</td><td>Neutral</td><td>OpenAI</td></tr>
+          </table>
+
+          <h3>Response</h3>
+          <p>Returns audio file as <code>audio/mpeg</code> (MP3 format).</p>
+
+          <h3>Example</h3>
+          <div class="code-block" id="code-tts">
+            <button class="copy-btn" onclick="copyCode('code-tts')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/media/tts \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "text": "こんにちは、これはテストです",
+    "voice": "Kazuha",
+    "speed": 1.0
+  }'</span> \
+  --output audio.mp3
+          </div>
+        </div>
+      </div>
+
+      <!-- Image Generation -->
+      <h2 id="media-image">Image Generation</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/image</span>
+          <span class="endpoint-desc">Generate images from text descriptions</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Generate high-quality images using DALL-E 3, Flux Pro, Flux Schnell, or Flux Realism models.</p>
+
+          <h3>Request Body</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+            <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>Description of the image to generate</td></tr>
+            <tr><td><code>model</code></td><td>string</td><td>No</td><td>Model: <code>flux-schnell</code> (default), <code>flux-pro</code>, <code>flux-realism</code>, <code>dalle-3</code></td></tr>
+            <tr><td><code>size</code></td><td>string</td><td>No</td><td><code>1024x1024</code> (default), <code>1792x1024</code>, <code>1024x1792</code></td></tr>
+            <tr><td><code>quality</code></td><td>string</td><td>No</td><td><code>standard</code> (default), <code>hd</code> (DALL-E 3 only)</td></tr>
+          </table>
+
+          <h3>Models</h3>
+          <table>
+            <tr><th>Model</th><th>Credits</th><th>Speed</th><th>Quality</th></tr>
+            <tr><td><code>flux-schnell</code></td><td>5</td><td>Fast (~15s)</td><td>Good</td></tr>
+            <tr><td><code>flux-realism</code></td><td>10</td><td>Medium (~30s)</td><td>Very Realistic</td></tr>
+            <tr><td><code>flux-pro</code></td><td>15</td><td>Slow (~60s)</td><td>Best</td></tr>
+            <tr><td><code>dalle-3</code></td><td>10 (20 HD)</td><td>Medium (~30s)</td><td>Excellent</td></tr>
+          </table>
+
+          <h3>Response</h3>
+          <div class="code-block">
+{
+  <span class="key">"images"</span>: [{
+    <span class="key">"url"</span>: <span class="string">"https://..."</span>
+  }],
+  <span class="key">"model"</span>: <span class="string">"flux-schnell"</span>,
+  <span class="key">"credits_used"</span>: <span class="number">5</span>
+}
+          </div>
+
+          <h3>Example</h3>
+          <div class="code-block" id="code-image">
+            <button class="copy-btn" onclick="copyCode('code-image')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/media/image \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "prompt": "a cute cat in the snow, cinematic lighting, 4k",
+    "model": "flux-schnell",
+    "size": "1024x1024"
+  }'</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Generation -->
+      <h2 id="media-video">Video Generation</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/video</span>
+          <span class="endpoint-desc">Generate short videos from text (async)</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Generate 5-10 second videos using Kling AI. Video generation is asynchronous - the API returns immediately with a video_id that you can poll for completion.</p>
+
+          <h3>Request Body</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+            <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>Description of the video scene</td></tr>
+            <tr><td><code>duration</code></td><td>number</td><td>No</td><td><code>5</code> (default) or <code>10</code> seconds</td></tr>
+            <tr><td><code>mode</code></td><td>string</td><td>No</td><td><code>standard</code> (default) or <code>pro</code></td></tr>
+          </table>
+
+          <h3>Response (202 Accepted)</h3>
+          <div class="code-block">
+{
+  <span class="key">"video_id"</span>: <span class="string">"abc123..."</span>,
+  <span class="key">"status"</span>: <span class="string">"queued"</span>,
+  <span class="key">"estimated_time"</span>: <span class="number">120</span>,
+  <span class="key">"credits_used"</span>: <span class="number">50</span>
+}
+          </div>
+
+          <h3>Example</h3>
+          <div class="code-block" id="code-video">
+            <button class="copy-btn" onclick="copyCode('code-video')">Copy</button>
+<span class="comment"># 1. Create video generation job</span>
+curl -X POST https://api.chatweb.ai/api/v1/media/video \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "prompt": "a dog running on the beach at sunset",
+    "duration": 5
+  }'</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/media/video/{id}</span>
+          <span class="endpoint-desc">Check video generation status</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Poll this endpoint to check if your video is ready. Status progresses: <code>queued</code> → <code>processing</code> → <code>completed</code> or <code>failed</code>.</p>
+
+          <h3>Response</h3>
+          <div class="code-block">
+{
+  <span class="key">"video_id"</span>: <span class="string">"abc123..."</span>,
+  <span class="key">"status"</span>: <span class="string">"completed"</span>,
+  <span class="key">"url"</span>: <span class="string">"https://..."</span>,
+  <span class="key">"thumbnail_url"</span>: <span class="string">"https://..."</span>,
+  <span class="key">"created_at"</span>: <span class="string">"2026-02-17T12:00:00Z"</span>
+}
+          </div>
+
+          <h3>Example</h3>
+          <div class="code-block" id="code-video-status">
+            <button class="copy-btn" onclick="copyCode('code-video-status')">Copy</button>
+<span class="comment"># 2. Check status (poll every 15 seconds)</span>
+curl https://api.chatweb.ai/api/v1/media/video/abc123 \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Billing -->
+      <h2 id="billing">Billing - Checkout</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/billing/checkout</span>
+          <span class="endpoint-desc">Create a Stripe checkout session</span>
+        </div>
+        <div class="endpoint-body">
+          <h3>Request Body</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+            <tr><td><code>plan</code></td><td>string</td><td><code>starter</code> ($9/mo) or <code>pro</code> ($29/mo)</td></tr>
+          </table>
+          <h3>Response</h3>
+          <p>Returns a <code>checkout_url</code> to redirect the user to Stripe.</p>
+        </div>
+      </div>
+
+      <h2 id="portal">Billing - Portal</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/billing/portal</span>
+          <span class="endpoint-desc">Get Stripe billing portal URL</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Returns a URL to the Stripe customer portal for managing subscriptions.</p>
+        </div>
+      </div>
+
+      <h2 id="coupons">Coupons</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/coupon/validate</span>
+          <span class="endpoint-desc">Validate a coupon code</span>
+        </div>
+        <div class="endpoint-body">
+          <h3>Request Body</h3>
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+            <tr><td><code>code</code></td><td>string</td><td>Coupon code to validate</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Channels -->
+      <h2 id="line">LINE Webhook</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/webhooks/line</span>
+          <span class="endpoint-desc">LINE Messaging API webhook</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Receives LINE webhook events. Configure in the <a href="https://developers.line.biz/console/">LINE Developer Console</a>.</p>
+          <p>LINE Bot ID: <code>@619jcqqh</code></p>
+        </div>
+      </div>
+
+      <h2 id="telegram">Telegram Webhook</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/webhooks/telegram</span>
+          <span class="endpoint-desc">Telegram Bot API webhook</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Receives Telegram webhook updates. Configure via <a href="https://core.telegram.org/bots/api#setwebhook">setWebhook</a>.</p>
+          <p>Bot: <code>@chatweb_ai_bot</code></p>
+        </div>
+      </div>
+
+      <h2 id="linking">Channel Linking</h2>
+      <p>Users can link their Web, LINE, and Telegram conversations so all channels share the same chat history.</p>
+
+      <h3>Method 1: Auto-Link (Recommended)</h3>
+      <p>Click the LINE/Telegram button on <a href="https://chatweb.ai">chatweb.ai</a>. Your session ID is included in the deep link and auto-linked when you add the bot.</p>
+
+      <h3>Method 2: Session ID</h3>
+      <p>Copy your Web session ID (shown on the chat page) and send it directly to the LINE or Telegram bot.</p>
+
+      <h3>Method 3: Link Code</h3>
+      <p>Type <code>/link</code> in any channel to generate a 6-digit code. Then type <code>/link CODE</code> in another channel to link them.</p>
+
+      <h3>Credit Rates</h3>
+      <table>
+        <tr><th>Model</th><th>Credits per 1K tokens</th></tr>
+        <tr><td>GPT-4o-mini</td><td>4</td></tr>
+        <tr><td>Gemini Flash</td><td>4</td></tr>
+        <tr><td>GPT-4o</td><td>20</td></tr>
+        <tr><td>Claude Sonnet</td><td>24</td></tr>
+        <tr><td>Claude Opus</td><td>120</td></tr>
+      </table>
+
+      <h3>Plans</h3>
+      <table>
+        <tr><th>Plan</th><th>Price</th><th>Credits/month</th><th>Models</th></tr>
+        <tr><td>Free</td><td>$0</td><td>1,000</td><td>GPT-4o-mini, Gemini Flash</td></tr>
+        <tr><td>Starter</td><td>$9/mo</td><td>50,000</td><td>+ GPT-4o, Claude Sonnet</td></tr>
+        <tr><td>Pro</td><td>$29/mo</td><td>200,000</td><td>+ Claude Opus, all models</td></tr>
+      </table>
+
+      <div style="margin-top:60px;padding-top:24px;border-top:1px solid var(--border);text-align:center;">
+        <p style="color:var(--muted);font-size:12px;">
+          <a href="https://chatweb.ai">chatweb.ai</a> &middot;
+          <a href="https://chatweb.ai/pricing">Pricing</a> &middot;
+          <a href="https://chatweb.ai/status">Status</a> &middot;
+          <a href="https://github.com/yukihamada/nanobot">GitHub</a> &middot;
+          <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
+          &copy; 2025-2026
+        </p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Check login status and show prompt if not logged in
+    async function checkLoginStatus() {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return false;
+
+      try {
+        const response = await fetch('https://api.chatweb.ai/api/v1/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    window.addEventListener('load', async () => {
+      const isLoggedIn = await checkLoginStatus();
+      if (!isLoggedIn) {
+        showLoginPrompt();
+      }
+    });
+
+    function showLoginPrompt() {
+      const banner = document.createElement('div');
+      banner.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(135deg, var(--accent), #7c3aed);
+        color: white;
+        padding: 16px;
+        text-align: center;
+        z-index: 1000;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      `;
+      banner.innerHTML = `
+        <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 16px;">
+          <strong>🔐 API を使用するにはログインが必要です</strong>
+          <a href="https://chatweb.ai" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 20px; border-radius: 8px; font-weight: 600; transition: all 0.2s;">
+            ログイン
+          </a>
+          <button onclick="this.parentElement.parentElement.remove()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;">
+            閉じる
+          </button>
+        </div>
+      `;
+      document.body.prepend(banner);
+      if (window.innerWidth > 768) {
+        document.querySelector('.content').style.paddingTop = '100px';
+      }
+    }
+
+    function copyCode(id) {
+      const block = document.getElementById(id);
+      const text = block.innerText.replace('Copy', '').trim();
+      navigator.clipboard.writeText(text);
+      const btn = block.querySelector('.copy-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    }
+
+    // Highlight active nav on scroll
+    const sections = document.querySelectorAll('h2[id], h1[id]');
+    const navItems = document.querySelectorAll('.sidebar a.nav-item');
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(s => {
+        if (window.scrollY >= s.offsetTop - 100) current = s.id;
+      });
+      navItems.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+      });
+    });
+
+    // Language switching
+    function setLang(l) {
+      document.documentElement.lang = l;
+      localStorage.setItem('nl', l);
+      var btn = document.getElementById('lang-btn');
+      btn.textContent = l === 'ja' ? 'EN' : 'JA';
+
+      var t = {
+        ja: {
+          title: 'chatweb.ai API',
+          subtitle: 'マルチチャネルAIチャットAPI。ロードバランシング、ツール呼び出し、統一課金に対応。',
+          baseLabel: 'ベースURL',
+          desc: 'chatweb.ai APIで、AIモデル（GPT-4o、Claude、Gemini）に単一エンドポイントからメッセージを送信できます。セッション管理、クロスチャネル同期（Web/LINE/Telegram）、ツール呼び出し（Web検索、天気、計算）、クレジット課金に対応。',
+          auth: '認証',
+          authDesc: 'すべてのAPIリクエストにはAuthorizationヘッダーにAPIキーが必要です。',
+          quickstart: 'クイックスタート',
+          quickDesc: '数秒で最初のメッセージを送信:',
+          chat: 'メッセージ送信',
+          sessions: 'セッション',
+          account: 'アカウント',
+          usage: '使用量',
+          providers: 'プロバイダー',
+          integrations: 'インテグレーション',
+          health: 'ヘルスチェック',
+          billing: '課金 - チェックアウト',
+          portal: '課金 - ポータル',
+          coupons: 'クーポン',
+          line: 'LINE Webhook',
+          telegram: 'Telegram Webhook',
+          linking: 'チャネル連携',
+          plans: 'プラン',
+          creditRates: 'クレジットレート',
+          gettingStarted: 'はじめに',
+          overview: '概要',
+          quickStart: 'クイックスタート',
+          sendMessage: 'メッセージ送信',
+          accountInfo: 'アカウント情報',
+          platform: 'プラットフォーム',
+          channels: 'チャネル',
+          links: 'リンク',
+          checkout: 'チェックアウト',
+          billingPortal: '課金ポータル',
+          channelLinking: 'チャネル連携',
+          mediaApi: 'メディアAPI',
+          media: 'メディアAPI概要',
+          mediaTts: 'テキスト読み上げ',
+          mediaImage: '画像生成',
+          mediaVideo: '動画生成'
+        },
+        en: {
+          title: 'chatweb.ai API',
+          subtitle: 'Multi-channel AI chat API with load balancing, tool calling, and unified billing.',
+          baseLabel: 'Base URL',
+          desc: 'The chatweb.ai API lets you send messages to AI models (GPT-4o, Claude, Gemini) via a single unified endpoint. Features include session management, cross-channel sync (Web/LINE/Telegram), tool calling (web search, weather, calculator), and credit-based billing.',
+          auth: 'Authentication',
+          authDesc: 'All API requests require an API key passed in the Authorization header.',
+          quickstart: 'Quick Start',
+          quickDesc: 'Send your first message in seconds:',
+          chat: 'Send Message',
+          sessions: 'Sessions',
+          account: 'Account',
+          usage: 'Usage',
+          providers: 'Providers',
+          integrations: 'Integrations',
+          health: 'Health Check',
+          billing: 'Billing - Checkout',
+          portal: 'Billing - Portal',
+          coupons: 'Coupons',
+          line: 'LINE Webhook',
+          telegram: 'Telegram Webhook',
+          linking: 'Channel Linking',
+          plans: 'Plans',
+          creditRates: 'Credit Rates',
+          gettingStarted: 'Getting Started',
+          overview: 'Overview',
+          quickStart: 'Quick Start',
+          sendMessage: 'Send Message',
+          accountInfo: 'Account Info',
+          platform: 'Platform',
+          channels: 'Channels',
+          links: 'Links',
+          checkout: 'Checkout',
+          billingPortal: 'Billing Portal',
+          channelLinking: 'Channel Linking',
+          mediaApi: 'Media API',
+          media: 'Media API Overview',
+          mediaTts: 'Text-to-Speech',
+          mediaImage: 'Image Generation',
+          mediaVideo: 'Video Generation'
+        }
+      };
+      var s = t[l];
+
+      // Main content
+      document.getElementById('overview').textContent = s.title;
+      document.querySelector('.subtitle').textContent = s.subtitle;
+      document.querySelector('.base-url .label').textContent = s.baseLabel;
+
+      // Section headings by id
+      var headingMap = {
+        auth: s.auth, quickstart: s.quickstart, chat: s.chat, sessions: s.sessions,
+        account: s.account, usage: s.usage, providers: s.providers, integrations: s.integrations,
+        health: s.health, media: s.media, 'media-tts': s.mediaTts, 'media-image': s.mediaImage,
+        'media-video': s.mediaVideo, billing: s.billing, portal: s.portal, coupons: s.coupons,
+        line: s.line, telegram: s.telegram, linking: s.linking
+      };
+      for (var id in headingMap) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = headingMap[id];
+      }
+
+      // Sidebar nav headings (h3 in sidebar)
+      var sidebarH3 = document.querySelectorAll('.sidebar h3');
+      var h3Keys = ['gettingStarted', 'chat', 'account', 'platform', 'mediaApi', 'billing', 'channels', 'links'];
+      sidebarH3.forEach(function(h, i) { if (s[h3Keys[i]]) h.textContent = s[h3Keys[i]]; });
+
+      // Sidebar nav items
+      var navMap = {
+        '#overview': s.overview, '#auth': s.auth, '#quickstart': s.quickStart,
+        '#chat': s.sendMessage, '#sessions': s.sessions,
+        '#account': s.accountInfo, '#usage': s.usage,
+        '#providers': s.providers, '#integrations': s.integrations, '#health': s.health,
+        '#media': s.media, '#media-tts': s.mediaTts, '#media-image': s.mediaImage, '#media-video': s.mediaVideo,
+        '#billing': s.checkout, '#portal': s.billingPortal, '#coupons': s.coupons,
+        '#line': s.line, '#telegram': s.telegram, '#linking': s.channelLinking
+      };
+      document.querySelectorAll('.sidebar a.nav-item[href^="#"]').forEach(function(a) {
+        if (navMap[a.getAttribute('href')]) a.textContent = navMap[a.getAttribute('href')];
+      });
+    }
+    // Initialize language from localStorage or browser
+    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+  </script>
+</body>
+</html>

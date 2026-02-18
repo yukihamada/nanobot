@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service - chatweb.ai</title>
+  <meta name="description" content="chatweb.ai Terms of Service / 利用規約">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #1e1e1e;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    nav {
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; text-decoration: none; color: var(--text); }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 16px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: var(--text); }
+    .lang-sw {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+    }
+    .lang-sw button {
+      background: none; border: none; color: var(--muted);
+      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .lang-sw button.on { background: var(--accent); color: #fff; }
+    .main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .hero {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .hero h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      color: var(--muted);
+      font-size: 15px;
+    }
+    .section {
+      margin-bottom: 36px;
+    }
+    .section h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--text);
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 16px 0 8px;
+      color: var(--text);
+    }
+    .section p, .section li {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.8;
+      margin-bottom: 8px;
+    }
+    .section ul, .section ol {
+      padding-left: 24px;
+      margin-bottom: 12px;
+    }
+    .section li {
+      margin-bottom: 4px;
+    }
+    .updated {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo">chatweb<span>.ai</span></a>
+    <div class="nav-links">
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/contact">Contact</a>
+      <div class="lang-sw">
+        <button id="btnJa" class="on" onclick="setLang('ja')">JA</button>
+        <button id="btnEn" onclick="setLang('en')">EN</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="hero">
+      <h1 id="pageTitle">利用規約</h1>
+      <p id="pageDesc">chatweb.ai サービスのご利用にあたって</p>
+    </div>
+
+    <!-- Japanese -->
+    <div id="content-ja">
+      <div class="section">
+        <h2>第1条（適用）</h2>
+        <p>本利用規約（以下「本規約」）は、chatweb.ai（以下「本サービス」）の利用に関する条件を定めるものです。ユーザーは本サービスを利用することにより、本規約に同意したものとみなされます。</p>
+        <p>本サービスは、株式会社イネブラ（以下「当社」）が運営しています。</p>
+      </div>
+
+      <div class="section">
+        <h2>第2条（サービスの内容）</h2>
+        <p>本サービスは、AIを活用したチャットアシスタントサービスです。以下の機能を提供します：</p>
+        <ul>
+          <li>AIとのテキストチャット（Web、LINE、Telegram対応）</li>
+          <li>音声認識・音声合成による対話</li>
+          <li>Web検索、天気情報、計算などのツール機能</li>
+          <li>チャネル間のアカウント連携</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>第3条（アカウント）</h2>
+        <p>ユーザーは、メールアドレスまたはGoogleアカウントを使用してアカウントを作成できます。</p>
+        <ul>
+          <li>アカウント情報は正確かつ最新の状態を維持してください。</li>
+          <li>アカウントの管理責任はユーザーにあります。</li>
+          <li>第三者へのアカウントの共有・譲渡は禁止します。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>第4条（料金・支払い）</h2>
+        <p>本サービスには無料プランと有料プランがあります。</p>
+        <ul>
+          <li><strong>Freeプラン</strong>：初回100クレジット付与。機能制限あり。</li>
+          <li><strong>Starterプラン</strong>：月額$9（税別）。月30,000クレジット。</li>
+          <li><strong>Proプラン</strong>：月額$29（税別）。月100,000クレジット。</li>
+        </ul>
+        <p>有料プランはStripeを通じた自動課金です。解約はいつでも可能で、次の請求サイクルから停止されます。</p>
+        <p>プロモーションコードによる無料トライアル期間中は課金されません。</p>
+      </div>
+
+      <div class="section">
+        <h2>第5条（禁止事項）</h2>
+        <p>ユーザーは以下の行為を行ってはなりません：</p>
+        <ul>
+          <li>法令に違反する行為、または犯罪に関連する行為</li>
+          <li>本サービスを利用した違法コンテンツの生成</li>
+          <li>本サービスのインフラに過度な負荷をかける行為</li>
+          <li>他のユーザーへの嫌がらせ、なりすまし</li>
+          <li>本サービスのリバースエンジニアリング</li>
+          <li>APIの不正利用、自動化されたスクレイピング</li>
+          <li>本サービスを利用したスパム行為</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>第6条（知的財産権）</h2>
+        <p>本サービスのソフトウェア、デザイン、ロゴ等の知的財産権は当社に帰属します。</p>
+        <p>AIが生成したコンテンツについて、ユーザーは個人的・商業的な利用が可能ですが、AIの出力の正確性について当社は保証しません。</p>
+      </div>
+
+      <div class="section">
+        <h2>第7条（プライバシー）</h2>
+        <p>当社はユーザーのプライバシーを重視します。</p>
+        <ul>
+          <li>会話データはサービス提供に必要な範囲で処理されます。</li>
+          <li>データは日本リージョン（AWS ap-northeast-1）に保存されます。</li>
+          <li>第三者へのデータ販売は行いません。</li>
+          <li>ユーザーはアカウント削除を通じてデータの削除を要求できます。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>第8条（免責事項）</h2>
+        <ul>
+          <li>本サービスは「現状有姿」で提供されます。</li>
+          <li>AIの回答の正確性、完全性、有用性について保証しません。</li>
+          <li>サービスの中断・停止について、当社は責任を負いません。</li>
+          <li>ユーザーがAIの回答に基づいて行った判断・行動に関して、当社は責任を負いません。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>第9条（サービスの変更・終了）</h2>
+        <p>当社は、事前の通知なくサービスの内容を変更、または提供を終了できるものとします。有料プランのユーザーに対しては、合理的な事前通知を行うよう努めます。</p>
+      </div>
+
+      <div class="section">
+        <h2>第10条（規約の変更）</h2>
+        <p>当社は本規約を変更できるものとします。重要な変更がある場合は、サービス内での通知またはメールにて周知します。変更後もサービスを継続利用した場合、変更後の規約に同意したものとみなします。</p>
+      </div>
+
+      <div class="section">
+        <h2>第11条（準拠法・管轄裁判所）</h2>
+        <p>本規約は日本法に準拠し、日本法に従って解釈されます。本規約に関する紛争は、東京地方裁判所を第一審の専属的合意管轄裁判所とします。</p>
+      </div>
+
+      <div class="section">
+        <h2>第12条（お問い合わせ）</h2>
+        <p>本規約に関するお問い合わせは、<a href="/contact" style="color: var(--accent);">お問い合わせフォーム</a>またはメール（yuki@hamada.tokyo）までご連絡ください。</p>
+      </div>
+    </div>
+
+    <!-- English -->
+    <div id="content-en" style="display:none;">
+      <div class="section">
+        <h2>1. Acceptance of Terms</h2>
+        <p>These Terms of Service ("Terms") govern your use of chatweb.ai ("the Service"). By using the Service, you agree to be bound by these Terms.</p>
+        <p>The Service is operated by Enebular Inc. ("we", "us", or "the Company").</p>
+      </div>
+
+      <div class="section">
+        <h2>2. Service Description</h2>
+        <p>The Service is an AI-powered chat assistant platform providing:</p>
+        <ul>
+          <li>AI text chat (Web, LINE, Telegram)</li>
+          <li>Speech recognition and text-to-speech</li>
+          <li>Tool functions (web search, weather, calculator)</li>
+          <li>Cross-channel account linking</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>3. Accounts</h2>
+        <p>You may create an account using your email address or Google account.</p>
+        <ul>
+          <li>You are responsible for maintaining accurate account information.</li>
+          <li>You are responsible for all activity under your account.</li>
+          <li>Sharing or transferring accounts to third parties is prohibited.</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>4. Pricing & Payment</h2>
+        <p>The Service offers free and paid plans:</p>
+        <ul>
+          <li><strong>Free</strong>: 100 credits on signup. Limited features.</li>
+          <li><strong>Starter</strong>: $9/month. 30,000 credits/month.</li>
+          <li><strong>Pro</strong>: $29/month. 100,000 credits/month.</li>
+        </ul>
+        <p>Paid plans are billed automatically via Stripe. You may cancel at any time; cancellation takes effect at the next billing cycle.</p>
+        <p>Promotional codes provide free trial periods with no charges during the trial.</p>
+      </div>
+
+      <div class="section">
+        <h2>5. Prohibited Uses</h2>
+        <p>You may not:</p>
+        <ul>
+          <li>Violate any applicable laws or regulations</li>
+          <li>Generate illegal or harmful content</li>
+          <li>Place excessive load on the Service infrastructure</li>
+          <li>Harass other users or impersonate others</li>
+          <li>Reverse engineer the Service</li>
+          <li>Abuse the API or conduct automated scraping</li>
+          <li>Use the Service for spam</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>6. Intellectual Property</h2>
+        <p>All intellectual property rights in the Service (software, design, logos) belong to the Company.</p>
+        <p>You may use AI-generated content for personal and commercial purposes, but we do not guarantee the accuracy of AI outputs.</p>
+      </div>
+
+      <div class="section">
+        <h2>7. Privacy</h2>
+        <p>We take your privacy seriously.</p>
+        <ul>
+          <li>Conversation data is processed only as necessary to provide the Service.</li>
+          <li>Data is stored in the Japan region (AWS ap-northeast-1).</li>
+          <li>We do not sell your data to third parties.</li>
+          <li>You may request data deletion by deleting your account.</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>8. Disclaimer</h2>
+        <ul>
+          <li>The Service is provided "as is" without warranties of any kind.</li>
+          <li>We do not guarantee the accuracy, completeness, or usefulness of AI responses.</li>
+          <li>We are not liable for service interruptions or downtime.</li>
+          <li>We are not responsible for decisions or actions you take based on AI responses.</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>9. Service Changes</h2>
+        <p>We may modify or discontinue the Service at any time. We will make reasonable efforts to notify paid plan users in advance of significant changes.</p>
+      </div>
+
+      <div class="section">
+        <h2>10. Changes to Terms</h2>
+        <p>We may update these Terms at any time. Material changes will be communicated via in-service notifications or email. Continued use of the Service after changes constitutes acceptance of the updated Terms.</p>
+      </div>
+
+      <div class="section">
+        <h2>11. Governing Law</h2>
+        <p>These Terms are governed by the laws of Japan. Any disputes shall be subject to the exclusive jurisdiction of the Tokyo District Court.</p>
+      </div>
+
+      <div class="section">
+        <h2>12. Contact</h2>
+        <p>For questions about these Terms, please use the <a href="/contact" style="color: var(--accent);">contact form</a> or email yuki@hamada.tokyo.</p>
+      </div>
+    </div>
+
+    <div class="updated" id="updatedText">最終更新日：2026年2月9日</div>
+  </div>
+
+  <footer>
+    <a href="/">chatweb.ai</a> &middot; <a href="/pricing">Pricing</a> &middot; <a href="/contact">Contact</a> &middot; <a href="/terms">Terms</a>
+  </footer>
+
+  <script>
+    const i18n = {
+      ja: { title: '利用規約', desc: 'chatweb.ai サービスのご利用にあたって', updated: '最終更新日：2026年2月9日' },
+      en: { title: 'Terms of Service', desc: 'Terms and conditions for using chatweb.ai', updated: 'Last updated: February 9, 2026' }
+    };
+    let lang = localStorage.getItem('cw-lang') || 'ja';
+    function setLang(l) {
+      lang = l;
+      localStorage.setItem('cw-lang', l);
+      document.getElementById('content-ja').style.display = l === 'ja' ? '' : 'none';
+      document.getElementById('content-en').style.display = l === 'en' ? '' : 'none';
+      document.getElementById('pageTitle').textContent = i18n[l].title;
+      document.getElementById('pageDesc').textContent = i18n[l].desc;
+      document.getElementById('updatedText').textContent = i18n[l].updated;
+      document.getElementById('btnJa').className = l === 'ja' ? 'on' : '';
+      document.getElementById('btnEn').className = l === 'en' ? 'on' : '';
+    }
+    setLang(lang);
+  </script>
+</body>
+</html>

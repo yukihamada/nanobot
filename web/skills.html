@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skills - chatweb.ai</title>
+  <meta name="description" content="chatweb.ai の全機能一覧。40+ツール、14チャネル、9プロバイダー、5コマンド。">
+  <meta property="og:title" content="Skills - chatweb.ai">
+  <meta property="og:description" content="chatweb.ai の全機能一覧。40+ツール、14チャネル、9プロバイダー、5コマンド。">
+  <meta property="og:image" content="https://chatweb.ai/og.svg">
+  <meta property="og:url" content="https://chatweb.ai/skills">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <style>
+    :root{--bg:#121214;--s:#1a1a1e;--b:#2e2e33;--t:#e4e4e8;--ts:#a0a0a8;--m:#6b6b73;--a:#818cf8;--ah:#a5b4fc;--g:#4ade80;--y:#fbbf24;--r:#f87171}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-size:16px}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
+    nav{padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b)}
+    .logo{font-size:18px;font-weight:700;text-decoration:none;color:var(--t)}.logo span{color:var(--a)}
+    .nav-links{display:flex;align-items:center;gap:16px}
+    .nav-links a{color:var(--m);text-decoration:none;font-size:14px;font-weight:500}.nav-links a:hover{color:var(--t)}
+    .nav-links a.active{color:var(--a)}
+    .lang-sw{background:var(--s);border:1px solid var(--b);border-radius:6px;overflow:hidden;display:flex}
+    .lang-sw button{background:none;border:none;color:var(--m);padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer}
+    .lang-sw button.on{background:var(--a);color:#fff}
+    .main{max-width:1300px;margin:0 auto;padding:40px 24px 80px}
+    .hero{text-align:center;margin-bottom:48px}
+    .hero h1{font-size:36px;font-weight:800;letter-spacing:-1px;margin-bottom:12px}
+    .hero p{color:var(--m);font-size:16px;max-width:700px;margin:0 auto}
+    .stats{display:flex;justify-content:center;gap:32px;margin:32px 0 48px;flex-wrap:wrap}
+    .stat{text-align:center}
+    .stat .num{font-size:32px;font-weight:800;color:var(--a)}
+    .stat .label{font-size:12px;color:var(--m);margin-top:2px}
+    /* Category section */
+    .cat-title{font-size:20px;font-weight:800;margin:48px 0 20px;display:flex;align-items:center;gap:10px}
+    .cat-title:first-of-type{margin-top:0}
+    .cat-icon{font-size:24px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:16px}
+    /* Tool card */
+    .tool{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:18px 20px;transition:border-color .2s}
+    .tool:hover{border-color:var(--a)}
+    .tool-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}
+    .tool-name{font-size:14px;font-weight:700;font-family:'SF Mono',Monaco,Consolas,monospace;color:var(--t)}
+    .badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;flex-shrink:0}
+    .badge.auto{background:rgba(34,197,94,.12);color:var(--g)}
+    .badge.confirm{background:rgba(245,158,11,.12);color:var(--y)}
+    .badge.free{background:rgba(129,140,248,.12);color:var(--a)}
+    .badge.tested{background:rgba(34,197,94,.08);color:var(--g);font-size:9px;margin-left:4px}
+    .badge.untested{background:rgba(119,119,119,.1);color:var(--m);font-size:9px;margin-left:4px}
+    .tool-desc{font-size:12px;color:var(--m);line-height:1.5}
+    /* Channel card */
+    .ch{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:16px 20px;text-align:center;transition:border-color .2s}
+    .ch:hover{border-color:var(--a)}
+    .ch-icon{font-size:28px;margin-bottom:6px}
+    .ch-name{font-size:14px;font-weight:700}
+    .ch-type{font-size:11px;color:var(--m);margin-top:2px}
+    /* Provider card */
+    .prov{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:18px 20px;transition:border-color .2s}
+    .prov:hover{border-color:var(--a)}
+    .prov-name{font-size:15px;font-weight:700;margin-bottom:4px}
+    .prov-model{font-size:12px;color:var(--m);font-family:'SF Mono',Monaco,Consolas,monospace}
+    /* Command card */
+    .cmd{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:18px 20px;transition:border-color .2s}
+    .cmd:hover{border-color:var(--a)}
+    .cmd-name{font-size:15px;font-weight:700;font-family:'SF Mono',Monaco,Consolas,monospace;color:var(--a);margin-bottom:4px}
+    .cmd-desc{font-size:12px;color:var(--m);line-height:1.5}
+    .cmd-perm{font-size:11px;color:var(--m);margin-top:6px}
+    /* CTA */
+    .cta{text-align:center;padding:48px 0}
+    .cta-btn{display:inline-block;background:var(--a);color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;transition:all .2s}
+    .cta-btn:hover{background:var(--ah);transform:translateY(-1px)}
+    footer{text-align:center;padding:24px;color:var(--m);font-size:12px;border-top:1px solid var(--b)}
+    footer a{color:var(--m);text-decoration:none}footer a:hover{color:var(--t)}
+    @media(max-width:768px){
+      .hero h1{font-size:26px}.stats{gap:16px}.stat .num{font-size:24px}
+      .grid{grid-template-columns:1fr}
+      .cat-title{font-size:18px;margin-top:32px}
+    }
+  </style>
+</head>
+<body>
+<nav>
+  <a href="/" class="logo"><span>chat</span>web.ai</a>
+  <div class="nav-links">
+    <a href="/">Chat</a>
+    <a href="/docs">API Docs</a>
+    <a href="/pricing" id="nav-pricing">Pricing</a>
+    <a href="/skills" class="active">Skills</a>
+    <a href="/contact" id="nav-contact">Contact</a>
+    <div class="lang-sw">
+      <button onclick="setLang('ja')" id="btn-ja" class="on">JP</button>
+      <button onclick="setLang('en')" id="btn-en">EN</button>
+    </div>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="hero">
+    <h1 id="t-title">全スキル一覧</h1>
+    <p id="t-subtitle">chatweb.ai が持つ全ツール・チャネル・プロバイダー・コマンドの一覧</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="num">34</div><div class="label" id="s-tools">Tools</div></div>
+    <div class="stat"><div class="num">14</div><div class="label" id="s-channels">Channels</div></div>
+    <div class="stat"><div class="num">7</div><div class="label" id="s-providers">Providers</div></div>
+    <div class="stat"><div class="num">5</div><div class="label" id="s-commands">Commands</div></div>
+  </div>
+
+  <!-- ===== Search & Information ===== -->
+  <div class="cat-title" id="c-search">&#x1F50D; <span id="t-c-search">検索・情報</span></div>
+  <div class="grid">
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">web_search</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-web_search">Web検索。Google/Bingでリアルタイム情報を取得</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">web_fetch</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-web_fetch">URLからWebページの内容を取得・要約</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">wikipedia</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-wikipedia">Wikipedia記事を検索・取得</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">news_search</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-news_search">最新ニュースを検索</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">weather</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-weather">天気予報を取得（都市名 or 座標）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">arxiv_search</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-arxiv_search">arXiv論文を検索・要約</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">youtube_transcript</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-youtube_transcript">YouTube動画の字幕・文字起こしを取得</div>
+    </div>
+  </div>
+
+  <!-- ===== Calculation & Analysis ===== -->
+  <div class="cat-title" id="c-calc">&#x1F4CA; <span id="t-c-calc">計算・分析</span></div>
+  <div class="grid">
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">calculator</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-calculator">数式を安全に計算（四則演算、関数、単位変換）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">csv_analysis</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-csv_analysis">CSVデータの統計分析・集計</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">datetime</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-datetime">日時の計算・タイムゾーン変換</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">translate</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-translate">多言語翻訳（100+言語対応）</div>
+    </div>
+  </div>
+
+  <!-- ===== Code Execution ===== -->
+  <div class="cat-title" id="c-code">&#x1F4BB; <span id="t-c-code">コード実行</span></div>
+  <div class="grid">
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">code_execute</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-code_execute">Shell/Python/Node.jsコードをサンドボックスで実行</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">file_read</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-file_read">サンドボックス内ファイル読み取り（32KB上限）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">file_write</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-file_write">サンドボックス内ファイル書き込み（100KB上限）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">file_list</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-file_list">サンドボックス内ディレクトリ一覧</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">browser</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-browser">ヘッドレスブラウザでWebページを操作</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">filesystem</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-filesystem">サンドボックス内ファイル操作（find, grep, diff）</div>
+    </div>
+  </div>
+
+  <!-- ===== Media Generation ===== -->
+  <div class="cat-title" id="c-media">&#x1F3A8; <span id="t-c-media">メディア生成</span></div>
+  <div class="grid">
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">qr_code</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-qr_code">QRコード生成</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">image_generate</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-image_generate">AI画像生成（DALL-E / Stable Diffusion）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">music_generate</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-music_generate">AI音楽生成（Suno）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">video_generate</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-video_generate">AI動画生成（Kling）</div>
+    </div>
+  </div>
+
+  <!-- ===== Google Integration ===== -->
+  <div class="cat-title" id="c-google">&#x1F4C5; <span id="t-c-google">Google連携</span></div>
+  <div class="grid">
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">google_calendar</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-google_calendar">Googleカレンダー（閲覧=自動承認 / 作成=要確認）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">gmail</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-gmail">Gmail（検索・閲覧=自動承認 / 送信=要確認）</div>
+    </div>
+  </div>
+
+  <!-- ===== GitHub ===== -->
+  <div class="cat-title" id="c-github">&#x1F4E6; <span id="t-c-github">GitHub</span></div>
+  <div class="grid">
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">github_read_file</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-github_read_file">GitHubリポジトリのファイルを読み取り</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">github_create_or_update_file</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-github_create_or_update_file">GitHubリポジトリにファイルを作成・更新</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">github_create_pr</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-github_create_pr">GitHubプルリクエストを作成</div>
+    </div>
+  </div>
+
+  <!-- ===== SaaS Integration ===== -->
+  <div class="cat-title" id="c-saas">&#x1F517; <span id="t-c-saas">SaaS連携</span></div>
+  <div class="grid">
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">slack</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-slack">Slackメッセージ送信（読み取り=自動承認 / 送信=要確認）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">discord</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-discord">Discordメッセージ送信</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">notion</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-notion">Notionページ操作（検索・閲覧=自動承認 / 作成=要確認）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">spotify</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-spotify">Spotify楽曲検索・プレイリスト取得</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">postgres</span><span class="badge auto">AutoApprove</span></div>
+      <div class="tool-desc" id="t-postgres">PostgreSQLデータベースクエリ実行</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">phone_call</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-phone_call">電話発信（Amazon Connect）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">web_deploy</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-web_deploy">Webサイトをデプロイ（サンドボックスHTML公開）</div>
+    </div>
+    <div class="tool">
+      <div class="tool-head"><span class="tool-name">webhook_trigger</span><span class="badge confirm">Confirm</span></div>
+      <div class="tool-desc" id="t-webhook_trigger">Webhookを送信（任意のURL）</div>
+    </div>
+  </div>
+
+  <!-- ===== Channels ===== -->
+  <div class="cat-title" id="c-channels">&#x1F4AC; <span id="t-c-channels">チャネル</span></div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+    <div class="ch"><div class="ch-icon">&#x1F310;</div><div class="ch-name">Web</div><div class="ch-type">chatweb.ai</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F4AC;</div><div class="ch-name">LINE</div><div class="ch-type">Webhook</div></div>
+    <div class="ch"><div class="ch-icon">&#x2708;&#xFE0F;</div><div class="ch-name">Telegram</div><div class="ch-type">Bot API</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F4D8;</div><div class="ch-name">Facebook</div><div class="ch-type">Messenger</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F4F1;</div><div class="ch-name">WhatsApp</div><div class="ch-type">Business API</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F4BC;</div><div class="ch-name">Slack</div><div class="ch-type">Bot</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F3AE;</div><div class="ch-name">Discord</div><div class="ch-type">Bot</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F4BB;</div><div class="ch-name">Teams</div><div class="ch-type">Bot</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F4E8;</div><div class="ch-name">Google Chat</div><div class="ch-type">Bot</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F438;</div><div class="ch-name">Zalo</div><div class="ch-type">OA API</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F426;</div><div class="ch-name">Feishu</div><div class="ch-type">Bot</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F30D;</div><div class="ch-name">Matrix</div><div class="ch-type">Protocol</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F510;</div><div class="ch-name">Signal</div><div class="ch-type">Bot</div></div>
+    <div class="ch"><div class="ch-icon">&#x1F4AC;</div><div class="ch-name">iMessage</div><div class="ch-type">Bridge</div></div>
+  </div>
+
+  <!-- ===== LLM Providers ===== -->
+  <div class="cat-title" id="c-providers">&#x1F9E0; <span id="t-c-providers">LLMプロバイダー</span></div>
+  <div class="grid">
+    <div class="prov">
+      <div class="prov-name">Anthropic</div>
+      <div class="prov-model">claude-sonnet-4-5-20250929</div>
+    </div>
+    <div class="prov">
+      <div class="prov-name">OpenAI</div>
+      <div class="prov-model">gpt-4o</div>
+    </div>
+    <div class="prov">
+      <div class="prov-name">Google Gemini</div>
+      <div class="prov-model">gemini-2.5-flash</div>
+    </div>
+    <div class="prov">
+      <div class="prov-name">Groq</div>
+      <div class="prov-model">llama-3.3-70b-versatile</div>
+    </div>
+    <div class="prov">
+      <div class="prov-name">DeepSeek</div>
+      <div class="prov-model">deepseek-chat</div>
+    </div>
+    <div class="prov">
+      <div class="prov-name">OpenRouter</div>
+      <div class="prov-model">openrouter/auto</div>
+    </div>
+    <div class="prov">
+      <div class="prov-name">Local LLM</div>
+      <div class="prov-model">Qwen3-0.6B (GGUF)</div>
+    </div>
+  </div>
+
+  <!-- ===== Slash Commands ===== -->
+  <div class="cat-title" id="c-commands">&#x2F20; <span id="t-c-commands">コマンド</span></div>
+  <div class="grid">
+    <div class="cmd">
+      <div class="cmd-name">/help</div>
+      <div class="cmd-desc" id="t-cmd-help">利用可能なコマンド一覧を表示</div>
+      <div class="cmd-perm" id="t-cmd-help-perm">全ユーザー</div>
+    </div>
+    <div class="cmd">
+      <div class="cmd-name">/status</div>
+      <div class="cmd-desc" id="t-cmd-status">LLMプロバイダーの稼働状況（レイテンシms付き）</div>
+      <div class="cmd-perm" id="t-cmd-status-perm">全ユーザー</div>
+    </div>
+    <div class="cmd">
+      <div class="cmd-name">/share</div>
+      <div class="cmd-desc" id="t-cmd-share">会話の共有リンクを生成</div>
+      <div class="cmd-perm" id="t-cmd-share-perm">認証済みユーザー</div>
+    </div>
+    <div class="cmd">
+      <div class="cmd-name">/link [CODE]</div>
+      <div class="cmd-desc" id="t-cmd-link">チャネル連携（6文字コード発行 / 適用）</div>
+      <div class="cmd-perm" id="t-cmd-link-perm">全ユーザー</div>
+    </div>
+    <div class="cmd">
+      <div class="cmd-name">/improve</div>
+      <div class="cmd-desc" id="t-cmd-improve">自己改善PRを作成（準備中）</div>
+      <div class="cmd-perm" id="t-cmd-improve-perm">管理者のみ</div>
+    </div>
+  </div>
+
+  <!-- ===== Permission Legend ===== -->
+  <div style="margin:48px 0 24px;padding:20px 24px;background:var(--s);border:1px solid var(--b);border-radius:12px">
+    <div style="font-size:14px;font-weight:700;margin-bottom:12px" id="t-legend-title">権限バッジについて</div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:var(--m)">
+      <div style="display:flex;align-items:center;gap:8px"><span class="badge auto">AutoApprove</span> <span id="t-legend-auto">安全・読み取り専用。確認なしで自動実行</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><span class="badge confirm">Confirm</span> <span id="t-legend-confirm">外部への書き込み・コスト発生。ユーザー確認が必要</span></div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta">
+    <a href="/" class="cta-btn" id="t-cta">chatweb.ai を試す</a>
+  </div>
+</div>
+
+<footer>
+  <a href="/">Chat</a> &middot;
+  <a href="/docs">API Docs</a> &middot;
+  <a href="/pricing">Pricing</a> &middot;
+  <a href="/skills">Skills</a> &middot;
+  <a href="/contact">Contact</a> &middot;
+  <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+</footer>
+
+<script>
+const T={
+  ja:{
+    title:'全スキル一覧',
+    subtitle:'chatweb.ai が持つ全ツール・チャネル・プロバイダー・コマンドの一覧',
+    cta:'chatweb.ai を試す',
+    pricing:'料金',
+    contact:'お問い合わせ',
+    sTools:'ツール',sChannels:'チャネル',sProviders:'プロバイダー',sCommands:'コマンド',
+    cSearch:'検索・情報',cCalc:'計算・分析',cCode:'コード実行',cMedia:'メディア生成',
+    cGoogle:'Google連携',cGithub:'GitHub',cSaas:'SaaS連携',cChannels:'チャネル',
+    cProviders:'LLMプロバイダー',cCommands:'コマンド',
+    web_search:'Web検索。Google/Bingでリアルタイム情報を取得',
+    web_fetch:'URLからWebページの内容を取得・要約',
+    wikipedia:'Wikipedia記事を検索・取得',
+    news_search:'最新ニュースを検索',
+    weather:'天気予報を取得（都市名 or 座標）',
+    arxiv_search:'arXiv論文を検索・要約',
+    youtube_transcript:'YouTube動画の字幕・文字起こしを取得',
+    calculator:'数式を安全に計算（四則演算、関数、単位変換）',
+    csv_analysis:'CSVデータの統計分析・集計',
+    datetime:'日時の計算・タイムゾーン変換',
+    translate:'多言語翻訳（100+言語対応）',
+    code_execute:'Shell/Python/Node.jsコードをサンドボックスで実行',
+    file_read:'サンドボックス内ファイル読み取り（32KB上限）',
+    file_write:'サンドボックス内ファイル書き込み（100KB上限）',
+    file_list:'サンドボックス内ディレクトリ一覧',
+    browser:'ヘッドレスブラウザでWebページを操作',
+    filesystem:'サンドボックス内ファイル操作（find, grep, diff）',
+    qr_code:'QRコード生成',
+    image_generate:'AI画像生成（DALL-E / Stable Diffusion）',
+    music_generate:'AI音楽生成（Suno）',
+    video_generate:'AI動画生成（Kling）',
+    google_calendar:'Googleカレンダー（閲覧=自動承認 / 作成=要確認）',
+    gmail:'Gmail（検索・閲覧=自動承認 / 送信=要確認）',
+    github_read_file:'GitHubリポジトリのファイルを読み取り',
+    github_create_or_update_file:'GitHubリポジトリにファイルを作成・更新',
+    github_create_pr:'GitHubプルリクエストを作成',
+    slack:'Slackメッセージ送信（読み取り=自動承認 / 送信=要確認）',
+    discord:'Discordメッセージ送信',
+    notion:'Notionページ操作（検索・閲覧=自動承認 / 作成=要確認）',
+    spotify:'Spotify楽曲検索・プレイリスト取得',
+    postgres:'PostgreSQLデータベースクエリ実行',
+    phone_call:'電話発信（Amazon Connect）',
+    web_deploy:'Webサイトをデプロイ（サンドボックスHTML公開）',
+    webhook_trigger:'Webhookを送信（任意のURL）',
+    cmdHelp:'利用可能なコマンド一覧を表示',
+    cmdStatus:'LLMプロバイダーの稼働状況（レイテンシms付き）',
+    cmdShare:'会話の共有リンクを生成',
+    cmdLink:'チャネル連携（6文字コード発行 / 適用）',
+    cmdImprove:'自己改善PRを作成（準備中）',
+    cmdHelpPerm:'全ユーザー',cmdStatusPerm:'全ユーザー',cmdSharePerm:'認証済みユーザー',cmdLinkPerm:'全ユーザー',cmdImprovePerm:'管理者のみ',
+    legendTitle:'権限バッジについて',
+    legendAuto:'安全・読み取り専用。確認なしで自動実行',
+    legendConfirm:'外部への書き込み・コスト発生。ユーザー確認が必要'
+  },
+  en:{
+    title:'All Skills',
+    subtitle:'Complete list of tools, channels, providers, and commands available on chatweb.ai',
+    cta:'Try chatweb.ai',
+    pricing:'Pricing',
+    contact:'Contact',
+    sTools:'Tools',sChannels:'Channels',sProviders:'Providers',sCommands:'Commands',
+    cSearch:'Search & Info',cCalc:'Calculation & Analysis',cCode:'Code Execution',cMedia:'Media Generation',
+    cGoogle:'Google Integration',cGithub:'GitHub',cSaas:'SaaS Integration',cChannels:'Channels',
+    cProviders:'LLM Providers',cCommands:'Commands',
+    web_search:'Web search via Google/Bing for real-time information',
+    web_fetch:'Fetch and summarize content from any URL',
+    wikipedia:'Search and retrieve Wikipedia articles',
+    news_search:'Search latest news articles',
+    weather:'Get weather forecast by city or coordinates',
+    arxiv_search:'Search and summarize arXiv papers',
+    youtube_transcript:'Get YouTube video transcripts and subtitles',
+    calculator:'Safely evaluate math expressions (arithmetic, functions, unit conversion)',
+    csv_analysis:'Statistical analysis and aggregation of CSV data',
+    datetime:'Date/time calculation and timezone conversion',
+    translate:'Multi-language translation (100+ languages)',
+    code_execute:'Execute Shell/Python/Node.js code in a sandbox',
+    file_read:'Read files in sandbox (32KB limit)',
+    file_write:'Write files in sandbox (100KB limit)',
+    file_list:'List directory contents in sandbox',
+    browser:'Operate web pages with a headless browser',
+    filesystem:'Sandbox file operations (find, grep, diff)',
+    qr_code:'Generate QR codes',
+    image_generate:'AI image generation (DALL-E / Stable Diffusion)',
+    music_generate:'AI music generation (Suno)',
+    video_generate:'AI video generation (Kling)',
+    google_calendar:'Google Calendar (list=auto / create=confirm)',
+    gmail:'Gmail (search/read=auto / send=confirm)',
+    github_read_file:'Read files from GitHub repositories',
+    github_create_or_update_file:'Create or update files in GitHub repositories',
+    github_create_pr:'Create GitHub pull requests',
+    slack:'Slack messaging (read=auto / send=confirm)',
+    discord:'Send Discord messages',
+    notion:'Notion pages (search/read=auto / create=confirm)',
+    spotify:'Search Spotify tracks and get playlists',
+    postgres:'Execute PostgreSQL database queries',
+    phone_call:'Make phone calls (Amazon Connect)',
+    web_deploy:'Deploy websites (publish sandbox HTML)',
+    webhook_trigger:'Send webhooks to any URL',
+    cmdHelp:'Show available commands',
+    cmdStatus:'Show LLM provider status with latency (ms)',
+    cmdShare:'Generate a shareable conversation link',
+    cmdLink:'Link/unlink channels (6-char code)',
+    cmdImprove:'Create self-improvement PR (coming soon)',
+    cmdHelpPerm:'All users',cmdStatusPerm:'All users',cmdSharePerm:'Authenticated users',cmdLinkPerm:'All users',cmdImprovePerm:'Admin only',
+    legendTitle:'About Permission Badges',
+    legendAuto:'Safe, read-only. Runs automatically without confirmation',
+    legendConfirm:'External writes or costs. Requires user confirmation'
+  }
+};
+function setLang(l){
+  document.documentElement.lang=l;localStorage.setItem('nl',l);
+  document.getElementById('btn-ja').className=l==='ja'?'on':'';
+  document.getElementById('btn-en').className=l==='en'?'on':'';
+  var t=T[l];
+  document.getElementById('t-title').textContent=t.title;
+  document.getElementById('t-subtitle').textContent=t.subtitle;
+  document.getElementById('t-cta').textContent=t.cta;
+  document.getElementById('nav-pricing').textContent=t.pricing;
+  document.getElementById('nav-contact').textContent=t.contact;
+  document.getElementById('s-tools').textContent=t.sTools;
+  document.getElementById('s-channels').textContent=t.sChannels;
+  document.getElementById('s-providers').textContent=t.sProviders;
+  document.getElementById('s-commands').textContent=t.sCommands;
+  document.getElementById('t-c-search').textContent=t.cSearch;
+  document.getElementById('t-c-calc').textContent=t.cCalc;
+  document.getElementById('t-c-code').textContent=t.cCode;
+  document.getElementById('t-c-media').textContent=t.cMedia;
+  document.getElementById('t-c-google').textContent=t.cGoogle;
+  document.getElementById('t-c-github').textContent=t.cGithub;
+  document.getElementById('t-c-saas').textContent=t.cSaas;
+  document.getElementById('t-c-channels').textContent=t.cChannels;
+  document.getElementById('t-c-providers').textContent=t.cProviders;
+  document.getElementById('t-c-commands').textContent=t.cCommands;
+  // Tool descriptions
+  var tools=['web_search','web_fetch','wikipedia','news_search','weather','arxiv_search','youtube_transcript',
+    'calculator','csv_analysis','datetime','translate','code_execute','file_read','file_write','file_list',
+    'browser','filesystem','qr_code','image_generate','music_generate','video_generate','google_calendar','gmail',
+    'github_read_file','github_create_or_update_file','github_create_pr','slack','discord','notion',
+    'spotify','postgres','phone_call','web_deploy','webhook_trigger'];
+  tools.forEach(function(n){var el=document.getElementById('t-'+n);if(el)el.textContent=t[n]||''});
+  // Commands
+  document.getElementById('t-cmd-help').textContent=t.cmdHelp;
+  document.getElementById('t-cmd-status').textContent=t.cmdStatus;
+  document.getElementById('t-cmd-share').textContent=t.cmdShare;
+  document.getElementById('t-cmd-link').textContent=t.cmdLink;
+  document.getElementById('t-cmd-improve').textContent=t.cmdImprove;
+  document.getElementById('t-cmd-help-perm').textContent=t.cmdHelpPerm;
+  document.getElementById('t-cmd-status-perm').textContent=t.cmdStatusPerm;
+  document.getElementById('t-cmd-share-perm').textContent=t.cmdSharePerm;
+  document.getElementById('t-cmd-link-perm').textContent=t.cmdLinkPerm;
+  document.getElementById('t-cmd-improve-perm').textContent=t.cmdImprovePerm;
+  // Legend
+  document.getElementById('t-legend-title').textContent=t.legendTitle;
+  document.getElementById('t-legend-auto').textContent=t.legendAuto;
+  document.getElementById('t-legend-confirm').textContent=t.legendConfirm;
+}
+setLang(localStorage.getItem('nl')||(navigator.language.startsWith('ja')?'ja':'en'));
+
+// Tool test results (2026-02-13)
+var tested={
+  web_search:1,web_fetch:1,wikipedia:1,news_search:1,weather:1,arxiv_search:1,youtube_transcript:1,
+  calculator:1,csv_analysis:1,datetime:1,translate:1,
+  code_execute:0,file_read:0,file_write:0,file_list:0,browser:0,filesystem:0,
+  qr_code:1,image_generate:0,music_generate:0,video_generate:0,
+  google_calendar:0,gmail:0,
+  github_read_file:0,github_create_or_update_file:0,github_create_pr:0,
+  slack:0,discord:0,notion:0,spotify:0,postgres:0,phone_call:0,web_deploy:0,webhook_trigger:0
+};
+document.querySelectorAll('.tool-name').forEach(function(el){
+  var name=el.textContent.trim();
+  if(tested[name]===1){
+    var b=document.createElement('span');b.className='badge tested';b.textContent='\u2713 Tested';
+    el.parentNode.appendChild(b);
+  }
+});
+</script>
+</body>
+</html>

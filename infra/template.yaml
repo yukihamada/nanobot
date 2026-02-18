@@ -1,0 +1,323 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: nanobot - Lightweight AI agent framework (Lambda deployment)
+
+Parameters:
+  Environment:
+    Type: String
+    Description: Deployment environment (prod or dev)
+    Default: 'prod'
+    AllowedValues:
+      - prod
+      - dev
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+    Description: Anthropic API key
+    Default: ''
+  OpenaiApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenAI API key
+    Default: ''
+  TelegramBotToken:
+    Type: String
+    NoEcho: true
+    Description: Telegram Bot API token
+    Default: ''
+  TelegramAllowFrom:
+    Type: String
+    Description: Comma-separated Telegram user IDs/usernames allowed
+    Default: ''
+  LineChannelSecret:
+    Type: String
+    NoEcho: true
+    Description: LINE channel secret
+    Default: ''
+  LineChannelAccessToken:
+    Type: String
+    NoEcho: true
+    Description: LINE channel access token
+    Default: ''
+  LineAllowFrom:
+    Type: String
+    Description: Comma-separated LINE user IDs allowed
+    Default: ''
+  NanobotModel:
+    Type: String
+    Description: Default LLM model
+    Default: 'openai/gpt-4o'
+  BraveApiKey:
+    Type: String
+    NoEcho: true
+    Description: Brave Search API key
+    Default: ''
+  GoogleApiKey:
+    Type: String
+    NoEcho: true
+    Description: Google Vertex AI / Gemini API key
+    Default: ''
+  DeepseekApiKey:
+    Type: String
+    NoEcho: true
+    Description: DeepSeek API key
+    Default: ''
+  OpenrouterApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenRouter API key (backup LLM provider)
+    Default: ''
+  ResendApiKey:
+    Type: String
+    NoEcho: true
+    Description: Resend API key for email
+    Default: ''
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub personal access token for self-edit (repo scope)
+    Default: ''
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth 2.0 Client ID
+    Default: ''
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Description: Google OAuth 2.0 Client Secret
+    Default: ''
+  TenantId:
+    Type: String
+    Description: Tenant ID for multi-tenant isolation
+    Default: 'default'
+  AdminSessionKeys:
+    Type: String
+    NoEcho: true
+    Description: Comma-separated admin session keys or emails
+    Default: ''
+  PasswordHmacKey:
+    Type: String
+    NoEcho: true
+    Description: HMAC key for password hashing (if empty, falls back to GOOGLE_CLIENT_SECRET)
+    Default: ''
+  TelegramWebhookSecret:
+    Type: String
+    NoEcho: true
+    Description: Secret token for Telegram webhook verification
+    Default: ''
+  FacebookPageAccessToken:
+    Type: String
+    NoEcho: true
+    Description: Facebook Page Access Token for Messenger
+    Default: ''
+  FacebookVerifyToken:
+    Type: String
+    NoEcho: true
+    Description: Facebook webhook verify token
+    Default: ''
+  LocalModelUrl:
+    Type: String
+    Description: URL to GGUF model file for local LLM fallback (S3 presigned or public)
+    Default: ''
+  LocalTokenizerUrl:
+    Type: String
+    Description: URL to tokenizer.json for local LLM fallback
+    Default: ''
+  StripeWebhookSecret:
+    Type: String
+    NoEcho: true
+    Description: Stripe webhook signing secret (whsec_...)
+    Default: ''
+  ConnectInstanceId:
+    Type: String
+    Description: Amazon Connect instance ID for phone calls
+    Default: ''
+  ConnectContactFlowId:
+    Type: String
+    Description: Amazon Connect contact flow ID for outbound calls
+    Default: ''
+  ConnectPhoneNumber:
+    Type: String
+    Description: Amazon Connect source phone number (E.164 format)
+    Default: ''
+
+Mappings:
+  EnvironmentConfig:
+    prod:
+      MemorySize: 2048
+      Timeout: 120
+      LogRetention: 30
+    dev:
+      MemorySize: 512
+      Timeout: 60
+      LogRetention: 7
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, 'prod']
+  IsDevelopment: !Equals [!Ref Environment, 'dev']
+
+Globals:
+  Function:
+    Timeout: !FindInMap [EnvironmentConfig, !Ref Environment, Timeout]
+    MemorySize: !FindInMap [EnvironmentConfig, !Ref Environment, MemorySize]
+
+Resources:
+  # ====== CloudWatch Logs ======
+  NanobotLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/nanobot-${Environment}'
+      RetentionInDays: !FindInMap [EnvironmentConfig, !Ref Environment, LogRetention]
+
+  # ====== Lambda Function ======
+  NanobotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'nanobot-${Environment}'
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - arm64
+      CodeUri: ../target/lambda/bootstrap/
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref NanobotLogGroup
+      Environment:
+        Variables:
+          RUST_LOG: nanobot=info
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          OPENAI_API_KEY: !Ref OpenaiApiKey
+          TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
+          TELEGRAM_ALLOW_FROM: !Ref TelegramAllowFrom
+          LINE_CHANNEL_SECRET: !Ref LineChannelSecret
+          LINE_CHANNEL_ACCESS_TOKEN: !Ref LineChannelAccessToken
+          LINE_ALLOW_FROM: !Ref LineAllowFrom
+          NANOBOT_MODEL: !Ref NanobotModel
+          BRAVE_API_KEY: !Ref BraveApiKey
+          GOOGLE_API_KEY: !Ref GoogleApiKey
+          DEEPSEEK_API_KEY: !Ref DeepseekApiKey
+          OPENROUTER_API_KEY: !Ref OpenrouterApiKey
+          RESEND_API_KEY: !Ref ResendApiKey
+          GITHUB_TOKEN: !Ref GitHubToken
+          NANOBOT_TENANT_ID: !Ref TenantId
+          GOOGLE_CLIENT_ID: !Ref GoogleClientId
+          GOOGLE_CLIENT_SECRET: !Ref GoogleClientSecret
+          ADMIN_SESSION_KEYS: !Ref AdminSessionKeys
+          PASSWORD_HMAC_KEY: !Ref PasswordHmacKey
+          TELEGRAM_WEBHOOK_SECRET: !Ref TelegramWebhookSecret
+          FACEBOOK_PAGE_ACCESS_TOKEN: !Ref FacebookPageAccessToken
+          FACEBOOK_VERIFY_TOKEN: !Ref FacebookVerifyToken
+          LOCAL_MODEL_URL: !Ref LocalModelUrl
+          LOCAL_TOKENIZER_URL: !Ref LocalTokenizerUrl
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
+          CONNECT_INSTANCE_ID: !Ref ConnectInstanceId
+          CONNECT_CONTACT_FLOW_ID: !Ref ConnectContactFlowId
+          CONNECT_PHONE_NUMBER: !Ref ConnectPhoneNumber
+          DYNAMODB_SESSIONS_TABLE: !Ref SessionsTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MemoryTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfigTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - polly:SynthesizeSpeech
+              Resource: '*'
+        - Statement:
+            - Effect: Allow
+              Action:
+                - connect:StartOutboundVoiceContact
+                - connect:StopContact
+                - connect:DescribeContact
+                - connect:GetFederationToken
+              Resource: '*'
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref NanobotApi
+
+  # ====== HTTP API Gateway v2 ======
+  NanobotApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: '$default'
+      Description: nanobot HTTP API
+
+  # ====== DynamoDB Tables ======
+  SessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'nanobot-${Environment}-sessions-${TenantId}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: tenant_id
+          AttributeType: S
+        - AttributeName: session_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tenant_id
+          KeyType: HASH
+        - AttributeName: session_key
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  MemoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'nanobot-${Environment}-memory-${TenantId}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: tenant_id
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tenant_id
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+
+  ConfigTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'nanobot-${Environment}-config-${TenantId}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: tenant_id
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tenant_id
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${NanobotApi}.execute-api.${AWS::Region}.amazonaws.com'
+  HealthEndpoint:
+    Description: Health check URL
+    Value: !Sub 'https://${NanobotApi}.execute-api.${AWS::Region}.amazonaws.com/health'
+  LineWebhookUrl:
+    Description: LINE webhook URL (set in LINE Developer Console)
+    Value: !Sub 'https://${NanobotApi}.execute-api.${AWS::Region}.amazonaws.com/webhooks/line'
+  TelegramWebhookUrl:
+    Description: Telegram webhook URL (use setup-webhook.sh to register)
+    Value: !Sub 'https://${NanobotApi}.execute-api.${AWS::Region}.amazonaws.com/webhooks/telegram'
+  SessionsTableName:
+    Description: DynamoDB sessions table name
+    Value: !Ref SessionsTable
+  FunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt NanobotFunction.Arn

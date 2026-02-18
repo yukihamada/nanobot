@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AIメディア生成 - chatweb.ai</title>
+    <meta name="description" content="画像・音声・動画を簡単に生成。DALL-E 3、Flux、Qwen3 TTS、Kling AIを統合したマルチモーダルAPI">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+    <meta name="theme-color" content="#6366f1">
+    <style>
+        :root {
+            --bg: #09090b;
+            --surface: #18181b;
+            --surface2: #1e1e24;
+            --border: #27272a;
+            --text: #fafafa;
+            --muted: #71717a;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --accent-glow: rgba(99,102,241,0.25);
+            --green: #22c55e;
+            --red: #ef4444;
+            --yellow: #eab308;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animations */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Nav */
+        nav {
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+        .logo {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            text-decoration: none;
+            color: var(--text);
+        }
+        .logo span {
+            background: linear-gradient(135deg, var(--accent), #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Main */
+        .main {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 48px;
+            animation: fadeUp 0.6s ease-out;
+        }
+        .header h1 {
+            font-size: 42px;
+            font-weight: 900;
+            letter-spacing: -1.5px;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #fff 0%, #a5a5ff 50%, #fff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header p {
+            color: var(--muted);
+            font-size: 17px;
+            line-height: 1.6;
+        }
+
+        /* Info Box */
+        .info-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+            animation: fadeUp 0.6s ease-out 0.1s both;
+        }
+        .info-box h3 {
+            color: var(--accent);
+            font-size: 16px;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+        .info-box p {
+            color: var(--muted);
+            line-height: 1.8;
+            font-size: 14px;
+        }
+        .info-box code {
+            background: var(--surface2);
+            color: var(--accent);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+        }
+        .info-box a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .info-box a:hover {
+            text-decoration: underline;
+        }
+
+        /* Card */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 24px;
+            transition: transform 0.3s, border-color 0.3s;
+            animation: fadeUp 0.6s ease-out both;
+        }
+        .card:nth-child(3) { animation-delay: 0.1s; }
+        .card:nth-child(4) { animation-delay: 0.2s; }
+        .card:nth-child(5) { animation-delay: 0.3s; }
+        .card:nth-child(6) { animation-delay: 0.4s; }
+        .card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .card-icon {
+            font-size: 40px;
+            margin-right: 16px;
+        }
+        .card-title h2 {
+            font-size: 22px;
+            color: var(--text);
+            margin-bottom: 4px;
+            font-weight: 700;
+        }
+        .card-title p {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .label-badge {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-left: 8px;
+            font-weight: 600;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 15px;
+            font-family: inherit;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            line-height: 1.6;
+        }
+        input::placeholder, textarea::placeholder {
+            color: var(--muted);
+        }
+
+        /* Token input */
+        .token-input {
+            position: relative;
+        }
+        .token-toggle {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 20px;
+            width: auto;
+            padding: 5px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        .token-toggle:hover {
+            opacity: 1;
+        }
+
+        /* Sample prompts */
+        .sample-prompts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .sample-prompt {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .sample-prompt:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        /* Button */
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 20px var(--accent-glow);
+        }
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px var(--accent-glow);
+        }
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        /* Result */
+        .result {
+            margin-top: 24px;
+            padding: 20px;
+            border-radius: 12px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            animation: fadeUp 0.3s ease-out;
+        }
+        .result.success {
+            border-left: 4px solid var(--green);
+        }
+        .result.error {
+            border-left: 4px solid var(--red);
+        }
+        .result strong {
+            display: block;
+            margin-bottom: 12px;
+            font-size: 15px;
+        }
+        .result-content {
+            margin-top: 15px;
+            color: var(--muted);
+        }
+
+        /* Generated image */
+        .generated-image {
+            width: 100%;
+            border-radius: 12px;
+            margin-top: 16px;
+            border: 1px solid var(--border);
+        }
+
+        /* Audio */
+        audio {
+            width: 100%;
+            margin-top: 16px;
+            border-radius: 8px;
+        }
+
+        /* Download button */
+        .download-btn {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 10px 20px;
+            background: var(--green);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .download-btn:hover {
+            background: #16a34a;
+            transform: translateY(-1px);
+        }
+
+        /* Credits info */
+        .credits-info {
+            display: inline-block;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--yellow);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-top: 8px;
+            font-weight: 600;
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            body {
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+            .main {
+                padding: 24px 16px;
+            }
+            .header h1 {
+                font-size: 32px;
+            }
+            .card {
+                padding: 20px;
+            }
+            .card-icon {
+                font-size: 32px;
+            }
+            .card-title h2 {
+                font-size: 19px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="logo"><span>chatweb.ai</span></a>
+        <div style="font-size: 14px; color: var(--muted);">Media API</div>
+    </nav>
+
+    <div class="main">
+        <div class="header">
+            <h1>🎨 AIメディア生成</h1>
+            <p>画像・音声・動画を簡単に作成</p>
+        </div>
+
+        <div class="info-box">
+            <h3>📖 使い方</h3>
+            <p>
+                <strong>1.</strong> <a href="https://chatweb.ai" target="_blank">chatweb.ai</a> にログイン<br>
+                <strong>2.</strong> 開発者ツール (F12) → Console で <code>localStorage.getItem('auth_token')</code> を実行<br>
+                <strong>3.</strong> 取得したトークンを下の「認証トークン」欄に貼り付け<br>
+                <strong>4.</strong> 好きなメディアを生成！
+            </p>
+        </div>
+
+        <!-- Token -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🔑</div>
+                <div class="card-title">
+                    <h2>認証トークン</h2>
+                    <p>ログイン後に取得したトークンを入力</p>
+                </div>
+            </div>
+            <div class="form-group token-input">
+                <input type="password" id="authToken" placeholder="Bearer token を貼り付けてください">
+                <button type="button" class="token-toggle" onclick="toggleTokenVisibility()">👁️</button>
+            </div>
+        </div>
+
+        <!-- TTS -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🔊</div>
+                <div class="card-title">
+                    <h2>音声生成</h2>
+                    <p>テキストを自然な音声に変換</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>テキスト</label>
+                <textarea id="ttsText" placeholder="例: こんにちは、今日はいい天気ですね">こんにちは、これはAI音声生成のテストです。自然な日本語で読み上げます。</textarea>
+                <div class="sample-prompts">
+                    <div class="sample-prompt" onclick="setTTSText('おはようございます。今日も良い一日をお過ごしください。')">おはよう挨拶</div>
+                    <div class="sample-prompt" onclick="setTTSText('ご注文ありがとうございます。商品は3営業日以内に発送いたします。')">ビジネス</div>
+                    <div class="sample-prompt" onclick="setTTSText('こんにちは！今日は何をして遊ぼうかな？')">子供向け</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>音声 <span class="label-badge">自動選択</span></label>
+                <select id="ttsVoice">
+                    <option value="Kazuha">Kazuha (日本語・女性・Polly) 推奨</option>
+                    <option value="Takumi">Takumi (日本語・男性・Polly)</option>
+                    <option value="Mizuki">Mizuki (日本語・女性・Polly)</option>
+                    <option value="female_calm">Female Calm (日本語・女性・Qwen3)</option>
+                    <option value="male_calm">Male Calm (日本語・男性・Qwen3)</option>
+                    <option value="nova">Nova (英語・女性・OpenAI)</option>
+                    <option value="alloy">Alloy (英語・OpenAI)</option>
+                </select>
+                <div class="credits-info">💰 約 1 credit / 100文字</div>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                <button onclick="generateTTS()" id="ttsBtn" style="flex: 1;">🔊 音声を生成</button>
+                <button onclick="playTestAudio()" style="flex: 0 0 auto; background: var(--surface); color: var(--text); border: 1px solid var(--border);">🎧 テスト再生</button>
+            </div>
+            <div id="ttsResult"></div>
+        </div>
+
+        <!-- Image -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🖼️</div>
+                <div class="card-title">
+                    <h2>画像生成</h2>
+                    <p>テキストから美しい画像を作成</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>プロンプト</label>
+                <textarea id="imagePrompt" placeholder="例: 雪の中に座っている可愛い猫">雪の中に座っている可愛い猫、月光の下、シネマティックライティング、4K品質、フォトリアル</textarea>
+                <div class="sample-prompts">
+                    <div class="sample-prompt" onclick="setImagePrompt('美しい日本庭園、桜が満開、春の朝、柔らかい光')">日本庭園</div>
+                    <div class="sample-prompt" onclick="setImagePrompt('未来都市の夜景、ネオンライト、サイバーパンク')">未来都市</div>
+                    <div class="sample-prompt" onclick="setImagePrompt('宇宙飛行士が月面を歩く、地球が見える、リアル')">宇宙</div>
+                    <div class="sample-prompt" onclick="setImagePrompt('可愛い柴犬の子犬、草原で遊ぶ、晴天')">柴犬</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>モデル <span class="label-badge">品質と速度</span></label>
+                <select id="imageModel" onchange="updateImageCredits()">
+                    <option value="flux-schnell">Flux Schnell (高速) 推奨</option>
+                    <option value="flux-pro">Flux Pro (最高品質)</option>
+                    <option value="flux-realism">Flux Realism (超リアル)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>サイズ</label>
+                <select id="imageSize">
+                    <option value="1024x1024">正方形 (1024×1024)</option>
+                    <option value="1792x1024">横長 (1792×1024)</option>
+                    <option value="1024x1792">縦長 (1024×1792)</option>
+                </select>
+                <div class="credits-info" id="imageCredits">💰 5 credits</div>
+            </div>
+
+            <button onclick="generateImage()" id="imageBtn">🖼️ 画像を生成</button>
+            <div id="imageResult"></div>
+        </div>
+
+        <!-- Music & Sound Effects -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🎵</div>
+                <div class="card-title">
+                    <h2>音楽・効果音生成</h2>
+                    <p>テキストから音楽や効果音を作成</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>タイプ</label>
+                <select id="audioType" onchange="updateAudioPrompts()">
+                    <option value="music">音楽</option>
+                    <option value="sfx">効果音</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>説明</label>
+                <textarea id="audioPrompt" placeholder="例: 明るいピアノ曲、Lo-fi ヒップホップ">アコースティックギターを使った穏やかなカフェミュージック、Lo-fi、リラックス</textarea>
+                <div class="sample-prompts" id="audioSamples">
+                    <div class="sample-prompt" onclick="setAudioPrompt('アコースティックギターを使った穏やかなカフェミュージック、Lo-fi、リラックス')">カフェBGM</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('アップテンポなエレクトロニックミュージック、EDM、エネルギッシュ')">EDM</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('ピアノソロ、感動的、映画のような、ゆっくり')">感動ピアノ</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('ジャズトリオ、サックス、夜のバー、スムーズ')">ジャズ</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>長さ</label>
+                <select id="audioDuration" onchange="updateAudioCredits()">
+                    <option value="10">10秒 推奨</option>
+                    <option value="30">30秒</option>
+                    <option value="60">60秒</option>
+                </select>
+                <div class="credits-info" id="audioCredits">💰 30 credits</div>
+            </div>
+
+            <button onclick="generateAudio()" id="audioBtn">🎵 音楽を生成</button>
+            <div id="audioResult"></div>
+        </div>
+
+        <!-- Video -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🎬</div>
+                <div class="card-title">
+                    <h2>動画生成</h2>
+                    <p>テキストから短い動画を作成</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>プロンプト</label>
+                <textarea id="videoPrompt" placeholder="例: ゴールデンレトリバーがビーチで走る、夕暮れ">ゴールデンレトリバーが幸せそうにビーチを走る、夕暮れ時、スローモーション、シネマティック</textarea>
+                <div class="sample-prompts">
+                    <div class="sample-prompt" onclick="setVideoPrompt('桜の花びらが風に舞う、春の公園、スローモーション')">桜</div>
+                    <div class="sample-prompt" onclick="setVideoPrompt('波が砂浜に打ち寄せる、青い海、リラックス')">海</div>
+                    <div class="sample-prompt" onclick="setVideoPrompt('猫がジャンプする、スローモーション、可愛い')">猫ジャンプ</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>長さ <span class="label-badge">生成時間: 約2-3分</span></label>
+                <select id="videoDuration" onchange="updateVideoCredits()">
+                    <option value="5">5秒 推奨</option>
+                    <option value="10">10秒</option>
+                </select>
+                <div class="credits-info" id="videoCredits">💰 50 credits</div>
+            </div>
+
+            <button onclick="generateVideo()" id="videoBtn">🎬 動画を生成</button>
+            <div id="videoResult"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://api.chatweb.ai/api/v1/media';
+
+        // Check login status
+        async function checkLoginStatus() {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                return false;
+            }
+
+            try {
+                const response = await fetch('https://api.chatweb.ai/api/v1/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                return response.ok;
+            } catch {
+                return false;
+            }
+        }
+
+        window.addEventListener('load', async () => {
+            const savedToken = localStorage.getItem('auth_token') || localStorage.getItem('test_auth_token');
+            if (savedToken) {
+                document.getElementById('authToken').value = savedToken;
+            }
+
+            // Check if user is logged in
+            const isLoggedIn = await checkLoginStatus();
+            if (!isLoggedIn) {
+                showLoginPrompt();
+            }
+        });
+
+        function showLoginPrompt() {
+            const banner = document.createElement('div');
+            banner.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: linear-gradient(135deg, var(--accent), #7c3aed);
+                color: white;
+                padding: 16px;
+                text-align: center;
+                z-index: 1000;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            `;
+            banner.innerHTML = `
+                <div style="max-width: 900px; margin: 0 auto;">
+                    <strong>🔐 ログインが必要です</strong>
+                    <span style="margin: 0 12px;">·</span>
+                    <a href="https://chatweb.ai" style="color: white; text-decoration: underline; font-weight: 600;">
+                        chatweb.ai にログイン
+                    </a>
+                    <span style="margin: 0 12px;">·</span>
+                    <button onclick="this.parentElement.parentElement.remove()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;">
+                        閉じる
+                    </button>
+                </div>
+            `;
+            document.body.prepend(banner);
+            document.querySelector('.main').style.marginTop = '80px';
+        }
+
+        function toggleTokenVisibility() {
+            const input = document.getElementById('authToken');
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+
+        document.getElementById('authToken').addEventListener('change', (e) => {
+            if (e.target.value.trim()) {
+                localStorage.setItem('test_auth_token', e.target.value.trim());
+            }
+        });
+
+        function setTTSText(text) {
+            document.getElementById('ttsText').value = text;
+        }
+
+        function setImagePrompt(prompt) {
+            document.getElementById('imagePrompt').value = prompt;
+        }
+
+        function setVideoPrompt(prompt) {
+            document.getElementById('videoPrompt').value = prompt;
+        }
+
+        function setAudioPrompt(prompt) {
+            document.getElementById('audioPrompt').value = prompt;
+        }
+
+        function updateAudioPrompts() {
+            const type = document.getElementById('audioType').value;
+            const samplesDiv = document.getElementById('audioSamples');
+
+            if (type === 'music') {
+                samplesDiv.innerHTML = `
+                    <div class="sample-prompt" onclick="setAudioPrompt('アコースティックギターを使った穏やかなカフェミュージック、Lo-fi、リラックス')">カフェBGM</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('アップテンポなエレクトロニックミュージック、EDM、エネルギッシュ')">EDM</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('ピアノソロ、感動的、映画のような、ゆっくり')">感動ピアノ</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('ジャズトリオ、サックス、夜のバー、スムーズ')">ジャズ</div>
+                `;
+                document.getElementById('audioPrompt').placeholder = '例: 明るいピアノ曲、Lo-fi ヒップホップ';
+            } else {
+                samplesDiv.innerHTML = `
+                    <div class="sample-prompt" onclick="setAudioPrompt('ドアが閉まる音')">ドア</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('雨の音、雷')">雨と雷</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('通知音、ピコーン')">通知音</div>
+                    <div class="sample-prompt" onclick="setAudioPrompt('足音、廊下を歩く')">足音</div>
+                `;
+                document.getElementById('audioPrompt').placeholder = '例: ドアが閉まる音、雨の音';
+            }
+        }
+
+        function updateAudioCredits() {
+            const duration = document.getElementById('audioDuration').value;
+            const credits = duration === '10' ? 30 : duration === '30' ? 80 : 150;
+            document.getElementById('audioCredits').textContent = `💰 ${credits} credits`;
+        }
+
+        function updateImageCredits() {
+            const model = document.getElementById('imageModel').value;
+            const credits = {
+                'flux-schnell': 5,
+                'flux-pro': 15,
+                'flux-realism': 10
+            };
+            document.getElementById('imageCredits').textContent = `💰 ${credits[model]} credits`;
+        }
+
+        function updateVideoCredits() {
+            const duration = document.getElementById('videoDuration').value;
+            const credits = duration === '5' ? 50 : 100;
+            document.getElementById('videoCredits').textContent = `💰 ${credits} credits`;
+        }
+
+        async function playTestAudio() {
+            const resultDiv = document.getElementById('ttsResult');
+
+            try {
+                // Check if we have a cached test audio
+                let cachedAudio = localStorage.getItem('test_audio_cache');
+
+                if (!cachedAudio) {
+                    // Generate test audio once and cache it
+                    resultDiv.innerHTML = '<div class="result">⏳ テスト音声を準備中...</div>';
+
+                    const token = document.getElementById('authToken').value.trim();
+                    if (!token) {
+                        // If no token, use a simple beep sound (data URI)
+                        // Short 440Hz beep using Web Audio API
+                        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        const oscillator = audioContext.createOscillator();
+                        const gainNode = audioContext.createGain();
+
+                        oscillator.connect(gainNode);
+                        gainNode.connect(audioContext.destination);
+
+                        oscillator.frequency.value = 440;
+                        oscillator.type = 'sine';
+
+                        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+                        oscillator.start(audioContext.currentTime);
+                        oscillator.stop(audioContext.currentTime + 0.5);
+
+                        resultDiv.innerHTML = `
+                            <div class="result success">
+                                <strong>🎧 テスト音声を再生しました</strong>
+                                <div class="result-content">
+                                    認証トークンを入力すると、実際のTTS音声でテストできます
+                                </div>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    // Generate and cache test audio
+                    const response = await fetch(`${API_BASE}/tts`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            text: 'こんにちは。これはテスト音声です。',
+                            voice: 'nova'
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('テスト音声の生成に失敗しました');
+                    }
+
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+
+                    await new Promise((resolve) => {
+                        reader.onloadend = () => {
+                            cachedAudio = reader.result;
+                            localStorage.setItem('test_audio_cache', cachedAudio);
+                            resolve();
+                        };
+                        reader.readAsDataURL(blob);
+                    });
+                }
+
+                // Play cached audio
+                const audio = new Audio(cachedAudio);
+                audio.play();
+
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        <strong>🎧 テスト音声を再生しました</strong>
+                        <div class="result-content">
+                            キャッシュされた音声を再生しています（クレジット消費なし）
+                            <audio controls src="${cachedAudio}"></audio>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <strong>❌ エラーが発生しました</strong>
+                        <div class="result-content">${error.message}</div>
+                    </div>
+                `;
+            }
+        }
+
+        async function generateTTS() {
+            const btn = document.getElementById('ttsBtn');
+            const resultDiv = document.getElementById('ttsResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>音声生成中...';
+            resultDiv.innerHTML = '<div class="result">⏳ 音声を生成しています...</div>';
+
+            try {
+                const token = document.getElementById('authToken').value.trim();
+                if (!token) {
+                    throw new Error('認証トークンを入力してください');
+                }
+
+                const response = await fetch(`${API_BASE}/tts`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: document.getElementById('ttsText').value,
+                        voice: document.getElementById('ttsVoice').value
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const size = (blob.size / 1024).toFixed(1);
+
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        <strong>✅ 音声生成完了</strong>
+                        <div class="result-content">
+                            ファイルサイズ: ${size} KB
+                            <audio controls src="${url}" autoplay></audio>
+                            <a href="${url}" download="audio.mp3" class="download-btn">💾 ダウンロード</a>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <strong>❌ エラーが発生しました</strong>
+                        <div class="result-content">${error.message}</div>
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🔊 音声を生成';
+            }
+        }
+
+        async function apiCall(endpoint, data) {
+            const token = document.getElementById('authToken').value.trim();
+            if (!token) {
+                throw new Error('認証トークンを入力してください');
+            }
+
+            const response = await fetch(`${API_BASE}${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || `HTTP ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        async function generateImage() {
+            const btn = document.getElementById('imageBtn');
+            const resultDiv = document.getElementById('imageResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>画像生成中 (30-60秒)...';
+            resultDiv.innerHTML = '<div class="result">⏳ 画像を生成しています。少々お待ちください...</div>';
+
+            try {
+                const data = await apiCall('/image', {
+                    prompt: document.getElementById('imagePrompt').value,
+                    model: document.getElementById('imageModel').value,
+                    size: document.getElementById('imageSize').value
+                });
+
+                const imageUrl = data.images[0].url;
+
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        <strong>✅ 画像生成完了</strong>
+                        <div class="result-content">
+                            モデル: ${data.model} | 使用クレジット: ${data.credits_used}
+                            <img src="${imageUrl}" alt="生成された画像" class="generated-image">
+                            <a href="${imageUrl}" target="_blank" class="download-btn">🔗 フルサイズで開く</a>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <strong>❌ エラーが発生しました</strong>
+                        <div class="result-content">${error.message}</div>
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🖼️ 画像を生成';
+            }
+        }
+
+        async function generateAudio() {
+            const btn = document.getElementById('audioBtn');
+            const resultDiv = document.getElementById('audioResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>音楽生成中 (60-90秒)...';
+            resultDiv.innerHTML = '<div class="result">⏳ 音楽を生成しています。少々お待ちください...</div>';
+
+            try {
+                const token = document.getElementById('authToken').value.trim();
+                if (!token) {
+                    throw new Error('認証トークンを入力してください');
+                }
+
+                const type = document.getElementById('audioType').value;
+                const duration = parseInt(document.getElementById('audioDuration').value);
+
+                // Call music generation API (to be implemented)
+                const response = await fetch(`${API_BASE}/music`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: document.getElementById('audioPrompt').value,
+                        type: type,
+                        duration: duration
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const data = await response.json();
+
+                if (data.audio_url) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <strong>✅ 音楽生成完了</strong>
+                            <div class="result-content">
+                                タイプ: ${type === 'music' ? '音楽' : '効果音'} | 使用クレジット: ${data.credits_used}
+                                <audio controls src="${data.audio_url}" autoplay></audio>
+                                <a href="${data.audio_url}" download="audio.mp3" class="download-btn">💾 ダウンロード</a>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                // If endpoint not implemented yet, show coming soon message
+                if (error.message.includes('404') || error.message.includes('Not Found')) {
+                    resultDiv.innerHTML = `
+                        <div class="result" style="background: #e3f2fd; border-left: 4px solid #2196f3;">
+                            <strong>🚧 この機能は準備中です</strong>
+                            <div class="result-content">
+                                音楽・効果音生成機能は現在開発中です。<br>
+                                近日中にリリース予定です！お楽しみに。<br><br>
+                                <small>利用可能になるサービス: Suno AI, Stable Audio</small>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <strong>❌ エラーが発生しました</strong>
+                            <div class="result-content">${error.message}</div>
+                        </div>
+                    `;
+                }
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🎵 音楽を生成';
+            }
+        }
+
+        async function generateVideo() {
+            const btn = document.getElementById('videoBtn');
+            const resultDiv = document.getElementById('videoResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>動画生成リクエスト送信中...';
+            resultDiv.innerHTML = '<div class="result">⏳ 動画生成リクエストを送信しています...</div>';
+
+            try {
+                const data = await apiCall('/video', {
+                    prompt: document.getElementById('videoPrompt').value,
+                    duration: parseInt(document.getElementById('videoDuration').value),
+                    mode: 'standard'
+                });
+
+                if (data.video_id) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <strong>✅ 動画生成を開始しました</strong>
+                            <div class="result-content">
+                                動画ID: ${data.video_id}<br>
+                                ステータス: ${data.status}<br>
+                                推定完了時間: 約${data.estimated_time}秒<br>
+                                使用クレジット: ${data.credits_used}<br><br>
+                                <div id="videoStatus_${data.video_id}">⏳ 処理中... 15秒後に自動で確認します</div>
+                            </div>
+                        </div>
+                    `;
+
+                    setTimeout(() => checkVideoStatus(data.video_id), 15000);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <strong>❌ エラーが発生しました</strong>
+                        <div class="result-content">${error.message}</div>
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🎬 動画を生成';
+            }
+        }
+
+        async function checkVideoStatus(videoId) {
+            const statusDiv = document.getElementById(`videoStatus_${videoId}`);
+            const token = document.getElementById('authToken').value.trim();
+
+            try {
+                const response = await fetch(`${API_BASE}/video/${videoId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'completed' && data.url) {
+                    statusDiv.innerHTML = `
+                        <strong>🎉 動画生成完了！</strong><br><br>
+                        ${data.thumbnail_url ? `<img src="${data.thumbnail_url}" alt="サムネイル" style="max-width: 100%; border-radius: 8px; margin-bottom: 10px;">` : ''}
+                        <br><a href="${data.url}" target="_blank" class="download-btn">🎬 動画を再生</a>
+                    `;
+                } else if (data.status === 'processing' || data.status === 'queued') {
+                    statusDiv.innerHTML = `⏳ 処理中 (${data.status})... 15秒後に再確認します`;
+                    setTimeout(() => checkVideoStatus(videoId), 15000);
+                } else if (data.status === 'failed') {
+                    statusDiv.innerHTML = `<strong>❌ 動画生成に失敗しました</strong>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<strong>❌ ステータス確認エラー: ${error.message}</strong>`;
+            }
+        }
+    </script>
+</body>
+</html>

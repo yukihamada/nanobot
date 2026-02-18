@@ -1,0 +1,7 @@
+name = "teai-edge"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+PRIMARY_BACKEND = "https://api.chatweb.ai"
+FALLBACK_BACKEND = "https://nanobot-ai.fly.dev"

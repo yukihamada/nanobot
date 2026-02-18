@@ -1,0 +1,24 @@
+# Build outputs
+/target
+*.zip
+bootstrap
+lambda-bootstrap
+
+# Editor
+*.swp
+*.swo
+.DS_Store
+
+# Environment
+.env
+.env.local
+samconfig.toml
+
+# Logs
+*.log
+firebase-debug.log
+
+# IDE
+.vscode/
+.idea/
+*.iml

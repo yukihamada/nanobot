@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome - chatweb.ai</title>
+  <meta property="og:title" content="Welcome - chatweb.ai">
+  <meta property="og:description" content="Welcome to chatweb.ai - your AI assistant.">
+  <meta property="og:image" content="https://chatweb.ai/og.svg">
+  <meta property="og:url" content="https://chatweb.ai/welcome">
+  <meta property="og:type" content="website">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #1e1e1e;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --green: #22c55e;
+      --line: #06C755;
+      --tg: #2AABEE;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    nav {
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; text-decoration: none; color: var(--text); }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; align-items: center; gap: 16px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: var(--text); }
+    .lang-sw {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+    }
+    .lang-sw button {
+      background: none; border: none; color: var(--muted);
+      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+    }
+    .lang-sw button.on { background: var(--accent); color: #fff; }
+
+    .main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      background: var(--green);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+    }
+    .success-icon svg { width: 32px; height: 32px; }
+    .hero {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .hero h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card h2 .step {
+      background: var(--accent);
+      color: #fff;
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .card p { font-size: 14px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+    .code-block {
+      background: #0d0d0d;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      overflow-x: auto;
+      position: relative;
+      margin-bottom: 12px;
+    }
+    .code-block .comment { color: var(--muted); }
+    .code-block .string { color: #a5d6a7; }
+    .code-block .key { color: #90caf9; }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+
+    .session-key-box {
+      background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(34,197,94,0.1));
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .session-key-box p { color: var(--text); font-weight: 600; margin-bottom: 8px; }
+    .session-key-box .key-display {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 16px;
+      color: var(--accent);
+      background: rgba(99,102,241,0.1);
+      padding: 8px 16px;
+      border-radius: 8px;
+      display: inline-block;
+      margin-bottom: 8px;
+      cursor: pointer;
+      user-select: all;
+    }
+    .session-key-box .note { font-size: 12px; color: var(--muted); font-weight: 400; }
+
+    .channel-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .channel-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.15s;
+      border: 1px solid var(--border);
+      color: #fff;
+    }
+    .channel-btn:hover { transform: translateY(-1px); }
+    .channel-btn.line { background: var(--line); border-color: var(--line); }
+    .channel-btn.tg { background: var(--tg); border-color: var(--tg); }
+
+    .app-card {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      text-decoration: none;
+      color: var(--text);
+      transition: all 0.15s;
+    }
+    .app-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .app-card .app-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 800;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .app-card .app-info h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .app-card .app-info p { font-size: 13px; color: var(--muted); margin: 0; }
+    .app-card .app-badge {
+      margin-left: auto;
+      padding: 6px 12px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 32px;
+    }
+    .cta-row a {
+      flex: 1;
+      display: block;
+      text-align: center;
+      padding: 14px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+    .cta-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .cta-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .cta-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .cta-secondary:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    footer a { color: var(--muted); }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 24px; }
+      .cta-row { flex-direction: column; }
+      .channel-row { flex-direction: column; }
+      .app-card { flex-direction: column; text-align: center; }
+      .app-card .app-badge { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>chat</span>web.ai</a>
+    <div class="nav-links">
+      <a href="/" id="nav-home">Home</a>
+      <a href="/pricing" id="nav-pricing">Pricing</a>
+      <a href="/status">Status</a>
+      <div class="lang-sw">
+        <button onclick="setLang('ja')" id="l-ja">JA</button>
+        <button onclick="setLang('en')" id="l-en">EN</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="success-icon">
+      <svg viewBox="0 0 32 32" fill="none"><path d="M12 22l-6-6 2-2 4 4 10-10 2 2L12 22z" fill="#fff"/></svg>
+    </div>
+    <div class="hero">
+      <h1 id="t-title">セットアップ完了！</h1>
+      <p id="t-sub">セッションキーでAPIを利用できます。早速使い始めましょう。</p>
+    </div>
+
+    <div class="session-key-box">
+      <p id="t-key-label">あなたのセッションキー</p>
+      <div class="key-display" id="session-key-display" onclick="copySessionKey()">---</div>
+      <button class="copy-btn" onclick="copySessionKey()" style="position:static;margin-top:8px;" id="copy-key-btn">Copy</button>
+      <div class="note" id="t-key-warn">セッションキーはAPIの認証に使用します</div>
+    </div>
+
+    <!-- Step 1: Quick start -->
+    <div class="card">
+      <h2><span class="step">1</span> <span id="t-step1-title">APIを呼び出す</span></h2>
+      <p id="t-step1-desc">curlコマンドでAPIを試してみましょう。</p>
+      <div class="code-block" id="code-chat">
+        <button class="copy-btn" onclick="copyCode('code-chat')">Copy</button>
+<span class="comment"># Send a chat message</span>
+curl -X POST https://chatweb.ai/api/v1/chat \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer <span id="code-sid-1">YOUR_SESSION_KEY</span>"</span> \
+  -d <span class="string">'{
+    "message": "Hello, chatweb.ai!",
+    "session_id": "<span id="code-sid-2">YOUR_SESSION_KEY</span>"
+  }'</span></div>
+    </div>
+
+    <!-- Step 2: Check response -->
+    <div class="card">
+      <h2><span class="step">2</span> <span id="t-step2-title">レスポンスを確認</span></h2>
+      <p id="t-step2-desc">APIは以下の形式でJSON応答を返します。</p>
+      <div class="code-block">
+{
+  <span class="key">"response"</span>: <span class="string">"Hello! How can I help you today?"</span>,
+  <span class="key">"session_id"</span>: <span class="string">"<span id="code-sid-3">YOUR_SESSION_KEY</span>"</span>,
+  <span class="key">"credits_used"</span>: <span style="color:#f9a825;">1</span>,
+  <span class="key">"credits_remaining"</span>: <span style="color:#f9a825;">99</span>
+}</div>
+    </div>
+
+    <!-- Step 3: Check credits -->
+    <div class="card">
+      <h2><span class="step">3</span> <span id="t-step3-title">クレジット残高を確認</span></h2>
+      <p id="t-step3-desc">いつでもAPIでクレジット残高を確認できます。</p>
+      <div class="code-block" id="code-usage">
+        <button class="copy-btn" onclick="copyCode('code-usage')">Copy</button>
+<span class="comment"># Check credits and account info</span>
+curl https://chatweb.ai/api/v1/auth/me \
+  -H <span class="string">"Authorization: Bearer <span id="code-sid-4">YOUR_SESSION_KEY</span>"</span></div>
+    </div>
+
+    <!-- Channel integration -->
+    <div class="card">
+      <h2 id="t-channel-title">チャネル連携</h2>
+      <p id="t-channel-desc">LINE・Telegramでもchatweb.aiを使えます。友だち追加するだけで自動連携。</p>
+      <div class="channel-row">
+        <a href="https://line.me/R/oaMessage/@619jcqqh/" target="_blank" class="channel-btn line">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 5.81 2 10.41c0 3.43 2.71 6.41 6.73 7.54-.09.82-.53 3.07-.55 3.15 0 0-.01.1.05.14.06.03.13.01.13.01.17-.02 2.01-1.31 2.93-1.93.88.13 1.79.2 2.71.2 5.52 0 10-3.81 10-8.41C22 5.81 17.52 2 12 2z"/></svg>
+          LINE
+        </a>
+        <a href="https://t.me/chatweb_ai_bot" target="_blank" class="channel-btn tg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+          Telegram
+        </a>
+      </div>
+    </div>
+
+    <!-- ElioChat app -->
+    <a href="https://apps.apple.com/app/eliochat/id6742071881" target="_blank" class="app-card" id="elio-card">
+      <div class="app-icon">E</div>
+      <div class="app-info">
+        <h3>ElioChat</h3>
+        <p id="t-elio-desc">iOSアプリでchatweb.aiをもっと便利に。音声入力・プッシュ通知対応。</p>
+      </div>
+      <div class="app-badge" id="t-elio-badge">App Store</div>
+    </a>
+
+    <div class="cta-row">
+      <a href="/" class="cta-primary" id="t-cta-chat">チャットを試す</a>
+      <a href="/docs" class="cta-secondary" id="t-cta-docs">APIドキュメント</a>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/">Home</a> &middot;
+    <a href="/pricing" id="nav-pricing2">Pricing</a> &middot;
+    <a href="/docs">Docs</a> &middot;
+    <a href="/status">Status</a> &middot;
+    <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
+    chatweb.ai &copy; 2025-2026
+  </footer>
+
+  <script>
+    // Get session key from URL parameter ?sid=xxx
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get('sid') || '';
+
+    function updateSessionKeyDisplay() {
+      const display = document.getElementById('session-key-display');
+      if (sid) {
+        display.textContent = sid;
+        // Update code blocks with actual session key
+        document.querySelectorAll('[id^="code-sid-"]').forEach(el => { el.textContent = sid; });
+      } else {
+        const l = document.documentElement.lang || 'ja';
+        display.textContent = l === 'ja' ? '（URLにsidパラメータがありません）' : '(No sid parameter in URL)';
+      }
+    }
+
+    function copySessionKey() {
+      if (!sid) return;
+      navigator.clipboard.writeText(sid);
+      const btn = document.getElementById('copy-key-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    }
+
+    const T = {
+      ja: {
+        title: 'セットアップ完了！',
+        sub: 'セッションキーでAPIを利用できます。早速使い始めましょう。',
+        pricing: '料金',
+        keyLabel: 'あなたのセッションキー',
+        keyWarn: 'セッションキーはAPIの認証に使用します',
+        step1Title: 'APIを呼び出す',
+        step1Desc: 'curlコマンドでAPIを試してみましょう。',
+        step2Title: 'レスポンスを確認',
+        step2Desc: 'APIは以下の形式でJSON応答を返します。',
+        step3Title: 'クレジット残高を確認',
+        step3Desc: 'いつでもAPIでクレジット残高を確認できます。',
+        channelTitle: 'チャネル連携',
+        channelDesc: 'LINE・Telegramでもchatweb.aiを使えます。友だち追加するだけで自動連携。',
+        elioDesc: 'iOSアプリでchatweb.aiをもっと便利に。音声入力・プッシュ通知対応。',
+        elioBadge: 'App Store',
+        ctaChat: 'チャットを試す',
+        ctaDocs: 'APIドキュメント',
+      },
+      en: {
+        title: 'Setup Complete!',
+        sub: 'Use your session key to access the API. Let\'s get started.',
+        pricing: 'Pricing',
+        keyLabel: 'Your Session Key',
+        keyWarn: 'Use this session key to authenticate API requests',
+        step1Title: 'Make your first API call',
+        step1Desc: 'Try the API with curl.',
+        step2Title: 'Check the response',
+        step2Desc: 'The API returns a JSON response in this format.',
+        step3Title: 'Check your credits',
+        step3Desc: 'Check your credit balance anytime via the API.',
+        channelTitle: 'Connect Channels',
+        channelDesc: 'Use chatweb.ai on LINE and Telegram too. Just add as a friend to auto-connect.',
+        elioDesc: 'Use chatweb.ai on iOS with voice input and push notifications.',
+        elioBadge: 'App Store',
+        ctaChat: 'Try the Chat',
+        ctaDocs: 'API Documentation',
+      },
+    };
+
+    function setLang(l) {
+      document.documentElement.lang = l;
+      localStorage.setItem('nl', l);
+      document.getElementById('l-ja').className = l === 'ja' ? 'on' : '';
+      document.getElementById('l-en').className = l === 'en' ? 'on' : '';
+
+      const t = T[l];
+      document.getElementById('t-title').textContent = t.title;
+      document.getElementById('t-sub').textContent = t.sub;
+      document.getElementById('nav-pricing').textContent = t.pricing;
+      document.getElementById('nav-pricing2').textContent = t.pricing;
+      document.getElementById('t-key-label').textContent = t.keyLabel;
+      document.getElementById('t-key-warn').textContent = t.keyWarn;
+      document.getElementById('t-step1-title').textContent = t.step1Title;
+      document.getElementById('t-step1-desc').textContent = t.step1Desc;
+      document.getElementById('t-step2-title').textContent = t.step2Title;
+      document.getElementById('t-step2-desc').textContent = t.step2Desc;
+      document.getElementById('t-step3-title').textContent = t.step3Title;
+      document.getElementById('t-step3-desc').textContent = t.step3Desc;
+      document.getElementById('t-channel-title').textContent = t.channelTitle;
+      document.getElementById('t-channel-desc').textContent = t.channelDesc;
+      document.getElementById('t-elio-desc').textContent = t.elioDesc;
+      document.getElementById('t-elio-badge').textContent = t.elioBadge;
+      document.getElementById('t-cta-chat').textContent = t.ctaChat;
+      document.getElementById('t-cta-docs').textContent = t.ctaDocs;
+      updateSessionKeyDisplay();
+    }
+
+    function copyCode(id) {
+      const block = document.getElementById(id);
+      const text = block.innerText.replace('Copy', '').trim();
+      navigator.clipboard.writeText(text);
+      const btn = block.querySelector('.copy-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    }
+
+    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+  </script>
+</body>
+</html>

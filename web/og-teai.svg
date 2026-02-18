@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <!-- Logo -->
+  <rect x="80" y="60" width="64" height="64" rx="16" fill="rgba(255,255,255,0.2)"/>
+  <text x="112" y="104" text-anchor="middle" font-size="36" font-weight="800" font-family="system-ui,sans-serif" fill="white">te</text>
+  <!-- Brand -->
+  <text x="160" y="100" font-size="32" font-weight="700" font-family="system-ui,sans-serif" fill="white">teai.io</text>
+  <!-- Main heading -->
+  <text x="80" y="260" font-size="64" font-weight="800" font-family="system-ui,sans-serif" fill="white">AI Agent for</text>
+  <text x="80" y="340" font-size="64" font-weight="800" font-family="system-ui,sans-serif" fill="rgba(255,255,255,0.9)">Developers</text>
+  <!-- Subtitle -->
+  <text x="80" y="400" font-size="28" font-weight="400" font-family="system-ui,sans-serif" fill="rgba(255,255,255,0.7)">Code, search, automate — from your terminal or browser</text>
+  <!-- Feature badges -->
+  <rect x="80" y="460" width="140" height="48" rx="24" fill="rgba(255,255,255,0.15)"/>
+  <text x="150" y="490" text-anchor="middle" font-size="20" font-weight="600" font-family="system-ui,sans-serif" fill="white">Code Gen</text>
+  <rect x="240" y="460" width="150" height="48" rx="24" fill="rgba(255,255,255,0.15)"/>
+  <text x="315" y="490" text-anchor="middle" font-size="20" font-weight="600" font-family="system-ui,sans-serif" fill="white">MCP Tools</text>
+  <rect x="410" y="460" width="140" height="48" rx="24" fill="rgba(255,255,255,0.15)"/>
+  <text x="480" y="490" text-anchor="middle" font-size="20" font-weight="600" font-family="system-ui,sans-serif" fill="white">REST API</text>
+  <rect x="570" y="460" width="170" height="48" rx="24" fill="rgba(255,255,255,0.15)"/>
+  <text x="655" y="490" text-anchor="middle" font-size="20" font-weight="600" font-family="system-ui,sans-serif" fill="white">Multi-Model</text>
+  <!-- Decorative circles -->
+  <circle cx="1050" cy="150" r="80" fill="rgba(255,255,255,0.05)"/>
+  <circle cx="1100" cy="400" r="120" fill="rgba(255,255,255,0.03)"/>
+  <circle cx="900" cy="500" r="60" fill="rgba(255,255,255,0.04)"/>
+</svg>

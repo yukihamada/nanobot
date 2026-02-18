@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>chatweb.ai - Admin Dashboard</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface2: #1a1a1a;
+      --border: #1e1e1e;
+      --text: #e5e5e5;
+      --muted: #777;
+      --accent: #6366f1;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --orange: #f97316;
+      --cyan: #06b6d4;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'SF Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    nav {
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { font-size: 16px; font-weight: 700; }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; gap: 16px; font-size: 13px; }
+    .nav-links a { color: var(--muted); text-decoration: none; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--accent); }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .page-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Tab navigation */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab:hover { color: var(--text); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Cards grid */
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .card-value { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .card-sub { font-size: 12px; color: var(--muted); }
+    .card-value.green { color: var(--green); }
+    .card-value.yellow { color: var(--yellow); }
+    .card-value.red { color: var(--red); }
+    .card-value.blue { color: var(--blue); }
+
+    /* Table */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .table-title {
+      padding: 16px 20px;
+      font-size: 14px;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 10px 16px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .status-dot.green { background: var(--green); }
+    .status-dot.yellow { background: var(--yellow); }
+    .status-dot.red { background: var(--red); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-rust { background: #b7410e22; color: #e67e22; }
+    .badge-js { background: #f7df1e22; color: #f7df1e; }
+    .badge-green { background: #22c55e22; color: var(--green); }
+    .badge-blue { background: #3b82f622; color: var(--blue); }
+    .badge-orange { background: #f9731622; color: var(--orange); }
+    .badge-cyan { background: #06b6d422; color: var(--cyan); }
+    .badge-muted { background: #77777722; color: var(--muted); }
+
+    /* Architecture diagram */
+    .arch-diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      overflow-x: auto;
+    }
+    .arch-diagram h3 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+    .arch-flow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+    .arch-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      text-align: center;
+      min-width: 120px;
+    }
+    .arch-box.primary { border-color: var(--accent); }
+    .arch-box .box-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .arch-box .box-name { font-weight: 700; font-size: 13px; }
+    .arch-box .box-detail { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .arch-arrow { color: var(--muted); font-size: 16px; }
+
+    /* Session list */
+    .session-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .session-item:last-child { border-bottom: none; }
+    .session-key { font-weight: 600; font-size: 13px; }
+    .session-meta { font-size: 11px; color: var(--muted); }
+
+    /* Cost breakdown */
+    .cost-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .cost-row:last-child { border-bottom: none; }
+    .cost-row .cost-name { color: var(--text); }
+    .cost-row .cost-amount { font-weight: 700; font-family: 'SF Mono', monospace; }
+
+    .refresh-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .refresh-btn:hover { border-color: var(--accent); }
+
+    .latency-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border);
+      margin-top: 4px;
+    }
+    .latency-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    /* Users tab */
+    .user-list { max-height: 500px; overflow-y: auto; }
+    .user-row {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.15s;
+    }
+    .user-row:hover { background: var(--surface2); }
+    .user-row:last-child { border-bottom: none; }
+    .user-row.selected { background: var(--surface2); border-left: 3px solid var(--accent); }
+    .user-info { flex: 1; }
+    .user-email { font-weight: 600; font-size: 13px; }
+    .user-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .user-stats { text-align: right; font-size: 12px; }
+    .user-credits { font-weight: 700; }
+
+    .conv-list { max-height: 400px; overflow-y: auto; }
+    .conv-row {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .conv-row:hover { background: var(--surface2); }
+    .conv-row.selected { background: var(--surface2); border-left: 3px solid var(--accent); }
+    .conv-title { font-weight: 600; font-size: 13px; }
+    .conv-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .msg-list { max-height: 500px; overflow-y: auto; padding: 16px; }
+    .msg-bubble {
+      margin-bottom: 12px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 80%;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .msg-bubble.user {
+      background: var(--accent);
+      color: white;
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+    }
+    .msg-bubble.assistant {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+    .msg-bubble.system {
+      background: #2d1f00;
+      border: 1px solid #4a3000;
+      font-size: 11px;
+      color: var(--yellow);
+      max-width: 100%;
+    }
+    .msg-time { font-size: 10px; color: var(--muted); margin-top: 4px; }
+    .msg-role { font-size: 10px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .users-layout {
+      display: grid;
+      grid-template-columns: 300px 280px 1fr;
+      gap: 16px;
+    }
+    .users-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 12px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-header .count { color: var(--muted); font-weight: 400; }
+    .search-input {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: none;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+    }
+    .search-input::placeholder { color: var(--muted); }
+    .empty-state {
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 1024px) {
+      .users-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      .cards { grid-template-columns: 1fr 1fr; }
+      .arch-flow { flex-direction: column; }
+      .arch-arrow { transform: rotate(90deg); }
+    }
+    /* Tickets */
+    .ticket-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .ticket-card.priority { border-left: 3px solid var(--red); }
+    .ticket-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .ticket-id { font-weight: 700; font-size: 13px; }
+    .ticket-status { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+    .ticket-status.open { background: rgba(234,179,8,0.15); color: var(--yellow); }
+    .ticket-status.resolved { background: rgba(34,197,94,0.15); color: var(--green); }
+    .ticket-question { font-size: 13px; margin-bottom: 8px; line-height: 1.5; }
+    .ticket-meta { font-size: 11px; color: var(--muted); }
+    .ticket-respond { margin-top: 10px; }
+    .ticket-respond textarea {
+      width: 100%; padding: 8px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 12px; resize: vertical; margin-bottom: 6px;
+    }
+    .ticket-respond button {
+      padding: 6px 16px; background: var(--accent); color: #fff; border: none;
+      border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .ticket-respond button:hover { opacity: 0.9; }
+    .ticket-filter { display: flex; gap: 8px; margin-bottom: 16px; }
+    .ticket-filter button {
+      padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--muted);
+    }
+    .ticket-filter button.active { border-color: var(--accent); background: rgba(99,102,241,0.15); color: var(--accent); }
+
+    @media (max-width: 480px) {
+      .cards { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo" style="text-decoration:none"><span>chat</span>web.ai <span style="color:var(--muted);font-size:11px;font-weight:400">admin</span></a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/status">Status</a>
+      <a href="#" class="active" id="nav-admin">Dashboard</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-title">
+      Dashboard
+      <button class="refresh-btn" onclick="refreshAll()">Refresh</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('overview')">Overview</button>
+      <button class="tab" onclick="showTab('users')">Users</button>
+      <button class="tab" onclick="showTab('tickets')">Tickets</button>
+      <button class="tab" onclick="showTab('infra')">Infrastructure</button>
+      <button class="tab" onclick="showTab('sessions')">Sessions</button>
+      <button class="tab" onclick="showTab('keys')">Keys</button>
+      <button class="tab" onclick="showTab('costs')">Costs</button>
+    </div>
+
+    <!-- ========== OVERVIEW ========== -->
+    <div id="tab-overview" class="tab-content active">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Registered Users</div>
+          <div class="card-value blue" id="stat-users">--</div>
+          <div class="card-sub">USER# records in DynamoDB</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Total Sessions</div>
+          <div class="card-value green" id="stat-sessions">--</div>
+          <div class="card-sub">Web / LINE / Telegram</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Today's Requests</div>
+          <div class="card-value yellow" id="stat-requests">--</div>
+          <div class="card-sub" id="stat-date">Tool calls today</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Monthly Cost (est.)</div>
+          <div class="card-value" id="stat-cost">--</div>
+          <div class="card-sub">AWS + Fly.io + CF Workers</div>
+        </div>
+      </div>
+
+      <!-- Latency by endpoint -->
+      <div class="table-wrap">
+        <div class="table-title">Endpoint Health</div>
+        <table>
+          <tr>
+            <th>Endpoint</th>
+            <th>URL</th>
+            <th>Status</th>
+            <th>Latency</th>
+          </tr>
+          <tbody id="health-table"></tbody>
+        </table>
+      </div>
+
+      <!-- Recent activity -->
+      <div class="table-wrap">
+        <div class="table-title">Service Channels</div>
+        <table>
+          <tr>
+            <th>Channel</th>
+            <th>Status</th>
+            <th>Users</th>
+            <th>AI Model</th>
+          </tr>
+          <tr>
+            <td>Web Chat (chatweb.ai)</td>
+            <td><span class="status-dot green"></span>Active</td>
+            <td id="ch-web">--</td>
+            <td><span class="badge badge-green">GPT-4o</span></td>
+          </tr>
+          <tr>
+            <td>LINE Bot (@619jcqqh)</td>
+            <td><span class="status-dot green"></span>Active</td>
+            <td id="ch-line">--</td>
+            <td><span class="badge badge-green">GPT-4o</span></td>
+          </tr>
+          <tr>
+            <td>Telegram (@chatweb_ai_bot)</td>
+            <td><span class="status-dot green"></span>Active</td>
+            <td id="ch-tg">--</td>
+            <td><span class="badge badge-green">GPT-4o</span></td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ========== USERS ========== -->
+    <div id="tab-users" class="tab-content">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Total Users</div>
+          <div class="card-value blue" id="users-total">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Paid Users</div>
+          <div class="card-value green" id="users-paid">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Active (used credits)</div>
+          <div class="card-value yellow" id="users-active">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Total Credits Used</div>
+          <div class="card-value" id="users-credits-used">--</div>
+        </div>
+      </div>
+
+      <div class="users-layout">
+        <div class="users-panel">
+          <div class="panel-header">Users <span class="count" id="users-list-count"></span></div>
+          <input type="text" class="search-input" placeholder="Search by email or name..." id="user-search" oninput="filterUsers()">
+          <div class="user-list" id="user-list-container">
+            <div class="empty-state">Loading...</div>
+          </div>
+        </div>
+
+        <div class="users-panel">
+          <div class="panel-header">Conversations <span class="count" id="conv-list-count"></span></div>
+          <div class="conv-list" id="conv-list-container">
+            <div class="empty-state">Select a user</div>
+          </div>
+        </div>
+
+        <div class="users-panel">
+          <div class="panel-header">Messages <span class="count" id="msg-count"></span></div>
+          <div class="msg-list" id="msg-list-container">
+            <div class="empty-state">Select a conversation</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== TICKETS ========== -->
+    <div id="tab-tickets" class="tab-content">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Open Tickets</div>
+          <div class="card-value red" id="tickets-open">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Resolved</div>
+          <div class="card-value green" id="tickets-resolved">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Priority</div>
+          <div class="card-value yellow" id="tickets-priority">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Total</div>
+          <div class="card-value" id="tickets-total">--</div>
+        </div>
+      </div>
+
+      <div class="ticket-filter">
+        <button class="active" onclick="filterTickets('all', this)">All</button>
+        <button onclick="filterTickets('open', this)">Open</button>
+        <button onclick="filterTickets('resolved', this)">Resolved</button>
+      </div>
+
+      <div id="tickets-container">
+        <div style="padding:32px;text-align:center;color:var(--muted);">Loading...</div>
+      </div>
+    </div>
+
+    <!-- ========== INFRASTRUCTURE ========== -->
+    <div id="tab-infra" class="tab-content">
+      <!-- Architecture diagram -->
+      <div class="arch-diagram">
+        <h3>Request Flow</h3>
+        <div class="arch-flow">
+          <div class="arch-box">
+            <div class="box-label">Client</div>
+            <div class="box-name">Browser / LINE / TG</div>
+          </div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-box">
+            <div class="box-label">DNS</div>
+            <div class="box-name">Route53 / Cloudflare</div>
+            <div class="box-detail">chatweb.ai / teai.io</div>
+          </div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-box">
+            <div class="box-label">Edge</div>
+            <div class="box-name">CF Workers</div>
+            <div class="box-detail">Load balance + failover</div>
+          </div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-box primary">
+            <div class="box-label">Primary</div>
+            <div class="box-name">AWS Lambda</div>
+            <div class="box-detail">ap-northeast-1 (Tokyo)</div>
+          </div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-box">
+            <div class="box-label">LLM</div>
+            <div class="box-name">OpenAI API</div>
+            <div class="box-detail">GPT-4o</div>
+          </div>
+        </div>
+        <div class="arch-flow" style="margin-top:12px; padding-left: 280px;">
+          <div class="arch-arrow" style="transform:rotate(90deg)">&rarr;</div>
+          <div class="arch-box">
+            <div class="box-label">Fallback</div>
+            <div class="box-name">Fly.io</div>
+            <div class="box-detail">nrt (Tokyo)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Service details table -->
+      <div class="table-wrap">
+        <div class="table-title">Deployed Services</div>
+        <table>
+          <tr>
+            <th>Service</th>
+            <th>Provider</th>
+            <th>Region</th>
+            <th>Language</th>
+            <th>Runtime</th>
+            <th>URL</th>
+            <th>Status</th>
+          </tr>
+          <tr>
+            <td><strong>nanobot Lambda</strong></td>
+            <td>AWS Lambda</td>
+            <td>ap-northeast-1 (Tokyo)</td>
+            <td><span class="badge badge-rust">Rust</span></td>
+            <td>ARM64, provided.al2023, 1024MB</td>
+            <td><a href="https://api.chatweb.ai" style="color:var(--accent)">api.chatweb.ai</a></td>
+            <td><span class="status-dot green"></span>Live (v13)</td>
+          </tr>
+          <tr>
+            <td><strong>nanobot Fly</strong></td>
+            <td>Fly.io</td>
+            <td>nrt (Tokyo)</td>
+            <td><span class="badge badge-rust">Rust</span></td>
+            <td>Docker, shared-cpu-1x, 256MB</td>
+            <td><a href="https://nanobot-ai.fly.dev" style="color:var(--accent)">nanobot-ai.fly.dev</a></td>
+            <td><span class="status-dot green"></span>Live</td>
+          </tr>
+          <tr>
+            <td><strong>teai-edge Worker</strong></td>
+            <td>Cloudflare Workers</td>
+            <td>Edge (global)</td>
+            <td><span class="badge badge-js">JavaScript</span></td>
+            <td>V8 Isolate, 10ms CPU / req</td>
+            <td><a href="https://teai-edge.yukihamada.workers.dev" style="color:var(--accent)">teai-edge.*.workers.dev</a></td>
+            <td><span class="status-dot green"></span>Live</td>
+          </tr>
+          <tr>
+            <td><strong>API Gateway</strong></td>
+            <td>AWS API Gateway v2</td>
+            <td>ap-northeast-1</td>
+            <td><span class="badge badge-muted">Managed</span></td>
+            <td>HTTP API, auto-scale</td>
+            <td>chatweb.ai, teai.io</td>
+            <td><span class="status-dot green"></span>Live</td>
+          </tr>
+          <tr>
+            <td><strong>DynamoDB Sessions</strong></td>
+            <td>AWS DynamoDB</td>
+            <td>ap-northeast-1</td>
+            <td><span class="badge badge-muted">Managed</span></td>
+            <td>On-demand (PAY_PER_REQUEST)</td>
+            <td>nanobot-sessions</td>
+            <td><span class="status-dot green"></span>Active</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Domain routing -->
+      <div class="table-wrap">
+        <div class="table-title">Domain Routing</div>
+        <table>
+          <tr>
+            <th>Domain</th>
+            <th>DNS</th>
+            <th>Destination</th>
+            <th>Purpose</th>
+          </tr>
+          <tr>
+            <td><strong>chatweb.ai</strong></td>
+            <td>Cloudflare</td>
+            <td>API Gateway &rarr; Lambda</td>
+            <td>Main web UI + API</td>
+          </tr>
+          <tr>
+            <td><strong>api.chatweb.ai</strong></td>
+            <td>Cloudflare</td>
+            <td>API Gateway &rarr; Lambda</td>
+            <td>API endpoint</td>
+          </tr>
+          <tr>
+            <td><strong>teai.io</strong></td>
+            <td>Route53</td>
+            <td>API Gateway &rarr; Lambda</td>
+            <td>Alternate domain</td>
+          </tr>
+          <tr>
+            <td><strong>api.teai.io</strong></td>
+            <td>Route53</td>
+            <td>API Gateway &rarr; Lambda</td>
+            <td>API endpoint</td>
+          </tr>
+          <tr>
+            <td><strong>teai-edge.*.workers.dev</strong></td>
+            <td>Cloudflare</td>
+            <td>CF Worker &rarr; Lambda / Fly.io</td>
+            <td>Edge proxy with failover</td>
+          </tr>
+          <tr>
+            <td><strong>nanobot-ai.fly.dev</strong></td>
+            <td>Fly.io</td>
+            <td>Fly.io container</td>
+            <td>Fallback backend</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Tech stack -->
+      <div class="table-wrap">
+        <div class="table-title">Tech Stack Details</div>
+        <table>
+          <tr>
+            <th>Component</th>
+            <th>Technology</th>
+            <th>Version</th>
+            <th>Notes</th>
+          </tr>
+          <tr>
+            <td>Core Engine</td>
+            <td><span class="badge badge-rust">Rust</span></td>
+            <td>stable (2024)</td>
+            <td>nanobot-core crate, async with Tokio</td>
+          </tr>
+          <tr>
+            <td>HTTP Framework</td>
+            <td><span class="badge badge-rust">Axum</span></td>
+            <td>0.7+</td>
+            <td>Async web framework built on Tokio</td>
+          </tr>
+          <tr>
+            <td>Lambda Runtime</td>
+            <td><span class="badge badge-rust">lambda_http</span></td>
+            <td>latest</td>
+            <td>AWS Lambda custom runtime (provided.al2023)</td>
+          </tr>
+          <tr>
+            <td>Edge Proxy</td>
+            <td><span class="badge badge-js">JavaScript</span></td>
+            <td>ES2024</td>
+            <td>Cloudflare Workers V8 isolate</td>
+          </tr>
+          <tr>
+            <td>AI Provider</td>
+            <td><span class="badge badge-green">OpenAI</span></td>
+            <td>GPT-4o</td>
+            <td>Via OpenAI-compatible API</td>
+          </tr>
+          <tr>
+            <td>Session Store</td>
+            <td><span class="badge badge-orange">DynamoDB</span></td>
+            <td>On-demand</td>
+            <td>TTL-enabled, tenant-partitioned</td>
+          </tr>
+          <tr>
+            <td>IaC</td>
+            <td><span class="badge badge-orange">AWS SAM</span></td>
+            <td>latest</td>
+            <td>Infrastructure as Code (template.yaml)</td>
+          </tr>
+          <tr>
+            <td>CI/CD</td>
+            <td><span class="badge badge-muted">GitHub Actions</span></td>
+            <td>--</td>
+            <td>test &rarr; build &rarr; canary 10% &rarr; prod 100%</td>
+          </tr>
+          <tr>
+            <td>Cross-compile</td>
+            <td><span class="badge badge-rust">cargo-zigbuild</span></td>
+            <td>+zig</td>
+            <td>macOS &rarr; aarch64-linux (ARM64 Lambda)</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ========== SESSIONS ========== -->
+    <div id="tab-sessions" class="tab-content">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Web Sessions</div>
+          <div class="card-value blue" id="sess-web">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">LINE Sessions</div>
+          <div class="card-value green" id="sess-line">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Telegram Sessions</div>
+          <div class="card-value" style="color:var(--cyan)" id="sess-tg">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Total Sessions</div>
+          <div class="card-value" id="sess-total">--</div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-title">Active Sessions</div>
+        <div id="session-list" style="max-height: 400px; overflow-y: auto;">
+          <div style="padding: 16px; color: var(--muted); text-align: center;">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== COSTS ========== -->
+    <div id="tab-keys" class="tab-content">
+      <div id="keys-message" style="display:none;padding:10px 16px;margin-bottom:12px;border-radius:6px;background:rgba(34,197,94,0.1);border:1px solid var(--green);color:var(--green);font-size:13px;"></div>
+      <div id="keys-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <div id="tab-costs" class="tab-content">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">AWS Monthly (est.)</div>
+          <div class="card-value yellow" id="cost-aws">--</div>
+          <div class="card-sub">Lambda + API GW + DynamoDB</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Fly.io Monthly</div>
+          <div class="card-value green" id="cost-fly">$0</div>
+          <div class="card-sub">Free tier (shared-cpu-1x)</div>
+        </div>
+        <div class="card">
+          <div class="card-label">CF Workers Monthly</div>
+          <div class="card-value green" id="cost-cf">$0</div>
+          <div class="card-sub">Free tier (100K req/day)</div>
+        </div>
+        <div class="card">
+          <div class="card-label">OpenAI API Monthly (est.)</div>
+          <div class="card-value yellow" id="cost-openai">--</div>
+          <div class="card-sub">GPT-4o usage</div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-title">Cost Breakdown (Monthly Estimate)</div>
+        <div style="padding: 20px;">
+          <div class="cost-row"><span class="cost-name">AWS Lambda (1024MB, ARM64)</span><span class="cost-amount">~$0.50</span></div>
+          <div class="cost-row"><span class="cost-name">API Gateway HTTP API</span><span class="cost-amount">~$0.10</span></div>
+          <div class="cost-row"><span class="cost-name">DynamoDB (on-demand, sessions + memory)</span><span class="cost-amount">~$0.25</span></div>
+          <div class="cost-row"><span class="cost-name">Route53 (2 hosted zones)</span><span class="cost-amount">$1.00</span></div>
+          <div class="cost-row"><span class="cost-name">ACM Certificates</span><span class="cost-amount">$0.00</span></div>
+          <div class="cost-row"><span class="cost-name">CloudWatch Logs</span><span class="cost-amount">~$0.10</span></div>
+          <div class="cost-row" style="border-top: 1px solid var(--border); padding-top: 16px;"><span class="cost-name"><strong>AWS Subtotal</strong></span><span class="cost-amount" style="color:var(--yellow)">~$1.95</span></div>
+          <div class="cost-row"><span class="cost-name">Fly.io (shared-cpu-1x, 256MB)</span><span class="cost-amount" style="color:var(--green)">$0.00 (free tier)</span></div>
+          <div class="cost-row"><span class="cost-name">Cloudflare Workers (free plan)</span><span class="cost-amount" style="color:var(--green)">$0.00 (free tier)</span></div>
+          <div class="cost-row"><span class="cost-name">Cloudflare DNS (chatweb.ai)</span><span class="cost-amount" style="color:var(--green)">$0.00 (free)</span></div>
+          <div class="cost-row"><span class="cost-name">OpenAI API (GPT-4o, ~1000 req/mo)</span><span class="cost-amount" style="color:var(--yellow)">~$5.00</span></div>
+          <div class="cost-row"><span class="cost-name">Domain: chatweb.ai</span><span class="cost-amount">~$1.00/mo</span></div>
+          <div class="cost-row"><span class="cost-name">Domain: teai.io</span><span class="cost-amount">~$3.00/mo</span></div>
+          <div class="cost-row" style="border-top: 2px solid var(--accent); padding-top: 16px; font-size: 15px;"><span class="cost-name"><strong>Total Monthly Estimate</strong></span><span class="cost-amount" style="color:var(--accent); font-size: 18px;">~$10.95</span></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-title">Cost per Request Estimate</div>
+        <div style="padding: 20px;">
+          <div class="cost-row"><span class="cost-name">Lambda invocation (1024MB, ~2s avg)</span><span class="cost-amount">$0.0000333</span></div>
+          <div class="cost-row"><span class="cost-name">API Gateway per request</span><span class="cost-amount">$0.0000012</span></div>
+          <div class="cost-row"><span class="cost-name">DynamoDB read (session load)</span><span class="cost-amount">$0.0000013</span></div>
+          <div class="cost-row"><span class="cost-name">DynamoDB write (session save)</span><span class="cost-amount">$0.0000065</span></div>
+          <div class="cost-row"><span class="cost-name">OpenAI GPT-4o (~500 tokens)</span><span class="cost-amount">~$0.005</span></div>
+          <div class="cost-row" style="border-top: 2px solid var(--accent); padding-top: 16px;"><span class="cost-name"><strong>Total per AI chat request</strong></span><span class="cost-amount" style="color:var(--accent)">~$0.005</span></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-title">Latency Breakdown per Request</div>
+        <div style="padding: 20px;">
+          <div class="cost-row"><span class="cost-name">DNS resolution</span><span class="cost-amount">~5ms</span></div>
+          <div class="cost-row"><span class="cost-name">TLS handshake</span><span class="cost-amount">~20ms</span></div>
+          <div class="cost-row"><span class="cost-name">API Gateway routing</span><span class="cost-amount">~10ms</span></div>
+          <div class="cost-row"><span class="cost-name">Lambda cold start (Rust ARM64)</span><span class="cost-amount">~120ms (first req only)</span></div>
+          <div class="cost-row"><span class="cost-name">Lambda warm execution</span><span class="cost-amount">~2ms</span></div>
+          <div class="cost-row"><span class="cost-name">DynamoDB session load</span><span class="cost-amount">~5ms</span></div>
+          <div class="cost-row"><span class="cost-name">OpenAI GPT-4o API call</span><span class="cost-amount">~1000-5000ms</span></div>
+          <div class="cost-row"><span class="cost-name">DynamoDB session save</span><span class="cost-amount">~5ms</span></div>
+          <div class="cost-row" style="border-top: 2px solid var(--accent); padding-top: 16px;"><span class="cost-name"><strong>Total (warm, with AI)</strong></span><span class="cost-amount" style="color:var(--accent)">~1-5 seconds</span></div>
+          <div class="cost-row"><span class="cost-name"><strong>Total (health check, no AI)</strong></span><span class="cost-amount" style="color:var(--green)">~50ms</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+    const SID = new URLSearchParams(location.search).get('sid') || '';
+    const ENDPOINTS = [
+      { name: 'AWS Lambda (chatweb.ai)', url: 'https://chatweb.ai/health' },
+      { name: 'AWS Lambda (teai.io)', url: 'https://teai.io/health' },
+      { name: 'AWS Lambda (api.chatweb.ai)', url: 'https://api.chatweb.ai/health' },
+      { name: 'Fly.io (nanobot-ai)', url: 'https://nanobot-ai.fly.dev/health' },
+      { name: 'CF Workers (edge)', url: 'https://teai-edge.yukihamada.workers.dev/health' },
+    ];
+
+    // Tab switching
+    function showTab(id) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + id).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // Health check all endpoints
+    async function checkHealth() {
+      const tbody = document.getElementById('health-table');
+      tbody.innerHTML = '';
+      for (const ep of ENDPOINTS) {
+        const row = document.createElement('tr');
+        const start = performance.now();
+        try {
+          const r = await fetch(ep.url, { mode: 'cors' });
+          const latency = Math.round(performance.now() - start);
+          const data = await r.json().catch(() => ({}));
+          const color = latency < 200 ? 'var(--green)' : latency < 500 ? 'var(--yellow)' : 'var(--red)';
+          const dotClass = latency < 200 ? 'green' : latency < 500 ? 'yellow' : 'red';
+          row.innerHTML = '<td>' + ep.name + '</td><td style="font-size:11px;color:var(--muted)">' + ep.url + '</td>'
+            + '<td><span class="status-dot ' + dotClass + '"></span>' + (r.ok ? 'OK' : r.status) + '</td>'
+            + '<td style="color:' + color + ';font-weight:700">' + latency + 'ms</td>';
+        } catch(e) {
+          row.innerHTML = '<td>' + ep.name + '</td><td style="font-size:11px;color:var(--muted)">' + ep.url + '</td>'
+            + '<td><span class="status-dot red"></span>Error</td>'
+            + '<td style="color:var(--red)">--</td>';
+        }
+        tbody.appendChild(row);
+      }
+    }
+
+    // Load sessions
+    async function loadSessions() {
+      try {
+        const r = await fetch(API + '/api/v1/sessions');
+        const data = await r.json();
+        const list = Array.isArray(data) ? data : [];
+
+        let web = 0, line = 0, tg = 0;
+        list.forEach(s => {
+          const k = typeof s === 'string' ? s : (s.key || s);
+          if (k.startsWith('line:')) line++;
+          else if (k.startsWith('tg:')) tg++;
+          else web++;
+        });
+
+        document.getElementById('stat-sessions').textContent = list.length;
+        document.getElementById('sess-web').textContent = web;
+        document.getElementById('sess-line').textContent = line;
+        document.getElementById('sess-tg').textContent = tg;
+        document.getElementById('sess-total').textContent = list.length;
+        document.getElementById('ch-web').textContent = web;
+        document.getElementById('ch-line').textContent = line;
+        document.getElementById('ch-tg').textContent = tg;
+
+        const container = document.getElementById('session-list');
+        container.innerHTML = '';
+        if (list.length === 0) {
+          container.innerHTML = '<div style="padding:16px;color:var(--muted);text-align:center">No sessions yet</div>';
+          return;
+        }
+        list.forEach(s => {
+          const key = typeof s === 'string' ? s : (s.key || JSON.stringify(s));
+          const div = document.createElement('div');
+          div.className = 'session-item';
+          const channel = key.startsWith('line:') ? 'LINE' : key.startsWith('tg:') ? 'Telegram' : 'Web';
+          const badgeClass = key.startsWith('line:') ? 'badge-green' : key.startsWith('tg:') ? 'badge-cyan' : 'badge-blue';
+          div.innerHTML = '<div><div class="session-key">' + key + '</div></div>'
+            + '<span class="badge ' + badgeClass + '">' + channel + '</span>';
+          container.appendChild(div);
+        });
+      } catch(e) {
+        document.getElementById('session-list').innerHTML = '<div style="padding:16px;color:var(--red);text-align:center">Failed to load sessions</div>';
+      }
+    }
+
+    // Load admin stats from API
+    async function loadAdminStats() {
+      try {
+        const r = await fetch(API + '/api/v1/admin/stats?sid=' + encodeURIComponent(SID));
+        if (!r.ok) return;
+        const data = await r.json();
+        if (data.total_users !== undefined) {
+          document.getElementById('stat-users').textContent = data.total_users;
+        }
+        if (data.sessions) {
+          const s = data.sessions;
+          document.getElementById('stat-sessions').textContent = s.total || 0;
+          document.getElementById('sess-web').textContent = s.webchat || 0;
+          document.getElementById('sess-line').textContent = s.line || 0;
+          document.getElementById('sess-tg').textContent = s.telegram || 0;
+          document.getElementById('sess-total').textContent = s.total || 0;
+          document.getElementById('ch-web').textContent = s.webchat || 0;
+          document.getElementById('ch-line').textContent = s.line || 0;
+          document.getElementById('ch-tg').textContent = s.telegram || 0;
+        }
+        if (data.today_usage !== undefined) {
+          document.getElementById('stat-requests').textContent = data.today_usage;
+          document.getElementById('stat-date').textContent = 'Tool calls on ' + (data.date || 'today');
+        }
+      } catch(e) {
+        console.warn('Failed to load admin stats:', e);
+      }
+    }
+
+    // ========== USERS TAB ==========
+    let allUsers = [];
+
+    async function loadUsers() {
+      try {
+        const r = await fetch(API + '/api/v1/admin/users?sid=' + encodeURIComponent(SID));
+        if (!r.ok) { document.getElementById('user-list-container').innerHTML = '<div class="empty-state" style="color:var(--red)">Forbidden (check sid)</div>'; return; }
+        const data = await r.json();
+        allUsers = data.users || [];
+
+        // Stats
+        document.getElementById('users-total').textContent = allUsers.length;
+        document.getElementById('users-paid').textContent = allUsers.filter(u => u.plan !== 'free').length;
+        document.getElementById('users-active').textContent = allUsers.filter(u => u.credits_used > 0).length;
+        document.getElementById('users-credits-used').textContent = allUsers.reduce((s, u) => s + (u.credits_used || 0), 0).toLocaleString();
+
+        renderUsers(allUsers);
+      } catch(e) {
+        document.getElementById('user-list-container').innerHTML = '<div class="empty-state" style="color:var(--red)">Error: ' + e.message + '</div>';
+      }
+    }
+
+    function renderUsers(users) {
+      const container = document.getElementById('user-list-container');
+      document.getElementById('users-list-count').textContent = '(' + users.length + ')';
+      if (users.length === 0) {
+        container.innerHTML = '<div class="empty-state">No users found</div>';
+        return;
+      }
+      container.innerHTML = '';
+      users.forEach(u => {
+        const div = document.createElement('div');
+        div.className = 'user-row';
+        div.onclick = () => selectUser(u.user_id, div);
+        const planBadge = u.plan === 'free' ? 'badge-muted' : u.plan === 'starter' ? 'badge-blue' : 'badge-green';
+        div.innerHTML = '<div class="user-info">'
+          + '<div class="user-email">' + escHtml(u.email || u.display_name || u.user_id.slice(0,8)) + '</div>'
+          + '<div class="user-meta">' + escHtml(u.user_id.slice(0,12)) + '... <span class="badge ' + planBadge + '">' + u.plan + '</span></div>'
+          + '</div>'
+          + '<div class="user-stats">'
+          + '<div class="user-credits" style="color:' + (u.credits_remaining > 20 ? 'var(--green)' : 'var(--red)') + '">' + u.credits_remaining + ' cr</div>'
+          + '<div style="font-size:11px;color:var(--muted)">used: ' + u.credits_used + '</div>'
+          + '</div>';
+        container.appendChild(div);
+      });
+    }
+
+    function filterUsers() {
+      const q = document.getElementById('user-search').value.toLowerCase();
+      if (!q) { renderUsers(allUsers); return; }
+      renderUsers(allUsers.filter(u =>
+        (u.email || '').toLowerCase().includes(q) ||
+        (u.display_name || '').toLowerCase().includes(q) ||
+        (u.user_id || '').toLowerCase().includes(q)
+      ));
+    }
+
+    async function selectUser(userId, el) {
+      document.querySelectorAll('.user-row').forEach(r => r.classList.remove('selected'));
+      if (el) el.classList.add('selected');
+      const container = document.getElementById('conv-list-container');
+      container.innerHTML = '<div class="empty-state">Loading...</div>';
+      document.getElementById('msg-list-container').innerHTML = '<div class="empty-state">Select a conversation</div>';
+      document.getElementById('msg-count').textContent = '';
+
+      try {
+        const r = await fetch(API + '/api/v1/admin/users/' + encodeURIComponent(userId) + '/conversations?sid=' + encodeURIComponent(SID));
+        const data = await r.json();
+        const convs = data.conversations || [];
+        document.getElementById('conv-list-count').textContent = '(' + convs.length + ')';
+
+        if (convs.length === 0) {
+          container.innerHTML = '<div class="empty-state">No conversations</div>';
+          return;
+        }
+        container.innerHTML = '';
+        convs.forEach(c => {
+          const div = document.createElement('div');
+          div.className = 'conv-row';
+          div.onclick = () => selectConversation(c.session_id, div);
+          div.innerHTML = '<div class="conv-title">' + escHtml(c.title || 'Untitled') + '</div>'
+            + '<div class="conv-meta">' + c.message_count + ' msgs · ' + escHtml(c.created_at || '') + '</div>';
+          container.appendChild(div);
+        });
+      } catch(e) {
+        container.innerHTML = '<div class="empty-state" style="color:var(--red)">Error: ' + e.message + '</div>';
+      }
+    }
+
+    async function selectConversation(sessionId, el) {
+      if (!sessionId) return;
+      document.querySelectorAll('.conv-row').forEach(r => r.classList.remove('selected'));
+      if (el) el.classList.add('selected');
+      const container = document.getElementById('msg-list-container');
+      container.innerHTML = '<div class="empty-state">Loading...</div>';
+
+      try {
+        const r = await fetch(API + '/api/v1/admin/sessions/' + encodeURIComponent(sessionId) + '/messages?sid=' + encodeURIComponent(SID));
+        const data = await r.json();
+        const msgs = data.messages || [];
+        document.getElementById('msg-count').textContent = '(' + msgs.length + ')';
+
+        if (msgs.length === 0) {
+          container.innerHTML = '<div class="empty-state">No messages</div>';
+          return;
+        }
+        container.innerHTML = '';
+        msgs.forEach(m => {
+          const div = document.createElement('div');
+          const role = m.role || 'unknown';
+          div.className = 'msg-bubble ' + (role === 'user' ? 'user' : role === 'assistant' ? 'assistant' : 'system');
+          div.innerHTML = '<div class="msg-role">' + role + '</div>'
+            + '<div>' + escHtml(m.content || '').replace(/\n/g, '<br>') + '</div>'
+            + (m.timestamp ? '<div class="msg-time">' + m.timestamp + '</div>' : '');
+          container.appendChild(div);
+        });
+        container.scrollTop = container.scrollHeight;
+      } catch(e) {
+        container.innerHTML = '<div class="empty-state" style="color:var(--red)">Error: ' + e.message + '</div>';
+      }
+    }
+
+    function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    // ========== TICKETS TAB ==========
+    let allTickets = [];
+
+    async function loadTickets() {
+      try {
+        const r = await fetch(API + '/api/v1/admin/tickets?sid=' + encodeURIComponent(SID));
+        if (!r.ok) return;
+        const data = await r.json();
+        allTickets = data.tickets || [];
+
+        const open = allTickets.filter(t => t.status === 'open').length;
+        const resolved = allTickets.filter(t => t.status === 'resolved').length;
+        const priority = allTickets.filter(t => t.priority).length;
+        document.getElementById('tickets-open').textContent = open;
+        document.getElementById('tickets-resolved').textContent = resolved;
+        document.getElementById('tickets-priority').textContent = priority;
+        document.getElementById('tickets-total').textContent = allTickets.length;
+
+        renderTickets(allTickets);
+      } catch(e) {
+        document.getElementById('tickets-container').innerHTML = '<div style="padding:32px;text-align:center;color:var(--red);">Error: ' + e.message + '</div>';
+      }
+    }
+
+    function filterTickets(status, btn) {
+      document.querySelectorAll('.ticket-filter button').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      if (status === 'all') renderTickets(allTickets);
+      else renderTickets(allTickets.filter(t => t.status === status));
+    }
+
+    function renderTickets(tickets) {
+      const container = document.getElementById('tickets-container');
+      if (tickets.length === 0) {
+        container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);">No tickets</div>';
+        return;
+      }
+      container.innerHTML = '';
+      tickets.forEach(t => {
+        const card = document.createElement('div');
+        card.className = 'ticket-card' + (t.priority ? ' priority' : '');
+        const statusClass = t.status === 'open' ? 'open' : 'resolved';
+        const ago = timeAgo(t.created_at);
+        card.innerHTML = '<div class="ticket-header">'
+          + '<span class="ticket-id">' + escHtml(t.ticket_id) + (t.priority ? ' \uD83D\uDD34' : '') + '</span>'
+          + '<span class="ticket-status ' + statusClass + '">' + t.status.toUpperCase() + '</span>'
+          + '</div>'
+          + '<div class="ticket-question">' + escHtml(t.question) + '</div>'
+          + '<div class="ticket-meta">'
+          + 'User: ' + escHtml(t.user_email || t.user_id || 'anonymous') + ' · '
+          + 'Channel: ' + escHtml(t.notify_channel) + ' · '
+          + 'SLA: ' + escHtml(t.sla) + ' · '
+          + ago
+          + '</div>';
+        if (t.status === 'resolved' && t.response) {
+          card.innerHTML += '<div style="margin-top:10px;padding:10px;background:rgba(34,197,94,0.08);border-radius:8px;font-size:12px;border:1px solid rgba(34,197,94,0.2);">'
+            + '<strong style="color:var(--green);">Response:</strong> ' + escHtml(t.response) + '</div>';
+        }
+        if (t.status === 'open') {
+          const respondDiv = document.createElement('div');
+          respondDiv.className = 'ticket-respond';
+          respondDiv.innerHTML = '<textarea rows="2" placeholder="Type your response..." id="resp-' + t.ticket_id + '"></textarea>'
+            + '<button onclick="respondTicket(\'' + t.ticket_id + '\')">Send Response</button>';
+          card.appendChild(respondDiv);
+        }
+        container.appendChild(card);
+      });
+    }
+
+    async function respondTicket(ticketId) {
+      const textarea = document.getElementById('resp-' + ticketId);
+      const response = textarea ? textarea.value.trim() : '';
+      if (!response) return;
+      try {
+        const r = await fetch(API + '/api/v1/admin/tickets/' + ticketId + '/respond', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sid: SID, response: response }),
+        });
+        const d = await r.json();
+        if (d.status === 'resolved') {
+          loadTickets();
+        } else {
+          alert(d.error || 'Error responding');
+        }
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    function timeAgo(iso) {
+      if (!iso) return '';
+      const diff = Date.now() - new Date(iso).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'min ago';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + 'h ago';
+      return Math.floor(hrs / 24) + 'd ago';
+    }
+
+    // Estimate costs from session count
+    function estimateCosts() {
+      document.getElementById('stat-cost').textContent = '~$11';
+      document.getElementById('cost-aws').textContent = '~$2';
+      document.getElementById('cost-openai').textContent = '~$5';
+    }
+
+    // Load API keys
+    async function loadKeys() {
+      const list = document.getElementById('keys-list');
+      list.innerHTML = '<div style="color:var(--muted);padding:16px;text-align:center">Loading...</div>';
+      try {
+        const r = await fetch(API + '/api/v1/admin/keys?sid=' + encodeURIComponent(SID));
+        if (!r.ok) { list.innerHTML = '<div style="color:var(--red);padding:16px">Failed to load</div>'; return; }
+        const data = await r.json();
+        list.innerHTML = '';
+        (data.keys || []).forEach(k => {
+          const provider = k.name.replace(/_API_KEY$/, '').replace(/_/g, ' ');
+          const dot = k.is_set ? 'green' : 'red';
+          const div = document.createElement('div');
+          div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px';
+          div.innerHTML = '<div style="display:flex;align-items:center;gap:10px">'
+            + '<span class="status-dot ' + dot + '"></span>'
+            + '<span style="font-weight:600;font-size:13px">' + escHtml(provider) + '</span>'
+            + '<span id="key-val-' + k.name + '" style="font-family:monospace;font-size:12px;color:var(--muted)">' + escHtml(k.masked_key || '—') + '</span>'
+            + '</div>'
+            + '<button onclick="editKey(\'' + k.name + '\')" style="padding:4px 12px;font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;cursor:pointer">Edit</button>';
+          list.appendChild(div);
+        });
+      } catch(e) {
+        list.innerHTML = '<div style="color:var(--red);padding:16px">Error: ' + escHtml(e.message) + '</div>';
+      }
+    }
+
+    function editKey(name) {
+      const val = document.getElementById('key-val-' + name);
+      if (!val || val.querySelector('input')) return;
+      const row = val.closest('div[style*="flex"]');
+      const btn = row.querySelector('button');
+      val.innerHTML = '<input type="password" id="key-input-' + name + '" placeholder="新しいキーを入力..." '
+        + 'style="width:220px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:12px;font-family:monospace">';
+      btn.outerHTML = '<div style="display:flex;gap:6px">'
+        + '<button onclick="saveKey(\'' + name + '\')" style="padding:4px 12px;font-size:12px;background:var(--green);border:none;color:#000;border-radius:4px;cursor:pointer;font-weight:600">Save</button>'
+        + '<button onclick="loadKeys()" style="padding:4px 10px;font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:4px;cursor:pointer">Cancel</button>'
+        + '</div>';
+      document.getElementById('key-input-' + name).focus();
+    }
+
+    async function saveKey(name) {
+      const input = document.getElementById('key-input-' + name);
+      if (!input) return;
+      const body = {};
+      body[name] = input.value.trim();
+      try {
+        const r = await fetch(API + '/api/v1/admin/keys?sid=' + encodeURIComponent(SID), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (r.ok) {
+          const msg = document.getElementById('keys-message');
+          msg.style.display = 'block';
+          msg.textContent = data.message || 'Saved';
+          setTimeout(() => { msg.style.display = 'none'; }, 4000);
+          loadKeys();
+        } else {
+          alert(data.error || 'Error');
+        }
+      } catch(e) { alert(e.message); }
+    }
+
+    function refreshAll() {
+      checkHealth();
+      loadAdminStats();
+      loadSessions();
+      loadUsers();
+      loadTickets();
+      loadKeys();
+      estimateCosts();
+    }
+
+    // Keep sid in admin nav link
+    document.getElementById('nav-admin').href = '/admin?sid=' + encodeURIComponent(SID);
+
+    // Init
+    refreshAll();
+  </script>
+</body>
+</html>

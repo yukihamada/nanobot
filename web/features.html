@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChatWeb AI の機能一覧 - できること・使い方 | chatweb.ai</title>
+  <meta name="description" content="ChatWeb AI (chatweb.ai) の全機能を紹介。音声で話しかけるだけで、検索・コード実行・GitHub操作・Gmail送信・カレンダー管理・画像生成・音楽生成まで29種類の機能が使えます。Web・LINE・Telegram対応。">
+  <meta name="keywords" content="ChatWeb AI,chatweb.ai,AI,機能,できること,音声アシスタント,LINE bot,Telegram bot,GitHub,Gmail,コード実行,画像生成,音楽生成">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <link rel="canonical" href="https://chatweb.ai/features">
+  <meta property="og:title" content="ChatWeb AI の機能一覧 - できること・使い方">
+  <meta property="og:description" content="音声で話しかけるだけで29種類の機能が使えるAI。検索、コード実行、GitHub、Gmail、画像生成、音楽生成など。">
+  <meta property="og:url" content="https://chatweb.ai/features">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ChatWeb AI の機能一覧 - できること・使い方">
+  <meta name="twitter:description" content="音声で話しかけるだけで29種類の機能が使えるAI。検索、コード実行、GitHub、Gmail、画像生成、音楽生成など。">
+
+  <style>
+    :root{--bg:#0a0a0a;--s:#141414;--b:#1e1e1e;--t:#e5e5e5;--m:#777;--a:#6366f1;--ah:#818cf8;--g:#22c55e;--y:#f59e0b;--r:#ef4444;--o:#f97316}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;line-height:1.6}
+
+    nav{padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);z-index:100}
+    .logo{font-size:18px;font-weight:700;text-decoration:none;color:var(--t)}.logo span{color:var(--a)}
+    .nav-links{display:flex;align-items:center;gap:16px}
+    .nav-links a{color:var(--m);text-decoration:none;font-size:14px;font-weight:500}.nav-links a:hover{color:var(--t)}
+
+    .hero{max-width:900px;margin:0 auto;padding:60px 24px 48px;text-align:center}
+    .hero h1{font-size:clamp(32px,5vw,48px);font-weight:800;letter-spacing:-1px;margin-bottom:16px;line-height:1.2}
+    .hero h1 .highlight{color:var(--a)}
+    .hero .subtitle{font-size:18px;color:var(--m);margin-bottom:32px}
+    .hero .cta{display:inline-flex;gap:12px;flex-wrap:wrap;justify-content:center}
+    .btn{padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;display:inline-block;transition:all .2s}
+    .btn-primary{background:var(--a);color:#fff}.btn-primary:hover{background:var(--ah)}
+    .btn-secondary{background:var(--s);color:var(--t);border:1px solid var(--b)}.btn-secondary:hover{background:var(--b)}
+
+    .stats{max-width:800px;margin:0 auto 60px;padding:0 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:24px}
+    .stat{text-align:center;padding:20px;background:var(--s);border-radius:12px;border:1px solid var(--b)}
+    .stat .num{font-size:36px;font-weight:800;color:var(--a);display:block;margin-bottom:4px}
+    .stat .label{font-size:13px;color:var(--m)}
+
+    .main{max-width:1200px;margin:0 auto;padding:0 24px 80px}
+
+    .section{margin-bottom:80px}
+    .section-header{text-align:center;margin-bottom:48px}
+    .section-header h2{font-size:32px;font-weight:800;margin-bottom:12px}
+    .section-header p{color:var(--m);font-size:16px;max-width:600px;margin:0 auto}
+
+    .features-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:24px;margin-bottom:48px}
+    .feature-card{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:24px;transition:all .3s}
+    .feature-card:hover{border-color:var(--a);transform:translateY(-2px)}
+    .feature-icon{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:16px}
+    .feature-card.basic .feature-icon{background:linear-gradient(135deg,#6366f1,#818cf8)}
+    .feature-card.dev .feature-icon{background:linear-gradient(135deg,#22c55e,#4ade80)}
+    .feature-card.integration .feature-icon{background:linear-gradient(135deg,#f59e0b,#fbbf24)}
+    .feature-card.creative .feature-icon{background:linear-gradient(135deg,#ec4899,#f472b6)}
+    .feature-card h3{font-size:18px;font-weight:700;margin-bottom:8px}
+    .feature-card p{font-size:14px;color:var(--m);line-height:1.6;margin-bottom:12px}
+    .feature-card .tag{display:inline-block;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;margin-right:6px;margin-top:6px}
+    .tag.free{background:var(--g);color:#000}
+    .tag.pro{background:var(--a);color:#fff}
+    .tag.voice{background:var(--o);color:#fff}
+
+    .comparison-link{text-align:center;padding:40px 24px;background:linear-gradient(135deg,var(--s),var(--b));border-radius:16px;margin-bottom:60px}
+    .comparison-link h3{font-size:24px;font-weight:700;margin-bottom:12px}
+    .comparison-link p{color:var(--m);margin-bottom:24px;font-size:15px}
+
+    .channels{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-top:40px}
+    .channel{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:20px;text-align:center}
+    .channel .icon{font-size:32px;margin-bottom:8px}
+    .channel .name{font-weight:600;font-size:14px;margin-bottom:4px}
+    .channel .desc{font-size:12px;color:var(--m)}
+
+    footer{border-top:1px solid var(--b);padding:32px 24px;text-align:center;color:var(--m);font-size:13px}
+    footer a{color:var(--a);text-decoration:none}
+
+    @media(max-width:768px){
+      .features-grid{grid-template-columns:1fr}
+      .stats{grid-template-columns:repeat(2,1fr)}
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo">chatweb<span>.ai</span></a>
+    <div class="nav-links">
+      <a href="/features" style="color:var(--a)">機能</a>
+      <a href="/pricing">料金</a>
+      <a href="/comparison">比較</a>
+      <a href="/docs">ドキュメント</a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <h1><span class="highlight">ChatWeb AI</span> の<br>全機能</h1>
+    <p class="subtitle">音声で話しかけるだけで、29種類の強力な機能が使えます。<br>検索からコード実行、GitHub操作、画像生成まで。</p>
+    <div class="cta">
+      <a href="/" class="btn btn-primary">今すぐ無料で始める</a>
+      <a href="/comparison" class="btn btn-secondary">他のAIと比較</a>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <span class="num">29+</span>
+      <span class="label">搭載機能</span>
+    </div>
+    <div class="stat">
+      <span class="num">5</span>
+      <span class="label">AIモデル</span>
+    </div>
+    <div class="stat">
+      <span class="num">3</span>
+      <span class="label">対応チャネル</span>
+    </div>
+    <div class="stat">
+      <span class="num">100%</span>
+      <span class="label">音声対応</span>
+    </div>
+  </div>
+
+  <main class="main">
+    <!-- 基本機能 -->
+    <section class="section">
+      <div class="section-header">
+        <h2>🔍 基本機能</h2>
+        <p>日常的に使える基本的な機能。すべて無料プランで利用可能。</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card basic">
+          <div class="feature-icon">🔍</div>
+          <h3>Web検索</h3>
+          <p>Brave Search APIで最新情報を即座に検索。ニュース、技術情報、トレンドまで。</p>
+          <span class="tag free">無料</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">🌐</div>
+          <h3>Webページ取得</h3>
+          <p>指定したURLのコンテンツを取得して要約。記事の内容を素早く把握。</p>
+          <span class="tag free">無料</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">🧮</div>
+          <h3>計算機</h3>
+          <p>複雑な数式も音声で伝えるだけ。数学、物理、統計計算に対応。</p>
+          <span class="tag free">無料</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">🌤️</div>
+          <h3>天気予報</h3>
+          <p>世界中の天気情報をリアルタイムで取得。旅行や出張の予定に。</p>
+          <span class="tag free">無料</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">🌍</div>
+          <h3>翻訳</h3>
+          <p>100以上の言語に対応。自然な翻訳で国際的なコミュニケーションをサポート。</p>
+          <span class="tag free">無料</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">📚</div>
+          <h3>Wikipedia検索</h3>
+          <p>知識の宝庫Wikipediaから正確な情報を即座に取得。</p>
+          <span class="tag free">無料</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">📅</div>
+          <h3>日時・タイムゾーン</h3>
+          <p>世界中のタイムゾーンを考慮した日時計算。会議スケジュールに最適。</p>
+          <span class="tag free">無料</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">📰</div>
+          <h3>ニュース検索</h3>
+          <p>最新のニュース記事を検索。キーワード、トピック、地域で絞り込み可能。</p>
+          <span class="tag free">無料</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">🎓</div>
+          <h3>論文検索 (arXiv)</h3>
+          <p>最新の学術論文をarXivから検索。研究者・学生に最適。</p>
+          <span class="tag free">無料</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">📺</div>
+          <h3>YouTube文字起こし</h3>
+          <p>YouTube動画の字幕を取得して要約。長い動画も素早く内容把握。</p>
+          <span class="tag pro">Pro</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 開発者向け機能 -->
+    <section class="section">
+      <div class="section-header">
+        <h2>💻 開発者向け機能</h2>
+        <p>コーディング、GitHub操作、デプロイまで。音声だけで開発作業が完結。</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card dev">
+          <div class="feature-icon">⚡</div>
+          <h3>コード実行</h3>
+          <p>Python、Node.js、シェルスクリプトを実行。サンドボックス環境で安全に動作。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card dev">
+          <div class="feature-icon">📁</div>
+          <h3>ファイル操作</h3>
+          <p>サンドボックス内でファイルの読み書き、一覧表示。データ処理に便利。</p>
+          <span class="tag pro">Pro</span>
+        </div>
+
+        <div class="feature-card dev">
+          <div class="feature-icon">🐙</div>
+          <h3>GitHub - ファイル読み取り</h3>
+          <p>リポジトリのファイルを読み込んでコードレビュー。音声で指示するだけ。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card dev">
+          <div class="feature-icon">✏️</div>
+          <h3>GitHub - ファイル編集</h3>
+          <p>GitHubのファイルを直接編集してコミット。音声でコード修正が可能。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card dev">
+          <div class="feature-icon">🔀</div>
+          <h3>GitHub - PR作成</h3>
+          <p>プルリクエストを自動作成。レビュー依頼まで一気通貫。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card dev">
+          <div class="feature-icon">🚀</div>
+          <h3>Webデプロイ</h3>
+          <p>静的サイトを即座にデプロイ。プロトタイプの公開が秒単位で完了。</p>
+          <span class="tag pro">Pro</span>
+        </div>
+
+        <div class="feature-card dev">
+          <div class="feature-icon">🔗</div>
+          <h3>Webhook連携</h3>
+          <p>任意のWebhookをトリガー。CI/CD、自動化フローと連携可能。</p>
+          <span class="tag pro">Pro</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 統合サービス -->
+    <section class="section">
+      <div class="section-header">
+        <h2>🔌 統合サービス</h2>
+        <p>Gmail、カレンダー、Slack、Notionなど、日常的に使うサービスと連携。</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card integration">
+          <div class="feature-icon">✉️</div>
+          <h3>Gmail送信</h3>
+          <p>音声でメールを作成して送信。To、CC、件名、本文をすべて音声で指定。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card integration">
+          <div class="feature-icon">📆</div>
+          <h3>Googleカレンダー</h3>
+          <p>予定の確認、追加、変更を音声で。ダブルブッキングを自動チェック。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card integration">
+          <div class="feature-icon">💬</div>
+          <h3>Slack連携</h3>
+          <p>Slackチャネルにメッセージを投稿。チーム通知を音声で送信。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card integration">
+          <div class="feature-icon">📝</div>
+          <h3>Notion連携</h3>
+          <p>Notionページの作成・編集。議事録やメモを音声で自動記録。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card integration">
+          <div class="feature-icon">💎</div>
+          <h3>Discord連携</h3>
+          <p>Discordサーバーにメッセージを送信。コミュニティへの自動通知に。</p>
+          <span class="tag pro">Pro</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- クリエイティブ機能 -->
+    <section class="section">
+      <div class="section-header">
+        <h2>🎨 クリエイティブ機能</h2>
+        <p>画像生成、音楽生成、動画生成。AIがクリエイティブ作業をサポート。</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card creative">
+          <div class="feature-icon">🎨</div>
+          <h3>画像生成</h3>
+          <p>テキストから高品質な画像を生成。イラスト、写真、アート、ロゴまで。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card creative">
+          <div class="feature-icon">🎵</div>
+          <h3>音楽生成</h3>
+          <p>プロンプトから音楽を自動生成。BGM、効果音、ジングルの制作に。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card creative">
+          <div class="feature-icon">🎬</div>
+          <h3>動画生成</h3>
+          <p>テキストや画像から動画を生成。プロモーション、説明動画の制作に。</p>
+          <span class="tag pro">Pro</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card creative">
+          <div class="feature-icon">📱</div>
+          <h3>QRコード生成</h3>
+          <p>URLやテキストからQRコードを即座に生成。イベント、名刺、チラシに。</p>
+          <span class="tag free">無料</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 高度な機能 -->
+    <section class="section">
+      <div class="section-header">
+        <h2>🚀 高度な機能</h2>
+        <p>音声通話、マルチモデル探索など、次世代のAI体験。</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card basic">
+          <div class="feature-icon">📞</div>
+          <h3>音声通話（実験的）</h3>
+          <p>AIと実際に電話で会話。リアルタイムの音声対話が可能。</p>
+          <span class="tag pro">Pro</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">🔬</div>
+          <h3>マルチモデル探索</h3>
+          <p>5つのAIモデルが同時に回答。最適な答えを比較して選択。</p>
+          <span class="tag free">無料</span>
+          <span class="tag voice">音声OK</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">🧠</div>
+          <h3>長期記憶</h3>
+          <p>過去の会話を記憶。あなたの好みや文脈を理解して対応。</p>
+          <span class="tag free">無料</span>
+        </div>
+
+        <div class="feature-card basic">
+          <div class="feature-icon">🔗</div>
+          <h3>会話共有</h3>
+          <p>会話を共有リンクで公開。チームでの知識共有に最適。</p>
+          <span class="tag free">無料</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 対応チャネル -->
+    <section class="section">
+      <div class="section-header">
+        <h2>📱 対応チャネル</h2>
+        <p>Web、LINE、Telegramで同じアカウント・履歴を共有。<br>どこからでもアクセス可能。</p>
+      </div>
+      <div class="channels">
+        <div class="channel">
+          <div class="icon">🌐</div>
+          <div class="name">Web版</div>
+          <div class="desc">フル機能・音声対応</div>
+        </div>
+        <div class="channel">
+          <div class="icon">💚</div>
+          <div class="name">LINE</div>
+          <div class="desc">@619jcqqh</div>
+        </div>
+        <div class="channel">
+          <div class="icon">✈️</div>
+          <div class="name">Telegram</div>
+          <div class="desc">@chatweb_ai_bot</div>
+        </div>
+        <div class="channel">
+          <div class="icon">📘</div>
+          <div class="name">Facebook</div>
+          <div class="desc">Messenger対応</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 比較リンク -->
+    <div class="comparison-link">
+      <h3>他のAIと何が違う？</h3>
+      <p>ChatGPT、Claude Code、OpenClaw、Picoclawとの詳細比較</p>
+      <a href="/comparison" class="btn btn-primary">比較表を見る →</a>
+    </div>
+
+    <!-- CTA -->
+    <section class="section" style="text-align:center;padding:60px 0">
+      <h2 style="font-size:36px;margin-bottom:24px">今すぐ無料で始める</h2>
+      <p style="color:var(--m);font-size:16px;margin-bottom:32px">クレジットカード不要。100クレジットを無料で提供。</p>
+      <div style="display:inline-flex;gap:12px;flex-wrap:wrap;justify-content:center">
+        <a href="/" class="btn btn-primary" style="font-size:16px;padding:16px 32px">Webで始める</a>
+        <a href="https://line.me/R/oaMessage/@619jcqqh/" class="btn btn-secondary" style="font-size:16px;padding:16px 32px">LINEで始める</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 chatweb.ai | <a href="/pricing">料金</a> | <a href="/docs">ドキュメント</a> | <a href="/terms">利用規約</a> | <a href="/contact">お問い合わせ</a></p>
+  </footer>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ChatWeb AI",
+    "url": "https://chatweb.ai",
+    "description": "音声で話しかけるだけで29種類の機能が使えるAI。検索、コード実行、GitHub操作、Gmail送信、画像生成、音楽生成など。Web・LINE・Telegram対応。",
+    "applicationCategory": "ProductivityApplication",
+    "operatingSystem": "Web, iOS, Android",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "JPY"
+    },
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "4.8",
+      "ratingCount": "127"
+    }
+  }
+  </script>
+</body>
+</html>

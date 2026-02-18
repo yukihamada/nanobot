@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+README.md
+*.md
+
+# Test files
+test_*.wav
+test-local.sh
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+venv/
+env/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

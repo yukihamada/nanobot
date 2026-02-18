@@ -1,0 +1,2253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>teai.io - AI Agent for Developers</title>
+  <meta name="description" content="Ship faster with AI. Code, search, automate — from your terminal or browser.">
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%2310b981'/%3E%3Ctext x='90' y='115' text-anchor='middle' font-size='80' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <!-- OGP -->
+  <meta property="og:title" content="teai.io - AI Agent for Developers">
+  <meta property="og:description" content="Ship faster with AI. Code, search, automate — from your terminal or browser.">
+  <meta property="og:image" content="https://teai.io/og.svg">
+  <meta property="og:url" content="https://teai.io">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="teai.io">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@teai_io">
+  <meta name="twitter:title" content="teai.io - AI Agent for Developers">
+  <meta name="twitter:description" content="Ship faster with AI. Code, search, automate — from your terminal or browser.">
+  <meta name="twitter:image" content="https://teai.io/og.svg">
+  <!-- Canonical & PWA -->
+  <link rel="canonical" href="https://teai.io/">
+  <meta name="theme-color" content="#10b981">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="teai.io">
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "teai.io",
+    "url": "https://teai.io",
+    "description": "AI Agent for Developers. Multi-model AI with MCP tools, REST API, and code generation.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Web",
+    "offers": [
+      {"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD"},
+      {"@type": "Offer", "name": "Developer", "price": "19", "priceCurrency": "USD"},
+      {"@type": "Offer", "name": "Team", "price": "49", "priceCurrency": "USD"}
+    ],
+    "featureList": "Code Generation, Web Search, MCP Tools, REST API, Multi-Model, 14+ Channels",
+    "inLanguage": ["en", "ja"]
+  }
+  </script>
+  <!-- Preconnect -->
+  <link rel="preconnect" href="https://teai.io">
+  <link rel="dns-prefetch" href="https://teai.io">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #09090b;
+      --surface: #18181b;
+      --surface2: #1e1e24;
+      --border: #27272a;
+      --text: #fafafa;
+      --muted: #71717a;
+      --accent: #10b981;
+      --accent-hover: #34d399;
+      --accent-glow: rgba(16,185,129,0.25);
+      --green: #22c55e;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* ===== Animations ===== */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px var(--accent-glow); }
+      50% { box-shadow: 0 0 40px var(--accent-glow), 0 0 60px rgba(16,185,129,0.1); }
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes countUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes typing {
+      from { width: 0; }
+      to { width: 100%; }
+    }
+    .fade-up { animation: fadeUp 0.6s ease-out both; }
+    .fade-up-d1 { animation-delay: 0.1s; }
+    .fade-up-d2 { animation-delay: 0.2s; }
+    .fade-up-d3 { animation-delay: 0.3s; }
+    .fade-up-d4 { animation-delay: 0.4s; }
+    .fade-up-d5 { animation-delay: 0.5s; }
+
+    .scroll-fade-up {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+    }
+    .scroll-fade-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ===== Nav ===== */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 14px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(9,9,11,0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      animation: fadeIn 0.5s ease-out;
+    }
+    .logo {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      cursor: pointer;
+    }
+    .logo .te { color: var(--accent); }
+    .logo .rest { color: var(--text); }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .nav-links a {
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .lang-sw {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+    }
+    .lang-sw button {
+      background: none;
+      border: none;
+      color: var(--muted);
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .lang-sw button.on { background: var(--accent); color: #fff; }
+    .nav-login {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-family: inherit;
+    }
+    .nav-login:hover { background: var(--accent-hover); }
+    .nav-hamburger {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    #user-menu { display: none; position: relative; }
+    #user-menu .user-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: inherit;
+    }
+    #user-menu .user-avatar {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .user-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px;
+      min-width: 160px;
+      z-index: 200;
+    }
+    .user-dropdown.show { display: block; }
+    .user-dropdown button {
+      display: block;
+      width: 100%;
+      background: none;
+      border: none;
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+      border-radius: 6px;
+      font-family: inherit;
+    }
+    .user-dropdown button:hover { background: var(--surface2); }
+    #credits-display {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 4px 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+    }
+
+    /* ===== Mobile menu ===== */
+    .mobile-menu {
+      display: none;
+      position: fixed;
+      top: 52px;
+      left: 0; right: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      z-index: 99;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .mobile-menu.show { display: flex; }
+    .mobile-menu a {
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 500;
+      padding: 8px 0;
+    }
+
+    /* ===== Main ===== */
+    .main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ===== Hero ===== */
+    .hero {
+      text-align: center;
+      padding: 80px 0 40px;
+      position: relative;
+    }
+    .hero-badge {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.2);
+      margin-bottom: 24px;
+      letter-spacing: 0.5px;
+    }
+    .hero h1 {
+      font-size: 56px;
+      font-weight: 900;
+      letter-spacing: -2px;
+      margin-bottom: 16px;
+      line-height: 1.1;
+      color: var(--text);
+    }
+    .hero-gradient {
+      display: block;
+      font-size: 56px;
+      font-weight: 900;
+      letter-spacing: -2px;
+      line-height: 1.1;
+      background: linear-gradient(135deg, var(--accent) 0%, #34d399 30%, #6ee7b7 50%, #34d399 70%, var(--accent) 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shimmer 3s ease-in-out infinite;
+      margin-bottom: 20px;
+    }
+    .hero-subtitle {
+      color: var(--muted);
+      font-size: 18px;
+      margin-bottom: 32px;
+      line-height: 1.6;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hero-cta {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 32px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 20px var(--accent-glow);
+      font-family: inherit;
+      text-decoration: none;
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 4px 30px var(--accent-glow);
+      transform: translateY(-1px);
+    }
+    .btn-outline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 32px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      text-decoration: none;
+    }
+    .btn-outline:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .trust-indicators {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .trust-indicators span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .trust-indicators .check {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* ===== Demo Buttons ===== */
+    .demo-section {
+      padding: 32px 0 48px;
+    }
+    .demo-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+    .demo-pill {
+      padding: 10px 20px;
+      border-radius: 24px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .demo-pill:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(16,185,129,0.05);
+    }
+    .demo-pill.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(16,185,129,0.1);
+    }
+
+    /* ===== Stats Bar ===== */
+    .stats-bar {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      flex-wrap: wrap;
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 60px;
+    }
+    .stat-item {
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: -1px;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+      font-weight: 500;
+    }
+
+    /* ===== Chat Widget ===== */
+    .chat-section {
+      margin-bottom: 80px;
+    }
+    .chat-section-title {
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+    .chat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      position: relative;
+    }
+    .chat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .chat-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .chat-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .chat-dot.red { background: #ef4444; }
+    .chat-dot.yellow { background: #eab308; }
+    .chat-dot.green { background: #22c55e; }
+    .chat-header-title {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 500;
+      margin-left: 8px;
+    }
+    .chat-model-select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .chat-messages {
+      height: 340px;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      scroll-behavior: smooth;
+    }
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-track { background: transparent; }
+    .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .chat-msg {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.6;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .chat-msg.user {
+      background: var(--accent);
+      color: #fff;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .chat-msg.bot {
+      background: var(--surface2);
+      color: var(--text);
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .chat-msg.bot .agent-badge {
+      display: inline-block;
+      background: rgba(16,185,129,0.15);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 6px;
+    }
+    .chat-msg.bot .tool-badges {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+    .chat-msg.bot .tool-badge {
+      background: var(--surface);
+      color: var(--muted);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      border: 1px solid var(--border);
+    }
+    .chat-welcome {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      padding: 40px 20px;
+    }
+    .chat-welcome .tei-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+      margin: 0 auto 12px;
+    }
+    .typewriter-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: var(--accent);
+      margin-left: 2px;
+      animation: blink 0.7s infinite;
+      vertical-align: text-bottom;
+    }
+    .chat-input-area {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .chat-agent-select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .chat-textarea {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      min-height: 42px;
+      max-height: 120px;
+      line-height: 1.5;
+      transition: border-color 0.2s;
+    }
+    .chat-textarea:focus { border-color: var(--accent); }
+    .chat-textarea::placeholder { color: var(--muted); }
+    .chat-send {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+      font-size: 18px;
+    }
+    .chat-send:hover { background: var(--accent-hover); }
+    .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+    .chat-login-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(9,9,11,0.85);
+      backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      z-index: 10;
+      border-radius: 16px;
+    }
+    .chat-login-overlay.hidden { display: none; }
+    .chat-login-overlay p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* ===== Shimmer / Loading ===== */
+    .shimmer-bar {
+      height: 3px;
+      background: linear-gradient(90deg, var(--surface2), var(--accent), var(--surface2));
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      border-radius: 2px;
+      margin-top: 8px;
+    }
+    .thinking-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .thinking-icon { font-size: 14px; }
+    .thinking-text { transition: opacity 0.15s; }
+    .thinking-elapsed { font-size: 11px; color: var(--muted); opacity: 0.7; }
+
+    /* ===== Features Grid ===== */
+    .features-section {
+      padding: 80px 0 60px;
+    }
+    .section-label {
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 12px;
+    }
+    .section-title {
+      text-align: center;
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 48px;
+      color: var(--text);
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px;
+      transition: all 0.3s ease;
+    }
+    .feature-card:hover {
+      border-color: rgba(16,185,129,0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    }
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: rgba(16,185,129,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-bottom: 16px;
+    }
+    .feature-card h3 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    .feature-card p {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ===== API Example ===== */
+    .api-section {
+      padding: 60px 0 80px;
+    }
+    .api-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .api-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+    .api-card-label {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .api-card-label .method {
+      background: var(--accent);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .copy-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .copy-btn.copied { border-color: var(--green); color: var(--green); }
+    .api-code {
+      padding: 20px;
+      overflow-x: auto;
+    }
+    .api-code pre {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #d4d4d8;
+      white-space: pre;
+    }
+    .api-code .str { color: #6ee7b7; }
+    .api-code .flag { color: #fbbf24; }
+    .api-code .cmd { color: #93c5fd; }
+    .api-code .key { color: #c084fc; }
+
+    /* ===== Pricing CTA ===== */
+    .pricing-cta {
+      text-align: center;
+      padding: 80px 0;
+      border-top: 1px solid var(--border);
+    }
+    .pricing-cta h2 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+    .pricing-cta .subtitle {
+      color: var(--muted);
+      font-size: 16px;
+      margin-bottom: 32px;
+    }
+    .pricing-cta-btns {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ===== Footer ===== */
+    footer {
+      text-align: center;
+      padding: 40px 24px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    footer .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    footer .footer-links a {
+      color: var(--muted);
+      transition: color 0.2s;
+    }
+    footer .footer-links a:hover { color: var(--text); }
+    footer .footer-copy {
+      margin-bottom: 8px;
+    }
+    footer .footer-family {
+      font-size: 12px;
+      color: var(--muted);
+      opacity: 0.7;
+    }
+    footer .footer-family a { color: var(--accent); }
+    footer .footer-family a:hover { text-decoration: underline; }
+
+    /* ===== Auth Modal ===== */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      width: 90%;
+      max-width: 400px;
+    }
+    .modal-box h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .modal-box .modal-desc {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .modal-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 12px;
+      transition: border-color 0.2s;
+    }
+    .modal-input:focus { border-color: var(--accent); }
+    .modal-submit {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      transition: background 0.2s;
+    }
+    .modal-submit.email-btn {
+      background: var(--accent);
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    .modal-submit.email-btn:hover { background: var(--accent-hover); }
+    .modal-divider {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      margin: 16px 0;
+      position: relative;
+    }
+    .modal-divider::before, .modal-divider::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 40%;
+      height: 1px;
+      background: var(--border);
+    }
+    .modal-divider::before { left: 0; }
+    .modal-divider::after { right: 0; }
+    .modal-submit.google-btn {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .modal-submit.google-btn:hover { border-color: var(--accent); }
+    .auth-error {
+      background: rgba(239,68,68,0.1);
+      color: #ef4444;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-hamburger { display: block; }
+      .hero { padding: 48px 0 32px; }
+      .hero h1, .hero-gradient { font-size: 36px; }
+      .hero-subtitle { font-size: 15px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .stats-bar { gap: 24px; }
+      .stat-value { font-size: 22px; }
+      .demo-pill { font-size: 12px; padding: 8px 16px; }
+      .section-title { font-size: 28px; }
+      .pricing-cta h2 { font-size: 28px; }
+      .chat-messages { height: 280px; }
+      .api-code pre { font-size: 11px; }
+    }
+    @media (min-width: 769px) {
+      .mobile-menu { display: none !important; }
+    }
+
+    /* ===== App Mode (Sidebar) ===== */
+    .app-sidebar {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: 280px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      z-index: 200;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .app-sidebar.open { transform: translateX(0); }
+    .app-sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .app-sidebar-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 20px;
+      cursor: pointer;
+    }
+    .app-sidebar-new {
+      width: 100%;
+      padding: 10px;
+      margin: 12px 16px;
+      width: calc(100% - 32px);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    .app-sidebar-new:hover { border-color: var(--accent); }
+    .app-conv-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .app-conv-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .app-conv-item:hover { background: var(--surface2); color: var(--text); }
+    .app-conv-item.active { background: rgba(16,185,129,0.1); color: var(--accent); }
+    .app-sidebar-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+    }
+    .app-sidebar-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .app-sidebar-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .app-sidebar-name {
+      font-size: 13px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .app-sidebar-credits {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .app-sidebar-toggle {
+      display: none;
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 201;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    body.app-mode .app-sidebar-toggle { display: flex; }
+
+    /* ===== Backdrop overlay for sidebar ===== */
+    .sidebar-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 199;
+    }
+    .sidebar-backdrop.show { display: block; }
+  </style>
+</head>
+<body>
+  <!-- App Sidebar -->
+  <button class="app-sidebar-toggle" id="app-sidebar-toggle" onclick="toggleAppSidebar()" style="display:none;">&#9776;</button>
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeAppSidebar()"></div>
+  <aside class="app-sidebar" id="app-sidebar">
+    <div class="app-sidebar-header">
+      <div class="logo"><span class="te">te</span><span class="rest">ai.io</span></div>
+      <button class="app-sidebar-close" onclick="closeAppSidebar()">&#10005;</button>
+    </div>
+    <button class="app-sidebar-new" onclick="newConversation()">+ <span id="app-new-conv-text">New chat</span></button>
+    <div class="app-conv-list" id="app-conv-list"></div>
+    <div class="app-sidebar-footer">
+      <div class="app-sidebar-user">
+        <div class="app-sidebar-avatar" id="app-user-avatar">T</div>
+        <div>
+          <div class="app-sidebar-name" id="app-user-name">User</div>
+          <div class="app-sidebar-credits" id="app-user-credits"></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Nav -->
+  <nav>
+    <div class="logo" onclick="window.scrollTo({top:0,behavior:'smooth'})"><span class="te">te</span><span class="rest">ai.io</span></div>
+    <div class="nav-links" id="nav-links">
+      <a href="#features" data-i18n="nav_features">Features</a>
+      <a href="/pricing" data-i18n="nav_pricing">Pricing</a>
+      <a href="/docs" data-i18n="nav_docs">Docs</a>
+      <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+    </div>
+    <div class="nav-right">
+      <div class="lang-sw">
+        <button id="lang-en" class="on" onclick="setLang('en')">EN</button>
+        <button id="lang-ja" onclick="setLang('ja')">JA</button>
+      </div>
+      <button class="nav-login" id="login-btn" onclick="openAuthModal()" data-i18n="nav_login">Login</button>
+      <div id="user-menu">
+        <button class="user-btn" onclick="toggleUserDropdown()">
+          <span class="user-avatar" id="user-avatar">U</span>
+          <span id="user-display-name">User</span>
+        </button>
+        <div class="user-dropdown" id="user-dropdown">
+          <div id="credits-display"></div>
+          <button onclick="openApiKeysModal()" data-i18n="menu_apikeys">API Keys</button>
+          <button onclick="logout()" data-i18n="menu_logout">Logout</button>
+        </div>
+      </div>
+      <button class="nav-hamburger" id="hamburger-btn" onclick="toggleMobileMenu()">&#9776;</button>
+    </div>
+  </nav>
+  <div class="mobile-menu" id="mobile-menu">
+    <a href="#features" onclick="closeMobileMenu()" data-i18n="nav_features">Features</a>
+    <a href="/pricing" data-i18n="nav_pricing">Pricing</a>
+    <a href="/docs" data-i18n="nav_docs">Docs</a>
+    <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+  </div>
+
+  <div class="main">
+    <!-- Hero -->
+    <section class="hero fade-up">
+      <div class="hero-badge" data-i18n="hero_badge">Built for Developers</div>
+      <h1 data-i18n="hero_title">Ship faster with AI</h1>
+      <span class="hero-gradient" data-i18n="hero_gradient">Code. Search. Automate.</span>
+      <p class="hero-subtitle" data-i18n="hero_subtitle">Multi-model AI agent with MCP tools, REST API, and 14+ channel integrations.</p>
+      <div class="hero-cta">
+        <a href="#chat" class="btn-primary" data-i18n="hero_cta_try">Try Free</a>
+        <a href="/docs" class="btn-outline" data-i18n="hero_cta_docs">View API Docs</a>
+      </div>
+      <div class="trust-indicators fade-up fade-up-d3">
+        <span><span class="check">&#10003;</span> <span data-i18n="trust_nocc">No credit card required</span></span>
+        <span><span class="check">&#10003;</span> <span data-i18n="trust_credits">1,000 free credits</span></span>
+        <span><span class="check">&#10003;</span> <span data-i18n="trust_speed">&lt; 2s response</span></span>
+      </div>
+    </section>
+
+    <!-- Demo Buttons -->
+    <section class="demo-section fade-up fade-up-d2">
+      <div class="demo-pills" id="demo-pills">
+        <button class="demo-pill" data-prompt="Write a Python FastAPI endpoint for user auth" data-i18n="demo_codegen">Code Generation</button>
+        <button class="demo-pill" data-prompt="Debug this 429 rate limit error from Stripe API" data-i18n="demo_debug">API Debugging</button>
+        <button class="demo-pill" data-prompt="Generate API docs for this Express router" data-i18n="demo_docgen">Doc Generation</button>
+        <button class="demo-pill" data-prompt="Design a PostgreSQL schema for a SaaS billing system" data-i18n="demo_dbdesign">DB Design</button>
+        <button class="demo-pill" data-prompt="Write pytest tests for this authentication module" data-i18n="demo_test">Test Writing</button>
+        <button class="demo-pill" data-prompt="Review this PR for security vulnerabilities" data-i18n="demo_review">Code Review</button>
+      </div>
+    </section>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar scroll-fade-up" id="stats-bar">
+      <div class="stat-item">
+        <div class="stat-value" data-count="5">5+</div>
+        <div class="stat-label" data-i18n="stat_models">AI Models</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">&lt;2s</div>
+        <div class="stat-label" data-i18n="stat_response">Response Time</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" data-count="10">10+</div>
+        <div class="stat-label" data-i18n="stat_tools">MCP Tools</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" data-count="14">14</div>
+        <div class="stat-label" data-i18n="stat_channels">Channels</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">REST</div>
+        <div class="stat-label">API</div>
+      </div>
+    </div>
+
+    <!-- Chat Widget -->
+    <section class="chat-section scroll-fade-up" id="chat">
+      <div class="chat-section-title" data-i18n="chat_label">Try it now</div>
+      <div class="chat-card">
+        <div class="chat-header">
+          <div class="chat-header-left">
+            <span class="chat-dot red"></span>
+            <span class="chat-dot yellow"></span>
+            <span class="chat-dot green"></span>
+            <span class="chat-header-title">teai.io</span>
+            <span id="conversation-id-badge" style="display:none;font-size:11px;background:rgba(99,102,241,0.1);color:#818cf8;padding:2px 8px;border-radius:8px;margin-left:8px;cursor:pointer;font-family:monospace;" title="Click to copy conversation ID" onclick="copyConversationId()"></span>
+          </div>
+          <select class="chat-model-select" id="model-select">
+            <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+            <option value="gpt-4o">GPT-4o</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+            <option value="deepseek-chat">DeepSeek</option>
+          </select>
+        </div>
+        <div class="chat-messages" id="messages">
+          <div class="chat-welcome" id="chat-welcome">
+            <div class="tei-avatar">T</div>
+            <div data-i18n="chat_welcome">Hi, I'm Tei. Ask me anything about code, APIs, or system design.</div>
+          </div>
+        </div>
+        <div class="chat-login-overlay" id="chat-login-overlay">
+          <p data-i18n="chat_login_prompt">Log in to start chatting</p>
+          <button class="btn-primary" onclick="openAuthModal()" data-i18n="chat_login_btn">Login to Chat</button>
+        </div>
+        <div class="chat-input-area">
+          <select class="chat-agent-select" id="agent-select">
+            <option value="auto">Auto</option>
+            <option value="coder">Coder</option>
+            <option value="researcher">Researcher</option>
+            <option value="analyst">Analyst</option>
+          </select>
+          <textarea class="chat-textarea" id="input" rows="1" placeholder="Message teai.io..." data-i18n-placeholder="chat_placeholder"></textarea>
+          <button class="chat-send" id="send-btn" onclick="send()">&#9654;</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section class="features-section" id="features">
+      <div class="section-label" data-i18n="features_label">Features</div>
+      <h2 class="section-title scroll-fade-up" data-i18n="features_title">Everything you need to build</h2>
+      <div class="features-grid">
+        <div class="feature-card scroll-fade-up">
+          <div class="feature-icon">&#9881;</div>
+          <h3 data-i18n="feat_multimodel_title">Multi-Model</h3>
+          <p data-i18n="feat_multimodel_desc">Access Claude, GPT-4o, Gemini, DeepSeek from one API. Best model auto-selected for each task.</p>
+        </div>
+        <div class="feature-card scroll-fade-up">
+          <div class="feature-icon">&#128295;</div>
+          <h3 data-i18n="feat_mcp_title">MCP Tools</h3>
+          <p data-i18n="feat_mcp_desc">Web search, file ops, browser automation, shell execution. Extend with your own tools.</p>
+        </div>
+        <div class="feature-card scroll-fade-up">
+          <div class="feature-icon">&#123;&#125;</div>
+          <h3 data-i18n="feat_api_title">REST API</h3>
+          <p data-i18n="feat_api_desc">Simple JSON API. Send a message, get a response. SSE streaming supported.</p>
+        </div>
+        <div class="feature-card scroll-fade-up">
+          <div class="feature-icon">&#60;/&#62;</div>
+          <h3 data-i18n="feat_codegen_title">Code Generation</h3>
+          <p data-i18n="feat_codegen_desc">Generate, review, debug code in any language. From quick scripts to full modules.</p>
+        </div>
+        <div class="feature-card scroll-fade-up">
+          <div class="feature-icon">&#128172;</div>
+          <h3 data-i18n="feat_channels_title">14+ Channels</h3>
+          <p data-i18n="feat_channels_desc">Web, LINE, Telegram, Discord, Slack, Teams and more. Same AI, everywhere.</p>
+        </div>
+        <div class="feature-card scroll-fade-up">
+          <div class="feature-icon">&#128451;</div>
+          <h3 data-i18n="feat_memory_title">Long-term Memory</h3>
+          <p data-i18n="feat_memory_desc">Persistent context across sessions. Your AI remembers your projects and preferences.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- API Example -->
+    <section class="api-section scroll-fade-up">
+      <div class="section-label" data-i18n="api_label">Developer Experience</div>
+      <h2 class="section-title" data-i18n="api_title">One API. Every model.</h2>
+      <div class="api-card">
+        <div class="api-card-header">
+          <div class="api-card-label">
+            <span class="method">POST</span>
+            /api/v1/chat
+          </div>
+          <button class="copy-btn" id="copy-api-btn" onclick="copyApiExample()">Copy</button>
+        </div>
+        <div class="api-code">
+          <pre id="api-code-block"><span class="cmd">curl</span> <span class="flag">-X</span> POST https://teai.io/api/v1/chat <span class="flag">\</span>
+  <span class="flag">-H</span> <span class="str">"Content-Type: application/json"</span> <span class="flag">\</span>
+  <span class="flag">-d</span> <span class="str">'{
+    <span class="key">"message"</span>: "Write a Rust function for binary search",
+    <span class="key">"session_id"</span>: "dev-123"
+  }'</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing CTA -->
+    <section class="pricing-cta scroll-fade-up">
+      <h2 data-i18n="cta_title">Start building today</h2>
+      <p class="subtitle" data-i18n="cta_subtitle">1,000 free credits. No credit card required.</p>
+      <div class="pricing-cta-btns">
+        <a href="#chat" class="btn-primary" data-i18n="cta_start">Get Started Free</a>
+        <a href="/pricing" class="btn-outline" data-i18n="cta_pricing">View Pricing</a>
+      </div>
+    </section>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-links">
+      <a href="/" data-i18n="footer_home">Home</a>
+      <a href="/pricing" data-i18n="nav_pricing">Pricing</a>
+      <a href="/docs" data-i18n="nav_docs">Docs</a>
+      <a href="/docs#api">API</a>
+      <a href="/status">Status</a>
+      <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+      <a href="/contact" data-i18n="footer_contact">Contact</a>
+    </div>
+    <div class="footer-copy">teai.io &copy; 2025-2026</div>
+    <div class="footer-family"><span data-i18n="footer_family">Part of the</span> <a href="https://chatweb.ai">ChatWeb AI</a> <span data-i18n="footer_family2">family</span></div>
+  </footer>
+
+  <!-- Auth Modal -->
+  <div class="modal-overlay" id="auth-modal" onclick="closeAuthModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <h2 data-i18n="auth_title">Welcome to teai.io</h2>
+      <p class="modal-desc" data-i18n="auth_desc">Sign in to start building with AI.</p>
+      <div class="auth-error" id="auth-error"></div>
+      <input class="modal-input" id="login-email" type="email" placeholder="you@example.com" onkeydown="if(event.key==='Enter')emailAuth()">
+      <button class="modal-submit email-btn" onclick="emailAuth()" data-i18n="auth_continue">Continue with Email</button>
+      <div class="modal-divider">or</div>
+      <button class="modal-submit google-btn" onclick="googleLogin()" data-i18n="auth_google">Continue with Google</button>
+    </div>
+  </div>
+
+  <!-- API Keys Modal -->
+  <div class="modal-overlay" id="apikey-modal" onclick="closeApiKeysModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <h2 id="apikey-modal-title">API Keys</h2>
+      <p class="modal-desc" id="apikey-modal-desc">Use API keys to access teai.io from your applications.</p>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <input class="modal-input" id="apikey-name-input" style="margin-bottom:0;" placeholder="Key name (e.g. my-app)">
+        <button class="btn-primary" style="padding:10px 20px;font-size:13px;white-space:nowrap;" id="apikey-create-btn" onclick="createApiKey()">Create</button>
+      </div>
+      <div id="apikey-new-key" style="display:none;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:12px;margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:4px;" id="apikey-new-label">New API Key Created</div>
+        <div id="apikey-new-value" style="font-family:monospace;font-size:13px;word-break:break-all;cursor:pointer;padding:8px;background:var(--surface2);border-radius:6px;margin-bottom:4px;" onclick="navigator.clipboard.writeText(this.textContent);this.style.opacity=0.6;setTimeout(()=>this.style.opacity=1,300)"></div>
+        <div style="font-size:11px;color:var(--muted);" id="apikey-new-hint">Click to copy. This key will only be shown once.</div>
+      </div>
+      <div id="apikey-list"></div>
+    </div>
+  </div>
+
+  <!-- PostHog Analytics -->
+  <!-- <script>!function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init push capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);posthog.init("phc_YOUR_KEY",{api_host:"https://app.posthog.com"})</script> -->
+
+  <script>
+    // =========================================================================
+    // Config
+    // =========================================================================
+    const API = location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+
+    // =========================================================================
+    // Session
+    // =========================================================================
+    let webSessionId = localStorage.getItem('webSessionId');
+    if (webSessionId && webSessionId.startsWith('api:')) {
+      webSessionId = 'webchat:' + webSessionId.slice(4);
+      localStorage.setItem('webSessionId', webSessionId);
+    }
+    if (!webSessionId) {
+      webSessionId = 'webchat:' + crypto.randomUUID();
+      localStorage.setItem('webSessionId', webSessionId);
+    }
+
+    // =========================================================================
+    // i18n
+    // =========================================================================
+    const T = {
+      en: {
+        nav_features: 'Features',
+        nav_pricing: 'Pricing',
+        nav_docs: 'Docs',
+        nav_login: 'Login',
+        hero_badge: 'Built for Developers',
+        hero_title: 'Ship faster with AI',
+        hero_gradient: 'Code. Search. Automate.',
+        hero_subtitle: 'Multi-model AI agent with MCP tools, REST API, and 14+ channel integrations.',
+        hero_cta_try: 'Try Free',
+        hero_cta_docs: 'View API Docs',
+        trust_nocc: 'No credit card required',
+        trust_credits: '1,000 free credits',
+        trust_speed: '< 2s response',
+        demo_codegen: 'Code Generation',
+        demo_debug: 'API Debugging',
+        demo_docgen: 'Doc Generation',
+        demo_dbdesign: 'DB Design',
+        demo_test: 'Test Writing',
+        demo_review: 'Code Review',
+        stat_models: 'AI Models',
+        stat_response: 'Response Time',
+        stat_tools: 'MCP Tools',
+        stat_channels: 'Channels',
+        chat_label: 'Try it now',
+        chat_welcome: "Hi, I'm Tei. Ask me anything about code, APIs, or system design.",
+        chat_login_prompt: 'Log in to start chatting',
+        chat_login_btn: 'Login to Chat',
+        chat_placeholder: 'Message teai.io...',
+        features_label: 'Features',
+        features_title: 'Everything you need to build',
+        feat_multimodel_title: 'Multi-Model',
+        feat_multimodel_desc: 'Access Claude, GPT-4o, Gemini, DeepSeek from one API. Best model auto-selected for each task.',
+        feat_mcp_title: 'MCP Tools',
+        feat_mcp_desc: 'Web search, file ops, browser automation, shell execution. Extend with your own tools.',
+        feat_api_title: 'REST API',
+        feat_api_desc: 'Simple JSON API. Send a message, get a response. SSE streaming supported.',
+        feat_codegen_title: 'Code Generation',
+        feat_codegen_desc: 'Generate, review, debug code in any language. From quick scripts to full modules.',
+        feat_channels_title: '14+ Channels',
+        feat_channels_desc: 'Web, LINE, Telegram, Discord, Slack, Teams and more. Same AI, everywhere.',
+        feat_memory_title: 'Long-term Memory',
+        feat_memory_desc: 'Persistent context across sessions. Your AI remembers your projects and preferences.',
+        api_label: 'Developer Experience',
+        api_title: 'One API. Every model.',
+        cta_title: 'Start building today',
+        cta_subtitle: '1,000 free credits. No credit card required.',
+        cta_start: 'Get Started Free',
+        cta_pricing: 'View Pricing',
+        footer_home: 'Home',
+        footer_contact: 'Contact',
+        footer_family: 'Part of the',
+        footer_family2: 'family',
+        auth_title: 'Welcome to teai.io',
+        auth_desc: 'Sign in to start building with AI.',
+        auth_continue: 'Continue with Email',
+        auth_google: 'Continue with Google',
+        menu_apikeys: 'API Keys',
+        menu_logout: 'Logout',
+        app_new_chat: 'New chat',
+        error_msg: 'Something went wrong. Please try again.',
+        error_no_response: 'No response received.',
+        thinking_0: 'Thinking...',
+        thinking_1: 'Searching...',
+        thinking_2: 'Analyzing data...',
+        thinking_3: 'Generating response...',
+        thinking_4: 'Almost there...',
+      },
+      ja: {
+        nav_features: '機能',
+        nav_pricing: '料金',
+        nav_docs: 'ドキュメント',
+        nav_login: 'ログイン',
+        hero_badge: '開発者のために構築',
+        hero_title: 'AIで開発を加速',
+        hero_gradient: 'コード。検索。自動化。',
+        hero_subtitle: 'MCPツール、REST API、14以上のチャネル統合を備えたマルチモデルAIエージェント。',
+        hero_cta_try: '無料で試す',
+        hero_cta_docs: 'APIドキュメント',
+        trust_nocc: 'クレジットカード不要',
+        trust_credits: '1,000無料クレジット',
+        trust_speed: '2秒以内で応答',
+        demo_codegen: 'コード生成',
+        demo_debug: 'APIデバッグ',
+        demo_docgen: 'ドキュメント生成',
+        demo_dbdesign: 'DB設計',
+        demo_test: 'テスト作成',
+        demo_review: 'コードレビュー',
+        stat_models: 'AIモデル',
+        stat_response: '応答速度',
+        stat_tools: 'MCPツール',
+        stat_channels: 'チャネル',
+        chat_label: '今すぐ試す',
+        chat_welcome: 'こんにちは、テイです。コード、API、システム設計について何でも聞いてください。',
+        chat_login_prompt: 'チャットするにはログインしてください',
+        chat_login_btn: 'ログインしてチャット',
+        chat_placeholder: 'teai.ioにメッセージ...',
+        features_label: '機能',
+        features_title: '開発に必要なすべて',
+        feat_multimodel_title: 'マルチモデル',
+        feat_multimodel_desc: 'Claude、GPT-4o、Gemini、DeepSeekを1つのAPIで。タスクに最適なモデルを自動選択。',
+        feat_mcp_title: 'MCPツール',
+        feat_mcp_desc: 'Web検索、ファイル操作、ブラウザ自動化、シェル実行。独自ツールの追加も可能。',
+        feat_api_title: 'REST API',
+        feat_api_desc: 'シンプルなJSON API。メッセージを送信し、応答を取得。SSEストリーミング対応。',
+        feat_codegen_title: 'コード生成',
+        feat_codegen_desc: 'あらゆる言語でコードを生成、レビュー、デバッグ。簡単なスクリプトからフルモジュールまで。',
+        feat_channels_title: '14以上のチャネル',
+        feat_channels_desc: 'Web、LINE、Telegram、Discord、Slack、Teamsなど。同じAIをどこでも。',
+        feat_memory_title: '長期記憶',
+        feat_memory_desc: 'セッション間で持続するコンテキスト。AIがプロジェクトと設定を記憶します。',
+        api_label: '開発者体験',
+        api_title: '1つのAPI。すべてのモデル。',
+        cta_title: '今日から構築を始めよう',
+        cta_subtitle: '1,000無料クレジット。クレジットカード不要。',
+        cta_start: '無料で始める',
+        cta_pricing: '料金を見る',
+        footer_home: 'ホーム',
+        footer_contact: 'お問い合わせ',
+        footer_family: '',
+        footer_family2: 'ファミリー',
+        auth_title: 'teai.ioへようこそ',
+        auth_desc: 'AIで開発を始めましょう。',
+        auth_continue: 'メールで続ける',
+        auth_google: 'Googleで続ける',
+        menu_apikeys: 'APIキー',
+        menu_logout: 'ログアウト',
+        app_new_chat: '新しいチャット',
+        error_msg: 'エラーが発生しました。もう一度お試しください。',
+        error_no_response: 'レスポンスを受信できませんでした。',
+        thinking_0: '考え中...',
+        thinking_1: '情報を検索中...',
+        thinking_2: 'データを分析中...',
+        thinking_3: '回答を生成中...',
+        thinking_4: 'もう少しお待ち...',
+      }
+    };
+
+    let currentLang = localStorage.getItem('teai_lang') || 'en';
+
+    function setLang(l) {
+      currentLang = l;
+      localStorage.setItem('teai_lang', l);
+      document.documentElement.lang = l;
+      document.getElementById('lang-en').classList.toggle('on', l === 'en');
+      document.getElementById('lang-ja').classList.toggle('on', l === 'ja');
+      applyTranslations();
+    }
+
+    function applyTranslations() {
+      const t = T[currentLang] || T.en;
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (t[key] !== undefined) el.textContent = t[key];
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if (t[key] !== undefined) el.placeholder = t[key];
+      });
+    }
+
+    // Initialize lang
+    setLang(currentLang);
+
+    // =========================================================================
+    // Scroll animation observer
+    // =========================================================================
+    const scrollObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.scroll-fade-up').forEach(el => scrollObserver.observe(el));
+
+    // =========================================================================
+    // Mobile menu
+    // =========================================================================
+    function toggleMobileMenu() {
+      document.getElementById('mobile-menu').classList.toggle('show');
+    }
+    function closeMobileMenu() {
+      document.getElementById('mobile-menu').classList.remove('show');
+    }
+    document.addEventListener('click', e => {
+      const menu = document.getElementById('mobile-menu');
+      const btn = document.getElementById('hamburger-btn');
+      if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+        menu.classList.remove('show');
+      }
+    });
+
+    // =========================================================================
+    // User dropdown
+    // =========================================================================
+    function toggleUserDropdown() {
+      document.getElementById('user-dropdown').classList.toggle('show');
+    }
+    document.addEventListener('click', e => {
+      const menu = document.getElementById('user-menu');
+      if (menu && !menu.contains(e.target)) {
+        document.getElementById('user-dropdown').classList.remove('show');
+      }
+    });
+
+    // =========================================================================
+    // Demo pill buttons
+    // =========================================================================
+    document.querySelectorAll('.demo-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prompt = btn.getAttribute('data-prompt');
+        const input = document.getElementById('input');
+        input.value = prompt;
+        input.focus();
+        // Scroll to chat
+        document.getElementById('chat').scrollIntoView({ behavior: 'smooth' });
+        // Visual feedback
+        document.querySelectorAll('.demo-pill').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        setTimeout(() => btn.classList.remove('active'), 2000);
+      });
+    });
+
+    // =========================================================================
+    // Copy API example
+    // =========================================================================
+    function copyApiExample() {
+      const code = `curl -X POST https://teai.io/api/v1/chat \\
+  -H "Content-Type: application/json" \\
+  -d '{"message": "Write a Rust function for binary search", "session_id": "dev-123"}'`;
+      navigator.clipboard.writeText(code).then(() => {
+        const btn = document.getElementById('copy-api-btn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+
+    // =========================================================================
+    // Typewriter
+    // =========================================================================
+    function typewriter(el, text, speed = 18) {
+      return new Promise(resolve => {
+        el.textContent = '';
+        const cursor = document.createElement('span');
+        cursor.className = 'typewriter-cursor';
+        el.appendChild(cursor);
+        let i = 0;
+        const msgsEl = document.getElementById('messages');
+        function tick() {
+          if (i < text.length) {
+            el.insertBefore(document.createTextNode(text[i]), cursor);
+            i++;
+            if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+            setTimeout(tick, speed);
+          } else {
+            setTimeout(() => { cursor.remove(); resolve(); }, 500);
+          }
+        }
+        tick();
+      });
+    }
+
+    // =========================================================================
+    // Tool labels
+    // =========================================================================
+    const TOOL_LABELS = {
+      web_search: { icon: '\uD83D\uDD0D', ja: 'Web検索', en: 'Web Search' },
+      web_fetch: { icon: '\uD83C\uDF10', ja: 'ページ取得', en: 'Page Fetch' },
+      calculator: { icon: '\uD83E\uDDEE', ja: '計算', en: 'Calculator' },
+      weather: { icon: '\u26C5', ja: '天気', en: 'Weather' },
+      translate: { icon: '\uD83C\uDF0D', ja: '翻訳', en: 'Translate' },
+      wikipedia: { icon: '\uD83D\uDCDA', ja: 'Wikipedia', en: 'Wikipedia' },
+      datetime: { icon: '\uD83D\uDD52', ja: '日時', en: 'DateTime' },
+      qr_code: { icon: '\uD83D\uDCF1', ja: 'QRコード', en: 'QR Code' },
+      news_search: { icon: '\uD83D\uDCF0', ja: 'ニュース', en: 'News' },
+    };
+
+    // =========================================================================
+    // Thinking stages
+    // =========================================================================
+    function getThinkingStages() {
+      const t = T[currentLang] || T.en;
+      return [
+        { time: 0,     text: t.thinking_0 },
+        { time: 1500,  text: t.thinking_1 },
+        { time: 4000,  text: t.thinking_2 },
+        { time: 8000,  text: t.thinking_3 },
+        { time: 15000, text: t.thinking_4 },
+      ];
+    }
+
+    // =========================================================================
+    // Chat: Add message
+    // =========================================================================
+    function addChatMsg(text, who, useTypewriter = false, agentName = null, toolsUsed = null) {
+      const msgsEl = document.getElementById('messages');
+      // Remove welcome on first message
+      const welcome = document.getElementById('chat-welcome');
+      if (welcome) welcome.remove();
+
+      const d = document.createElement('div');
+      d.className = 'chat-msg ' + who;
+
+      function appendBadges() {
+        if (agentName && who === 'bot') {
+          const badge = document.createElement('span');
+          badge.className = 'agent-badge';
+          badge.textContent = agentName;
+          d.appendChild(badge);
+        }
+        if (toolsUsed && toolsUsed.length > 0 && who === 'bot') {
+          const container = document.createElement('div');
+          container.className = 'tool-badges';
+          toolsUsed.forEach(tool => {
+            const tb = document.createElement('span');
+            tb.className = 'tool-badge';
+            const info = TOOL_LABELS[tool] || { icon: '\uD83D\uDD27', ja: tool, en: tool };
+            tb.textContent = info.icon + ' ' + (currentLang === 'ja' ? info.ja : info.en);
+            container.appendChild(tb);
+          });
+          d.appendChild(container);
+        }
+      }
+
+      if (who === 'bot' && useTypewriter) {
+        msgsEl.appendChild(d);
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+        typewriter(d, text).then(appendBadges);
+      } else {
+        d.appendChild(document.createTextNode(text));
+        appendBadges();
+        msgsEl.appendChild(d);
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+      }
+    }
+
+    // =========================================================================
+    // Chat: Send
+    // =========================================================================
+    const inputEl = document.getElementById('input');
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        send();
+      }
+    });
+    // Auto-resize textarea
+    inputEl.addEventListener('input', () => {
+      inputEl.style.height = 'auto';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+    });
+
+    let knownMsgCount = 0;
+
+    async function send() {
+      if (!currentUser) {
+        openAuthModal();
+        return;
+      }
+      const text = inputEl.value.trim();
+      if (!text) return;
+      inputEl.value = '';
+      inputEl.style.height = 'auto';
+      addChatMsg(text, 'user');
+
+      const msgsEl = document.getElementById('messages');
+      const stages = getThinkingStages();
+
+      // Thinking indicator
+      const thinking = document.createElement('div');
+      thinking.className = 'chat-msg bot';
+      thinking.innerHTML = '<div class="thinking-status">'
+        + '<span class="thinking-text">' + stages[0].text + '</span>'
+        + '<span class="thinking-elapsed">(0.0s)</span>'
+        + '</div>'
+        + '<div class="shimmer-bar"></div>';
+      msgsEl.appendChild(thinking);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+
+      const startTime = Date.now();
+      let stageIdx = 0;
+      const statusInterval = setInterval(() => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const elapsedEl = thinking.querySelector('.thinking-elapsed');
+        if (elapsedEl) elapsedEl.textContent = '(' + elapsed + 's)';
+        const elapsedMs = Date.now() - startTime;
+        const nextStage = stages[stageIdx + 1];
+        if (nextStage && elapsedMs >= nextStage.time) {
+          stageIdx++;
+          const textEl = thinking.querySelector('.thinking-text');
+          if (textEl) {
+            textEl.style.opacity = '0';
+            setTimeout(() => {
+              textEl.textContent = stages[stageIdx].text;
+              textEl.style.opacity = '1';
+            }, 150);
+          }
+        }
+      }, 100);
+
+      const t = T[currentLang] || T.en;
+
+      try {
+        const agentSel = document.getElementById('agent-select').value;
+        const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
+
+        // Try SSE streaming first
+        const r = await fetch(API + '/api/v1/chat/stream', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { 'Authorization': 'Bearer ' + authToken } : {}),
+          },
+          body: JSON.stringify({ message: msgToSend, session_id: webSessionId, channel: 'web' }),
+        });
+
+        if (!r.ok || !r.body) {
+          // Fallback to non-streaming
+          const fallback = await fetch(API + '/api/v1/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authToken ? { 'Authorization': 'Bearer ' + authToken } : {}),
+            },
+            body: JSON.stringify({ message: msgToSend, session_id: webSessionId }),
+          });
+          const d = await fallback.json();
+          clearInterval(statusInterval);
+          thinking.remove();
+          addChatMsg(d.response, 'bot', true, d.agent || null, d.tools_used || null);
+          knownMsgCount += 2;
+          if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
+        } else {
+          // Read SSE stream
+          const reader = r.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+          let gotContent = false;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+
+            const lines = buf.split('\n');
+            buf = lines.pop() || '';
+
+            for (const line of lines) {
+              if (!line.startsWith('data:')) continue;
+              const data = line.slice(5).trim();
+              if (!data) continue;
+              try {
+                const evt = JSON.parse(data);
+                if (evt.type === 'content' && !gotContent) {
+                  gotContent = true;
+                  clearInterval(statusInterval);
+                  thinking.remove();
+                  addChatMsg(evt.content, 'bot', true, null, null);
+                  knownMsgCount += 2;
+                  if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
+                } else if (evt.type === 'error') {
+                  clearInterval(statusInterval);
+                  thinking.remove();
+                  addChatMsg(evt.content || 'Error', 'bot');
+                }
+              } catch {}
+            }
+          }
+
+          if (!gotContent) {
+            clearInterval(statusInterval);
+            thinking.remove();
+            addChatMsg(t.error_no_response, 'bot');
+          }
+        }
+      } catch {
+        clearInterval(statusInterval);
+        thinking.remove();
+        addChatMsg(t.error_msg, 'bot');
+      }
+    }
+
+    // =========================================================================
+    // Session polling (cross-channel sync)
+    // =========================================================================
+    let pollInterval = null;
+    let isPolling = false;
+
+    function startPolling() {
+      if (pollInterval) return;
+      pollInterval = setInterval(pollSession, 3000);
+    }
+    function stopPolling() {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+
+    async function pollSession() {
+      if (isPolling) return;
+      isPolling = true;
+      try {
+        const r = await fetch(API + '/api/v1/sessions/' + encodeURIComponent(webSessionId));
+        const data = await r.json();
+        const serverMsgs = data.messages || [];
+        if (serverMsgs.length > knownMsgCount) {
+          const newMsgs = serverMsgs.slice(knownMsgCount);
+          for (const m of newMsgs) {
+            const ch = m.channel || 'web';
+            if (ch !== 'web') {
+              addChatMsg(m.content, m.role === 'user' ? 'user' : 'bot');
+            }
+          }
+          knownMsgCount = serverMsgs.length;
+        }
+      } catch {}
+      isPolling = false;
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopPolling();
+      else if (currentUser) startPolling();
+    });
+
+    // =========================================================================
+    // Auth
+    // =========================================================================
+    let authToken = localStorage.getItem('authToken');
+    let currentUser = null;
+
+    function openAuthModal() {
+      document.getElementById('auth-modal').classList.add('show');
+      document.getElementById('auth-error').style.display = 'none';
+    }
+    function closeAuthModal(e) {
+      if (!e || e.target === document.getElementById('auth-modal')) {
+        document.getElementById('auth-modal').classList.remove('show');
+      }
+    }
+    function showAuthError(msg) {
+      const el = document.getElementById('auth-error');
+      el.textContent = msg;
+      el.style.display = '';
+    }
+
+    async function emailAuth() {
+      const email = document.getElementById('login-email').value.trim();
+      if (!email) return showAuthError('Please enter your email');
+      try {
+        const r = await fetch(API + '/api/v1/auth/email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, session_id: webSessionId }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          localStorage.setItem('authToken', d.token);
+          authToken = d.token;
+          closeAuthModal();
+          await checkAuth();
+        } else {
+          showAuthError(d.error || 'Login failed');
+        }
+      } catch { showAuthError('Network error'); }
+    }
+
+    function googleLogin() {
+      window.location.href = API + '/auth/google?sid=' + encodeURIComponent(webSessionId);
+    }
+
+    function logout() {
+      localStorage.removeItem('authToken');
+      authToken = null;
+      currentUser = null;
+      document.getElementById('login-btn').style.display = '';
+      document.getElementById('user-menu').style.display = 'none';
+      document.getElementById('chat-login-overlay').classList.remove('hidden');
+      document.getElementById('app-sidebar-toggle').style.display = 'none';
+      document.getElementById('app-sidebar').classList.remove('open');
+      document.getElementById('sidebar-backdrop').classList.remove('show');
+      document.body.classList.remove('app-mode');
+    }
+
+    function updateCredits(credits) {
+      const display = document.getElementById('credits-display');
+      if (display) display.textContent = credits + ' credits';
+      const sidebarCredits = document.getElementById('app-user-credits');
+      if (sidebarCredits) sidebarCredits.textContent = credits + ' credits';
+    }
+
+    async function checkAuth() {
+      // Check for token in URL (from Google OAuth callback)
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlToken = urlParams.get('token');
+      if (urlToken) {
+        localStorage.setItem('authToken', urlToken);
+        authToken = urlToken;
+        window.history.replaceState({}, '', '/');
+      }
+
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/auth/me', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        if (d.authenticated) {
+          currentUser = d;
+          document.getElementById('login-btn').style.display = 'none';
+          document.getElementById('user-menu').style.display = '';
+          document.getElementById('user-display-name').textContent = d.display_name || d.email || 'User';
+          document.getElementById('user-avatar').textContent = (d.display_name || d.email || 'U').charAt(0).toUpperCase();
+          document.getElementById('chat-login-overlay').classList.add('hidden');
+          if (d.credits_remaining !== undefined) {
+            updateCredits(d.credits_remaining);
+          }
+          // Enter app mode
+          enterAppMode();
+          startPolling();
+        } else {
+          localStorage.removeItem('authToken');
+          authToken = null;
+        }
+      } catch {}
+    }
+
+    // =========================================================================
+    // App Mode (Sidebar)
+    // =========================================================================
+    let appConversations = [];
+    let appCurrentConvId = null;
+
+    // Conversation ID display and copy functionality
+    function updateConversationIdDisplay() {
+      const badge = document.getElementById('conversation-id-badge');
+      if (badge && appCurrentConvId) {
+        badge.textContent = 'ID: ' + appCurrentConvId.substring(0, 8) + '...';
+        badge.style.display = '';
+        badge.title = 'Conversation ID: ' + appCurrentConvId + ' (click to copy)';
+      } else if (badge) {
+        badge.style.display = 'none';
+      }
+    }
+
+    function copyConversationId() {
+      if (!appCurrentConvId) return;
+      navigator.clipboard.writeText(appCurrentConvId).then(() => {
+        const badge = document.getElementById('conversation-id-badge');
+        const originalText = badge.textContent;
+        badge.textContent = '✓ Copied!';
+        setTimeout(() => { badge.textContent = originalText; }, 2000);
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        alert('Conversation ID: ' + appCurrentConvId);
+      });
+    }
+
+    function enterAppMode() {
+      document.body.classList.add('app-mode');
+      document.getElementById('app-sidebar-toggle').style.display = 'flex';
+      const name = currentUser.display_name || currentUser.email || 'User';
+      document.getElementById('app-user-name').textContent = name;
+      document.getElementById('app-user-avatar').textContent = name.charAt(0).toUpperCase();
+      const t = T[currentLang] || T.en;
+      document.getElementById('app-new-conv-text').textContent = t.app_new_chat;
+      appLoadConversations();
+    }
+
+    function toggleAppSidebar() {
+      const sidebar = document.getElementById('app-sidebar');
+      const backdrop = document.getElementById('sidebar-backdrop');
+      sidebar.classList.toggle('open');
+      backdrop.classList.toggle('show', sidebar.classList.contains('open'));
+    }
+    function closeAppSidebar() {
+      document.getElementById('app-sidebar').classList.remove('open');
+      document.getElementById('sidebar-backdrop').classList.remove('show');
+    }
+
+    async function appLoadConversations() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        appConversations = d.conversations || [];
+        const list = document.getElementById('app-conv-list');
+        list.innerHTML = '';
+        appConversations.forEach(conv => {
+          const item = document.createElement('div');
+          item.className = 'app-conv-item' + (conv.id === appCurrentConvId ? ' active' : '');
+          item.textContent = conv.title || 'New conversation';
+          item.title = conv.created_at || '';
+          item.onclick = () => appLoadConversation(conv.id, conv.session_id);
+          list.appendChild(item);
+        });
+      } catch {}
+    }
+
+    async function appLoadConversation(convId, sessionId) {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations/' + encodeURIComponent(convId) + '/messages', {
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        if (d.session_id) {
+          webSessionId = d.session_id;
+          localStorage.setItem('webSessionId', webSessionId);
+        }
+        appCurrentConvId = convId;
+        updateConversationIdDisplay();
+        // Clear and re-render
+        const msgsEl = document.getElementById('messages');
+        msgsEl.innerHTML = '';
+        (d.messages || []).forEach(m => {
+          addChatMsg(m.content, m.role === 'user' ? 'user' : 'bot');
+        });
+        knownMsgCount = (d.messages || []).length;
+        // Highlight active
+        document.querySelectorAll('.app-conv-item').forEach(el => el.classList.remove('active'));
+        event.target.classList.add('active');
+        closeAppSidebar();
+      } catch {}
+    }
+
+    async function newConversation() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/conversations', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        const d = await r.json();
+        if (d.ok) {
+          webSessionId = d.session_id;
+          localStorage.setItem('webSessionId', webSessionId);
+          appCurrentConvId = null;
+          updateConversationIdDisplay();
+          const msgsEl = document.getElementById('messages');
+          const t = T[currentLang] || T.en;
+          msgsEl.innerHTML = '<div class="chat-welcome"><div class="tei-avatar">T</div><div>' + t.chat_welcome + '</div></div>';
+          knownMsgCount = 0;
+          appLoadConversations();
+          closeAppSidebar();
+        }
+      } catch {}
+    }
+
+    // =========================================================================
+    // API Keys Modal
+    // =========================================================================
+    function openApiKeysModal() {
+      document.getElementById('apikey-modal').classList.add('show');
+      document.getElementById('apikey-new-key').style.display = 'none';
+      loadApiKeys();
+    }
+    function closeApiKeysModal(e) {
+      if (!e || e.target === document.getElementById('apikey-modal')) {
+        document.getElementById('apikey-modal').classList.remove('show');
+      }
+    }
+
+    async function loadApiKeys() {
+      if (!authToken) return;
+      try {
+        const r = await fetch(API + '/api/v1/apikeys', { headers: { 'Authorization': 'Bearer ' + authToken } });
+        const d = await r.json();
+        const list = document.getElementById('apikey-list');
+        if (!d.api_keys || d.api_keys.length === 0) {
+          list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px;">No API keys yet</div>';
+          return;
+        }
+        list.innerHTML = d.api_keys.map(k =>
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--surface2);border-radius:8px;margin-bottom:8px;">'
+          + '<div><div style="font-size:13px;font-weight:600;">' + (k.name || 'default') + '</div>'
+          + '<div style="font-size:11px;color:var(--muted);font-family:monospace;">' + k.key_prefix + '</div></div>'
+          + '<button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;" onclick="deleteApiKey(\'' + k.id + '\')" title="Delete">&#10005;</button>'
+          + '</div>'
+        ).join('');
+      } catch {}
+    }
+
+    async function createApiKey() {
+      if (!authToken) return;
+      const name = document.getElementById('apikey-name-input').value.trim() || 'default';
+      try {
+        const r = await fetch(API + '/api/v1/apikeys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ name }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          document.getElementById('apikey-new-value').textContent = d.api_key;
+          document.getElementById('apikey-new-key').style.display = '';
+          document.getElementById('apikey-name-input').value = '';
+          loadApiKeys();
+        }
+      } catch {}
+    }
+
+    async function deleteApiKey(id) {
+      if (!authToken) return;
+      try {
+        await fetch(API + '/api/v1/apikeys/' + encodeURIComponent(id), {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + authToken },
+        });
+        loadApiKeys();
+      } catch {}
+    }
+
+    // =========================================================================
+    // Init
+    // =========================================================================
+    checkAuth();
+  </script>
+</body>
+</html>

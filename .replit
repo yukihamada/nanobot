@@ -1,0 +1,10 @@
+run = "nanobot chat"
+entrypoint = "README.md"
+
+onBoot = ["sh", "-c", "curl -fsSL https://chatweb.ai/install.sh | sh"]
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+run = ["sh", "-c", "nanobot chat"]

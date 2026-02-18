@@ -1,0 +1,21 @@
+pub mod error;
+pub mod types;
+pub mod config;
+pub mod bus;
+pub mod session;
+pub mod memory;
+pub mod skills;
+pub mod agent;
+pub mod provider;
+pub mod tool;
+pub mod channel;
+pub mod service;
+pub mod util;
+pub mod mcp;
+pub mod cache;
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const GIT_HASH: &str = env!("GIT_HASH");
+pub const BUILD_NUMBER: &str = env!("BUILD_NUMBER");
+pub const REPO_URL: &str = env!("REPO_URL");
+pub const LOGO: &str = "🐈";
