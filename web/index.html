@@ -73,17 +73,39 @@
   <style>
     :root {
       --bg: #ffffff;
-      --surface: #18181b;
-      --surface2: #1e1e24;
-      --border: #27272a;
+      --surface: #f8f9fa;
+      --surface2: #e9ecef;
+      --border: #dee2e6;
       --text: #212529;
-      --muted: #71717a;
+      --muted: #6c757d;
       --accent: #6366f1;
       --accent-hover: #818cf8;
       --accent-glow: rgba(99,102,241,0.25);
       --green: #22c55e;
       --line: #06C755;
       --tg: #2AABEE;
+    }
+
+    /* Dark mode */
+    [data-theme="dark"] {
+      --bg: #0d1117;
+      --surface: #18181b;
+      --surface2: #1e1e24;
+      --border: #27272a;
+      --text: #e9ecef;
+      --muted: #71717a;
+    }
+
+    /* System preference */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0d1117;
+        --surface: #18181b;
+        --surface2: #1e1e24;
+        --border: #27272a;
+        --text: #e9ecef;
+        --muted: #71717a;
+      }
     }
     button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible, select:focus-visible {
       outline: 2px solid var(--accent);
@@ -4269,6 +4291,14 @@
 
       <!-- Display Tab (NEW) -->
       <div class="settings-section" id="settings-tab-display">
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;">
+          <div class="settings-item-label" style="margin-bottom:6px;">&#127769; テーマ / Theme</div>
+          <select class="settings-select" id="settings-theme" onchange="changeTheme(this.value)">
+            <option value="system" selected>System (システム優先)</option>
+            <option value="light">Light (ライト)</option>
+            <option value="dark">Dark (ダーク)</option>
+          </select>
+        </div>
         <div class="settings-item">
           <div class="settings-item-info">
             <div class="settings-item-label">&#128187; ターミナルモード / Terminal Mode</div>
@@ -10878,6 +10908,9 @@
       }
       const codeTheme = document.getElementById('settings-code-theme');
       if (codeTheme && saved.codeTheme) codeTheme.value = saved.codeTheme;
+
+      // Load theme setting
+      initTheme();
     }
     function saveDisplaySettings() {
       const settings = {
@@ -10915,6 +10948,31 @@
       const btn = document.getElementById(idMap[key]);
       if (btn) btn.classList.toggle('active');
       saveDisplaySettings();
+    }
+
+    // --- Theme Management ---
+    function changeTheme(theme) {
+      localStorage.setItem('theme', theme);
+      applyTheme(theme);
+    }
+
+    function applyTheme(theme) {
+      const root = document.documentElement;
+      if (theme === 'dark') {
+        root.setAttribute('data-theme', 'dark');
+      } else if (theme === 'light') {
+        root.setAttribute('data-theme', 'light');
+      } else {
+        // system
+        root.removeAttribute('data-theme');
+      }
+    }
+
+    function initTheme() {
+      const savedTheme = localStorage.getItem('theme') || 'system';
+      const select = document.getElementById('settings-theme');
+      if (select) select.value = savedTheme;
+      applyTheme(savedTheme);
     }
 
     // --- Account Actions ---
@@ -11121,6 +11179,7 @@
       }
       initAdultModeUI();
       applyGeneralSettings();
+      initTheme();
       applyDisplaySettings();
       initAbTest();
     })();
