@@ -6,6 +6,8 @@
 
 ### Production-Ready AI Agent Platform in Pure Rust 🦀
 
+> **Fork notice:** This is a complete rewrite of [HKUDS/nanobot](https://github.com/HKUDS/nanobot) (Python) in Rust — same philosophy of minimal, hackable AI agents, rebuilt for production scale and voice-first deployment.
+
 [![CI](https://github.com/yukihamada/nanobot/actions/workflows/ci.yml/badge.svg)](https://github.com/yukihamada/nanobot/actions/workflows/ci.yml)
 [![Deploy](https://github.com/yukihamada/nanobot/actions/workflows/deploy.yml/badge.svg)](https://github.com/yukihamada/nanobot/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -226,6 +228,22 @@ See [deployment guide](docs/deployment.md) for details.
 <img src="docs/images/comparison.png" alt="nanobot vs PicoClaw vs openClaw comparison" width="800" />
 </div>
 
+### nanobot (Rust) vs HKUDS/nanobot (Python)
+
+| | **yukihamada/nanobot** (Rust) | [HKUDS/nanobot](https://github.com/HKUDS/nanobot) (Python) |
+|---|:---:|:---:|
+| **Language** | Rust | Python |
+| **Binary Size** | ~50 MB | ~4,000 lines (interpreter required) |
+| **Cold Start** | **0.1s** | ~3–5s |
+| **Voice** | ✅ Native STT/TTS | ❌ |
+| **Self-Improving** | ✅ `/improve` command | ❌ |
+| **Channels** | 13 (LINE, Telegram, Discord…) | 9+ (Telegram, Discord, Slack…) |
+| **LLM Providers** | 8+ with auto failover | 13+ (no failover) |
+| **Hosted Service** | ✅ chatweb.ai / teai.io | ❌ self-host only |
+| **Target** | Production / Voice-first | Research / Hackable |
+
+### nanobot vs Others
+
 | | **nanobot** | openClaw | PicoClaw |
 |---|:---:|:---:|:---:|
 | **Price** | **$5 (hardware)** | $599 (Mac Mini) | $10 (hardware) |
@@ -243,9 +261,9 @@ See [deployment guide](docs/deployment.md) for details.
 - 🌐 **[chatweb.ai](https://chatweb.ai)** — 音声AIアシスタント（フリーミアム、登録不要でお試し可）
 - 🛠️ **[teai.io](https://teai.io)** — 開発者向けAPI（フリーミアム、無料枠あり）
 
-**Origins:** Inspired by [sipeed/picoclaw](https://github.com/sipeed/picoclaw), rewritten in Rust for production scale.
+**Origins:** Complete Rust rewrite of [HKUDS/nanobot](https://github.com/HKUDS/nanobot), inspired by [sipeed/picoclaw](https://github.com/sipeed/picoclaw).
 
-[View detailed comparison →](https://chatweb.ai/comparison)
+[View full comparison →](https://chatweb.ai/comparison)
 
 ---
 
@@ -406,6 +424,7 @@ cargo clippy --all-targets
 ## 🙏 Acknowledgments
 
 Built on the shoulders of giants:
+- [HKUDS/nanobot](https://github.com/HKUDS/nanobot) - Original Python nanobot (this project is a complete Rust rewrite)
 - [sipeed/picoclaw](https://github.com/sipeed/picoclaw) - MCP architecture inspiration
 - [openclaw/openclaw](https://github.com/openclaw/openclaw) - Multi-channel patterns
 - Anthropic Claude, OpenAI, Google Gemini - LLM providers
