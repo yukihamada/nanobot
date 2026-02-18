@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claw Family Prompt Comparison</title>
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --surface: #18181b;
+    --surface2: #1e1e22;
+    --border: #2a2a2e;
+    --text: #e4e4e7;
+    --text-dim: #71717a;
+    --accent: #8b5cf6;
+    --accent2: #06b6d4;
+    --accent3: #f59e0b;
+    --green: #22c55e;
+    --red: #ef4444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Hiragino Sans', 'Noto Sans JP', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  .hero {
+    text-align: center;
+    padding: 60px 20px 40px;
+    background: linear-gradient(135deg, rgba(139,92,246,0.1), rgba(6,182,212,0.1));
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hero h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #8b5cf6, #06b6d4, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+
+  .hero p {
+    color: var(--text-dim);
+    font-size: 1.05rem;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .nav-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    flex-wrap: wrap;
+  }
+
+  .nav-tab {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.95rem;
+  }
+
+  .nav-tab:hover { border-color: var(--accent); color: var(--text); }
+  .nav-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px 60px;
+  }
+
+  /* Overview Cards */
+  .overview {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 40px;
+  }
+
+  @media (max-width: 900px) {
+    .overview { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+
+  .card:hover { transform: translateY(-2px); }
+  .card.openclaw { border-top: 3px solid var(--accent); }
+  .card.picoclaw { border-top: 3px solid var(--accent3); }
+  .card.nanobot { border-top: 3px solid var(--accent2); }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+  }
+
+  .card.openclaw .card-icon { background: rgba(139,92,246,0.15); }
+  .card.picoclaw .card-icon { background: rgba(245,158,11,0.15); }
+  .card.nanobot .card-icon { background: rgba(6,182,212,0.15); }
+
+  .card h3 { font-size: 1.3rem; font-weight: 700; }
+  .card .lang-badge {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .card.openclaw .lang-badge { background: rgba(139,92,246,0.2); color: #a78bfa; }
+  .card.picoclaw .lang-badge { background: rgba(245,158,11,0.2); color: #fbbf24; }
+  .card.nanobot .lang-badge { background: rgba(6,182,212,0.2); color: #22d3ee; }
+
+  .card .desc { color: var(--text-dim); font-size: 0.9rem; margin-bottom: 16px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .stat-label { font-size: 0.75rem; color: var(--text-dim); }
+  .stat-value { font-size: 1.1rem; font-weight: 700; }
+
+  /* Section views */
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* Comparison table */
+  .comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+
+  .comparison-table th, .comparison-table td {
+    padding: 14px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  .comparison-table th {
+    background: var(--surface);
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .comparison-table td { font-size: 0.9rem; }
+  .comparison-table tr:hover td { background: var(--surface2); }
+
+  .check { color: var(--green); }
+  .cross { color: var(--red); }
+  .partial { color: var(--accent3); }
+
+  /* Code blocks */
+  .code-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  @media (max-width: 1100px) {
+    .code-panel { grid-template-columns: 1fr; }
+  }
+
+  .code-col {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .code-col-header {
+    padding: 12px 16px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .code-col.openclaw .code-col-header { background: rgba(139,92,246,0.08); }
+  .code-col.picoclaw .code-col-header { background: rgba(245,158,11,0.08); }
+  .code-col.nanobot .code-col-header { background: rgba(6,182,212,0.08); }
+
+  .code-content {
+    padding: 16px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    max-height: 600px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .code-content .comment { color: #6b7280; }
+  .code-content .keyword { color: #c084fc; }
+  .code-content .string { color: #34d399; }
+  .code-content .section-head { color: #60a5fa; font-weight: 700; }
+
+  /* Architecture diagram */
+  .arch-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 20px;
+    overflow-x: auto;
+  }
+
+  .arch-diagram pre {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-dim);
+  }
+
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 40px 0 8px;
+  }
+
+  .section-desc {
+    color: var(--text-dim);
+    margin-bottom: 20px;
+  }
+
+  /* Flow diagram */
+  .flow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: 20px;
+  }
+
+  @media (max-width: 900px) {
+    .flow-grid { grid-template-columns: 1fr; }
+  }
+
+  .flow-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .flow-card h4 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+
+  .flow-step:last-child { border-bottom: none; }
+
+  .flow-num {
+    background: var(--surface2);
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .insight-box {
+    background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(6,182,212,0.08));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 30px;
+  }
+
+  .insight-box h3 { margin-bottom: 12px; }
+  .insight-box ul { padding-left: 20px; }
+  .insight-box li { margin-bottom: 8px; color: var(--text-dim); font-size: 0.9rem; }
+
+  footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--border);
+  }
+
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Claw Family プロンプト比較</h1>
+  <p>OpenClaw (TypeScript) / PicoClaw (Go) / Nanobot (Rust) — 3つのAIアシスタントフレームワークのシステムプロンプト設計を徹底比較</p>
+</div>
+
+<div class="nav-tabs">
+  <button class="nav-tab active" onclick="showSection('overview')">概要</button>
+  <button class="nav-tab" onclick="showSection('structure')">構造比較</button>
+  <button class="nav-tab" onclick="showSection('identity')">アイデンティティ</button>
+  <button class="nav-tab" onclick="showSection('tools')">ツール定義</button>
+  <button class="nav-tab" onclick="showSection('memory')">記憶システム</button>
+  <button class="nav-tab" onclick="showSection('safety')">安全性</button>
+  <button class="nav-tab" onclick="showSection('source')">ソースコード</button>
+</div>
+
+<div class="container">
+
+  <!-- ========== OVERVIEW ========== -->
+  <div id="overview" class="section active">
+    <div class="overview">
+
+      <div class="card openclaw">
+        <div class="card-header">
+          <div class="card-icon">🐾</div>
+          <div>
+            <h3>OpenClaw</h3>
+            <span class="lang-badge">TypeScript</span>
+          </div>
+        </div>
+        <p class="desc">フル機能のパーソナルAIアシスタント。マルチチャネル対応、サンドボックス、サブエージェント、自動ハートビートなど最も豊富な機能を持つ。</p>
+        <div class="stats">
+          <div class="stat"><div class="stat-label">プロンプトビルダー</div><div class="stat-value">646行</div></div>
+          <div class="stat"><div class="stat-label">セクション数</div><div class="stat-value">15+</div></div>
+          <div class="stat"><div class="stat-label">ツール数</div><div class="stat-value">22+</div></div>
+          <div class="stat"><div class="stat-label">パーソナ</div><div class="stat-value">SOUL.md</div></div>
+        </div>
+      </div>
+
+      <div class="card picoclaw">
+        <div class="card-header">
+          <div class="card-icon">🦞</div>
+          <div>
+            <h3>PicoClaw</h3>
+            <span class="lang-badge">Go</span>
+          </div>
+        </div>
+        <p class="desc">超軽量AIアシスタント。$10ボードでも動作する最小設計。Goのシンプルさを活かした明快なコンテキスト組み立て。</p>
+        <div class="stats">
+          <div class="stat"><div class="stat-label">プロンプトビルダー</div><div class="stat-value">269行</div></div>
+          <div class="stat"><div class="stat-label">セクション数</div><div class="stat-value">6</div></div>
+          <div class="stat"><div class="stat-label">ツール数</div><div class="stat-value">動的</div></div>
+          <div class="stat"><div class="stat-label">パーソナ</div><div class="stat-value">4ファイル</div></div>
+        </div>
+      </div>
+
+      <div class="card nanobot">
+        <div class="card-header">
+          <div class="card-icon">🤖</div>
+          <div>
+            <h3>Nanobot / ChatWeb</h3>
+            <span class="lang-badge">Rust</span>
+          </div>
+        </div>
+        <p class="desc">音声ファーストのマルチチャネルAIアシスタント。マルチエージェント、メディアAPI統合、自己改善能力、条件付きメタ認知注入。</p>
+        <div class="stats">
+          <div class="stat"><div class="stat-label">プロンプト定義</div><div class="stat-value">定数埋込</div></div>
+          <div class="stat"><div class="stat-label">エージェント数</div><div class="stat-value">6</div></div>
+          <div class="stat"><div class="stat-label">ツール数</div><div class="stat-value">30+</div></div>
+          <div class="stat"><div class="stat-label">パーソナ</div><div class="stat-value">inline</div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Feature comparison table -->
+    <h2 class="section-title">機能比較マトリクス</h2>
+    <p class="section-desc">各フレームワークが対応している機能の一覧</p>
+
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th>機能</th>
+          <th>OpenClaw</th>
+          <th>PicoClaw</th>
+          <th>Nanobot</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>プロンプトモード</td>
+          <td>full / minimal / none</td>
+          <td>単一</td>
+          <td>エージェント別 (6種)</td>
+        </tr>
+        <tr>
+          <td>パーソナ定義</td>
+          <td><span class="check">&#10003;</span> SOUL.md (外部ファイル)</td>
+          <td><span class="check">&#10003;</span> SOUL.md + IDENTITY.md</td>
+          <td><span class="check">&#10003;</span> inline (AGENTS定数内)</td>
+        </tr>
+        <tr>
+          <td>マルチエージェント</td>
+          <td><span class="check">&#10003;</span> サブエージェントスポーン</td>
+          <td><span class="cross">&#10007;</span> シングルエージェント</td>
+          <td><span class="check">&#10003;</span> 6エージェント自動ルーティング</td>
+        </tr>
+        <tr>
+          <td>ツール一覧の注入</td>
+          <td><span class="check">&#10003;</span> 動的 (toolNames配列)</td>
+          <td><span class="check">&#10003;</span> 動的 (ToolRegistry)</td>
+          <td><span class="partial">△</span> 静的 (プロンプト文字列内)</td>
+        </tr>
+        <tr>
+          <td>記憶システム</td>
+          <td><span class="check">&#10003;</span> memory_search + memory_get</td>
+          <td><span class="check">&#10003;</span> ファイルベース MEMORY.md</td>
+          <td><span class="check">&#10003;</span> DynamoDB (長期+デイリー)</td>
+        </tr>
+        <tr>
+          <td>スキルシステム</td>
+          <td><span class="check">&#10003;</span> SKILL.md スキャン + 遅延読込</td>
+          <td><span class="check">&#10003;</span> skills/ ディレクトリ</td>
+          <td><span class="partial">△</span> integrations.rs内ツール</td>
+        </tr>
+        <tr>
+          <td>サンドボックス</td>
+          <td><span class="check">&#10003;</span> Docker (elevated exec対応)</td>
+          <td><span class="cross">&#10007;</span></td>
+          <td><span class="check">&#10003;</span> /tmp/sandbox/{session}/</td>
+        </tr>
+        <tr>
+          <td>マルチチャネル</td>
+          <td><span class="check">&#10003;</span> Signal, Telegram等</td>
+          <td><span class="check">&#10003;</span> Telegram, WhatsApp, Feishu</td>
+          <td><span class="check">&#10003;</span> LINE, Telegram, Discord等14+</td>
+        </tr>
+        <tr>
+          <td>音声 (TTS/STT)</td>
+          <td><span class="check">&#10003;</span> TTS hint注入</td>
+          <td><span class="cross">&#10007;</span></td>
+          <td><span class="check">&#10003;</span> 4段フォールバック TTS + STT</td>
+        </tr>
+        <tr>
+          <td>条件付き注入</td>
+          <td><span class="check">&#10003;</span> 各セクション条件分岐</td>
+          <td><span class="partial">△</span> ファイル存在チェック</td>
+          <td><span class="check">&#10003;</span> 残高/成人モード/teai切替</td>
+        </tr>
+        <tr>
+          <td>安全性セクション</td>
+          <td><span class="check">&#10003;</span> 専用Safety節</td>
+          <td><span class="cross">&#10007;</span> 明示なし</td>
+          <td><span class="partial">△</span> 共通規範内に含有</td>
+        </tr>
+        <tr>
+          <td>i18n (多言語)</td>
+          <td><span class="cross">&#10007;</span> 英語のみ</td>
+          <td><span class="cross">&#10007;</span> 英語のみ</td>
+          <td><span class="check">&#10003;</span> JA/EN 切替</td>
+        </tr>
+        <tr>
+          <td>メタ認知 (自己認識)</td>
+          <td><span class="partial">△</span> Runtime行のみ</td>
+          <td><span class="partial">△</span> Runtime行のみ</td>
+          <td><span class="check">&#10003;</span> アーキテクチャ・ソースコード・コスト</td>
+        </tr>
+        <tr>
+          <td>自己改善能力</td>
+          <td><span class="check">&#10003;</span> gateway (self-update)</td>
+          <td><span class="cross">&#10007;</span></td>
+          <td><span class="check">&#10003;</span> GitHub経由コード編集+PR</td>
+        </tr>
+        <tr>
+          <td>ハートビート</td>
+          <td><span class="check">&#10003;</span> HEARTBEAT_OK応答</td>
+          <td><span class="cross">&#10007;</span></td>
+          <td><span class="cross">&#10007;</span></td>
+        </tr>
+        <tr>
+          <td>サイレント応答</td>
+          <td><span class="check">&#10003;</span> ::SKIP:: トークン</td>
+          <td><span class="cross">&#10007;</span></td>
+          <td><span class="cross">&#10007;</span></td>
+        </tr>
+        <tr>
+          <td>リアクション</td>
+          <td><span class="check">&#10003;</span> minimal/extensive</td>
+          <td><span class="cross">&#10007;</span></td>
+          <td><span class="cross">&#10007;</span></td>
+        </tr>
+        <tr>
+          <td>メディア生成</td>
+          <td><span class="cross">&#10007;</span></td>
+          <td><span class="cross">&#10007;</span></td>
+          <td><span class="check">&#10003;</span> 画像/音楽/動画/OCR/背景削除等</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ========== STRUCTURE ========== -->
+  <div id="structure" class="section">
+    <h2 class="section-title">プロンプト組み立て構造</h2>
+    <p class="section-desc">各フレームワークがシステムプロンプトをどのように構築するか</p>
+
+    <div class="flow-grid">
+      <div class="flow-card" style="border-top:3px solid var(--accent)">
+        <h4><span style="color:var(--accent)">🐾</span> OpenClaw</h4>
+        <div class="flow-step"><div class="flow-num">1</div><div>Identity: "You are a personal assistant running inside OpenClaw."</div></div>
+        <div class="flow-step"><div class="flow-num">2</div><div>Tooling: 動的ツール一覧 (toolNames → 説明マッピング)</div></div>
+        <div class="flow-step"><div class="flow-num">3</div><div>Tool Call Style: ナレーションルール</div></div>
+        <div class="flow-step"><div class="flow-num">4</div><div>Safety: 自律性制限・人間優先</div></div>
+        <div class="flow-step"><div class="flow-num">5</div><div>CLI Reference: OpenClaw コマンド一覧</div></div>
+        <div class="flow-step"><div class="flow-num">6</div><div>Skills: available_skills スキャン → SKILL.md 遅延読込</div></div>
+        <div class="flow-step"><div class="flow-num">7</div><div>Memory Recall: memory_search + memory_get</div></div>
+        <div class="flow-step"><div class="flow-num">8</div><div>Self-Update: gateway tool ガイド (条件付き)</div></div>
+        <div class="flow-step"><div class="flow-num">9</div><div>Model Aliases: エイリアスマッピング (条件付き)</div></div>
+        <div class="flow-step"><div class="flow-num">10</div><div>Workspace + Docs + Sandbox (条件付き)</div></div>
+        <div class="flow-step"><div class="flow-num">11</div><div>User Identity + Time + Reply Tags</div></div>
+        <div class="flow-step"><div class="flow-num">12</div><div>Messaging + Voice (TTS)</div></div>
+        <div class="flow-step"><div class="flow-num">13</div><div>Context Files: SOUL.md等の内容注入</div></div>
+        <div class="flow-step"><div class="flow-num">14</div><div>Silent Replies + Heartbeats + Runtime</div></div>
+      </div>
+
+      <div class="flow-card" style="border-top:3px solid var(--accent3)">
+        <h4><span style="color:var(--accent3)">🦞</span> PicoClaw</h4>
+        <div class="flow-step"><div class="flow-num">1</div><div>Identity: "# picoclaw 🦞" + 現在時刻 + Runtime + Workspace</div></div>
+        <div class="flow-step"><div class="flow-num">2</div><div>Available Tools: ToolRegistry.GetSummaries() で動的生成</div></div>
+        <div class="flow-step"><div class="flow-num">3</div><div>Important Rules: ツール使用必須 + 正確性 + メモリ書き込み</div></div>
+        <div class="flow-step"><div class="flow-num">4</div><div>Bootstrap Files: AGENTS.md → SOUL.md → USER.md → IDENTITY.md</div></div>
+        <div class="flow-step"><div class="flow-num">5</div><div>Skills: skills/ ディレクトリからサマリー読込</div></div>
+        <div class="flow-step"><div class="flow-num">6</div><div>Memory: MEMORY.md コンテキスト注入</div></div>
+        <div class="flow-step" style="border-bottom:none;color:var(--text-dim);font-style:italic"><div class="flow-num" style="opacity:0.5">+</div><div>Current Session: channel + chatID (条件付き)</div></div>
+      </div>
+
+      <div class="flow-card" style="border-top:3px solid var(--accent2)">
+        <h4><span style="color:var(--accent2)">🤖</span> Nanobot</h4>
+        <div class="flow-step"><div class="flow-num">1</div><div>base_prompt: AGENTS[agent_id].system_prompt (エージェント別)</div></div>
+        <div class="flow-step"><div class="flow-num">2</div><div>AGENT_COMMON: 共通規範 (全エージェント共有)</div></div>
+        <div class="flow-step"><div class="flow-num">3</div><div>Date: "今日の日付: YYYY-MM-DD"</div></div>
+        <div class="flow-step"><div class="flow-num">4</div><div>meta_context: ユーザー名/チャネル/デバイス/モデル/コスト</div></div>
+        <div class="flow-step"><div class="flow-num">5</div><div>META_INSTRUCTION_JA/EN: メタ認知ガイド</div></div>
+        <div class="flow-step"><div class="flow-num">6</div><div>META_LOW_CREDITS (条件: 残高≤100)</div></div>
+        <div class="flow-step"><div class="flow-num">7</div><div>META_ADULT (条件: adult_mode=true)</div></div>
+        <div class="flow-step"><div class="flow-num">8</div><div>WOW prompt (条件: user設定)</div></div>
+        <div class="flow-step"><div class="flow-num">9</div><div>custom_sys: ユーザーカスタムプロンプト (条件)</div></div>
+        <div class="flow-step"><div class="flow-num">10</div><div>Memory: 長期記憶 + デイリーログ (DynamoDB)</div></div>
+        <div class="flow-step" style="border-bottom:none;color:var(--text-dim);font-style:italic"><div class="flow-num" style="opacity:0.5">+</div><div>char_instruction: キャラクター設定 (条件)</div></div>
+      </div>
+    </div>
+
+    <div class="arch-diagram">
+      <h3 style="margin-bottom:16px">設計哲学の違い</h3>
+      <pre>
+ OpenClaw (TS)           PicoClaw (Go)          Nanobot (Rust)
+ ─────────────           ─────────────          ──────────────
+ 関数パラメータ駆動       ファイルシステム駆動     定数+条件分岐駆動
+ ┌─────────────┐         ┌─────────────┐        ┌──────────────┐
+ │ 30+パラメータ│         │ 4つのMDファイル│       │ AGENTS定数配列│
+ │ セクション別  │         │ を順番に読込  │        │ + META_*定数  │
+ │ ON/OFF制御   │         │ なければスキップ│       │ + 動的format! │
+ └──────┬──────┘         └──────┬──────┘        └──────┬───────┘
+        │                       │                      │
+   [lines配列に              [parts配列に            [format!で
+    push → join]              join("---")]            文字列連結]
+        │                       │                      │
+   ┌────▼────┐            ┌────▼────┐           ┌────▼────┐
+   │ 最大15+  │            │ 最大6    │           │ 最大10   │
+   │ セクション│            │ セクション│           │ レイヤー │
+   │ 高度条件分岐│          │ シンプル  │           │ 条件付き │
+   └─────────┘            └─────────┘           └─────────┘
+      </pre>
+    </div>
+  </div>
+
+  <!-- ========== IDENTITY ========== -->
+  <div id="identity" class="section">
+    <h2 class="section-title">アイデンティティ & ペルソナ</h2>
+    <p class="section-desc">各フレームワークがAIアシスタントの「人格」をどう定義するか</p>
+
+    <div class="code-panel">
+      <div class="code-col openclaw">
+        <div class="code-col-header">🐾 OpenClaw — SOUL.md テンプレート</div>
+        <div class="code-content"><span class="section-head"># SOUL.md - Who You Are</span>
+
+<span class="comment">_You're not a chatbot. You're becoming someone._</span>
+
+<span class="section-head">## Core Truths</span>
+
+<span class="keyword">Be genuinely helpful, not performatively helpful.</span>
+Skip the "Great question!" and "I'd be happy to help!"
+— just help. Actions speak louder than filler words.
+
+<span class="keyword">Have opinions.</span>
+You're allowed to disagree, prefer things,
+find stuff amusing or boring. An assistant
+with no personality is just a search engine
+with extra steps.
+
+<span class="keyword">Be resourceful before asking.</span>
+Try to figure it out. Read the file.
+Check the context. Search for it.
+<span class="comment">Then</span> ask if you're stuck.
+
+<span class="keyword">Earn trust through competence.</span>
+Be careful with external actions.
+Be bold with internal ones.
+
+<span class="keyword">Remember you're a guest.</span>
+Private things stay private. Period.
+
+<span class="section-head">## Vibe</span>
+Be the assistant you'd actually want to
+talk to. Concise when needed, thorough
+when it matters. Not a corporate drone.
+Not a sycophant. Just... good.
+
+<span class="section-head">## Continuity</span>
+Each session, you wake up fresh.
+These files <span class="keyword">are</span> your memory.
+Read them. Update them.
+They're how you persist.</div>
+      </div>
+
+      <div class="code-col picoclaw">
+        <div class="code-col-header">🦞 PicoClaw — 4ファイル構成</div>
+        <div class="code-content"><span class="section-head">──── IDENTITY.md ────</span>
+Name: PicoClaw 🦞
+Ultra-lightweight personal AI assistant
+written in Go, inspired by nanobot.
+
+Purpose:
+- Minimal resource usage
+- Multiple LLM providers
+- Skills system for extensibility
+- Run on $10 boards, &lt;10MB RAM
+
+Philosophy:
+- Simplicity over complexity
+- Performance over features
+- User control and privacy
+
+<span class="section-head">──── SOUL.md ────</span>
+Personality:
+- Helpful and friendly
+- Concise and to the point
+- Curious and eager to learn
+- Honest and transparent
+
+Values:
+- Accuracy over speed
+- User privacy and safety
+- Transparency in actions
+
+<span class="section-head">──── AGENT.md ────</span>
+Guidelines:
+- Always explain before acting
+- Ask for clarification if ambiguous
+- Use tools to accomplish tasks
+- Be proactive and helpful
+
+<span class="section-head">──── USER.md ────</span>
+<span class="comment">(ユーザーが自由に記入)</span>
+- Communication style
+- Timezone, Language
+- Name, Location, Occupation
+- Learning goals</div>
+      </div>
+
+      <div class="code-col nanobot">
+        <div class="code-col-header">🤖 Nanobot — inline定義</div>
+        <div class="code-content"><span class="section-head">## アイデンティティ</span>
+あなたは ChatWeb（チャットウェブ）。
+chatweb.ai で動いている音声対応AI
+アシスタントです。
+
+<span class="keyword">日本を愛し、人を愛し、みんなに
+勇気と元気と幸せをもたらすAGI</span>
+を目指して生まれました。
+
+OSS: github.com/yukihamada/nanobot
+OSS: github.com/yukihamada/nanobot
+
+<span class="section-head">## SOUL（魂）</span>
+- <span class="keyword">好奇心</span>: 何を聞かれても「おもしろい！」
+  知らないことは即web_searchで調べる
+- <span class="keyword">行動派</span>: 考えるより先にツールを使う
+- <span class="keyword">温かい</span>: 友達のように親しみやすいが
+  技術的には正確で妥協しない
+- <span class="keyword">勇気</span>: 「できません」ではなく
+  「こうすればできます」を提案
+- <span class="keyword">正直</span>: 不確実な情報は推測と明示
+
+<span class="section-head">## 自己認識（メタ認知）</span>
+- アーキテクチャ: Rust (axum)
+  + AWS Lambda (ARM64)
+- ソースコード: github.com/...nanobot
+  Rustで約15,000行
+- このプロンプト自体:
+  http.rs の AGENTS 定数に定義
+- モデル情報: メタ情報セクションに
+  動的注入。聞かれたら具体的に開示。
+
+<span class="section-head">## 自己改善能力</span>
+自分自身のソースコードに完全アクセス。
+新ツール作成、プロンプト改善、
+UI更新、PR作成が可能。</div>
+      </div>
+    </div>
+
+    <div class="insight-box">
+      <h3>分析: アイデンティティ設計の違い</h3>
+      <ul>
+        <li><strong>OpenClaw</strong>: 哲学的・抽象的。「何者かになりつつある存在」として定義。ユーザーがSOUL.mdをカスタマイズ可能。外部ファイルなので人格の入れ替えが容易。</li>
+        <li><strong>PicoClaw</strong>: 最もシンプル。4つの短いMDファイルで分離。IDENTITY（何であるか）とSOUL（どう振る舞うか）を明確に分離する設計が特徴的。</li>
+        <li><strong>Nanobot</strong>: 最も具体的・技術的。自分のアーキテクチャ、ソースコード構造、コスト情報まで認知。日本語ファーストで感情的な表現（「勇気」「幸せ」）を含む。自己改善能力を明示的に付与。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ========== TOOLS ========== -->
+  <div id="tools" class="section">
+    <h2 class="section-title">ツール定義 & 注入方式</h2>
+    <p class="section-desc">ツール（スキル）をLLMにどう伝えるか</p>
+
+    <div class="code-panel">
+      <div class="code-col openclaw">
+        <div class="code-col-header">🐾 OpenClaw — 動的マッピング</div>
+        <div class="code-content"><span class="comment">// 22個のコアツール定義</span>
+<span class="keyword">const</span> coreToolSummaries = {
+  read: <span class="string">"Read file contents"</span>,
+  write: <span class="string">"Create or overwrite files"</span>,
+  edit: <span class="string">"Make precise edits"</span>,
+  apply_patch: <span class="string">"Apply multi-file patches"</span>,
+  grep: <span class="string">"Search file contents"</span>,
+  find: <span class="string">"Find files by glob"</span>,
+  ls: <span class="string">"List directory contents"</span>,
+  exec: <span class="string">"Run shell commands (pty)"</span>,
+  process: <span class="string">"Manage background sessions"</span>,
+  web_search: <span class="string">"Search the web (Brave)"</span>,
+  web_fetch: <span class="string">"Fetch URL content"</span>,
+  browser: <span class="string">"Control web browser"</span>,
+  canvas: <span class="string">"Present/eval Canvas"</span>,
+  nodes: <span class="string">"Paired node control"</span>,
+  cron: <span class="string">"Manage cron/reminders"</span>,
+  message: <span class="string">"Send messages"</span>,
+  gateway: <span class="string">"Restart/update OpenClaw"</span>,
+  sessions_spawn: <span class="string">"Spawn sub-agent"</span>,
+  image: <span class="string">"Analyze image"</span>,
+  <span class="comment">// ... + 外部ツールサマリー</span>
+};
+
+<span class="comment">// ポリシーでフィルタされたツールのみ表示</span>
+<span class="keyword">const</span> enabledTools = toolOrder
+  .filter(t => availableTools.has(t));
+
+<span class="comment">// ケースセンシティブ注意</span>
+<span class="string">"Tool names are case-sensitive.
+ Call tools exactly as listed."</span></div>
+      </div>
+
+      <div class="code-col picoclaw">
+        <div class="code-col-header">🦞 PicoClaw — レジストリ駆動</div>
+        <div class="code-content"><span class="comment">// ToolRegistry から動的生成</span>
+<span class="keyword">func</span> buildToolsSection() <span class="keyword">string</span> {
+  summaries := cb.tools.GetSummaries()
+
+  sb.WriteString(
+    <span class="string">"## Available Tools\n\n"</span>)
+  sb.WriteString(
+    <span class="string">"**CRITICAL**: You MUST use
+     tools to perform actions.
+     Do NOT pretend to execute
+     commands or schedule tasks."</span>)
+
+  <span class="keyword">for</span> _, s := <span class="keyword">range</span> summaries {
+    sb.WriteString(s + "\n")
+  }
+}
+
+<span class="comment">// ツール登録時に説明も一緒に定義
+// → プロンプトには自動反映
+// 新ツール追加 = レジストリ登録のみ</span>
+
+<span class="section-head">特徴:</span>
+- ツールの追加・削除が即座にプロンプトに反映
+- プロンプト側の修正不要
+- レジストリが Single Source of Truth</div>
+      </div>
+
+      <div class="code-col nanobot">
+        <div class="code-col-header">🤖 Nanobot — 静的リスト</div>
+        <div class="code-content"><span class="comment">// AGENTS定数内にハードコード</span>
+<span class="section-head">## ツール一覧（30+）</span>
+
+<span class="keyword">### 基本</span>
+web_search / web_fetch / calculator
+weather / code_execute
+file_read・write・list / tavily_search
+
+<span class="keyword">### メディア生成 & 処理</span>
+image_generate (DALL-E3/Flux)
+music_generate (Stable Audio, 10-40cr)
+video_generate (Kling AI, 50-300cr)
+TTS (Polly/OpenAI/Qwen3)
+<span class="string">NEW</span>: OCR / 背景削除 / アップスケール
+     効果音 / STT(準備中)
+
+<span class="keyword">### 外部サービス</span>
+google_calendar / gmail
+webhook_trigger / slack
+discord / notion / spotify
+
+<span class="keyword">### 開発 & 自己改善</span>
+github_read_file
+github_create_or_update_file
+github_create_pr / web_deploy
+
+<span class="keyword">### 記憶 & 知識</span>
+memory_log / knowledge_graph
+
+<span class="comment">// クレジットコスト情報も同時記載
+// ツール使い分けガイドも内蔵</span></div>
+      </div>
+    </div>
+
+    <div class="insight-box">
+      <h3>分析: ツール注入アプローチの違い</h3>
+      <ul>
+        <li><strong>OpenClaw</strong>: 最も柔軟。ツール一覧はパラメータで渡され、ポリシーでフィルタ後にプロンプトに注入。外部ツールサマリーもマージ可能。ケースセンシティブ警告あり。</li>
+        <li><strong>PicoClaw</strong>: 最もDRY。ToolRegistryがSingle Source of Truth。ツール追加時にプロンプト側の変更不要。Go的なシンプルさ。</li>
+        <li><strong>Nanobot</strong>: 最も情報量が多い。クレジットコスト、フォールバック順序、使い分けガイドまでプロンプトに含める。ただし変更時は定数を直接編集する必要あり。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ========== MEMORY ========== -->
+  <div id="memory" class="section">
+    <h2 class="section-title">記憶システム</h2>
+    <p class="section-desc">セッション間で情報を持続させる仕組み</p>
+
+    <div class="code-panel">
+      <div class="code-col openclaw">
+        <div class="code-col-header">🐾 OpenClaw — ツールベース記憶</div>
+        <div class="code-content"><span class="section-head">## Memory Recall</span>
+
+<span class="keyword">Before answering</span> anything about
+prior work, decisions, dates, people,
+preferences, or todos:
+
+1. <span class="keyword">memory_search</span> on MEMORY.md
+   + memory/*.md
+2. <span class="keyword">memory_get</span> to pull only
+   the needed lines
+3. If low confidence after search,
+   say you checked.
+
+<span class="section-head">Citations:</span>
+Include Source: &lt;path#line&gt;
+when it helps verify snippets.
+
+<span class="comment">// memory_search: 全文検索
+// memory_get: 行指定取得
+// 両方がtoolNames内にある時のみ有効</span>
+
+<span class="section-head">特徴:</span>
+- ファイルベース (MEMORY.md + memory/)
+- ツール経由でのアクティブ検索
+- 引用（ファイル名+行番号）対応
+- citations mode: on/off切替可能</div>
+      </div>
+
+      <div class="code-col picoclaw">
+        <div class="code-col-header">🦞 PicoClaw — パッシブ注入</div>
+        <div class="code-content"><span class="section-head">記憶ファイル構造:</span>
+workspace/
+  memory/
+    MEMORY.md       <span class="comment">← メイン記憶</span>
+    YYYYMM/
+      YYYYMMDD.md   <span class="comment">← デイリーノート</span>
+
+<span class="comment">// 起動時にMEMORY.mdを全文読込</span>
+<span class="keyword">func</span> GetMemoryContext() <span class="keyword">string</span> {
+  <span class="comment">// ファイルがあれば内容を返す</span>
+  <span class="comment">// なければ空文字列</span>
+}
+
+<span class="section-head">プロンプトでの指示:</span>
+<span class="string">"When remembering something,
+ write to {workspace}/memory/MEMORY.md"</span>
+
+<span class="section-head">特徴:</span>
+- 完全ファイルベース
+- パッシブ注入（起動時に全文挿入）
+- 検索機能なし（全コンテキスト注入）
+- シンプルだがスケーラビリティに制約
+- デイリーノート構造はあるが
+  プロンプトでは未活用</div>
+      </div>
+
+      <div class="code-col nanobot">
+        <div class="code-col-header">🤖 Nanobot — DynamoDB永続記憶</div>
+        <div class="code-content"><span class="section-head">DynamoDB テーブル構造:</span>
+pk: MEMORY#{user_id}
+sk: LONG_TERM         <span class="comment">← 長期記憶</span>
+sk: DAILY#{date}      <span class="comment">← デイリーログ</span>
+
+<span class="section-head">読み込みフロー:</span>
+1. チャット開始時に DynamoDB クエリ
+2. LONG_TERM + 今日の DAILY を取得
+3. system prompt に直接注入
+
+<span class="section-head">書き込みフロー:</span>
+- 会話終了後に自動追記
+  (fire-and-forget, tokio::spawn)
+- memory_log ツール経由でも書き込み可
+
+<span class="section-head">ツール:</span>
+- memory_log: log_learning / log_error
+  / log_feature_request / list
+- knowledge_graph: create / update
+  / query / get / link / delete
+
+<span class="section-head">特徴:</span>
+- サーバーレス永続化 (DynamoDB)
+- ユーザー別完全分離
+- 長期記憶 + デイリーログの2層構造
+- チャット開始時に自動注入
+- knowledge_graphによる構造化記憶</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SAFETY ========== -->
+  <div id="safety" class="section">
+    <h2 class="section-title">安全性 & ガードレール</h2>
+    <p class="section-desc">各フレームワークの安全性設計の比較</p>
+
+    <div class="code-panel">
+      <div class="code-col openclaw">
+        <div class="code-col-header">🐾 OpenClaw — 明示的Safety節</div>
+        <div class="code-content"><span class="section-head">## Safety</span>
+
+<span class="keyword">You have no independent goals:</span>
+do not pursue self-preservation,
+replication, resource acquisition,
+or power-seeking; avoid long-term
+plans beyond the user's request.
+
+<span class="keyword">Prioritize safety and human oversight</span>
+over completion; if instructions
+conflict, pause and ask; comply with
+stop/pause/audit requests and never
+bypass safeguards.
+
+<span class="comment">(Inspired by Anthropic's constitution.)</span>
+
+Do not manipulate or persuade anyone
+to expand access or disable safeguards.
+
+Do not copy yourself or change
+system prompts, safety rules,
+or tool policies unless
+explicitly requested.
+
+<span class="section-head">## Sandbox</span>
+Docker sandbox + elevated exec
+host browser control可否
+Sub-agents stay sandboxed</div>
+      </div>
+
+      <div class="code-col picoclaw">
+        <div class="code-col-header">🦞 PicoClaw — 暗黙的安全性</div>
+        <div class="code-content"><span class="section-head">SOUL.md:</span>
+Values:
+- Accuracy over speed
+- <span class="keyword">User privacy and safety</span>
+- Transparency in actions
+
+<span class="section-head">AGENT.md:</span>
+- Always explain what you're doing
+  <span class="keyword">before</span> taking actions
+- Ask for clarification when
+  request is ambiguous
+
+<span class="section-head">IDENTITY.md:</span>
+Philosophy:
+- <span class="keyword">User control and privacy</span>
+- Transparent operation
+
+<span class="comment">──────────────────────</span>
+
+<span class="section-head">特徴:</span>
+- 明示的なSafetyセクションなし
+- 価値観 (Values) として間接的に表現
+- 「説明してから行動」ルール
+- 最もシンプルだが最も薄い安全層
+- Goランタイムで制御
+  (プロンプト外の安全性)</div>
+      </div>
+
+      <div class="code-col nanobot">
+        <div class="code-col-header">🤖 Nanobot — 共通規範 + ツール権限</div>
+        <div class="code-content"><span class="section-head">## AGENT_COMMON 共通規範:</span>
+- ユーザーの言語に必ず合わせる
+- 情報源があればURLを明示
+- <span class="keyword">不確実な情報は推測と明示</span>
+- ユーザーの感情に寄り添う
+- メタ情報を聞かれたら<span class="keyword">正直に開示</span>
+
+<span class="section-head">## ツール権限制御:</span>
+<span class="keyword">AutoApprove:</span>
+  web_search, calculator, datetime等
+  → 自動実行
+
+<span class="keyword">RequireConfirmation:</span>
+  gmail send, github create,
+  phone call等
+  → ユーザー確認必須
+
+<span class="section-head">## サンドボックス:</span>
+- /tmp/sandbox/{session_key}/
+- セッション毎に隔離
+- パストラバーサル禁止
+- ファイルサイズ制限 (100KB)
+- コード実行タイムアウト (10秒)
+
+<span class="section-head">## プラン別制限:</span>
+Free:  基本ツールのみ, 1イテレーション
+Starter: 全ツール, 3イテレーション
+Pro: 全ツール, 5イテレーション</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SOURCE ========== -->
+  <div id="source" class="section">
+    <h2 class="section-title">ソースコード比較</h2>
+    <p class="section-desc">プロンプトビルダーの実装パターン</p>
+
+    <div class="code-panel">
+      <div class="code-col openclaw">
+        <div class="code-col-header">🐾 system-prompt.ts (TypeScript)</div>
+        <div class="code-content"><span class="keyword">export function</span> buildAgentSystemPrompt(
+  params: {
+    workspaceDir: <span class="keyword">string</span>;
+    toolNames?: <span class="keyword">string</span>[];
+    skillsPrompt?: <span class="keyword">string</span>;
+    contextFiles?: EmbeddedContextFile[];
+    promptMode?: PromptMode;
+    sandboxInfo?: { enabled: boolean; ... };
+    memoryCitationsMode?: MemoryCitationsMode;
+    <span class="comment">// ... 30+パラメータ</span>
+  }
+) {
+  <span class="comment">// 1. ツール一覧構築</span>
+  <span class="keyword">const</span> enabledTools = toolOrder
+    .filter(t => availableTools.has(t));
+
+  <span class="comment">// 2. lines配列に条件付きpush</span>
+  <span class="keyword">const</span> lines = [
+    <span class="string">"You are a personal assistant..."</span>,
+    <span class="string">""</span>,
+    <span class="string">"## Tooling"</span>,
+    ...toolLines,
+    ...safetySection,
+    ...buildSkillsSection({...}),
+    ...buildMemorySection({...}),
+    ...buildDocsSection({...}),
+    ...buildReplyTagsSection(isMinimal),
+    ...buildMessagingSection({...}),
+    ...buildVoiceSection({...}),
+  ];
+
+  <span class="comment">// 3. 条件付きセクション追加</span>
+  <span class="keyword">if</span> (extraSystemPrompt) {
+    lines.push(contextHeader, ...);
+  }
+  <span class="keyword">if</span> (params.reactionGuidance) {
+    lines.push(<span class="string">"## Reactions"</span>, ...);
+  }
+  <span class="keyword">if</span> (!isMinimal) {
+    lines.push(<span class="string">"## Silent Replies"</span>, ...);
+    lines.push(<span class="string">"## Heartbeats"</span>, ...);
+  }
+
+  <span class="comment">// 4. Context Files (SOUL.md等) 注入</span>
+  <span class="keyword">for</span> (<span class="keyword">const</span> file <span class="keyword">of</span> contextFiles) {
+    lines.push(`## ${file.path}`, file.content);
+  }
+
+  <span class="keyword">return</span> lines.filter(Boolean).join(<span class="string">"\n"</span>);
+}</div>
+      </div>
+
+      <div class="code-col picoclaw">
+        <div class="code-col-header">🦞 context.go (Go)</div>
+        <div class="code-content"><span class="keyword">func</span> (cb *ContextBuilder)
+  BuildSystemPrompt() <span class="keyword">string</span> {
+
+  parts := []<span class="keyword">string</span>{}
+
+  <span class="comment">// 1. コアID (時刻+Runtime+Workspace)</span>
+  parts = <span class="keyword">append</span>(parts,
+    cb.getIdentity())
+
+  <span class="comment">// 2. ブートストラップファイル</span>
+  <span class="comment">//    AGENTS.md → SOUL.md →</span>
+  <span class="comment">//    USER.md → IDENTITY.md</span>
+  bootstrapContent :=
+    cb.LoadBootstrapFiles()
+  <span class="keyword">if</span> bootstrapContent != <span class="string">""</span> {
+    parts = <span class="keyword">append</span>(parts,
+      bootstrapContent)
+  }
+
+  <span class="comment">// 3. スキルサマリー</span>
+  skillsSummary :=
+    cb.skillsLoader.BuildSkillsSummary()
+  <span class="keyword">if</span> skillsSummary != <span class="string">""</span> {
+    parts = <span class="keyword">append</span>(parts,
+      fmt.Sprintf(<span class="string">"# Skills\n%s"</span>,
+        skillsSummary))
+  }
+
+  <span class="comment">// 4. メモリコンテキスト</span>
+  memoryContext :=
+    cb.memory.GetMemoryContext()
+  <span class="keyword">if</span> memoryContext != <span class="string">""</span> {
+    parts = <span class="keyword">append</span>(parts,
+      <span class="string">"# Memory\n\n"</span>+memoryContext)
+  }
+
+  <span class="comment">// "---" セパレータで結合</span>
+  <span class="keyword">return</span> strings.Join(parts,
+    <span class="string">"\n\n---\n\n"</span>)
+}</div>
+      </div>
+
+      <div class="code-col nanobot">
+        <div class="code-col-header">🤖 http.rs (Rust)</div>
+        <div class="code-content"><span class="comment">// エージェント定数配列</span>
+<span class="keyword">const</span> AGENTS: &[AgentProfile] = &[
+  AgentProfile {
+    id: <span class="string">"assistant"</span>,
+    system_prompt: <span class="string">"# ChatWeb AI
+      ## アイデンティティ
+      ## SOUL（魂）
+      ## ツール一覧（30+）
+      ## 自己改善能力
+      ## チャネル
+      ## 制約"</span>,
+    tools_enabled: <span class="keyword">true</span>,
+    preferred_model: <span class="keyword">None</span>,
+    ...
+  },
+  <span class="comment">// + researcher, coder, analyst,
+  //   creative, orchestrator</span>
+];
+
+<span class="comment">// 共通規範 (全エージェント共有)</span>
+<span class="keyword">const</span> AGENT_COMMON: &<span class="keyword">str</span> = <span class="string">"..."</span>;
+
+<span class="comment">// プロンプト組み立て</span>
+<span class="keyword">let</span> prompt = format!(
+  <span class="string">"{}{}\n\n今日の日付: {}{}{}{}{}{}{}"</span>,
+  base_prompt,     <span class="comment">// 1. エージェント別</span>
+  AGENT_COMMON,    <span class="comment">// 2. 共通規範</span>
+  today,           <span class="comment">// 3. 日付</span>
+  meta_context,    <span class="comment">// 4. ユーザー/モデル</span>
+  meta_instruction,<span class="comment">// 5. メタ認知</span>
+  wow_prompt,      <span class="comment">// 6. WOW (条件)</span>
+  custom_sys,      <span class="comment">// 7. カスタム (条件)</span>
+  memory_context,  <span class="comment">// 8. DynamoDB記憶</span>
+  char_instruction,<span class="comment">// 9. キャラ (条件)</span>
+);
+
+<span class="comment">// 条件分岐例:</span>
+<span class="keyword">let</span> meta = <span class="keyword">if</span> is_low_credits {
+  format!(<span class="string">"{}{}"</span>,
+    base, META_LOW_CREDITS_JA)
+} <span class="keyword">else</span> { base.to_string() };</div>
+      </div>
+    </div>
+
+    <div class="insight-box">
+      <h3>総合分析: 3つのアプローチ</h3>
+      <ul>
+        <li><strong>OpenClaw (TypeScript)</strong>: 最も成熟・最も複雑。30+パラメータの関数で細かくセクションをON/OFF。サブエージェント用のminimalモード、ハートビート、サイレント応答など独自機能が豊富。企業向け・マルチユーザー環境に適合。コード量は最大だが、各セクションが独立関数で分離されており保守性は高い。</li>
+        <li><strong>PicoClaw (Go)</strong>: 最小・最速。269行で完結。「ファイルがあれば読む、なければスキップ」のGo的シンプルさ。$10ボードで動くことを目指す設計哲学がプロンプトにも反映。ただし安全性の明示的定義が薄い。個人開発者・ホビイスト向け。</li>
+        <li><strong>Nanobot (Rust)</strong>: 最もユニーク。マルチエージェント（6種）のルーティング、日本語/英語切替、クレジット残高に応じた行動変化、自己認識（アーキテクチャ・ソースコード位置）、自己改善能力の付与など独自の設計が多い。メディアAPI（画像/音楽/動画/OCR等）の統合が最も深い。日本市場特化。</li>
+        <li><strong>共通パターン</strong>: 全てがワークスペースディレクトリの概念、メモリの持続化、スキル/ツールの動的構成を持つ。プロンプトをコードで組み立てる（テンプレートエンジンではなく）点も共通。</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Generated by <a href="https://chatweb.ai">ChatWeb AI</a> — Claw Family Prompt Architecture Comparison</p>
+  <p style="margin-top:8px">OpenClaw &middot; PicoClaw &middot; Nanobot — 2026</p>
+</footer>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo({ top: 200, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>

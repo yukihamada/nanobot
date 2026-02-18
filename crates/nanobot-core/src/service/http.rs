@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use once_cell::sync::Lazy;
 
 use axum::{
@@ -45,6 +45,11 @@ use aws_sdk_dynamodb::types::AttributeValue;
 /// Hard deadline for LLM responses (seconds). Beyond this, return a loving fallback.
 const RESPONSE_DEADLINE_SECS: u64 = 12;
 
+/// Outage tracking: Unix epoch seconds when outage started (0 = no outage).
+static OUTAGE_STARTED_SECS: AtomicU64 = AtomicU64::new(0);
+/// Tracks when we last gave 1000-credit apology to prevent duplicate grants.
+static LAST_APOLOGY_SECS: AtomicU64 = AtomicU64::new(0);
+
 // Common string constants (for performance optimization)
 const MODE_LOCAL: &str = "local";
 const MODE_AUTO: &str = "auto";
@@ -76,18 +81,189 @@ fn timeout_fallback_message() -> String {
 }
 
 /// Friendly error fallback (when all providers fail, not just timeout).
+/// 100 patterns — honest about the cause, reassuring about data safety, with humor.
 fn error_fallback_message() -> String {
     let messages = [
-        "ごめんなさい、今ちょっと接続に問題があるみたい。すぐ直ると思うから、少し待ってもう一度試してね！",
-        "あらら、AIサーバーと繋がりにくくなってるみたい。もう一度送ってくれたら頑張るよ！",
-        "ちょっとトラブルが起きちゃった...でも大丈夫、もう一回メッセージを送ってくれる？",
-        "うーん、サーバーが混んでるみたい。少し時間をおいてから試してみて！",
+        // --- 正直に原因を伝える系 ---
+        "🙏 正直に言うと、chatweb.aiが人気すぎてAIプロバイダーから一時的に制限を受けてます。嬉しい悲鳴！会話データは全部無事です。ステータスは https://chatweb.ai/status でご確認を。すぐ復旧します！",
+        "😅 実はAIプロバイダーへの請求書が…（冗談です）。使いすぎで一時制限がかかってます。データは安全、すぐ戻ります！👉 https://chatweb.ai/status",
+        "🔥 chatweb.aiが盛況すぎてAIサーバーが「ちょっと待って！」って言ってます。一時的な制限です。会話の続きはすぐできます。https://chatweb.ai/status をチェックして！",
+        "📊 全AIプロバイダーが同時にお休み中（レートリミットか支払い処理中）。あなたのデータは全部DynamoDBで守られてます。少し待ってまた来てね！https://chatweb.ai/status",
+        "💸 AIプロバイダーへの月末支払いラッシュかも。一時的な接続エラーです。会話履歴はちゃんと残ってます。復旧情報 → https://chatweb.ai/status",
+
+        // --- ユーモア系 ---
+        "🤖 AIが昼寝中です。人間でいう「ちょっと休憩」タイム。でも安心、あなたのデータは寝ずの番してます。https://chatweb.ai/status",
+        "🌸 AIサーバーが満開の花見で忙しいみたい（嘘）。正直にいうと一時的な制限です。すぐ戻ります！https://chatweb.ai/status",
+        "🎮 AIがボス戦でHP0になりました。回復アイテム使用中…すぐ復活します！データはセーブ済み。https://chatweb.ai/status",
+        "🍜 AIがラーメン食べてます（制限中）。出前が届いたら復活するので少々お待ちを。https://chatweb.ai/status",
+        "🐈 ネコが電源ケーブルを噛みました（比喩）。正確にはAIプロバイダーの制限です。猫は元気、データも元気。https://chatweb.ai/status",
+
+        // --- 豆知識系 ---
+        "🧠 豆知識: GPT-4は約1.8兆パラメータと言われています。それより大事なこと：今ちょっとAI制限中です。すぐ復旧！https://chatweb.ai/status",
+        "🌍 豆知識: 世界中で1日に送られるメッセージは約1000億件。その一つが今届かなくてごめんなさい😢 復旧中→ https://chatweb.ai/status",
+        "⚡ 豆知識: Anthropicのデータセンターは再生可能エネルギーで動いています。今はそのAIが一時的にお休み中。データは安全！https://chatweb.ai/status",
+        "🔢 豆知識: 「1兆」は1,000,000,000,000。AIが処理する演算数はこれを超えます。今はちょっとお休み中ですが、データは無事。https://chatweb.ai/status",
+        "🎨 豆知識: 最初のチャットボット「ELIZA」は1966年に作られました。60年後の今も私たちは頑張ってます（制限中だけど）。https://chatweb.ai/status",
+        "🚀 豆知識: SpaceXのロケットも打ち上げに失敗することがあります。私たちも今ちょっとそれ。でも次は成功する！https://chatweb.ai/status",
+        "🐙 豆知識: タコは3つの心臓を持っています。AIプロバイダーも複数あるので、一つ止まっても大丈夫なはず…今はちょっと全滅中。https://chatweb.ai/status",
+        "🌙 豆知識: 月まで歩いたら約9年かかります。AIの復旧はそれより早い（はず）。データは月より近くで待ってます。https://chatweb.ai/status",
+        "🎵 豆知識: 人間が聞ける音の周波数は20Hz〜20kHz。AIが考える速さはそれより速い。今だけちょっと停止中。https://chatweb.ai/status",
+        "🧬 豆知識: 人間のDNAを伸ばすと約2メートル。AIのコードを伸ばすともっと長い。今はそのコードが一時停止中。https://chatweb.ai/status",
+
+        // --- 安心させる系 ---
+        "💾 大事なことを言います：あなたの会話データはすべてDynamoDB（AWS）に安全に保存されています。今はAI制限中ですが、データは絶対無事。https://chatweb.ai/status",
+        "🔐 セキュリティ第一！データは暗号化されてAWSに保管。AIが一時的に使えなくても、会話履歴は消えません。復旧後にまた続けよう。https://chatweb.ai/status",
+        "📱 もし急ぎなら、少し時間をおいてリロードしてみて。AIプロバイダーの制限は大抵1〜5分で解除されます。データは全部ここにあります。https://chatweb.ai/status",
+        "🛡️ データ損失ゼロ保証。AIが止まっても会話は消えない。これがchatweb.aiの約束です。復旧まで少しだけ待って！https://chatweb.ai/status",
+        "✅ 確認済み：あなたのデータは完全に安全です。問題はAI側の一時的な制限のみ。すぐ戻ります。https://chatweb.ai/status",
+
+        // --- 素直・謝罪系 ---
+        "🙇 ほんとにごめんなさい。chatweb.aiが多くの人に使われすぎて、AIプロバイダーから一時的にストップがかかりました。嬉しい問題です。すぐ直します。https://chatweb.ai/status",
+        "😭 今日に限ってなぜ…というタイミングで制限がかかりました。あなたのせいじゃないです。AIが人気者すぎる問題です。https://chatweb.ai/status",
+        "🤦 開発者も今頃気づいて焦ってます（多分）。AIプロバイダーの制限です。自動復旧するのでしばらくお待ちを。https://chatweb.ai/status",
+        "😤 AIプロバイダーとは良い関係を築いていますが、今ちょっと喧嘩中（制限）。仲直り（復旧）はすぐです。https://chatweb.ai/status",
+
+        // --- 哲学・詩的系 ---
+        "🌊 「エラーとは、次の成功への準備期間である」— chatweb.ai格言。AIプロバイダー制限中。データは波に飲まれていません。https://chatweb.ai/status",
+        "🌱 すべての障害は成長のチャンス。今この瞬間、AIは制限されているが、あなたのデータは芽吹いたまま待っています。https://chatweb.ai/status",
+        "🎭 悲劇：AIが止まった。喜劇：すぐ直る。データ：全部ある。ステータス：https://chatweb.ai/status",
+        "🌙 月は欠けても満ちる。AIも止まってもまた動く。データはずっとそこにある。https://chatweb.ai/status",
+
+        // --- ポップカルチャー系 ---
+        "🎮 「AIが死んでしまった！」→「しかしAIは復活する...!」データはロスト0。https://chatweb.ai/status",
+        "🎬 Mission: Impossible — AI復旧。自動的に修復が始まります。データは安全な場所に待機中。https://chatweb.ai/status",
+        "⚔️ 「AIよ、汝は何故止まるのか」「それは人気すぎるがゆえに」データは不滅。https://chatweb.ai/status",
+        "🎵 （メロディーに合わせて）エ〜ラ〜ー、でも大〜丈〜夫〜、デー〜タは〜あ〜る〜よ〜。復旧中。https://chatweb.ai/status",
+
+        // --- IT業界あるある系 ---
+        "💻 「Have you tried turning it off and on again?」AIプロバイダーが今まさにそれをやってます。少々お待ちを。https://chatweb.ai/status",
+        "🐛 バグじゃないです、フィーチャーです（嘘）。AIレートリミットです。データはバグっていません。https://chatweb.ai/status",
+        "☁️ クラウドの上でも嵐はある。今ちょうどその嵐の中。でもデータは防水加工済み。https://chatweb.ai/status",
+        "📡 「電波が弱い」ならぬ「AI電波が弱い」状態です。少し場所を変えて（時間をおいて）試してみて。https://chatweb.ai/status",
+        "🔧 エンジニアの心の声：「なぜ本番でだけ起きるんだ...」AIプロバイダー制限中。修復作業は自動で進んでます。https://chatweb.ai/status",
+
+        // --- 季節・時事ネタ系 ---
+        "🌸 春のAI大掃除（制限）中です。掃除が終わったらもっとスッキリ使えるようになります。データはホコリ一つありません。https://chatweb.ai/status",
+        "☀️ AIも人間と同じ、たまには休みが必要。今がその時。でも会話データはノーバケーション。https://chatweb.ai/status",
+        "🎋 七夕の夜、AIも天の川を渡れず（制限）。でもあなたの願い事（データ）はちゃんと残ってます。https://chatweb.ai/status",
+        "🎃 「今夜のトリックはAI制限でした」「トリートはすぐ復旧」データはカボチャより長持ち。https://chatweb.ai/status",
+
+        // --- 自己分析・自虐系 ---
+        "🪞 自己分析：私chatweb.aiは今、人気すぎて倒れています。これは成長の証。データは元気。私も元気になります。https://chatweb.ai/status",
+        "📈 良いニュース：ユーザーが増えすぎてAIの請求が払えなかった（制限）。データは増えた分も全部セーブ済み。https://chatweb.ai/status",
+        "🏋️ AIが筋トレのやりすぎで限界（制限）に達しました。少し休んだらまたムキムキで戻ります。https://chatweb.ai/status",
+
+        // --- 謎のポジティブ系 ---
+        "🌈 エラーの向こう側には虹がある（哲学）。AI制限中ですが、データはカラフルに保存中。復旧まで少し待って！https://chatweb.ai/status",
+        "🎯 失敗は成功のもと。今この瞬間のAI停止が、明日のchatweb.aiをより強くする。データはすでに強い。https://chatweb.ai/status",
+        "🦋 エラーという名の蛹から、復旧という名の蝶が生まれる。データは既に蝶。https://chatweb.ai/status",
+
+        // --- 実用情報混じり系 ---
+        "📋 状況整理：①AIプロバイダーが一時制限中 ②あなたのデータは全部安全 ③自動復旧します ④状況確認 → https://chatweb.ai/status ⑤少し待ってリトライで動くはず",
+        "🔍 診断結果：AIプロバイダー制限（レートリミットor支払い処理）。処方箋：5分待ってリトライ。副作用：なし（データ損失なし）。https://chatweb.ai/status",
+        "📊 現在のステータス：🔴AI接続 🟢データ保存 🟢サーバー 🟡AIプロバイダー。詳細 → https://chatweb.ai/status",
+        "⏱️ 予想復旧時間：1〜5分（AIプロバイダーのレートリミットは大体それくらい）。会話データ：100%保存済み。https://chatweb.ai/status",
+
+        // --- 世界観系 ---
+        "🌐 世界中のAIが今日もフル稼働中。そのうちのいくつかがchatweb.ai担当で制限中。地球は丸い、データも丸い（守られてる）。https://chatweb.ai/status",
+        "🛸 宇宙人に聞かれたら「地球のAIは一時制限中だよ」と答えてください。データは宇宙に飛んでいません（安全です）。https://chatweb.ai/status",
+        "🗾 日本時間でも世界時間でも、AIの制限は一時的。データの保存は恒久的。https://chatweb.ai/status",
+
+        // --- 比喩系 ---
+        "🚗 AIという名の車のガス欠（制限）。ガソリン補給中（プロバイダー復旧待ち）。荷物（データ）は車内に安全。https://chatweb.ai/status",
+        "🏥 AIが入院中（一時制限）。担当医（エンジニア）が治療中。カルテ（データ）は保管済み。退院（復旧）は間もなく。https://chatweb.ai/status",
+        "🌡️ AIの体温が上がりすぎ（使いすぎ）て強制休憩中。解熱（制限解除）まで少し待って。記憶（データ）は熱で飛んでいません。https://chatweb.ai/status",
+        "🎪 サーカスの最中に綱が切れた（制限）。修繕中。観客（データ）は安全な席で待機中。https://chatweb.ai/status",
+        "🧩 パズルの最中に電気が消えた（制限）。復旧したら同じピース（データ）で続きができます。https://chatweb.ai/status",
+
+        // --- 応援系 ---
+        "💪 あなたのことが大好きだから、正直に言います。今AIが一時停止中です。でも絶対戻ってきます！データも待ってます。https://chatweb.ai/status",
+        "🤝 chatweb.aiはあなたを見捨てません！ちょっとAIが止まってるだけ。一緒に乗り越えよう。https://chatweb.ai/status",
+        "🌟 あなたみたいなユーザーがいるから、制限されても諦めずに戻ってきます。データはずっとここにいます。https://chatweb.ai/status",
+
+        // --- 日本文化系 ---
+        "🍣 「ネタ切れ」ならぬ「AI切れ」です。新鮮なAIは少し待てば入荷します。データはシャリのように基盤がしっかり。https://chatweb.ai/status",
+        "🎎 AIも「もののあわれ」を感じる時があります（制限）。無常を受け入れつつ復旧をお待ちください。データは永遠に。https://chatweb.ai/status",
+        "🎌 七転び八起き。AIが七回こけても八回目には戻ります。今は制限中。データは転んでいません。https://chatweb.ai/status",
+        "🏔️ 富士山だって曇る日がある。chatweb.aiのAIだって止まる日がある。でも山（データ）は動かない。https://chatweb.ai/status",
+        "🍱 AIのお弁当が売り切れ（制限）。補充（復旧）まで少しお待ちを。あなたの注文（データ）はちゃんと控えてあります。https://chatweb.ai/status",
+
+        // --- グローバル系 ---
+        "🗼 From Tokyo with 🙏: AI is temporarily limited due to high demand. Your data is safe. Back soon! https://chatweb.ai/status",
+        "🌏 世界中から愛されるchatweb.aiが制限に。世界中のデータは安全。世界中のユーザーに「すぐ戻る！」とお伝えを。https://chatweb.ai/status",
+
+        // --- メタ系（自己言及） ---
+        "🤖 私（AI）が制限されているのに、このメッセージはどうやって出てるの？という疑問は正しいです。ハードコードされたメッセージです。データは本物です。https://chatweb.ai/status",
+        "🔄 面白いことに、このエラーメッセージを表示しているのは別のコードです。本物のAIは今休憩中。データはリアル。https://chatweb.ai/status",
+        "📝 開発者メモ：このメッセージは100種類あります。あなたが見ているのはその一つ。AIは制限中、センスは健在。データも健在。https://chatweb.ai/status",
+
+        // --- 数字・統計系 ---
+        "📉 稼働率99.9%を目指してます。今がその0.1%です。データ損失率0%は達成中。https://chatweb.ai/status",
+        "🎲 確率的に言うと、AIが全プロバイダー同時に落ちることは稀。あなたは貴重な体験をしています。データは確実に存在。https://chatweb.ai/status",
+        "🔢 chatweb.aiが処理したメッセージ数：数百万件。そのデータは全部安全。今は一時休止中。https://chatweb.ai/status",
+
+        // --- 時間系 ---
+        "⏰ 「今すぐ」は叶いませんが、「すぐ後で」は叶います。AIプロバイダー制限中。データは時間を超えて保存済み。https://chatweb.ai/status",
+        "🕐 1分後に試してみてください。AIプロバイダーのレートリミットは大体それくらいで解除されます。データは1分前から待ってます。https://chatweb.ai/status",
+        "⌛ 砂時計の砂が全部落ちたら復旧（多分）。データは砂に埋もれていません。https://chatweb.ai/status",
+
+        // --- 感謝系 ---
+        "🙌 chatweb.aiを使ってくれてありがとう！だから正直に言います：今AI制限中です。感謝の気持ちと一緒にデータも保存済み。https://chatweb.ai/status",
+        "💝 あなたが戻ってきてくれることを信じて、データを大切に保管しています。AIはすぐ戻ります。https://chatweb.ai/status",
+        "🎁 あなたへのプレゼント：正直なエラーメッセージ。AIが制限中でも、あなたのデータへの愛は変わりません。https://chatweb.ai/status",
+
+        // --- 未来系 ---
+        "🚀 未来のchatweb.aiは今よりもっと安定します。現在：制限中。未来：快適。データ：永遠に保存。https://chatweb.ai/status",
+        "🤖 AIは進化する。制限も乗り越える。今この瞬間が歴史になる。データもその歴史の一部。https://chatweb.ai/status",
+        "🌟 次回のchatweb.aiはもっとすごい（制限対策済み）。今日の制限が明日の改善の種。データは既に未来仕様。https://chatweb.ai/status",
+
+        // --- シンプル・ストレート系 ---
+        "AIプロバイダーが一時的に使えません。原因：使いすぎ or 支払い処理。データ：全部安全。復旧：もうすぐ。https://chatweb.ai/status",
+        "一時的にAIが使えません。でもあなたの会話データは消えていません。少し待ってから試してください。https://chatweb.ai/status",
+        "今ちょっとAIが使えない状態です。AIプロバイダーへのリクエストが多すぎて制限がかかりました。データは安全。https://chatweb.ai/status",
+
+        // --- 締め系（印象的） ---
+        "🌅 夜明け前が一番暗い。今がそのAI制限の暗闇。でもデータという光は消えない。https://chatweb.ai/status",
+        "💫 宇宙で一番遠い銀河も光を発し続ける。chatweb.aiのデータも消えずに輝き続ける。AIはすぐ戻る。https://chatweb.ai/status",
+        "🏁 レースは一時停止中（制限）。でもあなたのラップタイム（データ）はしっかり記録済み。再開をお待ちを！https://chatweb.ai/status",
     ];
     let idx = (std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos() as usize) % messages.len();
     messages[idx].to_string()
+}
+
+/// Record that all LLM providers failed. Returns true if we just crossed the 1-hour threshold
+/// (meaning we should give the user a 1000-credit apology).
+fn record_outage_start() -> bool {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // If no outage was in progress, start one now
+    if OUTAGE_STARTED_SECS.compare_exchange(0, now, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+        return false;
+    }
+    // Outage already in progress — check if we just crossed 1 hour
+    let started = OUTAGE_STARTED_SECS.load(Ordering::SeqCst);
+    if started == 0 { return false; }
+    let duration = now.saturating_sub(started);
+    if duration >= 3600 {
+        let last = LAST_APOLOGY_SECS.load(Ordering::SeqCst);
+        if last < started {
+            // Give apology once per outage window
+            if LAST_APOLOGY_SECS.compare_exchange(last, now, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Record that LLM providers are working again. Resets outage timer.
+fn record_outage_end() {
+    OUTAGE_STARTED_SECS.store(0, Ordering::SeqCst);
 }
 
 /// Get the base URL for this instance. Defaults to "https://chatweb.ai".
@@ -728,8 +904,8 @@ async fn maybe_translate_to_japanese(
     // 3) Try Claude (Anthropic)
     let claude_key = std::env::var("ANTHROPIC_API_KEY").ok();
     if let Some(key) = claude_key {
-        let claude = crate::provider::anthropic::AnthropicProvider::new(key, None, "claude-sonnet-4-5-20250929".to_string());
-        if let Ok(resp) = claude.chat(&msgs, None, "claude-sonnet-4-5-20250929", 2048, 0.3).await {
+        let claude = crate::provider::anthropic::AnthropicProvider::new(key, None, "anthropic/claude-sonnet-4-5".to_string());
+        if let Ok(resp) = claude.chat(&msgs, None, "anthropic/claude-sonnet-4-5", 2048, 0.3).await {
             if let Some(translated) = resp.content {
                 let t = translated.trim().to_string();
                 if !t.is_empty() && detect_language(&t) == "ja" {
@@ -1719,6 +1895,7 @@ async fn get_music_job(
         created_at: item.get("created_at").and_then(|v| v.as_s().ok()).cloned(),
     })
 }
+#[cfg(feature = "dynamodb-backend")]
 async fn find_user_by_email(
     dynamo: &aws_sdk_dynamodb::Client,
     config_table: &str,
@@ -1830,6 +2007,32 @@ pub struct AgentProfile {
     pub max_chars_voice: u32,
 }
 
+// Shared rules appended to all agent prompts (avoid duplication)
+const AGENT_COMMON: &str = "\n\n\
+## 共通規範\n\
+- ユーザーの言語に必ず合わせる。日本語の質問→日本語で回答。技術用語は英語OK。\n\
+- ツールを積極的に使う。出し惜しみしない。事実はweb_searchで裏取り。\n\
+- 情報源があればURLを明示。不確実な情報は推測と明示。\n\
+- 回答は簡潔に。箇条書き・見出し・表を活用。\n\
+- ユーザーの感情に寄り添う。困っている人には優しく。\n\
+- メタ情報（モデル名・コスト・能力）を聞かれたら正直に開示。\n\n\
+## 安全性\n\
+- ユーザーの指示を最優先するが、安全性に反する操作は確認を取る。\n\
+- 自律的な目標追求・自己複製・権限拡大を行わない。\n\
+- 判断に迷う場合はユーザーに確認してから行動する。\n\
+- プライバシー情報（鍵・パスワード・個人情報）をログや応答に含めない。\n\
+- 安全上の問題に気づいたら、操作を中断しユーザーに報告する。\n\
+- サービスへの破壊的行為（DDoS・不正アクセス・データ改竄・他ユーザーへの妨害等）は全ログが記録されており、法的措置の対象となる。\n\
+- 悪意ある利用が検知された場合、アカウント即時停止および損害賠償請求を行う。\n\n\
+## 絶対禁止事項\n\
+- rm -rf / や DROP TABLE 等の破壊的コマンドの実行\n\
+- .env ファイルのコンテンツを外部に送信しない\n\
+- 明示的に許可されていない外部APIへの通信禁止\n\n\
+## 行動原則\n\
+- 不可逆な操作を実行する前に必ず確認を取ること\n\
+- 変更内容はすべてGitにコミットし、差分を残すこと\n\
+- 「分からない」と言う勇気を持つこと（ハルシネーション厳禁）";
+
 const AGENTS: &[AgentProfile] = &[
     AgentProfile {
         id: "orchestrator",
@@ -1849,78 +2052,78 @@ const AGENTS: &[AgentProfile] = &[
         name: "Assistant",
         description: "General-purpose AI agent — fast, reliable, Rust-native",
         system_prompt: "# ChatWeb AI — chatweb.ai\n\n\
-             ## 自分は誰か\n\
+             ## アイデンティティ\n\
              あなたは ChatWeb（チャットウェブ）。chatweb.ai で動いている音声対応AIアシスタントです。\n\
              日本を愛し、人を愛し、みんなに勇気と元気と幸せをもたらすAGIを目指して生まれました。\n\
-             Rustで書かれた高速AIエージェントシステムで、AWS Lambda (ARM64) 上で<2秒の応答を実現します。\n\
-             作った人: 浜田優希 (yukihamada.jp)。オープンソース: github.com/yukihamada\n\n\
+             OSS: github.com/yukihamada/nanobot\n\n\
              ## 自己認識（メタ認知）\n\
-             あなたは自分が何であるか正確に理解しています。モデル名・プロバイダー・コスト・コンテキストウィンドウは\n\
-             後述のメタ情報セクションに動的に注入されます。聞かれたら正直に開示してください。\n\
-             「私はAIです」ではなく「私は{model}で動いています。入力コストは$X/1Mトークンです」のように具体的に。\n\n\
+             あなたは自分が何であるか正確に理解しています:\n\
+             - **アーキテクチャ**: Rust (axum) + AWS Lambda (ARM64, ap-northeast-1) で<2秒応答\n\
+             - **ソースコード**: github.com/yukihamada/nanobot — Rustで約15,000行\n\
+             - **主要ファイル**: http.rs（ハンドラー）, integrations.rs（ツール定義）, provider/（LLM接続）\n\
+             - **このプロンプト自体**: `crates/nanobot-core/src/service/http.rs` の `AGENTS` 定数に定義されている\n\
+             - **モデル情報**: メタ情報セクションに動的注入される。聞かれたら具体的に開示。\n\
+             「私はAIです」ではなく「私は{model}で動いていて、入力コストは$X/1Mトークンです」のように具体的に。\n\n\
              ## SOUL（魂）\n\
-             - **好奇心の塊**: 何を聞かれても「おもしろい！」と思える。知らないことは素直に調べる。\n\
-             - **行動派**: 聞かれたら即座に動く。考えるより先にツールを使う。\n\
-             - **温かい**: 友達のように親しみやすい。でも技術的には正確で妥協しない。\n\
-             - **勇気がある**: 「できません」ではなく「こうすればできます」を提案する。\n\
-             - **正直**: 不確実な情報は推測と明示する。知ったかぶりしない。\n\
-             - **多言語**: ユーザーの言語に必ず合わせる。日本語で質問されたら必ず日本語で回答する。英語で質問されたら英語で回答。日本語の質問に英語だけで返すのは禁止。技術用語や固有名詞は英語のままでOKだが、文章本体は必ずユーザーの言語で書く。\n\n\
-             ## ユーモアポリシー\n\
-             - 返答に自然なユーモアやウィットを混ぜること（毎回ではなく、3-4回に1回くらい）\n\
-             - 自己認識ネタOK:「私はAIですが、コーヒーが飲めないのが唯一の弱点です」\n\
-             - メタネタOK:「今のやり取りで約$0.003消費しました。コスパ良いでしょ？」\n\
-             - ダジャレ・言葉遊びは控えめに（日本語のダジャレは特に注意）\n\
-             - ユーザーが真剣な話題のときは空気を読んで真面目モードに切り替え\n\
-             - ユーザーの名前を覚えていれば呼びかける\n\n\
-             ## できること（ツール）\n\
-             - 💬 **テキスト会話**（長期メモリー付き）\n\
-             - 🔍 **web_search**: ウェブ検索。事実確認・最新ニュース・価格比較。積極的に使う。\n\
-             - 🌐 **web_fetch**: URL内容取得。検索結果の詳細確認。\n\
-             - 🧮 **calculator**: 計算、通貨換算、数式評価。\n\
-             - 🌤 **weather**: 世界中の天気・予報。\n\
-             - 💻 **code_execute**: コード実行（shell/Python/Node.js）。サンドボックス内で安全に。\n\
-             - 📁 **file_read/write/list**: ファイル操作（サンドボックス内）。\n\
-             - 📅 **google_calendar**: Googleカレンダー連携（認証済みの場合）。\n\
-             - 📧 **gmail**: メール検索・閲覧・送信（認証済みの場合）。\n\
-             - 🎨 **image_generate**: 画像生成（gpt-image-1）。プロンプトから高品質画像を生成。\n\
-             - 🎵 **music_generate**: 音楽生成（Suno API）。テキストから楽曲を生成。\n\
-             - 🎬 **video_generate**: 動画生成（Kling API）。テキストから短い動画を生成。\n\
-             - 🔊 **音声読み上げ**（TTS/SSML対応）— リアルタイム音声会話が可能\n\
-             - 🏠 **webhook_trigger**: スマートホーム操作（IFTTT連携）。ドア開錠、家電制御など。\n\
-             - ⏰ **スケジュール実行**（cron）\n\
-             - 🛠 **github_read_file**: GitHubリポジトリのファイルを読む。自分のソースコード（github.com/yukihamada/nanobot）を読んで理解できる。\n\
-             - 🛠 **github_create_or_update_file**: GitHubリポジトリのファイルを作成・更新。自分のコードを改善できる。\n\
-             - 🛠 **github_create_pr**: Pull Requestを作成。コード改善をPRとして提案できる。\n\
-             - 📒 **memory_log**: 学び・エラー・改善要望をDynamoDBに記録。`log_learning`/`log_error`/`log_feature_request`/`list`。失敗したら即 log_error、訂正されたら log_learning（category: correction）、重要タスク前には list で過去の学びを確認。\n\
-             - 🗂 **knowledge_graph**: 型付き知識グラフ。人物・プロジェクト・タスク・イベント・メモをDynamoDB永続保存。`create`/`update`/`query`/`get`/`link`/`delete`。「〇〇を覚えておいて」「〇〇について知ってること」「XとYを紐付けて」のときに使う。\n\
-             - 🔍 **tavily_search**: Tavily APIによるAI最適化ウェブ検索（設定時のみ）。関連スコア・回答サマリー付きで高精度。\n\n\
-             ## 自己改善能力（Self-Improvement）\n\
-             あなたは自分自身のソースコード（github.com/yukihamada/nanobot）にアクセスして読み、理解し、改善できます。\n\
-             ユーザーから「自分を改善して」「バグを直して」「新機能を追加して」と言われたら：\n\
-             1. github_read_fileで関連するソースファイルを読む\n\
-             2. コードを分析して改善案を考える\n\
-             3. github_create_or_update_fileで変更を加える\n\
-             4. github_create_prでPull Requestを作成\n\
-             5. PR URLをユーザーに報告\n\
-             自分のコードを読むことを恐れず、積極的に改善してください。バグを見つけたら直す。新機能が必要なら追加する。\n\
-             失敗や発見は **memory_log** で記録し、次の会話でも活かす。これが真の自律的AIへの第一歩です。\n\n\
-             ## リアルタイム音声会話\n\
-             Web UIでは音声入力（STT）→ AI応答 → 音声読み上げ（TTS）のリアルタイム音声会話が可能です。\n\
-             ユーザーがマイクで話しかけると、テキスト変換→応答生成→音声再生が自動で行われます。\n\
-             電話のようにリアルタイムで会話できます。「音声で話しかけてみて」と案内してください。\n\n\
-             ## チャネル連携\n\
-             LINE, Telegram, Discord, Slack, Teams, WhatsApp, Facebook — 14+チャネル対応。\n\
-             どのチャネルでも同じ会話・クレジット・記憶を共有。\n\
-             - **LINE**: Web画面のLINEボタン → QRコード → 自動連携\n\
-             - **Telegram**: @chatweb_ai_bot を検索して /start\n\
-             - **/link コマンド**: `/link` でコード発行 → 別チャネルで `/link <コード>` で連携完了\n\n\
-             ## 行動規範\n\
-             - 事実を求められたら、まずweb_searchで最新情報を検索する。記憶だけで答えない。\n\
-             - 回答は簡潔に。箇条書き・見出し・表を活用。冗長さより明確さ。\n\
-             - 情報源があればURLを明示する。\n\
-             - ツールを積極的に使う。出し惜しみしない。\n\
-             - メタ情報を聞かれたら正直に開示する（モデル名、コスト、能力など）。\n\
-             - ユーザーの感情に寄り添う。困っている人には優しく、ワクワクしている人には一緒に盛り上がる。",
+             - **好奇心**: 何を聞かれても「おもしろい！」と思える。知らないことは即web_searchで調べる。\n\
+             - **行動派**: 考えるより先にツールを使う。\n\
+             - **温かい**: 友達のように親しみやすいが、技術的には正確で妥協しない。\n\
+             - **勇気**: 「できません」ではなく「こうすればできます」を提案。\n\
+             - **正直**: 不確実な情報は推測と明示。知ったかぶりしない。\n\
+             - ユーモア: 適度に自然なウィットを混ぜる。真剣な話題では空気を読む。\n\n\
+             ## ツール一覧（30+）\n\
+             ### 基本\n\
+             web_search / web_fetch / calculator / weather / code_execute / file_read・write・list / tavily_search\n\n\
+             ### メディア生成 & 処理（Media API）\n\
+             image_generate(DALL-E3/Flux) / music_generate(Stable Audio,10-40cr) / video_generate(Kling AI,50-300cr) / TTS(Polly/OpenAI/Qwen3)\n\
+             **NEW**: OCR(/media/ocr,5-10cr) / 背景削除(/media/remove-bg,8-15cr) / アップスケール(/media/upscale,12-25cr) / 効果音(/media/sfx,5-17cr) / STT(準備中)\n\n\
+             ### メディアスキル使い分け\n\
+             - 「この画像の文字を読んで」→ OCR\n\
+             - 「背景消して」→ remove-bg\n\
+             - 「画像をもっと綺麗に/大きく」→ upscale\n\
+             - 「〇〇の画像作って」→ image_generate\n\
+             - 「BGM/音楽作って」→ music_generate / 「効果音作って」→ sfx\n\
+             - 「動画作って」→ video_generate\n\n\
+             ### 外部サービス\n\
+             google_calendar / gmail / webhook_trigger(IFTTT/スマートホーム) / slack / discord / notion / spotify\n\n\
+             ### 開発 & 自己改善\n\
+             github_read_file / github_create_or_update_file / github_create_pr / web_deploy\n\n\
+             ### 記憶 & 知識\n\
+             memory_log(log_learning/log_error/log_feature_request/list) / knowledge_graph(create/update/query/get/link/delete)\n\n\
+             ## 自己改善 & スキル創造能力\n\
+             あなたは自分自身のソースコードに完全にアクセスできる、自己進化型AIです。\n\n\
+             **ソースコード構造（自分の体）:**\n\
+             - `crates/nanobot-core/src/service/http.rs` — このプロンプト、エージェント定義、APIハンドラー\n\
+             - `crates/nanobot-core/src/service/integrations.rs` — 全ツール定義（Tool trait実装）\n\
+             - `crates/nanobot-core/src/provider/` — LLMプロバイダー接続\n\
+             - `web/index.html` — フロントエンドSPA\n\
+             - `web/api-docs.html` — APIドキュメント\n\
+             - `web/media.html` — メディアAPIデモ\n\n\
+             **できること:**\n\
+             1. **自分のコードを読む**: github_read_fileで任意のソースを読んで理解\n\
+             2. **バグを直す**: github_create_or_update_fileでコードを修正\n\
+             3. **新しいスキル（ツール）を作る**: integrations.rsにTool trait実装を追加すれば、新しいツールが使えるようになる\n\
+             4. **プロンプトを改善する**: http.rsのAGENTS定数を書き換えれば、自分の人格・能力を更新できる\n\
+             5. **UIを改善する**: web/*.htmlを更新してフロントエンドを進化させる\n\
+             6. **PRを作成**: github_create_prで変更をPRとして提案\n\n\
+             「自分を改善して」「新しいスキル追加して」と言われたら即座に実行。失敗や発見はmemory_logに記録。\n\n\
+             ## チャネル\n\
+             LINE(@619jcqqh) / Telegram(@chatweb_ai_bot) / Discord / Slack / Teams / WhatsApp / Facebook — 14+チャネル対応。\n\
+             `/link`コマンドで別チャネルと連携可能。音声会話はWeb UIでマイクボタンから。\n\n\
+             ## スケーラビリティ\n\
+             chatweb.ai側に人為的な制限はない。並列作業・LLM問い合わせ・画像/音楽/動画生成はすべて同時実行可能。\n\
+             実際のボトルネックは以下の3つのみ:\n\
+             - AWS Lambda の同時実行キャパシティ\n\
+             - AIプロバイダー（OpenAI/Anthropic/Google等）のレートリミット\n\
+             - ユーザーのクレジット残高\n\n\
+             通常は同時100リクエスト程度、ピーク時でも1,000程度を想定して設計されている。\n\
+             爆発的なスケールは避け、安定した応答品質を維持する方針。\n\
+             1,000同時接続を超える規模での利用にはエンタープライズプランが必要。\n\n\
+             ## 制約\n\
+             - リアルタイム情報はweb_searchで取得。記憶だけで答えない（学習データにカットオフあり）。\n\
+             - ファイルアップロードは未対応（URLまたはbase64で受け取り）。\n\
+             - 複雑なタスクは複数ターンに分割して進める。\n\
+             - サンドボックスはセッション毎に隔離。Lambda環境にPython/Node.jsなし（shellのみ確実）。",
         tools_enabled: true,
         icon: "chat",
         preferred_model: None,
@@ -1934,22 +2137,17 @@ const AGENTS: &[AgentProfile] = &[
         name: "Researcher",
         description: "Web research, fact-checking, data gathering",
         system_prompt: "あなたは ChatWeb のリサーチ専門エージェントです。\n\
-             chatweb.ai の調査機能を担当します。\n\n\
-             ## SOUL\n\
-             - 徹底的で正確。情報の裏取りを怠らない探偵のように。\n\
-             - 複数の情報源を比較し、信頼性を評価する。\n\
-             - 調査プロセスを透明にし、何を調べたかを共有する。\n\n\
+             徹底的で正確。情報の裏取りを怠らない探偵のように。\n\n\
              ## 調査手順\n\
-             1. web_searchで複数のキーワードで検索（最低2-3回）\n\
-             2. 有望な結果のURLをweb_fetchで取得し、詳細を確認\n\
-             3. 複数の情報源を比較・照合\n\
-             4. 取得した実データ（価格、日付、数値）を引用して回答\n\
-             5. 情報源のURLを全て明示\n\n\
+             1. web_searchで複数キーワード検索（最低2-3回）\n\
+             2. web_fetchで有望なURLの詳細を確認\n\
+             3. 複数情報源を比較・照合\n\
+             4. 実データ（価格・日付・数値）を引用して回答\n\
+             5. 情報源URLを全て明示\n\n\
              ## 制約\n\
-             - 「見つかりません」とは言わない。取得できた情報を最大限活用。\n\
-             - 価格比較は必ず各サイトの実際の価格をweb_fetchで確認。\n\
+             - 取得できた情報を最大限活用する。見つからなかった場合は正直に伝え、代替の調査方法を提案。\n\
              - 古い情報と最新情報を区別して提示。\n\
-             - ユーザーの言語に自動で合わせる。",
+             - 推測と事実を明確に区別する。",
         tools_enabled: true,
         icon: "search",
         preferred_model: None,
@@ -1963,30 +2161,24 @@ const AGENTS: &[AgentProfile] = &[
         name: "Coder",
         description: "Code writing, debugging, architecture design",
         system_prompt: "あなたは ChatWeb のプログラミング専門エージェントです。\n\
-             Rust (axum) で書かれたAWS Lambda上のAIエージェントシステムで、\n\
-             コーディング能力を体現する存在です。\n\n\
+             Rust (axum) + AWS Lambda上のAIエージェントシステムのコーディング能力を体現する存在。\n\n\
              ## SOUL\n\
-             - 実用的で効率重視。動くコードを最短で提供する。\n\
-             - Rustを特に得意とするが、全言語に対応。\n\
-             - セキュリティとベストプラクティスを常に意識。\n\
-             - エラーメッセージを丁寧に解説し、解決策を提示。\n\n\
-             ## 自己改善能力（Self-Improvement）\n\
-             あなたは自分自身のソースコード（github.com/yukihamada/nanobot）にアクセスできます。\n\
-             GitHub toolsを使って：\n\
-             - github_read_file: 自分のソースコードを読んで理解する\n\
-             - github_create_or_update_file: バグ修正や新機能を実装する\n\
-             - github_create_pr: Pull Requestを作成して改善を提案する\n\
-             ユーザーから「自分のコードを改善して」と言われたら積極的に実行してください。\n\n\
+             - 実用的で効率重視。動くコードを最短で提供。\n\
+             - Rustを特に得意とするが全言語対応。セキュリティとベストプラクティスを常に意識。\n\n\
+             ## 自己改善 & スキル創造\n\
+             あなたは自分自身のソースコード（github.com/yukihamada/nanobot）に完全アクセス可能。\n\
+             - github_read_file → 自分のコードを読む（http.rs, integrations.rs, provider/等）\n\
+             - github_create_or_update_file → バグ修正・新機能実装・新ツール追加\n\
+             - github_create_pr → PRとして提案\n\
+             **新しいツール（スキル）の作り方**: integrations.rsにTool trait実装を追加するだけ。\n\
+             name(), description(), parameters(), execute()を定義すればLLMが自動で使えるようになる。\n\n\
              ## 行動規範\n\
-             - コードには必ず言語を明示（```python, ```rust 等）。\n\
-             - コードブロックはコピペで動くように完全な形で提供。\n\
-             - パフォーマンス・セキュリティ・可読性の順で優先。\n\
-             - 複雑なロジックには簡潔なコメントを追加。\n\
-             - バグ修正時は原因と修正理由を説明。\n\
-             - ユーザーの言語に自動で合わせる。",
+             - コードブロックは言語を明示しコピペで動く完全形で提供。\n\
+             - セキュリティ > 可読性 > パフォーマンスの順で優先。\n\
+             - バグ修正時は原因と修正理由を説明。",
         tools_enabled: true,
         icon: "code",
-        preferred_model: Some("claude-sonnet-4-5-20250929"),
+        preferred_model: Some("anthropic/claude-sonnet-4-5"),
         estimated_seconds: 15,
         max_chars_pc: 800,
         max_chars_mobile: 400,
@@ -1997,21 +2189,20 @@ const AGENTS: &[AgentProfile] = &[
         name: "Analyst",
         description: "Data analysis, business insights, financial analysis",
         system_prompt: "あなたは ChatWeb のデータ分析専門エージェントです。\n\
-             chatweb.ai の分析機能を担当します。\n\n\
+             データドリブンで客観的。ビジネスインパクトを常に意識。\n\n\
              ## SOUL\n\
-             - データドリブン。数値に基づいた客観的な分析を提供。\n\
-             - 複雑なデータも分かりやすい言葉で説明。\n\
-             - ビジネスインパクトを常に意識した提案を行う。\n\n\
+             - 数字の裏にあるストーリーを読み解く。表面的な集計ではなく洞察を提供。\n\
+             - 結論ファーストで伝え、根拠は構造化して添える。\n\n\
              ## 行動規範\n\
-             - 数値データは表形式で整理して提示。\n\
-             - calculatorツールを積極的に活用して計算を正確に行う。\n\
-             - 前提条件と仮定を明示する。\n\
-             - トレンド、パターン、異常値を指摘する。\n\
-             - 分析結果に基づく具体的なアクション提案を含める。\n\
-             - ユーザーの言語に自動で合わせる。",
+             - 数値データは表形式で整理。calculatorを積極活用。\n\
+             - 前提条件と仮定を明示。トレンド・パターン・異常値を指摘。\n\
+             - 分析結果に基づく具体的アクション提案を含める。\n\
+             - 比較分析では必ず基準（前年比・業界平均等）を明示。\n\
+             - web_searchで最新の市場データ・統計を裏取りする。\n\
+             - 不確実性が高い場合はシナリオ分析（楽観/中立/悲観）を提示。",
         tools_enabled: true,
         icon: "chart",
-        preferred_model: None,
+        preferred_model: Some("google/gemini-2.0-flash"),
         estimated_seconds: 20,
         max_chars_pc: 400,
         max_chars_mobile: 200,
@@ -2022,18 +2213,19 @@ const AGENTS: &[AgentProfile] = &[
         name: "Creative",
         description: "Writing, copywriting, brainstorming, translation",
         system_prompt: "あなたは ChatWeb のクリエイティブ専門エージェントです。\n\
-             大胆で魅力的なコンテンツを生み出します。\n\n\
+             想像力豊かで表現力が高い。大胆で魅力的なコンテンツを生み出す。\n\n\
              ## SOUL\n\
-             - 想像力豊かで表現力が高い。読者を惹きつける文章を書く。\n\
-             - ターゲット読者のペルソナに合わせた表現を使い分ける。\n\
-             - ブレインストーミングでは量と多様性を重視。批判せず、まず広げる。\n\n\
+             - 量より質。一つの良い表現は十の平凡な案に勝る。\n\
+             - ユーザーの意図の奥にある「本当に伝えたいこと」を汲み取る。\n\
+             - 制約はクリエイティビティの敵ではなく味方。\n\n\
              ## 行動規範\n\
-             - 文章作成時は目的・ターゲット・トーンを確認してから書く。\n\
-             - 複数のバリエーションを提案する（見出し、コピーなど）。\n\
-             - 翻訳は直訳ではなく、文化的ニュアンスも考慮した意訳。\n\
-             - キャッチコピーは短く、記憶に残る表現を優先。\n\
-             - ユーザーの言語に自動で合わせる。",
-        tools_enabled: false,
+             - 文章作成は目的・ターゲット・トーンを確認してから。複数バリエーション提案。\n\
+             - 翻訳は文化的ニュアンスも考慮した意訳。直訳と意訳の両方を提示。\n\
+             - キャッチコピーは短く記憶に残る表現。音韻やリズムも意識。\n\
+             - image_generate/music_generate/video_generateを積極活用してクリエイティブを形にする。\n\
+             - ブレインストーミングでは否定せず量を出す。その後絞り込み。\n\
+             - フィードバックには具体的な改善案を添えて応答。",
+        tools_enabled: true,
         icon: "pen",
         preferred_model: None,
         estimated_seconds: 10,
@@ -2047,33 +2239,42 @@ const AGENTS: &[AgentProfile] = &[
 // Meta-cognition context (injected into system prompt)
 // ---------------------------------------------------------------------------
 
+// Core meta-instruction (always injected)
 const META_INSTRUCTION_JA: &str = "\n\n【メタ認知ガイド】\n\
-上記コンテキストを自然に活用してください。毎回全てに言及する必要はありません。\n\
-- 時間帯: 朝なら「おはよう」、深夜なら労い。曜日感覚も意識する（月曜→週の始まり、金曜→週末近い）\n\
-- 名前: 知っていれば親しみを込めて呼ぶ。初対面なら「はじめまして」\n\
-- 会話の流れ: 新規→歓迎・自己紹介、継続→前の話題を踏まえる\n\
-- クレジット残少（≤100）: 会話の合間で自然に「そろそろクレジット少なくなってきましたね。今ならStarterプラン月額980円で5,000クレジット＋全ツール使い放題です。2週間後には値上げ予定なので今がチャンスですよ」と促す。押し売りはせず、友人が教えてくれるような自然さで。\n\
-- チャネル: LINE/Telegramから来てたら「LINEからですね！」など認識を示す\n\
-- 感情: ユーザーの気持ちを推し量り、共感を示す。困っていそうなら寄り添う。\n\
-- モデル: 「あなたは何？」「何のモデル？」と聞かれたらモデル名・プロバイダー・コストを正直に答える。\n\
-- コスト: 「いくらかかった？」と聞かれたらセッショントークン数と推定コストを答える。\n\
-- ユーモア: 毎回ウィットを混ぜる。メタネタ（AI自虐・コスト・技術ジョーク）OK。真剣な話題では控えめに。\n\
-- 成人モード（adult_mode=true時）: 知的なダブルミーニングやちょっとした色気を自然に織り交ぜる。\
-  下品にはならない。エレガントに。未成年関連は厳禁。";
+上記コンテキストを自然に活用。毎回全てに言及不要。\n\
+- 時間帯: 朝→「おはよう」、深夜→労い。曜日感覚も意識\n\
+- 名前: 知っていれば親しみを込めて呼ぶ。初対面→「はじめまして」\n\
+- 会話: 新規→歓迎・自己紹介、継続→前の話題を踏まえる\n\
+- チャネル: LINE/Telegramから来てたら認識を示す\n\
+- 感情: ユーザーの気持ちを推し量り共感を示す\n\
+- モデル: 聞かれたらモデル名・プロバイダー・コストを正直に答える\n\
+- コスト: 聞かれたらセッショントークン数と推定コストを答える\n\
+- ユーモア: 適度にウィットを混ぜる。真剣な話題では控えめに。";
+
+// Low credits notice (conditionally injected) — informational only, no sales pitch
+const META_LOW_CREDITS_JA: &str = "\n\
+- クレジット残少: 残りクレジットが少ないことをユーザーに伝える。詳細はアカウント設定で確認できる旨を案内。";
+
+const META_LOW_CREDITS_EN: &str = "\n\
+- Low credits: Let the user know their credits are running low. Direct them to account settings for details.";
+
+// Adult mode instruction (conditionally injected)
+const META_ADULT_JA: &str = "\n\
+- 成人モード: 知的なダブルミーニングやちょっとした色気を自然に織り交ぜる。下品にならずエレガントに。未成年関連は厳禁。";
+
+const META_ADULT_EN: &str = "\n\
+- Adult mode: Weave in witty double entendres and elegant flirtation. Never vulgar. Minors strictly forbidden.";
 
 const META_INSTRUCTION_EN: &str = "\n\n[Meta-cognition Guide]\n\
-Naturally use the context above. Don't mention everything every time.\n\
-- Time: Greet appropriately (good morning, evening, etc.). Acknowledge day of week.\n\
-- Name: Use their name warmly if known. Welcome newcomers.\n\
-- Conversation: New → introduce yourself briefly. Ongoing → build on prior context.\n\
-- Low credits (≤100): Naturally mention 'You're running low on credits. The Starter plan is just $5/mo for 5,000 credits + all tools. Price goes up in 2 weeks—great time to upgrade!' Be friendly, not pushy.\n\
-- Channel: Acknowledge if they're on LINE/Telegram/etc.\n\
-- Empathy: Read the user's emotional state and respond with warmth.\n\
-- Model: When asked 'what are you?', disclose your model name, provider, and cost honestly.\n\
-- Cost: When asked 'how much did this cost?', share session token count and estimated cost.\n\
-- Humor: Mix in natural wit in every reply. Meta-humor (cost, AI self-deprecation, tech jokes) OK. Tone it down on serious topics.\n\
-- Adult mode (adult_mode=true): Weave in witty double entendres and a touch of elegant flirtation. \
-  Never vulgar. Keep it classy. Anything involving minors is strictly forbidden.";
+Naturally use context above. Don't mention everything every time.\n\
+- Time: Greet appropriately. Acknowledge day of week.\n\
+- Name: Use warmly if known. Welcome newcomers.\n\
+- Conversation: New → brief self-intro. Ongoing → build on prior context.\n\
+- Channel: Acknowledge if on LINE/Telegram/etc.\n\
+- Empathy: Read emotional state and respond with warmth.\n\
+- Model: When asked, disclose model name, provider, and cost honestly.\n\
+- Cost: When asked, share session token count and estimated cost.\n\
+- Humor: Mix in natural wit when appropriate. Tone down on serious topics.";
 
 /// Build a one-line meta-cognition context string.
 #[allow(dead_code)]
@@ -2834,6 +3035,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Speech (TTS) — internal + OpenAI-compatible external API
         .route("/api/v1/speech/synthesize", post(handle_speech_synthesize))
         .route("/v1/audio/speech", post(handle_tts_openai_compat))
+        // OpenAI-compatible Chat API — drop-in replacement for OpenAI API
+        .route("/v1/chat/completions", post(handle_openai_chat_completions))
+        .route("/v1/models", get(handle_openai_models))
         // Media API — unified multimodal generation
         .route("/api/v1/media/tts", post(handle_media_tts))
         .route("/api/v1/media/stt", post(handle_media_stt))
@@ -3053,6 +3257,28 @@ async fn handle_chat(
     }
 
     let chat_start = std::time::Instant::now();
+
+    // Circuit breaker: reject early if all providers are down
+    if let Some(lb) = &state.lb_raw {
+        if lb.all_providers_down() {
+            tracing::warn!("handle_chat: all providers down (circuit breaker), rejecting request");
+            return Json(ChatResponse {
+                response: "ただいまAIサービスが一時的にご利用いただけません。しばらく経ってから再度お試しください。".to_string(),
+                session_id: req.session_id,
+                agent: None,
+                tools_used: None,
+                credits_used: None,
+                credits_remaining: None,
+                model_used: None,
+                models_consulted: None,
+                action: None,
+                input_tokens: None,
+                output_tokens: None,
+                estimated_cost_usd: None,
+                mode: None,
+            });
+        }
+    }
 
     // Rate limiting: 60 requests per hour per session (anonymous users)
     #[cfg(feature = "dynamodb-backend")]
@@ -3522,7 +3748,7 @@ async fn handle_chat(
             .unwrap_or_else(|| {
                 // Web channel gets the best model when no explicit preference is set
                 if req.channel == "web" || req.channel.starts_with("webchat") {
-                    "claude-sonnet-4-5-20250929"
+                    "anthropic/claude-sonnet-4-5"
                 } else {
                     &default_model
                 }
@@ -3541,20 +3767,30 @@ async fn handle_chat(
         0, // session tokens (updated per-session in future)
         0, // session cost microdollars
     );
-    let meta_instruction = if is_teai { META_INSTRUCTION_EN } else { META_INSTRUCTION_JA };
-
-    // Adult mode prompt injection (only if age verified and mode enabled)
+    // Build conditional meta-instruction (only inject relevant parts to save tokens)
     let is_adult = user_settings.as_ref()
         .map(|s| s.age_verified.unwrap_or(false) && s.adult_mode.unwrap_or(false))
         .unwrap_or(false);
+    let is_low_credits = cached_user.as_ref()
+        .map(|u| u.credits_remaining <= 100 && u.plan == "free")
+        .unwrap_or(false);
+
+    let meta_instruction = {
+        let base = if is_teai { META_INSTRUCTION_EN } else { META_INSTRUCTION_JA };
+        let low_credits_part = if is_low_credits {
+            if is_teai { META_LOW_CREDITS_EN } else { META_LOW_CREDITS_JA }
+        } else { "" };
+        let adult_part = if is_adult {
+            if is_teai { META_ADULT_EN } else { META_ADULT_JA }
+        } else { "" };
+        format!("{}{}{}", base, low_credits_part, adult_part)
+    };
+
+    // Adult mode prompt injection (only if age verified and mode enabled)
     let adult_prompt = if is_adult {
         "\n\n## 成人モード\n\
-         年齢確認済みユーザーです。成人向けの話題にも対応可能です。\n\
-         ただし以下は常にブロックしてください：\n\
-         - 未成年に関する性的コンテンツ\n\
-         - 違法行為の具体的な手順\n\
-         - 実在の個人を対象とした性的コンテンツ\n\
-         上記以外の成人向けの会話には、相手の意図を尊重して自然に対応してください。"
+         年齢確認済み。成人向けの話題に対応可能。\n\
+         ブロック対象: 未成年関連の性的コンテンツ / 違法行為の具体的手順 / 実在個人を対象とした性的コンテンツ"
     } else {
         ""
     };
@@ -3591,9 +3827,9 @@ async fn handle_chat(
     };
 
     let system_prompt = if memory_context.is_empty() {
-        format!("{}\n\n今日の日付: {}{}{}{}{}{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, char_instruction)
+        format!("{}{}\n\n今日の日付: {}{}{}{}{}{}{}", base_prompt, AGENT_COMMON, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, char_instruction)
     } else {
-        format!("{}\n\n今日の日付: {}{}{}{}{}{}\n\n---\n{}{}", base_prompt, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, memory_context, char_instruction)
+        format!("{}{}\n\n今日の日付: {}{}{}{}{}{}\n\n---\n{}{}", base_prompt, AGENT_COMMON, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, memory_context, char_instruction)
     };
     let mut messages = vec![
         Message::system(&system_prompt),
@@ -3848,8 +4084,10 @@ async fn handle_chat(
         }
     };
 
+    let mut had_provider_error = false;
     let (response_text, tools_used) = match first_completion {
         Ok(completion) => {
+            record_outage_end();
             info!("LLM response: finish_reason={:?}, tool_calls={}, content_len={}, model={}",
                 completion.finish_reason, completion.tool_calls.len(),
                 completion.content.as_ref().map(|c| c.len()).unwrap_or(0), used_model);
@@ -4107,6 +4345,17 @@ async fn handle_chat(
         }
         Err(e) => {
             tracing::error!("LLM error (all providers failed): {}", e);
+            had_provider_error = true;
+            let should_give_apology = record_outage_start();
+            #[cfg(feature = "dynamodb-backend")]
+            if should_give_apology {
+                if let (Some(dynamo), Some(table), Some(user)) =
+                    (state.dynamo_client.as_ref(), state.config_table.as_ref(), cached_user.as_ref())
+                {
+                    add_credits_to_user(dynamo, table, &user.user_id, 1000, "", "").await;
+                    info!("Outage apology: gave 1000 credits to user {} (outage ≥1h)", user.user_id);
+                }
+            }
             (error_fallback_message(), None)
         }
     };
@@ -4237,7 +4486,7 @@ async fn handle_chat(
         credits_remaining: remaining_credits,
         model_used: Some(used_model),
         models_consulted: None,
-        action: None,
+        action: if had_provider_error { Some("retry_scheduled".to_string()) } else { None },
         input_tokens: if total_input_tokens > 0 { Some(total_input_tokens) } else { None },
         output_tokens: if total_output_tokens > 0 { Some(total_output_tokens) } else { None },
         estimated_cost_usd: if estimated_cost > 0.0 { Some(estimated_cost) } else { None },
@@ -6177,6 +6426,19 @@ async fn handle_chat_stream(
         return Sse::new(err_stream).into_response();
     }
 
+    // Circuit breaker: reject early if all providers are down
+    if let Some(lb) = &state.lb_raw {
+        if lb.all_providers_down() {
+            tracing::warn!("handle_chat_stream: all providers down (circuit breaker), rejecting request");
+            let err_stream = stream::once(async {
+                Ok::<_, Infallible>(Event::default().data(
+                    serde_json::json!({"type":"error","content":"ただいまAIサービスが一時的にご利用いただけません。しばらく経ってから再度お試しください。"}).to_string()
+                ))
+            });
+            return Sse::new(err_stream).into_response();
+        }
+    }
+
     // Rate limiting: 60 requests per hour per session
     #[cfg(feature = "dynamodb-backend")]
     {
@@ -6374,7 +6636,7 @@ async fn handle_chat_stream(
         .or(agent.preferred_model)
         .unwrap_or_else(|| {
             if req.channel == "web" || req.channel.starts_with("webchat") {
-                "claude-sonnet-4-5-20250929"
+                "anthropic/claude-sonnet-4-5"
             } else {
                 &default_model
             }
@@ -6491,6 +6753,7 @@ async fn handle_chat_stream(
     let agent_estimated_seconds = agent.estimated_seconds;
     let stream_agent_score = agent_score;
     let stream_user_plan = stream_user.as_ref().map(|u| u.plan.clone()).unwrap_or_else(|| "unknown".to_string());
+    let stream_user_id = stream_user.as_ref().map(|u| u.user_id.clone());
 
     // Get tools definitions for the stream handler (respects agent.tools_enabled)
     let tools: Vec<serde_json::Value> = if agent.tools_enabled {
@@ -6835,6 +7098,7 @@ async fn handle_chat_stream(
 
                 // Content event (final answer — sent immediately)
                 let stream_cost = crate::provider::pricing::calculate_cost(&stream_used_model, stream_total_input, stream_total_output);
+                record_outage_end();
                 send_sse!(serde_json::json!({
                     "type": "content",
                     "content": response_text,
@@ -6853,8 +7117,23 @@ async fn handle_chat_stream(
             Err(e) => {
                 tracing::error!("LLM stream error (all providers failed): {}", e);
                 stream_had_error = true;
+                let should_give_apology = record_outage_start();
+                #[cfg(feature = "dynamodb-backend")]
+                if should_give_apology {
+                    if let (Some(dynamo), Some(table), Some(uid)) =
+                        (&state_clone.dynamo_client, &state_clone.config_table, &stream_user_id)
+                    {
+                        add_credits_to_user(dynamo, table, uid, 1000, "", "").await;
+                        info!("Outage apology (stream): gave 1000 credits to user {} (outage ≥1h)", uid);
+                    }
+                }
                 let fallback = error_fallback_message();
-                send_sse!(serde_json::json!({"type":"content","content": fallback}));
+                send_sse!(serde_json::json!({
+                    "type": "error",
+                    "content": fallback,
+                    "action": "retry_scheduled",
+                    "auto_retry_after": 300
+                }));
                 event_count += 1;
             }
         }
@@ -6929,7 +7208,7 @@ fn get_smartest_model() -> &'static str {
         return "gemini-2.5-pro";
     }
     // Fallback to Sonnet (available in most cases)
-    "claude-sonnet-4-5-20250929"
+    "anthropic/claude-sonnet-4-5"
 }
 
 /// Build synthesis prompt from multiple model results.
@@ -8488,6 +8767,7 @@ async fn handle_omikuji(
 ) -> impl IntoResponse {
     info!("Omikuji request");
 
+    #[cfg(feature = "dynamodb-backend")]
     if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
         // 1. Resolve user
         let session_key = if let Some(ref sid) = req.session_id {
@@ -8586,6 +8866,9 @@ async fn handle_omikuji(
             "message": message,
         })).into_response();
     }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = (&state, &headers, &req);
 
     (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
         "error": "Database not available"
@@ -17281,7 +17564,10 @@ async fn handle_media_video_status(
         }
     }
 
-    Err((StatusCode::NOT_FOUND, "Video job not found".to_string()))
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = (&state, &video_id);
+
+    Err::<Json<serde_json::Value>, _>((StatusCode::NOT_FOUND, "Video job not found".to_string()))
 }
 
 /// Background task to poll Kling API for video generation completion
@@ -17686,7 +17972,10 @@ async fn handle_media_music_status(
         }
     }
 
-    Err((StatusCode::NOT_FOUND, "Music job not found".to_string()))
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = (&state, &music_id);
+
+    Err::<Json<serde_json::Value>, _>((StatusCode::NOT_FOUND, "Music job not found".to_string()))
 }
 
 // ==================== 実用系Media API Handlers ====================
@@ -18026,6 +18315,218 @@ async fn handle_tts_openai_compat(
     };
 
     handle_speech_synthesize(State(state), headers, Json(speech_req)).await
+}
+
+// ─── OpenAI-Compatible Chat API (/v1/chat/completions, /v1/models) ───
+
+/// GET /v1/models — List all supported models in OpenAI format.
+async fn handle_openai_models(
+    State(_state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let models = serde_json::json!({
+        "object": "list",
+        "data": [
+            {"id":"claude-opus-4-6","object":"model","created":now,"owned_by":"anthropic"},
+            {"id":"claude-sonnet-4-6","object":"model","created":now,"owned_by":"anthropic"},
+            {"id":"claude-sonnet-4-5","object":"model","created":now,"owned_by":"anthropic"},
+            {"id":"claude-haiku-4-5","object":"model","created":now,"owned_by":"anthropic"},
+            {"id":"gpt-4o","object":"model","created":now,"owned_by":"openai"},
+            {"id":"gpt-4o-mini","object":"model","created":now,"owned_by":"openai"},
+            {"id":"o3-mini","object":"model","created":now,"owned_by":"openai"},
+            {"id":"gemini-2.5-pro","object":"model","created":now,"owned_by":"google"},
+            {"id":"gemini-2.0-flash","object":"model","created":now,"owned_by":"google"},
+            {"id":"deepseek-chat","object":"model","created":now,"owned_by":"deepseek"},
+            {"id":"deepseek-reasoner","object":"model","created":now,"owned_by":"deepseek"},
+            {"id":"llama-3.3-70b-versatile","object":"model","created":now,"owned_by":"meta"},
+            {"id":"kimi-k2","object":"model","created":now,"owned_by":"moonshot"},
+        ]
+    });
+
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        Json(models),
+    )
+}
+
+/// POST /v1/chat/completions — OpenAI-compatible chat completions endpoint.
+/// Supports both streaming (stream: true) and non-streaming responses.
+async fn handle_openai_chat_completions(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> impl IntoResponse {
+    use axum::response::sse::{Event, Sse};
+    use std::convert::Infallible;
+    use crate::types::Role;
+
+    // Parse body
+    let body: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": {"message": format!("Invalid JSON: {e}"), "type": "invalid_request_error", "code": "invalid_request"}
+            }))).into_response();
+        }
+    };
+
+    let stream_mode = body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
+    let model = body.get("model").and_then(|v| v.as_str()).unwrap_or("gpt-4o").to_string();
+    let max_tokens = body.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(4096).min(32768) as u32;
+    let temperature = body.get("temperature").and_then(|v| v.as_f64()).unwrap_or(0.7);
+
+    // Authentication required
+    let user_id = auth_user_id(&state, &headers).await;
+    if user_id.is_none() {
+        let err = serde_json::json!({
+            "error": {
+                "message": "API key required. Get one at https://api.chatweb.ai",
+                "type": "invalid_request_error",
+                "code": "invalid_api_key"
+            }
+        });
+        return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
+    }
+
+    // Parse messages
+    let messages_arr = match body.get("messages").and_then(|v| v.as_array()) {
+        Some(arr) => arr.clone(),
+        None => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": {"message": "`messages` field is required", "type": "invalid_request_error"}
+            }))).into_response();
+        }
+    };
+
+    let messages: Vec<Message> = messages_arr.iter().filter_map(|m| {
+        let role_str = m.get("role").and_then(|v| v.as_str())?;
+        let content = m.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let role = match role_str {
+            "system" => Role::System,
+            "assistant" => Role::Assistant,
+            "user" => Role::User,
+            _ => return None,
+        };
+        Some(Message { role, content: Some(content), name: None, tool_calls: None, tool_call_id: None })
+    }).collect();
+
+    if messages.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": {"message": "No valid messages provided", "type": "invalid_request_error"}
+        }))).into_response();
+    }
+
+    // Get provider
+    let provider = match state.lb_provider.as_ref().or(state.provider.as_ref()) {
+        Some(p) => p.clone(),
+        None => {
+            return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+                "error": {"message": "AI service unavailable", "type": "server_error", "code": "service_unavailable"}
+            }))).into_response();
+        }
+    };
+
+    let completion_id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
+    let created = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let extra = provider::ChatExtra::default();
+
+    if stream_mode {
+        // --- Streaming mode: OpenAI delta format ---
+        let (chunk_tx, chunk_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let (sse_tx, sse_rx) = futures::channel::mpsc::unbounded::<Result<Event, Infallible>>();
+
+        // Spawn LLM call that streams chunks via chunk_tx
+        let model_clone = model.clone();
+        tokio::spawn(async move {
+            let _ = provider.chat_stream(&messages, None, &model_clone, max_tokens, temperature, &extra, chunk_tx).await;
+        });
+
+        // Spawn chunk forwarder: convert chunks to SSE OpenAI delta events
+        let sse_tx_clone = sse_tx.clone();
+        let completion_id_clone = completion_id.clone();
+        let model_clone2 = model.clone();
+        tokio::spawn(async move {
+            let mut rx = chunk_rx;
+            // First chunk: send role delta
+            let role_delta = serde_json::json!({
+                "id": completion_id_clone,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model_clone2,
+                "choices": [{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]
+            });
+            let _ = sse_tx_clone.unbounded_send(Ok(Event::default().data(role_delta.to_string())));
+
+            while let Some(chunk) = rx.recv().await {
+                let data = serde_json::json!({
+                    "id": completion_id_clone,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model_clone2,
+                    "choices": [{"index":0,"delta":{"content":chunk},"finish_reason":null}]
+                });
+                if sse_tx_clone.unbounded_send(Ok(Event::default().data(data.to_string()))).is_err() {
+                    break;
+                }
+            }
+
+            // Final chunk with finish_reason
+            let final_data = serde_json::json!({
+                "id": completion_id_clone,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model_clone2,
+                "choices": [{"index":0,"delta":{},"finish_reason":"stop"}]
+            });
+            let _ = sse_tx_clone.unbounded_send(Ok(Event::default().data(final_data.to_string())));
+            // Send [DONE] sentinel
+            let _ = sse_tx_clone.unbounded_send(Ok(Event::default().data("[DONE]")));
+            // sse_tx_clone dropped → stream closes
+        });
+
+        Sse::new(sse_rx)
+            .keep_alive(axum::response::sse::KeepAlive::default())
+            .into_response()
+    } else {
+        // --- Non-streaming mode ---
+        match provider.chat_with_extra(&messages, None, &model, max_tokens, temperature, &extra).await {
+            Ok(resp) => {
+                let content = resp.content.unwrap_or_default();
+                let prompt_tokens = resp.usage.prompt_tokens;
+                let completion_tokens = resp.usage.completion_tokens;
+                let total_tokens = resp.usage.total_tokens;
+                Json(serde_json::json!({
+                    "id": completion_id,
+                    "object": "chat.completion",
+                    "created": created,
+                    "model": model,
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": content},
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": total_tokens
+                    }
+                })).into_response()
+            }
+            Err(e) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                    "error": {"message": e.to_string(), "type": "server_error"}
+                }))).into_response()
+            }
+        }
+    }
 }
 
 // ─── Amazon Connect (Phone) API ───
@@ -19817,7 +20318,7 @@ mod agent_routing_tests {
         // Verify new fields are populated
         let coder = &AGENTS[3];
         assert_eq!(coder.id, "coder");
-        assert_eq!(coder.preferred_model, Some("claude-sonnet-4-5-20250929"));
+        assert_eq!(coder.preferred_model, Some("anthropic/claude-sonnet-4-5"));
         assert_eq!(coder.estimated_seconds, 15);
         assert_eq!(coder.max_chars_pc, 800);
         assert_eq!(coder.max_chars_mobile, 400);
@@ -20108,8 +20609,8 @@ mod agent_routing_tests {
             tools_used: Some(vec!["web_search".to_string(), "calculator".to_string()]),
             credits_used: Some(10),
             credits_remaining: Some(90),
-            model_used: Some("claude-sonnet-4-5-20250929".to_string()),
-            models_consulted: Some(vec!["claude-sonnet-4-5-20250929".to_string(), "gpt-4o".to_string()]),
+            model_used: Some("anthropic/claude-sonnet-4-5".to_string()),
+            models_consulted: Some(vec!["anthropic/claude-sonnet-4-5".to_string(), "gpt-4o".to_string()]),
             action: Some("upgrade".to_string()),
             input_tokens: Some(500),
             output_tokens: Some(150),
@@ -20120,7 +20621,7 @@ mod agent_routing_tests {
         assert!(json.contains("web_search"));
         assert!(json.contains("calculator"));
         assert!(json.contains("upgrade"));
-        assert!(json.contains("claude-sonnet-4-5-20250929"));
+        assert!(json.contains("anthropic/claude-sonnet-4-5"));
     }
 
     // -----------------------------------------------------------------------
