@@ -136,8 +136,44 @@ docker run -p 3000:3000 \
 git clone https://github.com/yukihamada/nanobot.git
 cd nanobot
 export OPENAI_API_KEY=sk-...
+
+# Option 1: Run as HTTP gateway (Web UI)
 cargo run --release -- gateway --http --http-port 3000
+
+# Option 2: Run as CLI (Interactive terminal)
+cargo run --release -- chat --model claude-sonnet-4-5
+
+# Option 3: Execute single command
+echo "Search for Rust async best practices" | cargo run --release -- chat --model claude-sonnet-4-5
 ```
+
+**CLI Mode Features:**
+- Interactive conversation with autonomous coding agent
+- Access to all 30 tools (git, linter, tests, file ops, web search)
+- Self-correction loop: automatically fixes linter/test errors
+- OODA Loop: systematic approach to complex tasks
+- Workspace memory: persistent context in `~/.nanobot/workspace/memory/`
+
+**Quick Test:**
+```bash
+cargo run --release -- chat --model claude-sonnet-4-5 <<< "Show git status and run tests for this project"
+```
+
+**After Building:**
+```bash
+# Binary location: target/release/chatweb
+./target/release/chatweb chat  # Interactive mode
+./target/release/chatweb chat "Your message here"  # Single command
+
+# Or install globally:
+cargo install --path .
+chatweb chat  # Now available from anywhere
+```
+
+**Environment Variables:**
+- `OPENAI_API_KEY` (required): Your OpenAI API key
+- `ANTHROPIC_API_KEY` (optional): For Claude models (recommended)
+- `NANOBOT_WORKSPACE` (optional): Workspace directory (default: `~/.nanobot/workspace`)
 
 <details>
 <summary><b>Deploy to AWS Lambda (Production)</b></summary>
