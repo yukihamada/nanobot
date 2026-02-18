@@ -17,13 +17,9 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-unknown-linux-musl
 
-      - name: Install cross-compilation tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -41,7 +37,7 @@ jobs:
 
       - name: Build nanobot-lambda
         run: |
-          cargo build --release --target aarch64-unknown-linux-musl -p nanobot-lambda
+          cross build --release --target aarch64-unknown-linux-musl -p nanobot-lambda
         env:
           RUSTFLAGS: "-C target-cpu=neoverse-v1 -C link-arg=-s"
 
