@@ -167,16 +167,16 @@ impl ToolRegistry {
         self.tools.iter().map(|t| t.to_openai_definition()).collect()
     }
 
-    /// Execute a tool by name with a 10-second timeout.
+    /// Execute a tool by name with a 25-second timeout.
     pub async fn execute(&self, name: &str, arguments: &HashMap<String, serde_json::Value>) -> String {
         for tool in &self.tools {
             if tool.name() == name {
                 match tokio::time::timeout(
-                    std::time::Duration::from_secs(10),
+                    std::time::Duration::from_secs(25),
                     tool.execute(arguments.clone()),
                 ).await {
                     Ok(result) => return result,
-                    Err(_) => return format!("[TOOL_ERROR] Tool '{name}' timed out after 10s"),
+                    Err(_) => return format!("[TOOL_ERROR] Tool '{name}' timed out after 25s"),
                 }
             }
         }

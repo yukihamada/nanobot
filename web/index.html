@@ -5228,7 +5228,7 @@
       }, 100);
 
       const abortCtrl = new AbortController();
-      const frontendTimeout = setTimeout(() => { abortCtrl.abort(); }, 11000);
+      const frontendTimeout = setTimeout(() => { abortCtrl.abort(); }, 60000);
 
       try {
         const agentSel = document.getElementById('agent-select').value;
@@ -9215,7 +9215,7 @@
       }, 100);
 
       const abortCtrl = new AbortController();
-      const frontendTimeout = setTimeout(() => { abortCtrl.abort(); }, 11000);
+      const frontendTimeout = setTimeout(() => { abortCtrl.abort(); }, 30000);
 
       try {
         const agentSel = document.getElementById('app-agent-select').value;
@@ -9281,6 +9281,7 @@
           autoPlayTTS(d.response);
           setTimeout(() => appLoadConversations(), 1500);
         } else {
+          clearTimeout(frontendTimeout);  // Stream connected — cancel abort timer
           const reader = r.body.getReader();
           const decoder = new TextDecoder();
           let buf = '';
