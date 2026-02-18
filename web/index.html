@@ -3395,7 +3395,7 @@
         <a href="/settings" id="mob-settings">Settings</a>
         <a href="/status" id="mob-status">Status</a>
         <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
-        <div style="padding:8px 16px;font-size:11px;color:var(--muted);opacity:0.6;">version: 0bd6e74</div>
+        <div style="padding:8px 16px;font-size:11px;color:var(--muted);opacity:0.6;" id="mob-version-label">version: loading...</div>
         <button onclick="setLang('ja');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇯🇵 日本語</button>
         <button onclick="setLang('en');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇬🇧 English</button>
         <button onclick="setLang('zh');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇨🇳 中文</button>
@@ -4587,8 +4587,12 @@
       <div class="app-sidebar-header">
         <button class="app-sidebar-new" id="app-new-conv" onclick="appNewConversation()">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <span id="app-new-conv-text">New chat</span>
+          <span id="app-new-conv-text">New task</span>
         </button>
+      </div>
+      <div style="padding:8px 12px 2px;display:flex;align-items:center;gap:6px;">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="color:var(--muted);flex-shrink:0;"><rect x="1" y="3" width="14" height="2" rx="1" fill="currentColor"/><rect x="1" y="7" width="10" height="2" rx="1" fill="currentColor"/><rect x="1" y="11" width="12" height="2" rx="1" fill="currentColor"/></svg>
+        <span id="app-tasks-label" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Tasks</span>
       </div>
       <div class="app-sidebar-list" id="app-conv-list"></div>
       <div class="app-sidebar-channels">
@@ -5654,11 +5658,11 @@
         voiceLabel: '🎙️ AIの声を聴いてみよう',
         loginBtn: 'ログイン',
         chatLoginPrompt: 'ログインして会話を始める',
-        sidebarTitle: '会話履歴',
-        newConv: '+ 新しい会話',
-        appNewChat: '新しいチャット',
-        appEmptyText: '何でも聞いてください',
-        appPlaceholder: 'メッセージを入力...',
+        sidebarTitle: 'タスク',
+        newConv: '+ 新しいタスク',
+        appNewChat: '新しいタスク',
+        appEmptyText: 'どんなタスクでもお任せください',
+        appPlaceholder: 'タスクを入力...',
         uc1Title: 'ファイルの整理', uc1Desc: '「ダウンロードフォルダを種類別に整理して」— フォルダ作成からファイル移動まで自動で完了。',
         uc2Title: '環境構築・バグ修正', uc2Desc: '「このリポジトリを動くようにして」— エラーを自力で解決し、起動まで自律的に試行錯誤。',
         uc3Title: '定期監視（ハートビート）', uc3Desc: '「サーバーが落ちてないか見ておいて」— 寝ている間にダウンを検知し、復旧して事後報告。',
@@ -5712,11 +5716,11 @@
         voiceLabel: '🎙️ Listen to AI speak',
         loginBtn: 'Login',
         chatLoginPrompt: 'Login to start chatting',
-        sidebarTitle: 'Conversations',
-        newConv: '+ New Conversation',
-        appNewChat: 'New chat',
-        appEmptyText: 'Ask me anything',
-        appPlaceholder: 'Message chatweb.ai...',
+        sidebarTitle: 'Tasks',
+        newConv: '+ New Task',
+        appNewChat: 'New task',
+        appEmptyText: 'What task can I help with?',
+        appPlaceholder: 'Describe your task...',
         uc1Title: 'File Organization', uc1Desc: '"Organize my downloads by type" — Creates folders and moves files automatically.',
         uc2Title: 'Setup & Bug Fixes', uc2Desc: '"Get this repo running on my machine" — Resolves errors autonomously until it works.',
         uc3Title: 'Scheduled Monitoring', uc3Desc: '"Watch if my server goes down" — Detects downtime overnight, restarts and reports.',
@@ -6373,6 +6377,8 @@
       document.getElementById('new-conv-btn').textContent = t.newConv;
       const appNewConvText = document.getElementById('app-new-conv-text');
       if (appNewConvText) appNewConvText.textContent = t.appNewChat;
+      const appTasksLabel = document.getElementById('app-tasks-label');
+      if (appTasksLabel) appTasksLabel.textContent = t.sidebarTitle || 'Tasks';
       const appEmptyText = document.querySelector('.app-chat-empty-text');
       if (appEmptyText) appEmptyText.textContent = t.appEmptyText;
       const appInput = document.getElementById('app-input');
@@ -7446,13 +7452,13 @@
 
           const title = document.createElement('span');
           title.className = 'conv-title';
-          title.textContent = conv.title || 'New conversation';
+          title.textContent = conv.title || 'New task';
           title.onclick = () => loadConversation(conv.id, conv.session_id);
           item.appendChild(title);
 
           const actions = document.createElement('div');
           actions.className = 'conv-actions';
-          actions.innerHTML = '<button class="conv-action-btn" onclick="event.stopPropagation();renameConversation(\'' + conv.id + '\',\'' + (conv.title || 'New conversation').replace(/'/g, "\\'") + '\')" title="Rename">✏️</button>'
+          actions.innerHTML = '<button class="conv-action-btn" onclick="event.stopPropagation();renameConversation(\'' + conv.id + '\',\'' + (conv.title || 'New task').replace(/'/g, "\\'") + '\')" title="Rename">✏️</button>'
             + '<button class="conv-action-btn" onclick="event.stopPropagation();deleteConversation(\'' + conv.id + '\')" title="Delete">🗑️</button>'
             + '<button class="conv-action-btn" onclick="event.stopPropagation();shareConversation(\'' + conv.id + '\')" title="Share">🔗</button>';
           item.appendChild(actions);
@@ -7847,7 +7853,7 @@
       appLoadConversations();
       appRenderSuggestions();
       const l = document.documentElement.lang || 'ja';
-      document.getElementById('app-new-conv-text').textContent = l === 'ja' ? '新しいチャット' : 'New chat';
+      document.getElementById('app-new-conv-text').textContent = l === 'ja' ? '新しいタスク' : 'New task';
       var userName = currentUser.display_name && currentUser.display_name !== 'User' ? currentUser.display_name : '';
       document.getElementById('app-empty-text').textContent = l === 'ja'
         ? (userName ? userName + 'さん、何でも聞いてね' : '静かなところで、ゆっくり話しましょう')
@@ -8328,10 +8334,10 @@
         appConversations.forEach(conv => {
           const d2 = new Date(conv.updated_at || conv.created_at);
           let label;
-          if (d2 >= today) label = l === 'ja' ? '今日' : 'Today';
-          else if (d2 >= yesterday) label = l === 'ja' ? '昨日' : 'Yesterday';
-          else if (d2 >= weekAgo) label = l === 'ja' ? '今週' : 'This Week';
-          else label = l === 'ja' ? 'それ以前' : 'Older';
+          if (d2 >= today) label = l === 'ja' ? '今日のタスク' : 'Today';
+          else if (d2 >= yesterday) label = l === 'ja' ? '昨日のタスク' : 'Yesterday';
+          else if (d2 >= weekAgo) label = l === 'ja' ? '今週のタスク' : 'This Week';
+          else label = l === 'ja' ? '過去のタスク' : 'Past Tasks';
           if (!groups[label]) groups[label] = [];
           groups[label].push(conv);
         });
@@ -8367,13 +8373,17 @@
             const info = document.createElement('div');
             info.style.cssText = 'flex:1;overflow:hidden;min-width:0;';
 
-            // Title row with time
+            // Task icon + title row with time
             const titleRow = document.createElement('div');
             titleRow.style.cssText = 'display:flex;align-items:center;gap:4px;';
+            const taskIcon = document.createElement('span');
+            taskIcon.style.cssText = 'flex-shrink:0;font-size:12px;opacity:0.6;';
+            taskIcon.textContent = conv.message_count > 0 ? '✓' : '○';
+            titleRow.appendChild(taskIcon);
             const title = document.createElement('span');
             title.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;font-size:13px;';
-            const convTitle = conv.title || (l === 'ja' ? '新しい会話' : 'New conversation');
-            title.textContent = convTitle === 'New conversation' && l === 'ja' ? '新しい会話' : convTitle;
+            const convTitle = conv.title || (l === 'ja' ? '新しいタスク' : 'New task');
+            title.textContent = (convTitle === 'New conversation' || convTitle === 'New task') && l === 'ja' ? '新しいタスク' : convTitle;
             titleRow.appendChild(title);
 
             // Time badge
@@ -8402,7 +8412,7 @@
             if (conv.message_count > 0) {
               const countEl = document.createElement('div');
               countEl.style.cssText = 'font-size:10px;color:var(--muted);margin-top:1px;opacity:0.7;';
-              countEl.textContent = conv.message_count + (l === 'ja' ? ' メッセージ' : ' messages');
+              countEl.textContent = conv.message_count + (l === 'ja' ? ' やり取り' : ' exchanges');
               info.appendChild(countEl);
             }
 
@@ -8502,7 +8512,7 @@
       const now = new Date();
       const h = now.getHours().toString().padStart(2, '0');
       const m = now.getMinutes().toString().padStart(2, '0');
-      divider.innerHTML = '<span class="divider-text">' + (l === 'ja' ? '新しい会話 ' : 'New conversation ') + h + ':' + m + '</span>';
+      divider.innerHTML = '<span class="divider-text">' + (l === 'ja' ? '新しいタスク ' : 'New task ') + h + ':' + m + '</span>';
       msgsEl.appendChild(divider);
     }
 
@@ -8559,7 +8569,7 @@
       empty.innerHTML = '<div class="app-chat-empty-logo" onclick="showWelcomeAudioFlow()">chatweb.ai</div>'
         + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
         + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
-        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '何でも聞いてください' : 'Ask me anything') + '</div>'
+        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? 'どんなタスクでもお任せください' : 'What task can I help with?') + '</div>'
         + '<div class="app-chat-suggestions" id="app-suggestions"></div>'
         + '<div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;"><a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a><a href="/pricing" style="color:var(--muted);text-decoration:none;">Pricing</a></div>';
       msgsEl.appendChild(empty);
@@ -9026,6 +9036,99 @@
       }, 0);
     }
 
+    // Auto-retry: show countdown then re-send the last message
+    var _retryTimer = null;
+    function scheduleAutoRetry(delaySecs) {
+      if (_retryTimer) clearTimeout(_retryTimer);
+      var remaining = delaySecs;
+      var lang = document.documentElement.lang || 'ja';
+      // Append countdown element after last bot message
+      var msgsEl = document.getElementById('app-messages');
+      var countdownEl = document.createElement('div');
+      countdownEl.id = 'retry-countdown';
+      countdownEl.style.cssText = 'text-align:center;padding:8px;font-size:12px;color:var(--muted,#888);';
+      countdownEl.innerHTML = (lang === 'ja' ? '⏳ ' + remaining + '秒後に自動で再試行します... ' : '⏳ Retrying in ' + remaining + 's... ')
+        + '<button onclick="cancelAutoRetry()" style="font-size:11px;padding:2px 6px;border:1px solid var(--muted,#888);border-radius:4px;background:none;cursor:pointer;color:var(--muted,#888);">'
+        + (lang === 'ja' ? 'キャンセル' : 'Cancel') + '</button>';
+      if (msgsEl) msgsEl.appendChild(countdownEl);
+      var tick = setInterval(function() {
+        remaining--;
+        if (!document.getElementById('retry-countdown')) { clearInterval(tick); return; }
+        countdownEl.innerHTML = (lang === 'ja' ? '⏳ ' + remaining + '秒後に自動で再試行します... ' : '⏳ Retrying in ' + remaining + 's... ')
+          + '<button onclick="cancelAutoRetry()" style="font-size:11px;padding:2px 6px;border:1px solid var(--muted,#888);border-radius:4px;background:none;cursor:pointer;color:var(--muted,#888);">'
+          + (lang === 'ja' ? 'キャンセル' : 'Cancel') + '</button>';
+        if (remaining <= 0) clearInterval(tick);
+      }, 1000);
+      _retryTimer = setTimeout(function() {
+        var el = document.getElementById('retry-countdown');
+        if (el) el.remove();
+        clearInterval(tick);
+        appRetryChat();
+      }, delaySecs * 1000);
+    }
+
+    function cancelAutoRetry() {
+      if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
+      var el = document.getElementById('retry-countdown');
+      if (el) el.remove();
+    }
+
+    async function appRetryChat() {
+      var msg = window._lastMsgForRetry;
+      if (!msg) return;
+      var lang = document.documentElement.lang || 'ja';
+      var msgsEl = document.getElementById('app-messages');
+      var thinking = document.createElement('div');
+      thinking.className = 'app-msg app-msg-bot';
+      thinking.innerHTML = '<div class="app-msg-avatar">cw</div><div class="app-msg-content" style="color:var(--muted);">🔄 ' + (lang === 'ja' ? '再試行中...' : 'Retrying...') + '</div>';
+      if (msgsEl) { msgsEl.appendChild(thinking); msgsEl.scrollTop = msgsEl.scrollHeight; }
+      try {
+        var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
+        var chatBody = { message: msg, session_id: webSessionId, channel: 'web', device: isMobile ? 'mobile' : 'pc', language: lang };
+        var r = await fetch(API + '/api/v1/chat/stream', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(chatBody)
+        });
+        thinking.remove();
+        if (!r.ok || !r.body) {
+          var d = await fetch(API + '/api/v1/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(chatBody) });
+          var data = await d.json();
+          appAddMsg(data.response || friendlyError('Error'), 'bot');
+          if (data.action === 'retry_scheduled') scheduleAutoRetry(data.auto_retry_after || 300);
+          return;
+        }
+        var reader = r.body.getReader();
+        var decoder = new TextDecoder();
+        var buf = '';
+        var finalContent = '';
+        while (true) {
+          var _ref = await reader.read();
+          if (_ref.done) break;
+          buf += decoder.decode(_ref.value, { stream: true });
+          var lines = buf.split('\n'); buf = lines.pop() || '';
+          for (var l of lines) {
+            if (!l.startsWith('data:')) continue;
+            try {
+              var parsed = JSON.parse(l.slice(5).trim());
+              var evts = Array.isArray(parsed) ? parsed : [parsed];
+              for (var evt of evts) {
+                if (evt.type === 'content' && evt.content) {
+                  finalContent = evt.content;
+                  if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
+                } else if (evt.type === 'error') {
+                  finalContent = evt.content || friendlyError('Error');
+                  if (evt.action === 'retry_scheduled') scheduleAutoRetry(evt.auto_retry_after || 300);
+                }
+              }
+            } catch(e) {}
+          }
+        }
+        if (finalContent) appAddMsg(finalContent, 'bot');
+      } catch(e) {
+        thinking.remove();
+        appAddMsg(friendlyError('Network error'), 'bot');
+      }
+    }
+
     async function appSend() {
       const textarea = document.getElementById('app-input');
       let text = textarea.value.trim();
@@ -9059,12 +9162,15 @@
       textarea.value = '';
       textarea.style.height = 'auto';
       touchActivity();
-      appAddMsg(text, 'user');
-      trackAbMessage();
+      if (!window._raceRetrying) {
+        appAddMsg(text, 'user');
+        trackAbMessage();
+      }
+      delete window._raceRetrying;
 
       if (appCurrentConvId && appConversations) {
         const conv = appConversations.find(c => c.id === appCurrentConvId);
-        if (conv && (!conv.title || conv.title === 'New conversation')) {
+        if (conv && (!conv.title || conv.title === 'New task')) {
           const trimmed = text.trim();
           conv.title = trimmed.length > 50 ? trimmed.substring(0, 50) + '...' : trimmed;
           const activeItem = document.querySelector('.app-conv-item.active span');
@@ -9132,6 +9238,7 @@
         const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
         const deviceType = voiceInitiated ? 'voice' : (isMobile ? 'mobile' : 'pc');
 
+        window._lastMsgForRetry = msgToSend;
         const chatBody = { message: msgToSend, session_id: webSessionId, channel: 'web', device: deviceType, language: lang2 || 'ja' };
         // Apply LLM settings from localStorage
         const llmS = JSON.parse(localStorage.getItem('llmSettings') || '{}');
@@ -9170,6 +9277,7 @@
           knownMsgCount += 2; syncVersion++;
           if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
           if (d.action === 'upgrade') { appendUpgradeButton(); setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800); }
+          else if (d.action === 'retry_scheduled') { scheduleAutoRetry(d.auto_retry_after || 300); }
           autoPlayTTS(d.response);
           setTimeout(() => appLoadConversations(), 1500);
         } else {
@@ -9355,6 +9463,9 @@
                 setTimeout(function() {
                   showTopupModal(plan === 'free' ? 'plans' : 'credits');
                 }, 800);
+              } else if (evt.action === 'retry_scheduled') {
+                var retrySecs = evt.auto_retry_after || 300;
+                scheduleAutoRetry(retrySecs);
               }
             }
           }
@@ -9663,6 +9774,8 @@
 
       try {
         const tier = _selectedTier === 'auto' ? null : _selectedTier;
+        const raceAbort = new AbortController();
+        const raceTimeout = setTimeout(() => { raceAbort.abort(); }, 30000);
         const r = await fetch(API + '/api/v1/chat/race', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -9672,14 +9785,20 @@
             channel: 'web',
             tier: tier,
           }),
+          signal: raceAbort.signal,
         });
-
-        clearInterval(statusInterval);
-        stopThinkingAmbient();
-        thinking.remove();
+        clearTimeout(raceTimeout);
 
         if (!r.ok || !r.body) {
-          appAddMsg(lang === 'ja' ? '\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F' : 'Error occurred', 'bot');
+          clearInterval(statusInterval);
+          stopThinkingAmbient();
+          if (thinking.parentNode) thinking.remove();
+          // Fall back to normal stream
+          console.log('Race fetch failed (status=' + r.status + '), falling back to normal stream');
+          _selectedTier = '__skip_race__';
+          window._raceRetrying = true;
+          document.getElementById('app-input').value = text;
+          await appSend();
           return;
         }
 
@@ -9708,12 +9827,20 @@
               const data = JSON.parse(dataStr);
               if (data.error) {
                 clearInterval(statusInterval);
-                thinking.remove();
-                appAddMsg(friendlyError(data.error), 'bot');
+                stopThinkingAmbient();
+                if (thinking.parentNode) thinking.remove();
                 if (data.action === 'upgrade') {
+                  appAddMsg(friendlyError(data.error), 'bot');
                   appendUpgradeButton();
                   setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800);
+                  return;
                 }
+                // Fall back to normal stream on race error
+                console.log('Race error, falling back to normal stream:', data.error);
+                _selectedTier = '__skip_race__';
+                window._raceRetrying = true;
+                document.getElementById('app-input').value = text;
+                await appSend();
                 return;
               }
 
@@ -9745,14 +9872,23 @@
                 }
               } else if (data.type === 'race_done') {
                 raceData = data;
+                // Backend sends all results in one batch — populate results array
+                if (data.results && data.results.length > 0 && results.length === 0) {
+                  data.results.sort((a, b) => (a.rank || 0) - (b.rank || 0));
+                  data.results.forEach(r => results.push(r));
+                  firstResultShown = true;
+                }
               }
             } catch (parseErr) { console.warn('Race SSE parse error:', dataStr, parseErr); }
           }
         }
 
-        if (!firstResultShown) {
-          clearInterval(statusInterval);
-          thinking.remove();
+        // Clean up thinking indicator
+        clearInterval(statusInterval);
+        stopThinkingAmbient();
+        if (thinking.parentNode) thinking.remove();
+
+        if (!firstResultShown || results.length === 0) {
           appAddMsg(lang === 'ja' ? '\u5168\u30E2\u30C7\u30EB\u304C\u5931\u6557\u3057\u307E\u3057\u305F' : 'All models failed', 'bot');
           return;
         }
@@ -9865,6 +10001,15 @@
         stopThinkingAmbient();
         thinking.remove();
         console.error('Race error:', e);
+        if (e.name === 'AbortError') {
+          // Race timed out — fall back to normal stream
+          console.log('Race timed out, falling back to normal stream');
+          _selectedTier = '__skip_race__';
+          window._raceRetrying = true;
+          document.getElementById('app-input').value = text;
+          await appSend();
+          return;
+        }
         appAddMsg(lang === 'ja' ? '\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F' : 'Error occurred', 'bot');
       }
     }
@@ -14066,9 +14211,13 @@
 
           const badge = document.getElementById('version-badge');
           if (badge) {
-            // Display: v0.2.123 (abc1234)
-            badge.innerHTML = `<a href="${_repoUrl}/commit/${_appHash}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;display:block;width:100%;height:100%;" title="View commit on GitHub">v${_appVersion}.${buildNum} (${_appHash})</a>`;
+            // Display: v325 · 0.2.0 (abc1234)
+            const lambdaVer = d.lambda_version || '';
+            const verLabel = lambdaVer && lambdaVer !== '$LATEST' ? `v${lambdaVer}` : `b${buildNum}`;
+            badge.innerHTML = `<a href="${_repoUrl}/commit/${_appHash}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;display:block;width:100%;height:100%;" title="View commit on GitHub">${verLabel} · ${_appVersion} (${_appHash})</a>`;
           }
+          const mobLabel = document.getElementById('mob-version-label');
+          if (mobLabel) mobLabel.textContent = `version: ${verLabel} · ${_appVersion} (${_appHash})`;
         }
       } catch(e) { /* ignore */ }
     })();

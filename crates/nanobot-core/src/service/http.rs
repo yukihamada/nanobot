@@ -3061,6 +3061,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Pages
         .route("/pricing", get(handle_pricing))
         .route("/media", get(handle_media_demo))
+        .route("/voices", get(handle_voices))
         .route("/skill", get(handle_skill_marketplace))
         .route("/welcome", get(handle_welcome))
         .route("/features", get(handle_features))
@@ -10101,6 +10102,11 @@ async fn handle_pricing_api() -> impl IntoResponse {
 /// GET /media — Media API demo page
 async fn handle_media_demo() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/media.html"))
+}
+
+/// GET /voices — Voice samples page
+async fn handle_voices() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/voices.html"))
 }
 
 /// GET /skill — Skill marketplace page
@@ -20009,11 +20015,13 @@ async fn handle_feedback(
 
 /// GET /api/v1/version — Return version, git hash, build number, and repo URL.
 async fn handle_version() -> impl IntoResponse {
+    let lambda_version = std::env::var("AWS_LAMBDA_FUNCTION_VERSION").unwrap_or_default();
     Json(serde_json::json!({
         "version": crate::VERSION,
         "hash": crate::GIT_HASH,
         "build": crate::BUILD_NUMBER,
         "repo": crate::REPO_URL,
+        "lambda_version": lambda_version,
     }))
 }
 
