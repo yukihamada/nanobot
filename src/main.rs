@@ -3,9 +3,9 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-// Use mimalloc for better performance
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+// Use mimalloc for better performance (disabled for Lambda compatibility testing)
+// #[global_allocator]
+// static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use clap::{Parser, Subcommand};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{self, ClearType};
@@ -156,11 +156,13 @@ enum CronCommands {
 #[tokio::main]
 async fn main() -> Result<()> {
     // Default to warn level for cleaner CLI output, unless RUST_LOG is set
+    // But allow nanobot_core::agent at info level to show tool usage
     let default_filter = if std::env::var("RUST_LOG").is_ok() {
         tracing_subscriber::EnvFilter::from_default_env()
     } else {
         tracing_subscriber::EnvFilter::from_default_env()
             .add_directive("nanobot=warn".parse().unwrap())
+            .add_directive("nanobot_core::agent=info".parse().unwrap())
     };
 
     tracing_subscriber::fmt()

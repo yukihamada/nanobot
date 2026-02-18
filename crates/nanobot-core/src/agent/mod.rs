@@ -297,11 +297,15 @@ impl AgentLoop {
                 // Execute tools (concurrently if multiple)
                 if response.tool_calls.len() == 1 {
                     let tc = &response.tool_calls[0];
-                    debug!("Executing tool: {}", tc.name);
+                    info!("🔧 Using tool: {}", tc.name);
                     let result = self.tools.execute(&tc.name, tc.arguments.clone()).await;
                     messages.push(Message::tool_result(&tc.id, &tc.name, &result));
                 } else {
                     // Parallel execution with join_all
+                    info!("🔧 Using {} tools in parallel: {}",
+                        response.tool_calls.len(),
+                        response.tool_calls.iter().map(|tc| tc.name.as_str()).collect::<Vec<_>>().join(", ")
+                    );
                     let futures: Vec<_> = response
                         .tool_calls
                         .iter()
