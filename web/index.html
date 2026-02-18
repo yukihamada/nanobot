@@ -4890,6 +4890,11 @@
       webSessionId = 'webchat:' + webSessionId.slice(4);
       localStorage.setItem('webSessionId', webSessionId);
     }
+    // Migrate legacy cw_xxx format → webchat:xxx
+    if (webSessionId && webSessionId.startsWith('cw_')) {
+      webSessionId = 'webchat:' + webSessionId.slice(3);
+      localStorage.setItem('webSessionId', webSessionId);
+    }
     if (!webSessionId) {
       webSessionId = 'webchat:' + crypto.randomUUID();
       localStorage.setItem('webSessionId', webSessionId);

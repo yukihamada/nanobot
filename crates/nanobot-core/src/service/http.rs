@@ -122,7 +122,15 @@ fn validate_session_id(session_id: &str) -> bool {
     // Must contain at least one colon (prefix:id format)
     if !session_id.contains(':') {
         // Exception: admin-test-* format
-        return session_id.starts_with("admin-test-");
+        if session_id.starts_with("admin-test-") {
+            return true;
+        }
+        // Legacy format: cw_<hexstring> (older chatweb.ai sessions)
+        if let Some(rest) = session_id.strip_prefix("cw_") {
+            return !rest.is_empty() && rest.len() <= 64
+                && rest.chars().all(|c| c.is_alphanumeric() || c == '-');
+        }
+        return false;
     }
 
     let parts: Vec<&str> = session_id.splitn(2, ':').collect();
@@ -17827,7 +17835,7 @@ async fn handle_media_remove_bg(
 async fn handle_media_upscale(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
-    Json(req): Json(MediaUpscaleRequest),
+    Json(req): Json<MediaUpscaleRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     // 1. Authenticate
     let user_id = auth_user_id(&state, &headers).await
@@ -17911,7 +17919,7 @@ async fn handle_media_upscale(
 async fn handle_media_sfx(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
-    Json(req): Json(MediaSfxRequest),
+    Json(req): Json<MediaSfxRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     // 1. Authenticate
     let user_id = auth_user_id(&state, &headers).await
