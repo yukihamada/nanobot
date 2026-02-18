@@ -7,7 +7,7 @@ pub mod embeddings;
 pub mod local;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use async_trait::async_trait;
 
 use crate::error::ProviderError;
@@ -108,18 +108,128 @@ pub fn create_provider(
     ))
 }
 
+/// Circuit breaker cooldown: 5 minutes after 3 consecutive failures.
+const CIRCUIT_BREAKER_THRESHOLD: u32 = 3;
+const CIRCUIT_BREAKER_COOLDOWN_SECS: u64 = 300;
+
 /// Load-balanced provider that distributes requests across multiple providers
-/// with automatic failover.
+/// with automatic failover and per-provider circuit breakers.
 pub struct LoadBalancedProvider {
     providers: Vec<Arc<dyn LlmProvider>>,
     counter: AtomicUsize,
+    /// Consecutive failure counts per provider index.
+    failure_counts: Vec<AtomicU32>,
+    /// Unix timestamp (seconds) until which each provider's circuit is open (0 = closed).
+    circuit_open_until: Vec<AtomicU64>,
 }
 
 impl LoadBalancedProvider {
     pub fn new(providers: Vec<Arc<dyn LlmProvider>>) -> Self {
+        let n = providers.len();
         Self {
             providers,
             counter: AtomicUsize::new(0),
+            failure_counts: (0..n).map(|_| AtomicU32::new(0)).collect(),
+            circuit_open_until: (0..n).map(|_| AtomicU64::new(0)).collect(),
+        }
+    }
+
+    /// Returns true if the provider at `idx` is currently available (circuit closed).
+    fn is_provider_available(&self, idx: usize) -> bool {
+        let open_until = self.circuit_open_until[idx].load(Ordering::Relaxed);
+        if open_until == 0 {
+            return true;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        if now >= open_until {
+            // Cooldown expired — reset and close circuit
+            self.circuit_open_until[idx].store(0, Ordering::Relaxed);
+            self.failure_counts[idx].store(0, Ordering::Relaxed);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Record a failure for the provider at `idx`. Opens the circuit after threshold.
+    pub fn record_failure(&self, idx: usize) {
+        if idx >= self.providers.len() { return; }
+        let count = self.failure_counts[idx].fetch_add(1, Ordering::Relaxed) + 1;
+        if count >= CIRCUIT_BREAKER_THRESHOLD {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let open_until = now + CIRCUIT_BREAKER_COOLDOWN_SECS;
+            self.circuit_open_until[idx].store(open_until, Ordering::Relaxed);
+            tracing::warn!(
+                "Circuit breaker OPEN for provider #{} ({}) — {} failures, cooling down {}s",
+                idx, self.providers[idx].default_model(), count, CIRCUIT_BREAKER_COOLDOWN_SECS
+            );
+        }
+    }
+
+    /// Record a success for the provider at `idx` — resets failure count.
+    pub fn record_success(&self, idx: usize) {
+        if idx >= self.providers.len() { return; }
+        self.failure_counts[idx].store(0, Ordering::Relaxed);
+    }
+
+    /// Returns true if ALL providers have open circuits (none available).
+    pub fn all_providers_down(&self) -> bool {
+        if self.providers.is_empty() { return true; }
+        (0..self.providers.len()).all(|i| !self.is_provider_available(i))
+    }
+
+    /// Select the best available provider index for a given model.
+    /// Skips providers whose circuit is open.
+    fn select_provider_idx(&self, model: &str) -> usize {
+        let model_lower = model.to_lowercase();
+
+        // Collect indices of available matching providers
+        let matching: Vec<usize> = self.providers.iter().enumerate()
+            .filter(|(i, p)| {
+                if !self.is_provider_available(*i) { return false; }
+                let default = p.default_model().to_lowercase();
+                if model_lower.contains("claude") || model_lower.contains("anthropic") {
+                    default.contains("claude") || default.contains("anthropic")
+                } else if model_lower.contains("gemini") {
+                    default.contains("gemini")
+                } else if model_lower.contains("kimi") || model_lower.contains("moonshot") {
+                    default.contains("kimi") || default.contains("moonshot")
+                } else if model_lower.contains("qwen") {
+                    default.contains("qwen")
+                } else if model_lower.contains("llama") || model_lower.contains("mixtral") || model_lower.contains("groq") {
+                    default.contains("llama") || default.contains("mixtral") || default.contains("groq")
+                } else if model_lower.contains("deepseek") {
+                    default.contains("deepseek")
+                } else if model_lower.contains("gpt") || model_lower.contains("openai") {
+                    default.contains("gpt") || (!default.contains("claude") && !default.contains("gemini") && !default.contains("llama") && !default.contains("deepseek") && !default.contains("openrouter"))
+                } else {
+                    true
+                }
+            })
+            .map(|(i, _)| i)
+            .collect();
+
+        if matching.is_empty() {
+            // Fallback: any available provider (ignoring model family)
+            let available: Vec<usize> = (0..self.providers.len())
+                .filter(|i| self.is_provider_available(*i))
+                .collect();
+            if available.is_empty() {
+                // All circuits open — just round-robin (let them fail again to refresh cooldown)
+                self.counter.fetch_add(1, Ordering::Relaxed) % self.providers.len()
+            } else {
+                let idx = self.counter.fetch_add(1, Ordering::Relaxed) % available.len();
+                available[idx]
+            }
+        } else {
+            let idx = self.counter.fetch_add(1, Ordering::Relaxed) % matching.len();
+            matching[idx]
         }
     }
 
@@ -272,53 +382,14 @@ impl LoadBalancedProvider {
         }
     }
 
-    /// Select the best provider for a given model.
-    fn select_provider(&self, model: &str) -> &dyn LlmProvider {
-        let model_lower = model.to_lowercase();
-
-        // Filter providers that match the model
-        let matching: Vec<usize> = self.providers.iter().enumerate()
-            .filter(|(_, p)| {
-                let default = p.default_model().to_lowercase();
-                if model_lower.contains("claude") || model_lower.contains("anthropic") {
-                    default.contains("claude") || default.contains("anthropic")
-                } else if model_lower.contains("gemini") {
-                    default.contains("gemini")
-                } else if model_lower.contains("kimi") || model_lower.contains("moonshot") {
-                    default.contains("kimi") || default.contains("moonshot")
-                } else if model_lower.contains("qwen") {
-                    default.contains("qwen")
-                } else if model_lower.contains("llama") || model_lower.contains("mixtral") || model_lower.contains("groq") {
-                    default.contains("llama") || default.contains("mixtral") || default.contains("groq")
-                } else if model_lower.contains("deepseek") {
-                    default.contains("deepseek")
-                } else if model_lower.contains("gpt") || model_lower.contains("openai") {
-                    // Match OpenAI providers but not Groq/DeepSeek/OpenRouter
-                    default.contains("gpt") || (!default.contains("claude") && !default.contains("gemini") && !default.contains("llama") && !default.contains("deepseek") && !default.contains("openrouter"))
-                } else {
-                    true
-                }
-            })
-            .map(|(i, _)| i)
-            .collect();
-
-        if matching.is_empty() {
-            // Fallback to round-robin across all providers
-            let idx = self.counter.fetch_add(1, Ordering::Relaxed) % self.providers.len();
-            self.providers[idx].as_ref()
-        } else {
-            // Round-robin among matching providers
-            let idx = self.counter.fetch_add(1, Ordering::Relaxed) % matching.len();
-            self.providers[matching[idx]].as_ref()
-        }
-    }
-
     /// Get list of available models for parallel racing.
     /// Returns (model_name, provider_index) pairs, one per provider family.
+    /// Skips providers whose circuit breaker is open.
     pub fn available_parallel_models(&self) -> Vec<(String, usize)> {
         let mut models = Vec::new();
         let mut seen_families = std::collections::HashSet::new();
         for (i, p) in self.providers.iter().enumerate() {
+            if !self.is_provider_available(i) { continue; }
             let default = p.default_model().to_lowercase();
             let family = if default.contains("claude") { "claude" }
                 else if default.contains("gemini") { "gemini" }
@@ -734,15 +805,20 @@ impl LlmProvider for LoadBalancedProvider {
         let parallel_timeout = std::time::Duration::from_secs(7);
 
         // Phase 1: Try primary provider with short timeout
-        let primary = self.select_provider(model);
+        let primary_idx = self.select_provider_idx(model);
+        let primary = &*self.providers[primary_idx];
         let primary_result = tokio::time::timeout(
             primary_head_start,
             primary.chat(messages, tools, model, max_tokens, temperature),
         ).await;
 
         match primary_result {
-            Ok(Ok(resp)) => return Ok(resp),
+            Ok(Ok(resp)) => {
+                self.record_success(primary_idx);
+                return Ok(resp);
+            }
             Ok(Err(e)) => {
+                self.record_failure(primary_idx);
                 tracing::warn!("Primary provider failed for model {}: {}, trying parallel fallback", model, e);
             }
             Err(_) => {
@@ -750,21 +826,25 @@ impl LlmProvider for LoadBalancedProvider {
             }
         }
 
-        // Phase 2: Race ALL remaining providers in parallel, return first success
+        // Phase 2: Race ALL remaining available providers in parallel, return first success
         if total > 1 {
             let start = self.counter.load(Ordering::Relaxed);
             let msgs = messages.to_vec();
             let tools_owned: Option<Vec<serde_json::Value>> = tools.map(|t| t.to_vec());
 
-            let (tx, mut rx) = tokio::sync::mpsc::channel::<CompletionResponse>(total);
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<(CompletionResponse, usize)>(total);
+            let (fail_tx, mut fail_rx) = tokio::sync::mpsc::channel::<usize>(total);
 
+            let mut spawned = 0;
             for i in 1..total {
                 let idx = (start + i) % total;
+                if !self.is_provider_available(idx) { continue; }
                 let provider = self.providers[idx].clone();
                 let converted_model = Self::convert_model_for_provider(provider.as_ref(), model);
                 let msgs = msgs.clone();
                 let tools = tools_owned.clone();
                 let tx = tx.clone();
+                let fail_tx = fail_tx.clone();
 
                 tokio::spawn(async move {
                     let tools_ref = tools.as_deref();
@@ -774,22 +854,39 @@ impl LlmProvider for LoadBalancedProvider {
                     ).await {
                         Ok(Ok(resp)) => {
                             tracing::info!("Parallel fallback succeeded with model {}", converted_model);
-                            let _ = tx.send(resp).await;
+                            let _ = tx.send((resp, idx)).await;
                         }
                         Ok(Err(e)) => {
                             tracing::warn!("Parallel fallback {} failed: {}", converted_model, e);
+                            let _ = fail_tx.send(idx).await;
                         }
                         Err(_) => {
                             tracing::warn!("Parallel fallback {} timed out ({}s)", converted_model, parallel_timeout.as_secs());
                         }
                     }
                 });
+                spawned += 1;
             }
             drop(tx);
+            drop(fail_tx);
 
-            // Wait for first successful response
-            if let Some(resp) = rx.recv().await {
-                return Ok(resp);
+            if spawned > 0 {
+                // Collect failures and first success
+                while let Ok(idx) = fail_rx.try_recv() {
+                    self.record_failure(idx);
+                }
+                if let Some((resp, success_idx)) = rx.recv().await {
+                    self.record_success(success_idx);
+                    // Drain remaining failures
+                    while let Ok(idx) = fail_rx.try_recv() {
+                        self.record_failure(idx);
+                    }
+                    return Ok(resp);
+                }
+                // All failed — drain remaining failures
+                while let Ok(idx) = fail_rx.try_recv() {
+                    self.record_failure(idx);
+                }
             }
         }
 
@@ -832,6 +929,10 @@ impl LlmProvider for LoadBalancedProvider {
 
         for i in 0..total {
             let idx = (start + i) % total;
+            if !self.is_provider_available(idx) {
+                tracing::debug!("Stream: skipping provider #{} (circuit open)", idx);
+                continue;
+            }
             let provider = &*self.providers[idx];
             let converted_model = Self::convert_model_for_provider(provider, model);
 
@@ -840,12 +941,14 @@ impl LlmProvider for LoadBalancedProvider {
                 provider.chat_stream(messages, tools, &converted_model, max_tokens, temperature, extra, chunk_tx.clone()),
             ).await {
                 Ok(Ok(resp)) => {
+                    self.record_success(idx);
                     if i > 0 {
                         tracing::info!("Stream failover succeeded with provider #{} model {}", idx, converted_model);
                     }
                     return Ok(resp);
                 }
                 Ok(Err(e)) => {
+                    self.record_failure(idx);
                     tracing::warn!("Stream provider #{} ({}) failed: {}, trying next", idx, converted_model, e);
                     last_err = format!("{}", e);
                 }

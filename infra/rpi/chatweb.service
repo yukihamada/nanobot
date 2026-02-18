@@ -1,0 +1,38 @@
+[Unit]
+Description=chatweb AI Assistant (Raspberry Pi)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chatweb
+Group=chatweb
+WorkingDirectory=/opt/chatweb
+ExecStart=/opt/chatweb/chatweb gateway --http --http-port 3000
+EnvironmentFile=/opt/chatweb/.env
+Restart=always
+RestartSec=5
+
+# Resource limits (RPi4 4GB)
+MemoryMax=1G
+MemoryHigh=768M
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/chatweb
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=chatweb
+
+[Install]
+WantedBy=multi-user.target

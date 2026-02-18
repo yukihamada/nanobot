@@ -3112,6 +3112,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Link code generation and status for QR flow
         .route("/api/v1/link/generate", post(handle_link_generate))
         .route("/api/v1/link/status/{code}", get(handle_link_status))
+        // Credential vault
+        .route("/api/v1/vault/credentials", post(handle_vault_store))
+        .route("/api/v1/vault/credentials", get(handle_vault_list))
+        .route("/api/v1/vault/credentials/{service}", delete(handle_vault_delete))
         // MCP endpoint
         .route("/mcp", post(handle_mcp))
         // Partner API (Elio integration)
@@ -4201,6 +4205,10 @@ async fn handle_chat(
                     // Inject session key for tools that need user context
                     if name == "phone_call" || name == "web_deploy" {
                         args.insert("_session_key".to_string(), serde_json::Value::String(session_key.clone()));
+                    }
+                    // Inject user_id for browser tools that need vault access
+                    if name.starts_with("browser_") {
+                        args.insert("_user_id".to_string(), serde_json::Value::String(session_key.clone()));
                     }
                     async move {
                         info!("Tool call [iter {}]: {} args={:?}", iteration, name, args);
@@ -6908,6 +6916,10 @@ async fn handle_chat_stream(
                         if name == "phone_call" || name == "web_deploy" {
                             args.insert("_session_key".to_string(), serde_json::Value::String(session_key_clone.clone()));
                         }
+                        // Inject user_id for browser tools that need vault access
+                        if name.starts_with("browser_") {
+                            args.insert("_user_id".to_string(), serde_json::Value::String(session_key_clone.clone()));
+                        }
                         async move {
                             let raw_result = registry.execute(&name, &args).await;
                             let result = if raw_result.starts_with("[TOOL_ERROR]") {
@@ -6939,6 +6951,49 @@ async fn handle_chat_stream(
                             "iteration": iteration,
                         }));
                         event_count += 1;
+
+                        // Emit browser_screenshot event if tool result contains screenshot data
+                        if name.starts_with("browser_") {
+                            if let (Some(start), Some(end)) = (
+                                result.find("[BROWSER_SCREENSHOT_B64]"),
+                                result.find("[/BROWSER_SCREENSHOT_B64]"),
+                            ) {
+                                let b64_start = start + "[BROWSER_SCREENSHOT_B64]".len();
+                                if b64_start < end {
+                                    let screenshot_b64 = &result[b64_start..end];
+                                    send_sse!(serde_json::json!({
+                                        "type": "browser_screenshot",
+                                        "screenshot": screenshot_b64,
+                                        "tool": name,
+                                        "iteration": iteration,
+                                    }));
+                                    event_count += 1;
+                                }
+                            }
+                            // Emit purchase_confirm event if tool result requests confirmation
+                            if result.starts_with("[PURCHASE_CONFIRM]") {
+                                // Parse amount and description from the result
+                                let mut amount = "";
+                                let mut description = "";
+                                let mut p_session_id = "";
+                                if let Some(first_line) = result.lines().next() {
+                                    for part in first_line.split_whitespace() {
+                                        if let Some(a) = part.strip_prefix("amount=") { amount = a; }
+                                        if let Some(d) = part.strip_prefix("description=") { description = d; }
+                                        if let Some(s) = part.strip_prefix("session_id=") { p_session_id = s; }
+                                    }
+                                }
+                                send_sse!(serde_json::json!({
+                                    "type": "purchase_confirm",
+                                    "tool_call_id": name,
+                                    "amount": amount,
+                                    "description": description,
+                                    "session_id": p_session_id,
+                                    "iteration": iteration,
+                                }));
+                                event_count += 1;
+                            }
+                        }
                     }
 
                     // Build conversation with tool calls + results
@@ -10082,6 +10137,9 @@ async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
     if host.starts_with("api.") {
         // Serve API docs for api.chatweb.ai / api.teai.io
         axum::response::Html(include_str!("../../../../web/api-docs.html"))
+    } else if host.contains("chatweb-pi") || host.contains(".local") || (!host.contains('.') && !host.contains("chatweb.ai") && !host.contains("teai.io")) {
+        // Local Raspberry Pi UI for chatweb-pi.local, *.local, or bare hostnames
+        axum::response::Html(include_str!("../../../../web/pi.html"))
     } else {
         // Serve full chat UI for all domains (chatweb.ai, teai.io, etc.)
         // Frontend detects IS_TEAI via location.hostname for domain-specific behavior
@@ -19283,6 +19341,8 @@ struct CronUpdateRequest {
     enabled: Option<bool>,
     name: Option<String>,
     message: Option<String>,
+    schedule: Option<CronScheduleInput>,
+    channel: Option<String>,
 }
 
 async fn handle_cron_list(
@@ -19458,6 +19518,25 @@ async fn handle_cron_update(
             if let Some(ref message) = req.message {
                 update_expr_parts.push("message = :msg");
                 attr_values.insert(":msg".to_string(), AttributeValue::S(message.clone()));
+            }
+            if let Some(ref schedule) = req.schedule {
+                let (stype, svalue) = if let Some(mins) = schedule.every_minutes {
+                    ("every".to_string(), mins.to_string())
+                } else if let Some(ref expr) = schedule.cron {
+                    ("cron".to_string(), expr.clone())
+                } else if let Some(ref at_str) = schedule.at {
+                    ("at".to_string(), at_str.clone())
+                } else {
+                    ("every".to_string(), "30".to_string())
+                };
+                update_expr_parts.push("schedule_type = :stype");
+                attr_values.insert(":stype".to_string(), AttributeValue::S(stype));
+                update_expr_parts.push("schedule_value = :svalue");
+                attr_values.insert(":svalue".to_string(), AttributeValue::S(svalue));
+            }
+            if let Some(ref channel) = req.channel {
+                update_expr_parts.push("channel = :channel");
+                attr_values.insert(":channel".to_string(), AttributeValue::S(channel.clone()));
             }
             if update_expr_parts.is_empty() {
                 return Json(serde_json::json!({ "ok": true })).into_response();
@@ -20231,6 +20310,110 @@ async fn handle_admin_feedback(
         "stats": { "total_up": 0, "total_down": 0, "total": 0, "positive_rate": 0 },
         "days_queried": days,
     })).into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Credential Vault handlers
+// ---------------------------------------------------------------------------
+
+/// Store a credential in the vault (encrypted).
+async fn handle_vault_store(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return Json(serde_json::json!({ "error": "Unauthorized" })),
+        };
+
+        let service_name = match body.get("service_name").and_then(|v| v.as_str()) {
+            Some(s) if !s.is_empty() && s.len() <= 100 => s,
+            _ => return Json(serde_json::json!({ "error": "service_name is required (max 100 chars)" })),
+        };
+        let username = match body.get("username").and_then(|v| v.as_str()) {
+            Some(u) if !u.is_empty() && u.len() <= 254 => u,
+            _ => return Json(serde_json::json!({ "error": "username is required (max 254 chars)" })),
+        };
+        let password = match body.get("password").and_then(|v| v.as_str()) {
+            Some(p) if !p.is_empty() && p.len() <= 1024 => p,
+            _ => return Json(serde_json::json!({ "error": "password is required (max 1024 chars)" })),
+        };
+        let service_url = body.get("service_url").and_then(|v| v.as_str());
+        let display_name = body.get("display_name").and_then(|v| v.as_str());
+
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            match crate::service::vault::store_credential(
+                dynamo, table, &user_id, service_name, username, password, service_url, display_name,
+            ).await {
+                Ok(()) => {
+                    emit_audit_log(dynamo.clone(), table.clone(), "vault_store", &user_id, "", &format!("service={}", service_name));
+                    return Json(serde_json::json!({ "ok": true, "service_name": service_name }));
+                }
+                Err(e) => return Json(serde_json::json!({ "error": e.to_string() })),
+            }
+        }
+        return Json(serde_json::json!({ "error": "DynamoDB not configured" }));
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    Json(serde_json::json!({ "error": "Vault not available" }))
+}
+
+/// List all stored credentials (without passwords).
+async fn handle_vault_list(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return Json(serde_json::json!({ "error": "Unauthorized" })),
+        };
+
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            match crate::service::vault::list_credentials(dynamo, table, &user_id).await {
+                Ok(entries) => return Json(serde_json::json!({ "ok": true, "credentials": entries })),
+                Err(e) => return Json(serde_json::json!({ "error": e.to_string() })),
+            }
+        }
+        return Json(serde_json::json!({ "error": "DynamoDB not configured" }));
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    Json(serde_json::json!({ "error": "Vault not available" }))
+}
+
+/// Delete a credential from the vault.
+async fn handle_vault_delete(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Path(service): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return Json(serde_json::json!({ "error": "Unauthorized" })),
+        };
+
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            match crate::service::vault::delete_credential(dynamo, table, &user_id, &service).await {
+                Ok(()) => {
+                    emit_audit_log(dynamo.clone(), table.clone(), "vault_delete", &user_id, "", &format!("service={}", service));
+                    return Json(serde_json::json!({ "ok": true }));
+                }
+                Err(e) => return Json(serde_json::json!({ "error": e.to_string() })),
+            }
+        }
+        return Json(serde_json::json!({ "error": "DynamoDB not configured" }));
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    Json(serde_json::json!({ "error": "Vault not available" }))
 }
 
 #[cfg(test)]

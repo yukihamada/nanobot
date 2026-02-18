@@ -23,7 +23,7 @@ Voice-first • 13 channels • 35 tools (24 core + 11 optional) • Multi-model
 
 <br/>
 
-**[🚀 Try chatweb.ai](https://chatweb.ai)** · **[📚 Documentation](https://chatweb.ai/docs)** · **[📊 Compare](https://chatweb.ai/comparison)** · **[⚡ API Docs (teai.io)](https://teai.io)**
+**[🚀 Try chatweb.ai](https://chatweb.ai)** · **[📚 Documentation](https://chatweb.ai/docs)** · **[📊 Compare](https://chatweb.ai/comparison)** · **[🔊 Voice Samples](https://chatweb.ai/voices)** · **[⚡ API Docs (teai.io)](https://teai.io)**
 
 <br/>
 

@@ -12,6 +12,7 @@ lambda-bootstrap
 # Environment
 .env
 .env.local
+infra/rpi/.env.rpi
 samconfig.toml
 
 # Logs

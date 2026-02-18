@@ -110,6 +110,34 @@ pub enum ApprovalResult {
     Timeout,
 }
 
+/// Get the permission level for a tool by name.
+///
+/// This maps all known tools to their permission levels.
+pub fn tool_permission(name: &str) -> ToolPermission {
+    match name {
+        // Auto-approve: read-only, safe tools
+        "web_search" | "web_fetch" | "calculator" | "weather" | "translate"
+        | "wikipedia" | "date_time" | "qr_code" | "news_search" | "csv_analysis"
+        | "browser" | "youtube_transcript" | "arxiv_search" | "tavily_search"
+        | "file_read" | "file_list" | "git_status" | "git_diff"
+        | "browser_screenshot" | "memory_log" | "knowledge_graph" => ToolPermission::AutoApprove,
+
+        // Require confirmation: destructive or external-effect tools
+        "code_execute" | "file_write" | "gmail" | "google_calendar"
+        | "phone_call" | "web_deploy" | "slack" | "notion" | "discord"
+        | "spotify" | "postgres" | "webhook_trigger" | "image_generate"
+        | "music_generate" | "video_generate" | "filesystem" | "git_commit"
+        | "run_linter" | "run_tests"
+        | "browser_session" | "browser_action" | "browser_purchase" => ToolPermission::RequireConfirmation,
+
+        // Require admin auth: high-risk tools
+        "github_read_file" | "github_create_or_update_file" | "github_create_pr" => ToolPermission::RequireAuth,
+
+        // Default: require confirmation for unknown tools
+        _ => ToolPermission::RequireConfirmation,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,6 +154,17 @@ mod tests {
         assert!(!ToolPermission::AutoApprove.requires_admin());
         assert!(!ToolPermission::RequireConfirmation.requires_admin());
         assert!(ToolPermission::RequireAuth.requires_admin());
+    }
+
+    #[test]
+    fn test_tool_permission_mapping() {
+        assert_eq!(tool_permission("web_search"), ToolPermission::AutoApprove);
+        assert_eq!(tool_permission("browser_screenshot"), ToolPermission::AutoApprove);
+        assert_eq!(tool_permission("browser_session"), ToolPermission::RequireConfirmation);
+        assert_eq!(tool_permission("browser_action"), ToolPermission::RequireConfirmation);
+        assert_eq!(tool_permission("browser_purchase"), ToolPermission::RequireConfirmation);
+        assert_eq!(tool_permission("github_create_pr"), ToolPermission::RequireAuth);
+        assert_eq!(tool_permission("unknown_tool"), ToolPermission::RequireConfirmation);
     }
 
     #[test]

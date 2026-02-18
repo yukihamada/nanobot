@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AI音声サンプル - chatweb.ai</title>
+    <meta name="description" content="chatweb.aiのAI音声を無料で試聴。日本語・英語の多彩な音声をワンクリックで体験できます。">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+    <meta name="theme-color" content="#6366f1">
+    <style>
+        :root {
+            --bg: #09090b;
+            --surface: #18181b;
+            --surface2: #1e1e24;
+            --border: #27272a;
+            --text: #fafafa;
+            --muted: #71717a;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --accent-glow: rgba(99,102,241,0.25);
+            --green: #22c55e;
+            --red: #ef4444;
+            --yellow: #eab308;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Nav */
+        nav {
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+        .logo {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            text-decoration: none;
+            color: var(--text);
+        }
+        .logo span {
+            background: linear-gradient(135deg, var(--accent), #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-links {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        .nav-links a {
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover {
+            color: var(--text);
+        }
+
+        /* Main */
+        .main {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 24px 80px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 48px;
+            animation: fadeUp 0.6s ease-out;
+        }
+        .header h1 {
+            font-size: 42px;
+            font-weight: 900;
+            letter-spacing: -1.5px;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #fff 0%, #a5a5ff 50%, #fff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header p {
+            color: var(--muted);
+            font-size: 17px;
+            line-height: 1.6;
+        }
+        .free-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--green), #16a34a);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 12px;
+        }
+
+        /* Section */
+        .section {
+            margin-bottom: 40px;
+        }
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-title .icon {
+            font-size: 24px;
+        }
+
+        /* Voice Grid */
+        .voice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        /* Voice Card */
+        .voice-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px;
+            transition: transform 0.3s, border-color 0.3s;
+            animation: fadeUp 0.6s ease-out both;
+        }
+        .voice-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+        .voice-card .voice-name {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .voice-card .voice-desc {
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+        .voice-card .voice-tag {
+            display: inline-block;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            margin-bottom: 12px;
+        }
+        .voice-card .voice-tag.ja {
+            color: var(--red);
+            border-color: rgba(239,68,68,0.3);
+        }
+        .voice-card .voice-tag.en {
+            color: #3b82f6;
+            border-color: rgba(59,130,246,0.3);
+        }
+
+        /* Sample Buttons */
+        .sample-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .sample-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+            line-height: 1.4;
+            box-shadow: none;
+        }
+        .sample-btn:hover:not(:disabled) {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+        .sample-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .sample-btn .play-icon {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+        .sample-btn.playing .play-icon {
+            background: rgba(255,255,255,0.25);
+        }
+        .sample-btn .sample-text {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        /* Custom TTS Section */
+        .custom-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            margin-top: 40px;
+            animation: fadeUp 0.6s ease-out 0.3s both;
+        }
+        .custom-card h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .form-group {
+            margin-bottom: 18px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        textarea, select {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 15px;
+            font-family: inherit;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+            line-height: 1.6;
+        }
+        textarea::placeholder {
+            color: var(--muted);
+        }
+        .generate-btn {
+            width: 100%;
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 20px var(--accent-glow);
+        }
+        .generate-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px var(--accent-glow);
+        }
+        .generate-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Audio player */
+        .audio-result {
+            margin-top: 16px;
+        }
+        .audio-result audio {
+            width: 100%;
+            border-radius: 8px;
+        }
+
+        /* Footer CTA */
+        .footer-cta {
+            text-align: center;
+            margin-top: 48px;
+            padding: 32px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            animation: fadeUp 0.6s ease-out 0.4s both;
+        }
+        .footer-cta h3 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+        .footer-cta p {
+            color: var(--muted);
+            margin-bottom: 20px;
+            font-size: 15px;
+        }
+        .cta-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            color: white;
+            padding: 12px 28px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.3s;
+            box-shadow: 0 4px 20px var(--accent-glow);
+        }
+        .cta-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px var(--accent-glow);
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            body {
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+            .main {
+                padding: 24px 16px 60px;
+            }
+            .header h1 {
+                font-size: 30px;
+            }
+            .voice-grid {
+                grid-template-columns: 1fr;
+            }
+            .custom-card {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="logo"><span>chatweb.ai</span></a>
+        <div class="nav-links">
+            <a href="/media">Media API</a>
+            <a href="/pricing">Pricing</a>
+        </div>
+    </nav>
+
+    <div class="main">
+        <div class="header">
+            <h1>AI Voice Samples</h1>
+            <p>chatweb.aiで使える多彩なAI音声を試聴できます<br>日本語・英語、様々な声質をワンクリックで体験</p>
+            <div class="free-badge">FREE - 認証不要・無料で試聴</div>
+        </div>
+
+        <!-- Japanese Voices -->
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">🇯🇵</span> 日本語音声
+            </div>
+            <div class="voice-grid" id="jaVoices"></div>
+        </div>
+
+        <!-- English Voices -->
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">🇺🇸</span> 英語音声
+            </div>
+            <div class="voice-grid" id="enVoices"></div>
+        </div>
+
+        <!-- Custom Text -->
+        <div class="custom-card">
+            <h2><span>🎙️</span> カスタムテキストで試す</h2>
+            <div class="form-group">
+                <label>テキスト</label>
+                <textarea id="customText" placeholder="好きなテキストを入力して音声を生成...">こんにちは、ChatWebです。何でもお気軽にご相談ください。</textarea>
+            </div>
+            <div class="form-group">
+                <label>音声を選択</label>
+                <select id="customVoice">
+                    <optgroup label="日本語">
+                        <option value="Kazuha">Kazuha (女性・Polly)</option>
+                        <option value="Takumi">Takumi (男性・Polly)</option>
+                        <option value="Mizuki">Mizuki (女性・Polly)</option>
+                        <option value="female_calm">Female Calm (女性・Qwen3)</option>
+                        <option value="male_calm">Male Calm (男性・Qwen3)</option>
+                    </optgroup>
+                    <optgroup label="English">
+                        <option value="nova">Nova (Female・OpenAI)</option>
+                        <option value="alloy">Alloy (Neutral・OpenAI)</option>
+                        <option value="echo">Echo (Male・OpenAI)</option>
+                        <option value="fable">Fable (Expressive・OpenAI)</option>
+                        <option value="onyx">Onyx (Deep Male・OpenAI)</option>
+                        <option value="shimmer">Shimmer (Warm Female・OpenAI)</option>
+                    </optgroup>
+                </select>
+            </div>
+            <button class="generate-btn" onclick="playCustom()" id="customBtn">🔊 音声を生成して再生</button>
+            <div class="audio-result" id="customResult"></div>
+        </div>
+
+        <!-- Footer CTA -->
+        <div class="footer-cta">
+            <h3>chatweb.aiで音声AIを体験</h3>
+            <p>Voice-first AIアシスタント。話しかけるだけで、すぐに応答。</p>
+            <a href="/" class="cta-btn">chatweb.ai を試す</a>
+        </div>
+    </div>
+
+    <script>
+        // Voice definitions
+        const voices = {
+            ja: [
+                {
+                    name: 'Kazuha',
+                    voice: 'Kazuha',
+                    desc: '女性・落ち着いた自然な声 (Amazon Polly)',
+                    samples: [
+                        'こんにちは、ChatWebです。何でもお気軽にご相談ください。',
+                        '今日の東京の天気は晴れ、最高気温は25度です。',
+                    ]
+                },
+                {
+                    name: 'Takumi',
+                    voice: 'Takumi',
+                    desc: '男性・明瞭で聞き取りやすい声 (Amazon Polly)',
+                    samples: [
+                        'こんにちは、ChatWebです。何でもお気軽にご相談ください。',
+                        '次の会議は午後3時からです。資料の準備をお願いします。',
+                    ]
+                },
+                {
+                    name: 'Mizuki',
+                    voice: 'Mizuki',
+                    desc: '女性・柔らかく親しみやすい声 (Amazon Polly)',
+                    samples: [
+                        'こんにちは、ChatWebです。何でもお気軽にご相談ください。',
+                        'お疲れ様です。今日も一日頑張りましょう。',
+                    ]
+                },
+                {
+                    name: 'Female Calm',
+                    voice: 'female_calm',
+                    desc: '女性・穏やかで落ち着いた声 (Qwen3 TTS)',
+                    samples: [
+                        'こんにちは、ChatWebです。何でもお気軽にご相談ください。',
+                        '深呼吸をして、リラックスしましょう。',
+                    ]
+                },
+                {
+                    name: 'Male Calm',
+                    voice: 'male_calm',
+                    desc: '男性・穏やかで落ち着いた声 (Qwen3 TTS)',
+                    samples: [
+                        'こんにちは、ChatWebです。何でもお気軽にご相談ください。',
+                        '本日のニュースをお伝えします。',
+                    ]
+                },
+            ],
+            en: [
+                {
+                    name: 'Nova',
+                    voice: 'nova',
+                    desc: 'Female, warm and conversational (OpenAI)',
+                    samples: [
+                        "Hello, I'm your AI assistant. How can I help you today?",
+                        'The weather in Tokyo is sunny with a high of 25 degrees.',
+                    ]
+                },
+                {
+                    name: 'Alloy',
+                    voice: 'alloy',
+                    desc: 'Neutral, balanced and versatile (OpenAI)',
+                    samples: [
+                        "Hello, I'm your AI assistant. How can I help you today?",
+                        "Let's get started with your project. What would you like to build?",
+                    ]
+                },
+                {
+                    name: 'Echo',
+                    voice: 'echo',
+                    desc: 'Male, clear and authoritative (OpenAI)',
+                    samples: [
+                        "Hello, I'm your AI assistant. How can I help you today?",
+                        'Breaking news: a major technology breakthrough was announced today.',
+                    ]
+                },
+                {
+                    name: 'Fable',
+                    voice: 'fable',
+                    desc: 'Expressive and dynamic storytelling (OpenAI)',
+                    samples: [
+                        "Hello, I'm your AI assistant. How can I help you today?",
+                        'Once upon a time, in a land far away, there lived a wise old owl.',
+                    ]
+                },
+                {
+                    name: 'Onyx',
+                    voice: 'onyx',
+                    desc: 'Deep male, rich and resonant (OpenAI)',
+                    samples: [
+                        "Hello, I'm your AI assistant. How can I help you today?",
+                        'Welcome to the presentation. Today we will discuss the future of AI.',
+                    ]
+                },
+                {
+                    name: 'Shimmer',
+                    voice: 'shimmer',
+                    desc: 'Warm female, gentle and soothing (OpenAI)',
+                    samples: [
+                        "Hello, I'm your AI assistant. How can I help you today?",
+                        'Good evening. Here is a summary of your day and upcoming tasks.',
+                    ]
+                },
+            ]
+        };
+
+        // Audio cache: key = voice+text, value = blob URL
+        const audioCache = new Map();
+        let currentAudio = null;
+
+        function stopCurrentAudio() {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+                currentAudio = null;
+            }
+            document.querySelectorAll('.sample-btn.playing').forEach(btn => {
+                btn.classList.remove('playing');
+                btn.querySelector('.play-icon').textContent = '▶';
+            });
+        }
+
+        async function fetchTTS(text, voice) {
+            const cacheKey = voice + '::' + text;
+            if (audioCache.has(cacheKey)) {
+                return audioCache.get(cacheKey);
+            }
+
+            const response = await fetch('/api/v1/speech/synthesize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, voice })
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(errText || `HTTP ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            audioCache.set(cacheKey, url);
+            return url;
+        }
+
+        async function playSample(btn, voice, text) {
+            // If this button is already playing, stop it
+            if (btn.classList.contains('playing')) {
+                stopCurrentAudio();
+                return;
+            }
+
+            stopCurrentAudio();
+
+            const playIcon = btn.querySelector('.play-icon');
+            const originalIcon = playIcon.textContent;
+            playIcon.innerHTML = '<span class="loading-spinner"></span>';
+            btn.disabled = true;
+
+            try {
+                const url = await fetchTTS(text, voice);
+                const audio = new Audio(url);
+
+                btn.classList.add('playing');
+                playIcon.textContent = '⏹';
+                btn.disabled = false;
+                currentAudio = audio;
+
+                audio.addEventListener('ended', () => {
+                    btn.classList.remove('playing');
+                    playIcon.textContent = '▶';
+                    currentAudio = null;
+                });
+
+                audio.play();
+            } catch (err) {
+                playIcon.textContent = '▶';
+                btn.disabled = false;
+                alert('音声の生成に失敗しました: ' + err.message);
+            }
+        }
+
+        function renderVoiceCards() {
+            const jaContainer = document.getElementById('jaVoices');
+            const enContainer = document.getElementById('enVoices');
+
+            voices.ja.forEach((v, i) => {
+                const card = document.createElement('div');
+                card.className = 'voice-card';
+                card.style.animationDelay = (i * 0.08) + 's';
+                card.innerHTML = `
+                    <div class="voice-name">${v.name}</div>
+                    <span class="voice-tag ja">日本語</span>
+                    <div class="voice-desc">${v.desc}</div>
+                    <div class="sample-list">
+                        ${v.samples.map(s => `
+                            <button class="sample-btn" onclick="playSample(this, '${v.voice}', ${JSON.stringify(s)})">
+                                <span class="play-icon">▶</span>
+                                <span class="sample-text">${s}</span>
+                            </button>
+                        `).join('')}
+                    </div>
+                `;
+                jaContainer.appendChild(card);
+            });
+
+            voices.en.forEach((v, i) => {
+                const card = document.createElement('div');
+                card.className = 'voice-card';
+                card.style.animationDelay = (i * 0.08) + 's';
+                card.innerHTML = `
+                    <div class="voice-name">${v.name}</div>
+                    <span class="voice-tag en">English</span>
+                    <div class="voice-desc">${v.desc}</div>
+                    <div class="sample-list">
+                        ${v.samples.map(s => `
+                            <button class="sample-btn" onclick="playSample(this, '${v.voice}', ${JSON.stringify(s)})">
+                                <span class="play-icon">▶</span>
+                                <span class="sample-text">${s}</span>
+                            </button>
+                        `).join('')}
+                    </div>
+                `;
+                enContainer.appendChild(card);
+            });
+        }
+
+        async function playCustom() {
+            const btn = document.getElementById('customBtn');
+            const resultDiv = document.getElementById('customResult');
+            const text = document.getElementById('customText').value.trim();
+            const voice = document.getElementById('customVoice').value;
+
+            if (!text) {
+                alert('テキストを入力してください');
+                return;
+            }
+
+            stopCurrentAudio();
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading-spinner"></span> 音声生成中...';
+            resultDiv.innerHTML = '';
+
+            try {
+                const url = await fetchTTS(text, voice);
+                const audio = new Audio(url);
+                currentAudio = audio;
+
+                audio.addEventListener('ended', () => {
+                    currentAudio = null;
+                });
+
+                resultDiv.innerHTML = `<audio controls src="${url}" autoplay></audio>`;
+                audio.play();
+            } catch (err) {
+                resultDiv.innerHTML = `<div style="color: var(--red); margin-top: 12px; font-size: 14px;">音声の生成に失敗しました: ${err.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🔊 音声を生成して再生';
+            }
+        }
+
+        // Init
+        renderVoiceCards();
+    </script>
+</body>
+</html>

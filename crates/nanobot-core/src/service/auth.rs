@@ -77,6 +77,7 @@ impl Plan {
             Plan::Free => Some(&[
                 "web_search", "web_fetch", "calculator", "weather",
                 "translate", "wikipedia", "date_time", "qr_code", "news_search",
+                "image_generate",
             ]),
             _ => None, // Starter, Pro, Enterprise: all tools
         }
@@ -85,6 +86,22 @@ impl Plan {
     /// Whether sandbox (code execution, file operations) is available.
     pub fn has_sandbox(&self) -> bool {
         !matches!(self, Plan::Free)
+    }
+
+    /// Whether browser automation tools are available.
+    /// Free=no, Starter=limited (3 sessions/day), Pro/Enterprise=unlimited
+    pub fn has_browser(&self) -> bool {
+        !matches!(self, Plan::Free)
+    }
+
+    /// Maximum browser sessions per day.
+    pub fn browser_sessions_per_day(&self) -> u32 {
+        match self {
+            Plan::Free => 0,
+            Plan::Starter => 3,
+            Plan::Pro => 50,
+            Plan::Enterprise => u32::MAX,
+        }
     }
 }
 

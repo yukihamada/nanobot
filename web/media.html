@@ -409,7 +409,7 @@
     <div class="main">
         <div class="header">
             <h1>🎨 AIメディア生成</h1>
-            <p>画像・音声・動画を簡単に作成</p>
+            <p>画像・音声・動画・OCR・背景削除・アップスケール</p>
         </div>
 
         <div class="info-box">
@@ -563,6 +563,110 @@
 
             <button onclick="generateAudio()" id="audioBtn">🎵 音楽を生成</button>
             <div id="audioResult"></div>
+        </div>
+
+        <!-- OCR -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🔍</div>
+                <div class="card-title">
+                    <h2>OCR (文字認識) <span style="display:inline-block;background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;vertical-align:middle;margin-left:6px;">NEW</span></h2>
+                    <p>画像からテキストを抽出</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>画像URL</label>
+                <input type="text" id="ocrImageUrl" placeholder="https://example.com/document.jpg">
+                <div class="sample-prompts">
+                    <div class="sample-prompt" onclick="document.getElementById('ocrImageUrl').value='https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Japanese_road_sign_%28School_zone%29.svg/200px-Japanese_road_sign_%28School_zone%29.svg.png'">道路標識</div>
+                    <div class="sample-prompt" onclick="document.getElementById('ocrImageUrl').value='https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Image_created_with_a_mobile_phone.png/220px-Image_created_with_a_mobile_phone.png'">文書サンプル</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>言語 / エンジン</label>
+                <select id="ocrLanguage" onchange="updateOcrCredits()">
+                    <option value="ja">日本語 (Tesseract) - 5 credits</option>
+                    <option value="en">英語 (Tesseract) - 5 credits</option>
+                    <option value="premium">プレミアム (Google Vision) - 10 credits</option>
+                </select>
+                <div class="credits-info" id="ocrCredits">💰 5 credits</div>
+            </div>
+
+            <button onclick="generateOCR()" id="ocrBtn">🔍 テキストを抽出</button>
+            <div id="ocrResult"></div>
+        </div>
+
+        <!-- Remove Background -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">✂️</div>
+                <div class="card-title">
+                    <h2>背景削除 <span style="display:inline-block;background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;vertical-align:middle;margin-left:6px;">NEW</span></h2>
+                    <p>画像の背景を自動で削除</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>画像URL</label>
+                <input type="text" id="removeBgImageUrl" placeholder="https://example.com/photo.jpg">
+                <div class="sample-prompts">
+                    <div class="sample-prompt" onclick="document.getElementById('removeBgImageUrl').value='https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Cat_November_2010-1a.jpg/220px-Cat_November_2010-1a.jpg'">猫の写真</div>
+                    <div class="sample-prompt" onclick="document.getElementById('removeBgImageUrl').value='https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/YellowLabradorLooking_new.jpg/220px-YellowLabradorLooking_new.jpg'">犬の写真</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>品質</label>
+                <select id="removeBgQuality" onchange="updateRemoveBgCredits()">
+                    <option value="standard">Standard - 8 credits</option>
+                    <option value="hd">HD (高品質) - 15 credits</option>
+                </select>
+                <div class="credits-info" id="removeBgCredits">💰 8 credits</div>
+            </div>
+
+            <button onclick="generateRemoveBg()" id="removeBgBtn">✂️ 背景を削除</button>
+            <div id="removeBgResult"></div>
+        </div>
+
+        <!-- Upscale -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">📈</div>
+                <div class="card-title">
+                    <h2>アップスケール <span style="display:inline-block;background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;vertical-align:middle;margin-left:6px;">NEW</span></h2>
+                    <p>画像を高解像度に拡大</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>画像URL</label>
+                <input type="text" id="upscaleImageUrl" placeholder="https://example.com/low-res.jpg">
+                <div class="sample-prompts">
+                    <div class="sample-prompt" onclick="document.getElementById('upscaleImageUrl').value='https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/150px-Cat03.jpg'">低解像度画像</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>倍率</label>
+                <select id="upscaleScale" onchange="updateUpscaleCredits()">
+                    <option value="2">2x</option>
+                    <option value="4">4x</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>モデル</label>
+                <select id="upscaleModel" onchange="updateUpscaleCredits()">
+                    <option value="fast">Fast (Real-ESRGAN) 推奨</option>
+                    <option value="quality">Quality (CCSR)</option>
+                </select>
+                <div class="credits-info" id="upscaleCredits">💰 12 credits</div>
+            </div>
+
+            <button onclick="generateUpscale()" id="upscaleBtn">📈 アップスケール</button>
+            <div id="upscaleResult"></div>
         </div>
 
         <!-- Video -->
@@ -1023,6 +1127,110 @@
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '🎵 音楽を生成';
+            }
+        }
+
+        function updateOcrCredits() {
+            var lang = document.getElementById('ocrLanguage').value;
+            document.getElementById('ocrCredits').textContent = lang === 'premium' ? '💰 10 credits' : '💰 5 credits';
+        }
+
+        function updateRemoveBgCredits() {
+            var q = document.getElementById('removeBgQuality').value;
+            document.getElementById('removeBgCredits').textContent = q === 'hd' ? '💰 15 credits' : '💰 8 credits';
+        }
+
+        function updateUpscaleCredits() {
+            var scale = document.getElementById('upscaleScale').value;
+            var model = document.getElementById('upscaleModel').value;
+            var credits = { '2-fast': 12, '2-quality': 15, '4-fast': 20, '4-quality': 25 };
+            document.getElementById('upscaleCredits').textContent = '💰 ' + credits[scale + '-' + model] + ' credits';
+        }
+
+        async function generateOCR() {
+            var btn = document.getElementById('ocrBtn');
+            var resultDiv = document.getElementById('ocrResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>テキスト抽出中...';
+            resultDiv.innerHTML = '<div class="result">⏳ 画像を解析しています...</div>';
+
+            try {
+                var data = await apiCall('/ocr', {
+                    image_url: document.getElementById('ocrImageUrl').value,
+                    language: document.getElementById('ocrLanguage').value,
+                    format: 'text'
+                });
+
+                resultDiv.innerHTML = '<div class="result success"><strong>✅ テキスト抽出完了</strong><div class="result-content">' +
+                    (data.confidence ? '信頼度: ' + (data.confidence * 100).toFixed(1) + '% | ' : '') +
+                    '使用クレジット: ' + data.credits_used +
+                    '<pre style="margin-top:12px;padding:12px;background:var(--bg);border-radius:8px;white-space:pre-wrap;font-size:14px;color:var(--text);border:1px solid var(--border);">' +
+                    (data.text || '(テキストが検出されませんでした)').replace(/</g, '&lt;') +
+                    '</pre></div></div>';
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="result error"><strong>❌ エラーが発生しました</strong><div class="result-content">' + error.message + '</div></div>';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🔍 テキストを抽出';
+            }
+        }
+
+        async function generateRemoveBg() {
+            var btn = document.getElementById('removeBgBtn');
+            var resultDiv = document.getElementById('removeBgResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>背景削除中...';
+            resultDiv.innerHTML = '<div class="result">⏳ 背景を削除しています...</div>';
+
+            try {
+                var data = await apiCall('/remove-bg', {
+                    image_url: document.getElementById('removeBgImageUrl').value,
+                    quality: document.getElementById('removeBgQuality').value
+                });
+
+                var imageUrl = data.url || data.image_url;
+                resultDiv.innerHTML = '<div class="result success"><strong>✅ 背景削除完了</strong><div class="result-content">' +
+                    '使用クレジット: ' + data.credits_used +
+                    '<img src="' + imageUrl + '" alt="背景削除結果" class="generated-image" style="background:repeating-conic-gradient(#808080 0% 25%, transparent 0% 50%) 50% / 20px 20px;">' +
+                    '<a href="' + imageUrl + '" target="_blank" class="download-btn">🔗 フルサイズで開く</a>' +
+                    '</div></div>';
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="result error"><strong>❌ エラーが発生しました</strong><div class="result-content">' + error.message + '</div></div>';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '✂️ 背景を削除';
+            }
+        }
+
+        async function generateUpscale() {
+            var btn = document.getElementById('upscaleBtn');
+            var resultDiv = document.getElementById('upscaleResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>アップスケール中...';
+            resultDiv.innerHTML = '<div class="result">⏳ 画像を高解像度化しています...</div>';
+
+            try {
+                var data = await apiCall('/upscale', {
+                    image_url: document.getElementById('upscaleImageUrl').value,
+                    scale: parseInt(document.getElementById('upscaleScale').value),
+                    model: document.getElementById('upscaleModel').value
+                });
+
+                var imageUrl = data.url || data.image_url;
+                resultDiv.innerHTML = '<div class="result success"><strong>✅ アップスケール完了</strong><div class="result-content">' +
+                    (data.original_size ? 'サイズ: ' + data.original_size + ' → ' + data.upscaled_size + ' | ' : '') +
+                    '使用クレジット: ' + data.credits_used +
+                    '<img src="' + imageUrl + '" alt="アップスケール結果" class="generated-image">' +
+                    '<a href="' + imageUrl + '" target="_blank" class="download-btn">🔗 フルサイズで開く</a>' +
+                    '</div></div>';
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="result error"><strong>❌ エラーが発生しました</strong><div class="result-content">' + error.message + '</div></div>';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '📈 アップスケール';
             }
         }
 

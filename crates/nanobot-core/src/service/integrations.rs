@@ -147,6 +147,15 @@ impl ToolRegistry {
                 tracing::info!("Registering tavily_search tool (TAVILY_API_KEY present)");
                 tools.push(Box::new(TavilySearchTool));
             }
+
+            // Browser automation tools (requires BROWSER_SERVICE_URL)
+            if std::env::var("BROWSER_SERVICE_URL").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering browser automation tools (BROWSER_SERVICE_URL present)");
+                tools.push(Box::new(BrowserSessionTool));
+                tools.push(Box::new(BrowserActionTool));
+                tools.push(Box::new(BrowserScreenshotTool));
+                tools.push(Box::new(BrowserPurchaseTool));
+            }
         }
 
         Self { tools }
@@ -1813,51 +1822,53 @@ async fn execute_news_search(query: &str, freshness: &str) -> String {
 }
 
 /// Strip HTML tags from text, removing script/style content entirely.
+/// Extract readable text from HTML using Servo's html5ever parser (scraper crate).
 fn strip_html_tags(html: &str) -> String {
-    // First, remove <script>...</script> and <style>...</style> blocks entirely
-    let mut clean = html.to_string();
-    for tag in &["script", "style", "noscript", "svg", "head"] {
-        loop {
-            let open = format!("<{tag}");
-            let close = format!("</{tag}>");
-            if let Some(start) = clean.to_lowercase().find(&open) {
-                if let Some(end_pos) = clean.to_lowercase()[start..].find(&close) {
-                    clean.replace_range(start..start + end_pos + close.len(), " ");
-                    continue;
-                }
-            }
-            break;
+    use scraper::{Html, Selector, node::Node};
+
+    let doc = Html::parse_document(html);
+    let skip_sel = Selector::parse("script, style, noscript, svg").unwrap();
+
+    // Collect node IDs to skip (all descendants of blocked elements)
+    let mut skip_ids = std::collections::HashSet::new();
+    for el in doc.select(&skip_sel) {
+        skip_ids.insert(el.id());
+        for desc in el.descendants() {
+            skip_ids.insert(desc.id());
         }
     }
 
-    let mut result = String::new();
-    let mut in_tag = false;
-    let mut last_was_space = false;
-
-    for c in clean.chars() {
-        if c == '<' {
-            in_tag = true;
+    // Walk all nodes, collect text from non-blocked nodes
+    let mut parts: Vec<&str> = Vec::new();
+    for node_ref in doc.tree.nodes() {
+        if skip_ids.contains(&node_ref.id()) {
             continue;
         }
-        if c == '>' {
-            in_tag = false;
-            if !last_was_space {
-                result.push(' ');
-                last_was_space = true;
+        if let Node::Text(ref t) = node_ref.value() {
+            let trimmed = t.text.trim();
+            if !trimmed.is_empty() {
+                parts.push(trimmed);
             }
-            continue;
         }
-        if in_tag {
-            continue;
-        }
-        if c.is_whitespace() {
-            if !last_was_space {
-                result.push(' ');
-                last_was_space = true;
+    }
+
+    // Join and collapse excessive whitespace
+    let text = parts.join("\n");
+    let mut prev_empty = 0u32;
+    let mut result = String::with_capacity(text.len());
+    for line in text.lines() {
+        let l = line.trim();
+        if l.is_empty() {
+            prev_empty += 1;
+            if prev_empty <= 1 {
+                result.push('\n');
             }
         } else {
-            result.push(c);
-            last_was_space = false;
+            prev_empty = 0;
+            if !result.is_empty() && !result.ends_with('\n') {
+                result.push('\n');
+            }
+            result.push_str(l);
         }
     }
 
@@ -6608,4 +6619,440 @@ async fn execute_tavily_search(query: &str, api_key: &str, max_results: usize, t
         output.push_str("No results found.");
     }
     output
+}
+
+// ---------------------------------------------------------------------------
+// Browser Automation Tools — Playwright-based remote browser via Modal
+// Requires BROWSER_SERVICE_URL and BROWSER_SERVICE_AUTH_TOKEN env vars
+// ---------------------------------------------------------------------------
+
+fn browser_service_config() -> Option<(String, String)> {
+    let url = std::env::var("BROWSER_SERVICE_URL").ok().filter(|v| !v.is_empty())?;
+    let token = std::env::var("BROWSER_SERVICE_AUTH_TOKEN").ok().unwrap_or_default();
+    Some((url, token))
+}
+
+fn browser_http_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| format!("[TOOL_ERROR] HTTP client error: {e}"))
+}
+
+pub struct BrowserSessionTool;
+
+#[async_trait]
+impl Tool for BrowserSessionTool {
+    fn name(&self) -> &str { "browser_session" }
+
+    fn description(&self) -> &str {
+        "Start or end a remote browser session for web automation. \
+         Use action='create' to open a new headless browser session (returns session_id). \
+         Use action='close' with session_id to end the session. \
+         Sessions auto-close after 5 minutes of inactivity."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["create", "close"],
+                    "description": "create = open new browser session, close = end session"
+                },
+                "session_id": {
+                    "type": "string",
+                    "description": "Session ID (required for 'close')"
+                },
+                "locale": {
+                    "type": "string",
+                    "description": "Browser locale (default: ja-JP)"
+                }
+            },
+            "required": ["action"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let (base_url, auth_token) = match browser_service_config() {
+            Some(c) => c,
+            None => return "[TOOL_ERROR] BROWSER_SERVICE_URL not configured".to_string(),
+        };
+        let client = match browser_http_client() {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("create");
+
+        match action {
+            "create" => {
+                let locale = params.get("locale").and_then(|v| v.as_str()).unwrap_or("ja-JP");
+                let body = serde_json::json!({ "locale": locale });
+
+                let resp = match client
+                    .post(format!("{base_url}/session/create"))
+                    .bearer_auth(&auth_token)
+                    .json(&body)
+                    .send().await
+                {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Failed to create browser session: {e}"),
+                };
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let err = resp.text().await.unwrap_or_default();
+                    return format!("[TOOL_ERROR] Browser service error {status}: {err}");
+                }
+                let data: serde_json::Value = match resp.json().await {
+                    Ok(d) => d,
+                    Err(e) => return format!("[TOOL_ERROR] Failed to parse response: {e}"),
+                };
+                let session_id = data.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
+                format!("Browser session created. session_id: {session_id}\nUse browser_action with this session_id to navigate, click, fill forms, and take screenshots.")
+            }
+            "close" => {
+                let session_id = match params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id,
+                    _ => return "[TOOL_ERROR] session_id is required for close".to_string(),
+                };
+                let resp = match client
+                    .delete(format!("{base_url}/session/{session_id}"))
+                    .bearer_auth(&auth_token)
+                    .send().await
+                {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Failed to close session: {e}"),
+                };
+                if !resp.status().is_success() {
+                    return format!("[TOOL_ERROR] Failed to close session: HTTP {}", resp.status());
+                }
+                format!("Browser session {session_id} closed.")
+            }
+            _ => "[TOOL_ERROR] action must be 'create' or 'close'".to_string(),
+        }
+    }
+}
+
+pub struct BrowserActionTool;
+
+#[async_trait]
+impl Tool for BrowserActionTool {
+    fn name(&self) -> &str { "browser_action" }
+
+    fn description(&self) -> &str {
+        "Execute actions in a remote browser session. Send a batch of actions (navigate, click, fill, screenshot, etc.) \
+         to be executed sequentially. Use fill_credentials to auto-fill login forms from the user's credential vault \
+         (the password is never exposed to the AI). \
+         Supported actions: navigate, click, fill, fill_credentials, select, screenshot, \
+         wait_navigation, wait_selector, scroll, evaluate, go_back, go_forward."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "Browser session ID from browser_session tool"
+                },
+                "actions": {
+                    "type": "array",
+                    "description": "Array of actions to execute sequentially",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": ["navigate", "click", "fill", "fill_credentials", "select",
+                                         "screenshot", "wait_navigation", "wait_selector", "scroll",
+                                         "evaluate", "go_back", "go_forward"],
+                                "description": "Action type"
+                            },
+                            "url": { "type": "string", "description": "URL for navigate" },
+                            "selector": { "type": "string", "description": "CSS selector for click/fill/select/wait" },
+                            "value": { "type": "string", "description": "Value for fill/select" },
+                            "service_name": { "type": "string", "description": "Vault service name for fill_credentials" },
+                            "username_selector": { "type": "string", "description": "Username field selector for fill_credentials" },
+                            "password_selector": { "type": "string", "description": "Password field selector for fill_credentials" },
+                            "expression": { "type": "string", "description": "JavaScript expression for evaluate" },
+                            "direction": { "type": "string", "enum": ["up", "down"], "description": "Scroll direction" },
+                            "amount": { "type": "integer", "description": "Scroll pixels" }
+                        },
+                        "required": ["type"]
+                    }
+                }
+            },
+            "required": ["session_id", "actions"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let (base_url, auth_token) = match browser_service_config() {
+            Some(c) => c,
+            None => return "[TOOL_ERROR] BROWSER_SERVICE_URL not configured".to_string(),
+        };
+        let client = match browser_http_client() {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+
+        let session_id = match params.get("session_id").and_then(|v| v.as_str()) {
+            Some(id) if !id.is_empty() => id,
+            _ => return "[TOOL_ERROR] session_id is required".to_string(),
+        };
+        let actions = match params.get("actions").and_then(|v| v.as_array()) {
+            Some(a) if !a.is_empty() => a.clone(),
+            _ => return "[TOOL_ERROR] actions array is required and must not be empty".to_string(),
+        };
+        if actions.len() > 20 {
+            return "[TOOL_ERROR] Maximum 20 actions per batch".to_string();
+        }
+
+        // Process fill_credentials: inject decrypted credentials from vault
+        // The actual credential injection happens in the HTTP handler (http.rs)
+        // which has access to DynamoDB. Here we just pass through the action params
+        // with _user_id and _vault_* fields that were injected by the handler.
+
+        let body = serde_json::json!({ "actions": actions });
+
+        let resp = match client
+            .post(format!("{base_url}/session/{session_id}/actions"))
+            .bearer_auth(&auth_token)
+            .json(&body)
+            .send().await
+        {
+            Ok(r) => r,
+            Err(e) => return format!("[TOOL_ERROR] Browser action failed: {e}"),
+        };
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let err = resp.text().await.unwrap_or_default();
+            return format!("[TOOL_ERROR] Browser service error {status}: {err}");
+        }
+
+        let data: serde_json::Value = match resp.json().await {
+            Ok(d) => d,
+            Err(e) => return format!("[TOOL_ERROR] Failed to parse response: {e}"),
+        };
+
+        // Format results for the LLM
+        let mut output = String::new();
+        let page_url = data.get("page_url").and_then(|v| v.as_str()).unwrap_or("");
+        let page_title = data.get("page_title").and_then(|v| v.as_str()).unwrap_or("");
+        output.push_str(&format!("Page: {page_title}\nURL: {page_url}\n\n"));
+
+        if let Some(results) = data.get("results").and_then(|v| v.as_array()) {
+            for (i, r) in results.iter().enumerate() {
+                let status = r.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let action_type = r.get("type").and_then(|v| v.as_str()).unwrap_or("?");
+
+                if status == "error" {
+                    let err = r.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error");
+                    output.push_str(&format!("Action {}: {} - ERROR: {}\n", i + 1, action_type, err));
+                } else {
+                    output.push_str(&format!("Action {}: {} - OK", i + 1, action_type));
+                    // Include screenshot marker if present (handled by SSE layer)
+                    if r.get("screenshot").is_some() {
+                        output.push_str(" [screenshot captured]");
+                    }
+                    if let Some(result) = r.get("result").and_then(|v| v.as_str()) {
+                        let preview: String = result.chars().take(500).collect();
+                        output.push_str(&format!("\n  Result: {preview}"));
+                    }
+                    output.push('\n');
+                }
+            }
+        }
+
+        output
+    }
+}
+
+pub struct BrowserScreenshotTool;
+
+#[async_trait]
+impl Tool for BrowserScreenshotTool {
+    fn name(&self) -> &str { "browser_screenshot" }
+
+    fn description(&self) -> &str {
+        "Take a screenshot of the current page in a browser session. \
+         Returns the screenshot as a base64 JPEG image that will be displayed to the user. \
+         Use this to show the user what the browser is currently displaying."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "Browser session ID"
+                }
+            },
+            "required": ["session_id"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let (base_url, auth_token) = match browser_service_config() {
+            Some(c) => c,
+            None => return "[TOOL_ERROR] BROWSER_SERVICE_URL not configured".to_string(),
+        };
+        let client = match browser_http_client() {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+
+        let session_id = match params.get("session_id").and_then(|v| v.as_str()) {
+            Some(id) if !id.is_empty() => id,
+            _ => return "[TOOL_ERROR] session_id is required".to_string(),
+        };
+
+        let resp = match client
+            .post(format!("{base_url}/session/{session_id}/screenshot"))
+            .bearer_auth(&auth_token)
+            .send().await
+        {
+            Ok(r) => r,
+            Err(e) => return format!("[TOOL_ERROR] Screenshot failed: {e}"),
+        };
+        if !resp.status().is_success() {
+            return format!("[TOOL_ERROR] Screenshot error: HTTP {}", resp.status());
+        }
+
+        let data: serde_json::Value = match resp.json().await {
+            Ok(d) => d,
+            Err(e) => return format!("[TOOL_ERROR] Failed to parse screenshot response: {e}"),
+        };
+
+        let page_url = data.get("page_url").and_then(|v| v.as_str()).unwrap_or("");
+        let page_title = data.get("page_title").and_then(|v| v.as_str()).unwrap_or("");
+        let has_screenshot = data.get("screenshot").is_some();
+
+        // The screenshot base64 is stored in the result but displayed via SSE browser_screenshot event
+        // The HTTP handler extracts "screenshot" from the tool result and sends it as an SSE event
+        let mut output = format!("Screenshot captured.\nPage: {page_title}\nURL: {page_url}");
+        if has_screenshot {
+            // Embed a marker that the SSE handler will detect and extract
+            output.push_str("\n[BROWSER_SCREENSHOT_B64]");
+            if let Some(b64) = data.get("screenshot").and_then(|v| v.as_str()) {
+                // Store in the tool result for the handler to extract
+                output.push_str(b64);
+            }
+            output.push_str("[/BROWSER_SCREENSHOT_B64]");
+        }
+
+        output
+    }
+}
+
+pub struct BrowserPurchaseTool;
+
+#[async_trait]
+impl Tool for BrowserPurchaseTool {
+    fn name(&self) -> &str { "browser_purchase" }
+
+    fn description(&self) -> &str {
+        "Confirm and execute a purchase in a browser session. \
+         This tool REQUIRES explicit user approval before execution. \
+         Always show a screenshot and amount before calling this. \
+         The user must see and confirm the purchase details."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "Browser session ID"
+                },
+                "confirm_selector": {
+                    "type": "string",
+                    "description": "CSS selector for the purchase/confirm button to click"
+                },
+                "amount": {
+                    "type": "string",
+                    "description": "Purchase amount with currency (e.g., '3,980円')"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Brief description of what is being purchased"
+                }
+            },
+            "required": ["session_id", "confirm_selector", "amount", "description"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let (base_url, auth_token) = match browser_service_config() {
+            Some(c) => c,
+            None => return "[TOOL_ERROR] BROWSER_SERVICE_URL not configured".to_string(),
+        };
+        let client = match browser_http_client() {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+
+        let session_id = match params.get("session_id").and_then(|v| v.as_str()) {
+            Some(id) if !id.is_empty() => id,
+            _ => return "[TOOL_ERROR] session_id is required".to_string(),
+        };
+        let confirm_selector = match params.get("confirm_selector").and_then(|v| v.as_str()) {
+            Some(s) if !s.is_empty() => s,
+            _ => return "[TOOL_ERROR] confirm_selector is required".to_string(),
+        };
+        let amount = params.get("amount").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let description = params.get("description").and_then(|v| v.as_str()).unwrap_or("purchase");
+
+        // Check user approval flag (injected by HTTP handler)
+        let approved = params.get("_user_approved").and_then(|v| v.as_bool()).unwrap_or(false);
+        if !approved {
+            // Return purchase confirmation request — the SSE handler sends purchase_confirm event
+            return format!(
+                "[PURCHASE_CONFIRM] amount={amount} description={description} session_id={session_id} selector={confirm_selector}\n\
+                 Waiting for user approval to complete the purchase of {description} for {amount}."
+            );
+        }
+
+        // User has approved — click the purchase button
+        let body = serde_json::json!({
+            "actions": [
+                { "type": "click", "selector": confirm_selector },
+                { "type": "wait_navigation", "timeout_ms": 15000 },
+                { "type": "screenshot" }
+            ]
+        });
+
+        let resp = match client
+            .post(format!("{base_url}/session/{session_id}/actions"))
+            .bearer_auth(&auth_token)
+            .json(&body)
+            .send().await
+        {
+            Ok(r) => r,
+            Err(e) => return format!("[TOOL_ERROR] Purchase execution failed: {e}"),
+        };
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let err = resp.text().await.unwrap_or_default();
+            return format!("[TOOL_ERROR] Purchase error {status}: {err}");
+        }
+
+        let data: serde_json::Value = match resp.json().await {
+            Ok(d) => d,
+            Err(e) => return format!("[TOOL_ERROR] Failed to parse response: {e}"),
+        };
+
+        let page_url = data.get("page_url").and_then(|v| v.as_str()).unwrap_or("");
+        let page_title = data.get("page_title").and_then(|v| v.as_str()).unwrap_or("");
+
+        format!(
+            "Purchase completed!\nAmount: {amount}\nItem: {description}\n\
+             Page: {page_title}\nURL: {page_url}\n\
+             A confirmation screenshot has been captured."
+        )
+    }
 }

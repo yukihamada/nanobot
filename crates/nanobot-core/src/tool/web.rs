@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use regex::Regex;
+use scraper::{Html, Selector};
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -214,28 +214,56 @@ impl Tool for WebFetchTool {
     }
 }
 
-/// Strip HTML tags and normalize whitespace.
+/// Extract readable text from HTML using Servo's html5ever parser (scraper crate).
+/// Skips <script>, <style>, <noscript>, <svg> elements for clean text extraction.
 fn strip_html_tags(html: &str) -> String {
-    // Remove script and style blocks
-    let re_script = Regex::new(r"(?is)<script[\s\S]*?</script>").unwrap();
-    let re_style = Regex::new(r"(?is)<style[\s\S]*?</style>").unwrap();
-    let re_tags = Regex::new(r"<[^>]+>").unwrap();
-    let re_spaces = Regex::new(r"[ \t]+").unwrap();
-    let re_newlines = Regex::new(r"\n{3,}").unwrap();
+    use scraper::node::Node;
 
-    let text = re_script.replace_all(html, "");
-    let text = re_style.replace_all(&text, "");
-    let text = re_tags.replace_all(&text, "");
-    let text = re_spaces.replace_all(&text, " ");
-    let text = re_newlines.replace_all(&text, "\n\n");
+    let doc = Html::parse_document(html);
+    let skip_sel = Selector::parse("script, style, noscript, svg").unwrap();
 
-    // Decode common HTML entities
-    text.replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&nbsp;", " ")
-        .trim()
-        .to_string()
+    // Collect node IDs to skip (all descendants of blocked elements)
+    let mut skip_ids = std::collections::HashSet::new();
+    for el in doc.select(&skip_sel) {
+        skip_ids.insert(el.id());
+        for desc in el.descendants() {
+            skip_ids.insert(desc.id());
+        }
+    }
+
+    // Walk all nodes, collect text from non-blocked nodes
+    let mut parts: Vec<&str> = Vec::new();
+    for node_ref in doc.tree.nodes() {
+        if skip_ids.contains(&node_ref.id()) {
+            continue;
+        }
+        if let Node::Text(ref t) = node_ref.value() {
+            let trimmed = t.text.trim();
+            if !trimmed.is_empty() {
+                parts.push(trimmed);
+            }
+        }
+    }
+
+    // Join and collapse excessive whitespace
+    let text = parts.join("\n");
+    let mut prev_empty = 0u32;
+    let mut result = String::with_capacity(text.len());
+    for line in text.lines() {
+        let l = line.trim();
+        if l.is_empty() {
+            prev_empty += 1;
+            if prev_empty <= 1 {
+                result.push('\n');
+            }
+        } else {
+            prev_empty = 0;
+            if !result.is_empty() && !result.ends_with('\n') {
+                result.push('\n');
+            }
+            result.push_str(l);
+        }
+    }
+
+    result.trim().to_string()
 }

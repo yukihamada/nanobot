@@ -1,20 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>chatweb.ai API Documentation</title>
-  <meta name="description" content="API documentation for chatweb.ai - AI chat API with multi-channel support">
+  <title>chatweb.ai API ドキュメント</title>
+  <meta name="description" content="chatweb.ai API ドキュメント - マルチチャネルAIチャット、メディア生成、音声合成、画像処理を統合したAPIリファレンス">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
+  <meta name="theme-color" content="#6366f1">
   <style>
     :root {
-      --bg: #0a0a0a;
-      --surface: #141414;
-      --surface2: #1a1a1a;
-      --border: #1e1e1e;
-      --text: #e5e5e5;
-      --muted: #777;
+      --bg: #09090b;
+      --surface: #18181b;
+      --surface2: #1e1e24;
+      --border: #27272a;
+      --text: #fafafa;
+      --muted: #71717a;
       --accent: #6366f1;
       --accent-hover: #818cf8;
+      --accent-glow: rgba(99,102,241,0.25);
       --green: #22c55e;
       --red: #ef4444;
       --yellow: #eab308;
@@ -22,7 +25,7 @@
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', 'Inter', 'Segoe UI', sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
@@ -30,33 +33,68 @@
     a { color: var(--accent-hover); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Top Nav */
+    .top-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background: rgba(9,9,11,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      z-index: 50;
+      gap: 24px;
+    }
+    .top-nav a {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 500;
+      transition: color 0.15s;
+    }
+    .top-nav a:hover { color: var(--text); text-decoration: none; }
+    .top-nav a.active { color: var(--accent-hover); }
+    .top-nav-logo {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text) !important;
+      letter-spacing: -0.5px;
+      margin-right: 16px;
+    }
+    .top-nav-logo span { color: var(--accent); }
+
     /* Layout */
-    .layout { display: flex; min-height: 100vh; }
+    .layout { display: flex; min-height: 100vh; padding-top: 48px; }
     .sidebar {
       width: 260px;
       background: var(--surface);
       border-right: 1px solid var(--border);
       position: fixed;
-      top: 0;
+      top: 48px;
       left: 0;
       bottom: 0;
       overflow-y: auto;
-      padding: 20px 0;
+      padding: 16px 0;
       z-index: 10;
     }
-    .sidebar-logo {
-      padding: 0 20px 20px;
+    .sidebar-header {
+      padding: 0 20px 16px;
       border-bottom: 1px solid var(--border);
-      margin-bottom: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
-    .sidebar-logo a {
-      font-size: 18px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      color: var(--text);
-    }
-    .sidebar-logo a span { color: var(--accent); }
-    .sidebar-logo .api-badge {
+    .sidebar-header .api-badge {
       display: inline-block;
       background: var(--accent);
       color: #fff;
@@ -65,8 +103,18 @@
       padding: 2px 6px;
       border-radius: 4px;
       margin-left: 6px;
-      vertical-align: middle;
     }
+    .lang-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.15s;
+    }
+    .lang-btn:hover { color: var(--text); border-color: var(--accent); }
     .sidebar h3 {
       font-size: 11px;
       font-weight: 700;
@@ -77,23 +125,76 @@
     }
     .sidebar a.nav-item {
       display: block;
-      padding: 6px 20px;
+      padding: 5px 20px;
       font-size: 13px;
       color: var(--muted);
       transition: all 0.15s;
     }
     .sidebar a.nav-item:hover { color: var(--text); background: rgba(255,255,255,0.03); text-decoration: none; }
     .sidebar a.nav-item.active { color: var(--accent-hover); border-right: 2px solid var(--accent); }
+    .badge-new {
+      display: inline-block;
+      background: linear-gradient(135deg, var(--green), #16a34a);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-left: 6px;
+      vertical-align: middle;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
 
     .content {
       margin-left: 260px;
       flex: 1;
       padding: 40px 60px 80px;
-      max-width: 900px;
+      max-width: 920px;
+    }
+
+    /* Hero */
+    .hero {
+      margin-bottom: 40px;
+      animation: fadeUp 0.5s ease-out;
+    }
+    .hero h1 {
+      font-size: 36px;
+      font-weight: 900;
+      letter-spacing: -1.5px;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #fff 0%, #a5a5ff 50%, #fff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-subtitle { color: var(--muted); font-size: 16px; margin-bottom: 24px; }
+    .hero-stats {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+    .hero-stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 20px;
+      text-align: center;
+      flex: 1;
+      transition: border-color 0.2s;
+    }
+    .hero-stat:hover { border-color: var(--accent); }
+    .hero-stat .num {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--accent-hover);
+    }
+    .hero-stat .label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
     }
 
     /* Typography */
-    h1 { font-size: 32px; font-weight: 800; letter-spacing: -1px; margin-bottom: 12px; }
     h2 { font-size: 22px; font-weight: 700; margin-top: 48px; margin-bottom: 16px; padding-top: 24px; border-top: 1px solid var(--border); }
     h3 { font-size: 16px; font-weight: 600; margin-top: 24px; margin-bottom: 8px; }
     p { margin-bottom: 12px; color: var(--text); font-size: 14px; }
@@ -113,14 +214,17 @@
     .method.post { background: rgba(99,102,241,0.15); color: var(--accent-hover); }
     .method.delete { background: rgba(239,68,68,0.15); color: var(--red); }
 
-    /* Endpoint */
+    /* Endpoint card */
     .endpoint {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
       margin-bottom: 20px;
       overflow: hidden;
+      transition: border-color 0.2s, transform 0.2s;
+      animation: fadeUp 0.4s ease-out both;
     }
+    .endpoint:hover { border-color: rgba(99,102,241,0.3); }
     .endpoint-header {
       padding: 14px 18px;
       display: flex;
@@ -140,9 +244,7 @@
       color: var(--muted);
       margin-left: auto;
     }
-    .endpoint-body {
-      padding: 18px;
-    }
+    .endpoint-body { padding: 18px; }
     .endpoint-body p { font-size: 13px; }
 
     /* Code blocks */
@@ -207,175 +309,313 @@
     }
     .base-url .label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; }
 
+    /* Credits badge in endpoint */
+    .credits-badge {
+      display: inline-block;
+      background: rgba(234,179,8,0.12);
+      border: 1px solid rgba(234,179,8,0.25);
+      color: var(--yellow);
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    /* Demo link */
+    .demo-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.25);
+      color: var(--accent-hover);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 12px;
+      transition: all 0.15s;
+    }
+    .demo-link:hover { background: rgba(99,102,241,0.2); text-decoration: none; }
+
     /* Mobile */
     .menu-toggle { display: none; }
     @media (max-width: 768px) {
-      .sidebar { display: none; }
-      .sidebar.show { display: block; width: 100%; z-index: 100; }
-      .content { margin-left: 0; padding: 20px; }
+      .sidebar { transform: translateX(-100%); transition: transform 0.3s ease; width: 100%; }
+      .sidebar.show { transform: translateX(0); z-index: 100; }
+      .content { margin-left: 0; padding: 24px 16px 80px; }
+      .hero h1 { font-size: 28px; }
+      .hero-stats { flex-direction: column; gap: 12px; }
+      .top-nav { padding: 0 12px; gap: 12px; overflow-x: auto; }
       .menu-toggle {
-        display: block;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         position: fixed;
-        top: 12px;
-        left: 12px;
+        bottom: 20px;
+        right: 20px;
         z-index: 200;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        color: var(--text);
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-size: 14px;
+        background: var(--accent);
+        border: none;
+        color: #fff;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        font-size: 20px;
         cursor: pointer;
+        box-shadow: 0 4px 20px var(--accent-glow);
       }
     }
   </style>
 </head>
 <body>
-  <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('show')">Menu</button>
+  <!-- Top Navigation -->
+  <div class="top-nav">
+    <a href="https://chatweb.ai" class="top-nav-logo"><span>chat</span>web.ai</a>
+    <a href="https://chatweb.ai" data-i18n="nav-home">ホーム</a>
+    <a href="#overview" class="active" data-i18n="nav-reference">リファレンス</a>
+    <a href="/media" data-i18n="nav-demo">デモ</a>
+    <a href="https://chatweb.ai/pricing" data-i18n="nav-pricing">料金</a>
+  </div>
+
+  <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('show')">☰</button>
 
   <div class="layout">
     <nav class="sidebar">
-      <div class="sidebar-logo" style="display:flex;align-items:center;justify-content:space-between;">
+      <div class="sidebar-header">
         <div>
-          <a href="https://chatweb.ai"><span>chat</span>web.ai</a>
-          <span class="api-badge">API</span>
+          <span style="font-size:15px;font-weight:800;letter-spacing:-0.5px;">API</span>
+          <span class="api-badge">v1</span>
         </div>
-        <button onclick="setLang(document.documentElement.lang==='ja'?'en':'ja')" style="background:none;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;" id="lang-btn">EN</button>
+        <button class="lang-btn" onclick="setLang(document.documentElement.lang==='ja'?'en':'ja')" id="lang-btn">EN</button>
       </div>
 
-      <h3>Getting Started</h3>
-      <a class="nav-item" href="#overview">Overview</a>
-      <a class="nav-item" href="#auth">Authentication</a>
-      <a class="nav-item" href="#quickstart">Quick Start</a>
+      <h3 data-sh="0">🚀 はじめに</h3>
+      <a class="nav-item" href="#overview" data-nav="overview">概要</a>
+      <a class="nav-item" href="#auth" data-nav="auth">認証</a>
+      <a class="nav-item" href="#quickstart" data-nav="quickstart">クイックスタート</a>
 
-      <h3>Chat</h3>
-      <a class="nav-item" href="#chat">Send Message</a>
-      <a class="nav-item" href="#sessions">Sessions</a>
+      <h3 data-sh="1">💬 チャット API</h3>
+      <a class="nav-item" href="#playground" data-nav="playground">🎮 Playground</a>
+      <a class="nav-item" href="#chat" data-nav="chat">メッセージ送信</a>
+      <a class="nav-item" href="#streaming" data-nav="streaming">ストリーミング</a>
+      <a class="nav-item" href="#sessions" data-nav="sessions">セッション</a>
 
-      <h3>Account</h3>
-      <a class="nav-item" href="#account">Account Info</a>
-      <a class="nav-item" href="#usage">Usage</a>
+      <h3 data-sh="7">🔄 OpenAI互換 API</h3>
+      <a class="nav-item" href="#openai-compat" data-nav="openai-compat">概要</a>
+      <a class="nav-item" href="#openai-models" data-nav="openai-models">モデル一覧 <span class="badge-new">NEW</span></a>
+      <a class="nav-item" href="#openai-chat" data-nav="openai-chat">チャット補完 <span class="badge-new">NEW</span></a>
+      <a class="nav-item" href="#openai-audio" data-nav="openai-audio">音声合成</a>
 
-      <h3>Platform</h3>
-      <a class="nav-item" href="#providers">Providers</a>
-      <a class="nav-item" href="#integrations">Integrations</a>
-      <a class="nav-item" href="#health">Health</a>
+      <h3 data-sh="2">🎨 メディア API</h3>
+      <a class="nav-item" href="#media" data-nav="media">概要・料金表</a>
+      <a class="nav-item" href="#media-tts" data-nav="media-tts">音声合成 (TTS)</a>
+      <a class="nav-item" href="#media-stt" data-nav="media-stt">音声認識 (STT)</a>
+      <a class="nav-item" href="#media-image" data-nav="media-image">画像生成</a>
+      <a class="nav-item" href="#media-remove-bg" data-nav="media-remove-bg">背景削除 <span class="badge-new">NEW</span></a>
+      <a class="nav-item" href="#media-upscale" data-nav="media-upscale">アップスケール <span class="badge-new">NEW</span></a>
+      <a class="nav-item" href="#media-ocr" data-nav="media-ocr">OCR <span class="badge-new">NEW</span></a>
+      <a class="nav-item" href="#media-sfx" data-nav="media-sfx">効果音 <span class="badge-new">NEW</span></a>
+      <a class="nav-item" href="#media-music" data-nav="media-music">音楽生成 <span class="badge-new">NEW</span></a>
+      <a class="nav-item" href="#media-video" data-nav="media-video">動画生成</a>
 
-      <h3>Media API</h3>
-      <a class="nav-item" href="#media">Overview</a>
-      <a class="nav-item" href="#media-tts">Text-to-Speech</a>
-      <a class="nav-item" href="#media-image">Image Generation</a>
-      <a class="nav-item" href="#media-video">Video Generation</a>
+      <h3 data-sh="3">👤 アカウント</h3>
+      <a class="nav-item" href="#account" data-nav="account">ユーザー情報</a>
+      <a class="nav-item" href="#usage" data-nav="usage">使用量</a>
 
-      <h3>Billing</h3>
-      <a class="nav-item" href="#billing">Checkout</a>
-      <a class="nav-item" href="#portal">Billing Portal</a>
-      <a class="nav-item" href="#coupons">Coupons</a>
+      <h3 data-sh="4">💳 課金</h3>
+      <a class="nav-item" href="#billing" data-nav="billing">チェックアウト</a>
+      <a class="nav-item" href="#portal" data-nav="portal">課金ポータル</a>
+      <a class="nav-item" href="#coupons" data-nav="coupons">クーポン</a>
 
-      <h3>Channels</h3>
-      <a class="nav-item" href="#line">LINE Webhook</a>
-      <a class="nav-item" href="#telegram">Telegram Webhook</a>
-      <a class="nav-item" href="#linking">Channel Linking</a>
+      <h3 data-sh="5">📡 チャネル</h3>
+      <a class="nav-item" href="#line" data-nav="line">LINE Webhook</a>
+      <a class="nav-item" href="#telegram" data-nav="telegram">Telegram Webhook</a>
+      <a class="nav-item" href="#linking" data-nav="linking">チャネル連携</a>
 
-      <h3>Links</h3>
-      <a class="nav-item" href="https://chatweb.ai">chatweb.ai</a>
-      <a class="nav-item" href="https://chatweb.ai/pricing">Pricing</a>
-      <a class="nav-item" href="https://chatweb.ai/status">Status</a>
-      <a class="nav-item" href="https://github.com/yukihamada/nanobot">GitHub</a>
+      <h3 data-sh="6">⚙️ プラットフォーム</h3>
+      <a class="nav-item" href="#providers" data-nav="providers">プロバイダー</a>
+      <a class="nav-item" href="#integrations" data-nav="integrations">ツール</a>
+      <a class="nav-item" href="#health" data-nav="health">ヘルスチェック</a>
     </nav>
 
     <main class="content">
-      <h1 id="overview">chatweb.ai API</h1>
-      <p class="subtitle">Multi-channel AI chat API with load balancing, tool calling, and unified billing.</p>
+      <!-- Hero -->
+      <div class="hero">
+        <h1 id="overview">chatweb.ai API</h1>
+        <p class="hero-subtitle" id="hero-subtitle">OpenAI互換・マルチモデルAIゲートウェイ。Claude / GPT-4o / Gemini / DeepSeek を単一エンドポイントで利用。</p>
+        <div class="hero-stats">
+          <div class="hero-stat"><div class="num">13+</div><div class="label" data-i18n="stat-model">AI モデル</div></div>
+          <div class="hero-stat"><div class="num">5</div><div class="label" data-i18n="stat-provider">プロバイダー</div></div>
+          <div class="hero-stat" style="border-color:rgba(99,102,241,0.4);"><div class="num" style="color:#22c55e;">✓</div><div class="label" data-i18n="stat-compat">OpenAI 互換</div></div>
+        </div>
+      </div>
 
       <div class="base-url">
-        <span class="label">Base URL</span>
+        <span class="label" data-i18n="base-label">ベースURL</span>
         <span>https://api.chatweb.ai</span>
       </div>
 
-      <p>The chatweb.ai API lets you send messages to AI models (GPT-4o, Claude, Gemini) via a single unified endpoint. Features include session management, cross-channel sync (Web/LINE/Telegram), tool calling (web search, weather, calculator), and credit-based billing.</p>
+      <p id="main-desc">chatweb.ai APIは、Claude・GPT-4o・Gemini・DeepSeekなど13以上のAIモデルを集約したAPI集約ゲートウェイです。<strong>OpenAI互換エンドポイント</strong>（<code>/v1/chat/completions</code>）を提供するため、既存のOpenAI SDKをそのまま利用可能。セッション管理、クロスチャネル同期（Web/LINE/Telegram）、ツール呼び出し、メディア生成（画像・音声・動画・OCR）、クレジット課金に対応しています。</p>
 
       <!-- Authentication -->
-      <h2 id="auth">Authentication</h2>
-      <p>All API requests require an API key passed in the <code>Authorization</code> header.</p>
+      <h2 id="auth">認証</h2>
+      <p id="auth-desc">すべてのAPIリクエストには<code>Authorization</code>ヘッダーにAPIキーが必要です。</p>
       <div class="code-block">
 <span class="key">Authorization</span>: Bearer <span class="string">nb_live_a1b2c3d4e5f6g7h8i9j0</span>
       </div>
-      <p>Get your API key by signing up at <a href="https://chatweb.ai/pricing">chatweb.ai/pricing</a>. Free tier includes 1,000 credits/month.</p>
+      <p id="auth-signup"><a href="https://chatweb.ai/pricing">chatweb.ai/pricing</a>でサインアップしてAPIキーを取得してください。無料枠で毎月100クレジットが利用可能です。</p>
 
-      <div class="alert info">Free tier: No API key needed for basic chat. Send requests to <code>/api/v1/chat</code> with a session_id to get started.</div>
+      <div class="alert info" id="auth-free">無料枠: 基本チャットにはAPIキー不要。<code>/api/v1/chat</code>に session_id を付けてリクエストするだけで開始できます。</div>
 
       <!-- Quick Start -->
-      <h2 id="quickstart">Quick Start</h2>
-      <p>Send your first message in seconds:</p>
+      <h2 id="quickstart">クイックスタート</h2>
+      <p id="quick-desc">数秒で最初のメッセージを送信:</p>
       <div class="code-block" id="code-quick">
         <button class="copy-btn" onclick="copyCode('code-quick')">Copy</button>
-<span class="comment"># Send a chat message</span>
+<span class="comment"># メッセージを送信</span>
 curl -X POST https://api.chatweb.ai/api/v1/chat \
   -H <span class="string">"Content-Type: application/json"</span> \
   -d <span class="string">'{
-    "message": "Hello!",
+    "message": "こんにちは！",
     "session_id": "my-session-1"
   }'</span>
       </div>
-      <p>Response:</p>
+      <p id="quick-resp">レスポンス:</p>
       <div class="code-block">
 {
-  <span class="key">"response"</span>: <span class="string">"Hello! How can I help you today?"</span>,
+  <span class="key">"response"</span>: <span class="string">"こんにちは！何かお手伝いできることはありますか？"</span>,
   <span class="key">"session_id"</span>: <span class="string">"my-session-1"</span>
 }
       </div>
 
+      <!-- Playground -->
+      <h2 id="playground">インタラクティブPlayground</h2>
+      <p>APIキーを入力してその場でリクエストを試せます。</p>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">APIキー</label>
+            <input id="pg-key" type="password" placeholder="nb_live_..." style="width:100%;background:#0d0d0d;border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;font-family:monospace;" />
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">モデル</label>
+            <select id="pg-model" style="width:100%;background:#0d0d0d;border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;">
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6 (Anthropic)</option>
+              <option value="claude-haiku-4-5">claude-haiku-4-5 (Anthropic)</option>
+              <option value="gpt-4o">gpt-4o (OpenAI)</option>
+              <option value="gpt-4o-mini">gpt-4o-mini (OpenAI)</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash (Google)</option>
+              <option value="deepseek-chat">deepseek-chat (DeepSeek)</option>
+              <option value="llama-3.3-70b-versatile">llama-3.3-70b (Meta/Groq)</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">メッセージ</label>
+          <textarea id="pg-msg" rows="3" placeholder="こんにちは！" style="width:100%;background:#0d0d0d;border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;resize:vertical;font-family:inherit;"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <button onclick="runPlayground()" id="pg-btn" style="background:var(--accent);color:#fff;border:none;padding:9px 22px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s;">送信 →</button>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+            <input type="checkbox" id="pg-stream" style="accent-color:var(--accent);" /> ストリーミング
+          </label>
+        </div>
+        <div id="pg-result" style="display:none;margin-top:16px;">
+          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">レスポンス</label>
+          <pre id="pg-output" style="background:#0d0d0d;border:1px solid var(--border);border-radius:6px;padding:14px;font-size:12px;font-family:monospace;line-height:1.7;overflow-x:auto;white-space:pre-wrap;word-break:break-word;max-height:400px;overflow-y:auto;"></pre>
+        </div>
+      </div>
+
       <!-- Chat -->
-      <h2 id="chat">Send Message</h2>
+      <h2 id="chat">メッセージ送信</h2>
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="method post">POST</span>
           <span class="endpoint-path">/api/v1/chat</span>
-          <span class="endpoint-desc">Send a message and get AI response</span>
+          <span class="endpoint-desc" data-i18n="chat-desc">メッセージを送信してAI応答を取得</span>
         </div>
         <div class="endpoint-body">
-          <h3>Request Body</h3>
+          <h3>リクエストボディ</h3>
           <table>
-            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
-            <tr><td><code>message</code></td><td>string</td><td>Yes</td><td>The message to send</td></tr>
-            <tr><td><code>session_id</code></td><td>string</td><td>No</td><td>Session identifier for conversation history. Default: <code>api:default</code></td></tr>
-            <tr><td><code>channel</code></td><td>string</td><td>No</td><td>Channel identifier. Default: <code>api</code></td></tr>
+            <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+            <tr><td><code>message</code></td><td>string</td><td>Yes</td><td>送信するメッセージ</td></tr>
+            <tr><td><code>session_id</code></td><td>string</td><td>No</td><td>セッションID。デフォルト: <code>api:default</code></td></tr>
+            <tr><td><code>channel</code></td><td>string</td><td>No</td><td>チャネル識別子。デフォルト: <code>api</code></td></tr>
           </table>
 
-          <h3>Response</h3>
+          <h3>レスポンス</h3>
           <table>
-            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-            <tr><td><code>response</code></td><td>string</td><td>AI-generated response. May include tool call results.</td></tr>
-            <tr><td><code>session_id</code></td><td>string</td><td>Session ID used for this conversation</td></tr>
+            <tr><th>フィールド</th><th>型</th><th>説明</th></tr>
+            <tr><td><code>response</code></td><td>string</td><td>AIの応答。ツール呼び出し結果を含む場合あり。</td></tr>
+            <tr><td><code>session_id</code></td><td>string</td><td>使用されたセッションID</td></tr>
           </table>
 
-          <h3>Example</h3>
+          <h3>例</h3>
           <div class="code-block" id="code-chat">
             <button class="copy-btn" onclick="copyCode('code-chat')">Copy</button>
 curl -X POST https://api.chatweb.ai/api/v1/chat \
   -H <span class="string">"Content-Type: application/json"</span> \
   -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
   -d <span class="string">'{
-    "message": "What is the weather in Tokyo?",
+    "message": "東京の天気は？",
     "session_id": "user-123"
   }'</span>
           </div>
-          <div class="alert info">Tool calling is automatic. When you ask about weather, search, or calculations, the AI will use built-in tools and return the results.</div>
+          <div class="alert info" id="chat-tool-info">ツール呼び出しは自動です。天気、検索、計算について質問すると、AIが内蔵ツールを使用して結果を返します。</div>
+        </div>
+      </div>
+
+      <!-- Streaming -->
+      <h2 id="streaming">ストリーミング</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/chat/stream</span>
+          <span class="endpoint-desc" data-i18n="stream-desc">SSEでリアルタイム応答を取得</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Server-Sent Events (SSE) を使用したリアルタイムストリーミング応答。エージェントの思考過程やツール実行の進捗もリアルタイムで確認できます。</p>
+
+          <h3>SSE イベント型</h3>
+          <table>
+            <tr><th>イベント</th><th>説明</th></tr>
+            <tr><td><code>start</code></td><td>ストリーミング開始</td></tr>
+            <tr><td><code>content</code></td><td>テキストチャンク（逐次表示用）</td></tr>
+            <tr><td><code>thinking</code></td><td>AIの思考過程</td></tr>
+            <tr><td><code>tool_start</code></td><td>ツール実行開始</td></tr>
+            <tr><td><code>tool_result</code></td><td>ツール実行結果</td></tr>
+            <tr><td><code>error</code></td><td>エラー発生</td></tr>
+            <tr><td><code>done</code></td><td>ストリーミング完了</td></tr>
+          </table>
+
+          <h3>例</h3>
+          <div class="code-block" id="code-stream">
+            <button class="copy-btn" onclick="copyCode('code-stream')">Copy</button>
+curl -N -X POST https://api.chatweb.ai/api/v1/chat/stream \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "message": "Rustの特徴を教えて",
+    "session_id": "user-123"
+  }'</span>
+          </div>
         </div>
       </div>
 
       <!-- Sessions -->
-      <h2 id="sessions">Sessions</h2>
+      <h2 id="sessions">セッション</h2>
 
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/api/v1/sessions</span>
-          <span class="endpoint-desc">List all sessions</span>
+          <span class="endpoint-desc" data-i18n="sessions-list-desc">セッション一覧を取得</span>
         </div>
         <div class="endpoint-body">
-          <p>Returns an array of all session keys with metadata.</p>
+          <p>すべてのセッションキーとメタデータの配列を返します。</p>
           <div class="code-block" id="code-sessions">
             <button class="copy-btn" onclick="copyCode('code-sessions')">Copy</button>
 curl https://api.chatweb.ai/api/v1/sessions \
@@ -388,17 +628,17 @@ curl https://api.chatweb.ai/api/v1/sessions \
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/api/v1/sessions/{id}</span>
-          <span class="endpoint-desc">Get session with message history</span>
+          <span class="endpoint-desc" data-i18n="sessions-get-desc">メッセージ履歴付きセッションを取得</span>
         </div>
         <div class="endpoint-body">
-          <p>Returns full message history for a session. If the session is linked to other channels, messages from all channels are included.</p>
-          <h3>Response</h3>
+          <p>セッションの全メッセージ履歴を返します。他チャネルにリンクされている場合、全チャネルのメッセージが含まれます。</p>
+          <h3>レスポンス</h3>
           <table>
-            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-            <tr><td><code>key</code></td><td>string</td><td>Original session key</td></tr>
-            <tr><td><code>resolved_key</code></td><td>string</td><td>Unified session key (if linked)</td></tr>
-            <tr><td><code>messages</code></td><td>array</td><td>Message history with role, content, channel</td></tr>
-            <tr><td><code>message_count</code></td><td>number</td><td>Total message count</td></tr>
+            <tr><th>フィールド</th><th>型</th><th>説明</th></tr>
+            <tr><td><code>key</code></td><td>string</td><td>元のセッションキー</td></tr>
+            <tr><td><code>resolved_key</code></td><td>string</td><td>統合セッションキー（リンク済みの場合）</td></tr>
+            <tr><td><code>messages</code></td><td>array</td><td>メッセージ履歴（role, content, channel）</td></tr>
+            <tr><td><code>message_count</code></td><td>number</td><td>総メッセージ数</td></tr>
           </table>
         </div>
       </div>
@@ -407,31 +647,758 @@ curl https://api.chatweb.ai/api/v1/sessions \
         <div class="endpoint-header">
           <span class="method delete">DELETE</span>
           <span class="endpoint-path">/api/v1/sessions/{id}</span>
-          <span class="endpoint-desc">Delete a session</span>
+          <span class="endpoint-desc" data-i18n="sessions-del-desc">セッションを削除</span>
         </div>
         <div class="endpoint-body">
-          <p>Permanently deletes a session and its message history.</p>
+          <p>セッションとそのメッセージ履歴を永久に削除します。</p>
         </div>
       </div>
 
-      <!-- Account -->
-      <h2 id="account">Account</h2>
+      <!-- ========== OpenAI-Compatible API ========== -->
+      <h2 id="openai-compat">🔄 OpenAI互換 API</h2>
+      <p>chatweb.ai は <strong>OpenAI API互換エンドポイント</strong>を提供します。既存のOpenAI SDK・ライブラリをそのままベースURLだけ変更して利用可能。Claude・GPT-4o・Gemini・DeepSeekなど13以上のモデルにアクセスできます。</p>
+
+      <div class="alert info" style="margin-bottom:16px;">
+        <strong>OpenAI SDKからの移行:</strong> ベースURLを <code>https://api.chatweb.ai</code> に変更するだけで利用できます。
+        <div class="code-block" style="margin-top:10px;" id="code-sdk-python">
+          <button class="copy-btn" onclick="copyCode('code-sdk-python')">Copy</button>
+<span class="comment"># Python: openai ライブラリをそのまま使用</span>
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=<span class="string">"nb_live_..."</span>,  <span class="comment"># chatweb.ai APIキー</span>
+    base_url=<span class="string">"https://api.chatweb.ai/v1"</span>,
+)
+response = client.chat.completions.create(
+    model=<span class="string">"claude-sonnet-4-6"</span>,  <span class="comment"># またはgpt-4o, gemini-2.0-flashなど</span>
+    messages=[{<span class="string">"role"</span>: <span class="string">"user"</span>, <span class="string">"content"</span>: <span class="string">"こんにちは！"</span>}],
+)
+print(response.choices[0].message.content)
+        </div>
+      </div>
+
+      <!-- Models List -->
+      <h2 id="openai-models">モデル一覧 <span class="badge-new">NEW</span></h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/models</span>
+          <span class="endpoint-desc">利用可能なモデル一覧を取得</span>
+        </div>
+        <div class="endpoint-body">
+          <p>現在利用可能なすべてのAIモデルをOpenAI形式で返します。認証不要。</p>
+
+          <h3>サポートモデル</h3>
+          <table>
+            <tr><th>モデルID</th><th>プロバイダー</th><th>特徴</th></tr>
+            <tr><td><code>claude-opus-4-6</code></td><td>Anthropic</td><td>最高性能・複雑推論</td></tr>
+            <tr><td><code>claude-sonnet-4-6</code></td><td>Anthropic</td><td>高性能・バランス</td></tr>
+            <tr><td><code>claude-haiku-4-5</code></td><td>Anthropic</td><td>高速・低コスト</td></tr>
+            <tr><td><code>gpt-4o</code></td><td>OpenAI</td><td>マルチモーダル対応</td></tr>
+            <tr><td><code>gpt-4o-mini</code></td><td>OpenAI</td><td>高速・低コスト</td></tr>
+            <tr><td><code>o3-mini</code></td><td>OpenAI</td><td>推論特化</td></tr>
+            <tr><td><code>gemini-2.5-pro</code></td><td>Google</td><td>長コンテキスト・コード</td></tr>
+            <tr><td><code>gemini-2.0-flash</code></td><td>Google</td><td>超高速</td></tr>
+            <tr><td><code>deepseek-chat</code></td><td>DeepSeek</td><td>低コスト・多言語</td></tr>
+            <tr><td><code>deepseek-reasoner</code></td><td>DeepSeek</td><td>推論・数学特化</td></tr>
+            <tr><td><code>llama-3.3-70b-versatile</code></td><td>Meta / Groq</td><td>オープンソース・高速</td></tr>
+            <tr><td><code>kimi-k2</code></td><td>Moonshot</td><td>中国語・コード特化</td></tr>
+          </table>
+
+          <h3>例</h3>
+          <div class="code-block" id="code-models">
+            <button class="copy-btn" onclick="copyCode('code-models')">Copy</button>
+curl https://api.chatweb.ai/v1/models
+          </div>
+
+          <h3>レスポンス</h3>
+          <div class="code-block">
+{
+  <span class="key">"object"</span>: <span class="string">"list"</span>,
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="string">"claude-sonnet-4-6"</span>,
+      <span class="key">"object"</span>: <span class="string">"model"</span>,
+      <span class="key">"created"</span>: <span class="number">1740000000</span>,
+      <span class="key">"owned_by"</span>: <span class="string">"anthropic"</span>
+    },
+    <span class="comment">// ... その他のモデル</span>
+  ]
+}
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Completions -->
+      <h2 id="openai-chat">チャット補完 <span class="badge-new">NEW</span></h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/chat/completions</span>
+          <span class="endpoint-desc">OpenAI互換チャット補完</span>
+          <span class="credits-badge">1+ credits</span>
+        </div>
+        <div class="endpoint-body">
+          <p>OpenAI の <code>/v1/chat/completions</code> と完全互換のエンドポイント。ストリーミング（<code>stream: true</code>）もサポート。</p>
+
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+            <tr><td><code>model</code></td><td>string</td><td>Yes</td><td>モデルID（例: <code>claude-sonnet-4-6</code>, <code>gpt-4o</code>）</td></tr>
+            <tr><td><code>messages</code></td><td>array</td><td>Yes</td><td>会話履歴（role: system/user/assistant）</td></tr>
+            <tr><td><code>stream</code></td><td>boolean</td><td>No</td><td><code>true</code> でSSEストリーミング</td></tr>
+            <tr><td><code>max_tokens</code></td><td>integer</td><td>No</td><td>最大トークン数（デフォルト: 4096）</td></tr>
+            <tr><td><code>temperature</code></td><td>number</td><td>No</td><td>温度パラメータ（0-2、デフォルト: 0.7）</td></tr>
+          </table>
+
+          <h3>例（非ストリーミング）</h3>
+          <div class="code-block" id="code-openai-chat">
+            <button class="copy-btn" onclick="copyCode('code-openai-chat')">Copy</button>
+curl -X POST https://api.chatweb.ai/v1/chat/completions \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "model": "claude-sonnet-4-6",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "東京の人口は？"}
+    ],
+    "max_tokens": 1024
+  }'</span>
+          </div>
+
+          <h3>レスポンス</h3>
+          <div class="code-block">
+{
+  <span class="key">"id"</span>: <span class="string">"chatcmpl-abc123"</span>,
+  <span class="key">"object"</span>: <span class="string">"chat.completion"</span>,
+  <span class="key">"created"</span>: <span class="number">1740000000</span>,
+  <span class="key">"model"</span>: <span class="string">"claude-sonnet-4-6"</span>,
+  <span class="key">"choices"</span>: [{
+    <span class="key">"index"</span>: <span class="number">0</span>,
+    <span class="key">"message"</span>: {
+      <span class="key">"role"</span>: <span class="string">"assistant"</span>,
+      <span class="key">"content"</span>: <span class="string">"東京の人口は約1,400万人です..."</span>
+    },
+    <span class="key">"finish_reason"</span>: <span class="string">"stop"</span>
+  }],
+  <span class="key">"usage"</span>: {
+    <span class="key">"prompt_tokens"</span>: <span class="number">25</span>,
+    <span class="key">"completion_tokens"</span>: <span class="number">48</span>,
+    <span class="key">"total_tokens"</span>: <span class="number">73</span>
+  }
+}
+          </div>
+
+          <h3>例（ストリーミング）</h3>
+          <div class="code-block" id="code-openai-stream">
+            <button class="copy-btn" onclick="copyCode('code-openai-stream')">Copy</button>
+curl -X POST https://api.chatweb.ai/v1/chat/completions \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Rust のベストプラクティスは？"}],
+    "stream": true
+  }'</span>
+
+<span class="comment"># SSEストリーム出力例:</span>
+data: {"id":"chatcmpl-...","object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant"}}]}
+data: {"id":"chatcmpl-...","object":"chat.completion.chunk","choices":[{"delta":{"content":"Rust"}}]}
+data: {"id":"chatcmpl-...","object":"chat.completion.chunk","choices":[{"delta":{},"finish_reason":"stop"}]}
+data: [DONE]
+          </div>
+
+          <h3>Node.js / TypeScript例</h3>
+          <div class="code-block" id="code-openai-node">
+            <button class="copy-btn" onclick="copyCode('code-openai-node')">Copy</button>
+<span class="comment">// npm install openai</span>
+import OpenAI from <span class="string">'openai'</span>;
+
+const client = new OpenAI({
+  apiKey: <span class="string">'nb_live_...'</span>,
+  baseURL: <span class="string">'https://api.chatweb.ai/v1'</span>,
+});
+
+const response = await client.chat.completions.create({
+  model: <span class="string">'gemini-2.0-flash'</span>,
+  messages: [{ role: <span class="string">'user'</span>, content: <span class="string">'Hello!'</span> }],
+  stream: <span class="number">true</span>,
+});
+
+for await (const chunk of response) {
+  process.stdout.write(chunk.choices[0]?.delta?.content || <span class="string">''</span>);
+}
+          </div>
+        </div>
+      </div>
+
+      <!-- OpenAI Audio Compat -->
+      <h2 id="openai-audio">音声合成（OpenAI互換）</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/audio/speech</span>
+          <span class="endpoint-desc">OpenAI互換テキスト音声変換</span>
+          <span class="credits-badge">1-5 credits</span>
+        </div>
+        <div class="endpoint-body">
+          <p>OpenAI の <code>tts-1</code> と互換のTTSエンドポイント。OpenAI SDK からそのまま利用可能。</p>
+          <div class="code-block" id="code-openai-tts">
+            <button class="copy-btn" onclick="copyCode('code-openai-tts')">Copy</button>
+curl -X POST https://api.chatweb.ai/v1/audio/speech \
+  -H <span class="string">"Authorization: Bearer nb_live_..."</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"model":"tts-1","input":"こんにちは！","voice":"nova"}'</span> \
+  --output speech.mp3
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== Media API ========== -->
+      <h2 id="media">🎨 メディア API</h2>
+      <p>最先端のAIモデルを使って画像・音声・動画・テキスト認識を行うための統合API。DALL-E 3、Flux、Kling AI、BRIA、Real-ESRGANなどに対応。</p>
+
+      <div class="alert info">
+        🎨 <a href="/media" style="color:var(--accent-hover);font-weight:600;">インタラクティブデモ</a>で全メディアAPI機能をビジュアルに試すことができます。
+      </div>
+
+      <h3 id="media-pricing">全エンドポイント料金一覧</h3>
+      <table>
+        <tr><th>サービス</th><th>エンドポイント</th><th>クレジット</th><th>備考</th></tr>
+        <tr><td>音声合成 (TTS)</td><td><code>/media/tts</code></td><td>1 / 100文字</td><td>Polly, OpenAI, Qwen3</td></tr>
+        <tr><td>音声認識 (STT)</td><td><code>/media/stt</code></td><td>準備中</td><td>Whisper</td></tr>
+        <tr><td>画像生成 Standard</td><td><code>/media/image</code></td><td>5-10</td><td>Flux Schnell, DALL-E 3</td></tr>
+        <tr><td>画像生成 HD</td><td><code>/media/image</code></td><td>15-20</td><td>Flux Pro, DALL-E 3 HD</td></tr>
+        <tr><td>背景削除</td><td><code>/media/remove-bg</code></td><td>8-15</td><td>BRIA RMBG</td></tr>
+        <tr><td>アップスケール</td><td><code>/media/upscale</code></td><td>12-25</td><td>Real-ESRGAN / CCSR</td></tr>
+        <tr><td>OCR</td><td><code>/media/ocr</code></td><td>5-10</td><td>Tesseract / Google Vision</td></tr>
+        <tr><td>効果音</td><td><code>/media/sfx</code></td><td>5-17</td><td>長さにより変動</td></tr>
+        <tr><td>音楽生成</td><td><code>/media/music</code></td><td>10-40</td><td>Stable Audio</td></tr>
+        <tr><td>動画 5秒</td><td><code>/media/video</code></td><td>50</td><td>Kling AI Standard</td></tr>
+        <tr><td>動画 10秒</td><td><code>/media/video</code></td><td>100</td><td>Kling AI Standard</td></tr>
+      </table>
+
+      <!-- TTS -->
+      <h2 id="media-tts">音声合成 (TTS)</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/tts</span>
+          <span class="endpoint-desc">テキストを自然な音声に変換</span>
+          <span class="credits-badge">1 credit / 100文字</span>
+        </div>
+        <div class="endpoint-body">
+          <p>複数のTTSエンジンに対応し、自動フォールバックで高可用性を実現: Polly (AWS)、OpenAI TTS、Qwen3。</p>
+
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+            <tr><td><code>text</code></td><td>string</td><td>Yes</td><td>音声に変換するテキスト（最大4096文字）</td></tr>
+            <tr><td><code>voice</code></td><td>string</td><td>No</td><td>音声名。デフォルト: <code>Kazuha</code></td></tr>
+            <tr><td><code>speed</code></td><td>number</td><td>No</td><td>再生速度 (0.25-4.0)。デフォルト: 1.0</td></tr>
+          </table>
+
+          <h3>利用可能な音声</h3>
+          <table>
+            <tr><th>音声</th><th>言語</th><th>性別</th><th>エンジン</th></tr>
+            <tr><td><code>Kazuha</code></td><td>日本語</td><td>女性</td><td>Polly（推奨）</td></tr>
+            <tr><td><code>Takumi</code></td><td>日本語</td><td>男性</td><td>Polly</td></tr>
+            <tr><td><code>Mizuki</code></td><td>日本語</td><td>女性</td><td>Polly</td></tr>
+            <tr><td><code>female_calm</code></td><td>日本語</td><td>女性</td><td>Qwen3</td></tr>
+            <tr><td><code>male_calm</code></td><td>日本語</td><td>男性</td><td>Qwen3</td></tr>
+            <tr><td><code>nova</code></td><td>英語</td><td>女性</td><td>OpenAI</td></tr>
+            <tr><td><code>alloy</code></td><td>英語</td><td>中性</td><td>OpenAI</td></tr>
+          </table>
+
+          <h3>レスポンス</h3>
+          <p><code>audio/mpeg</code> (MP3形式) で音声ファイルを返します。</p>
+
+          <h3>例</h3>
+          <div class="code-block" id="code-tts">
+            <button class="copy-btn" onclick="copyCode('code-tts')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/media/tts \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "text": "こんにちは、これはテストです",
+    "voice": "Kazuha",
+    "speed": 1.0
+  }'</span> \
+  --output audio.mp3
+          </div>
+          <a href="/media" class="demo-link">🎨 デモで試す →</a>
+        </div>
+      </div>
+
+      <!-- STT -->
+      <h2 id="media-stt">音声認識 (STT)</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/stt</span>
+          <span class="endpoint-desc">音声をテキストに変換</span>
+          <span class="credits-badge">準備中</span>
+        </div>
+        <div class="endpoint-body">
+          <div class="alert warn">🚧 このエンドポイントは現在開発中です。Whisper APIを使用した音声認識機能を近日リリース予定です。</div>
+          <h3>予定パラメータ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>説明</th></tr>
+            <tr><td><code>audio</code></td><td>file</td><td>音声ファイル（MP3, WAV, M4A）</td></tr>
+            <tr><td><code>language</code></td><td>string</td><td>言語コード（ja, en など）</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Image Generation -->
+      <h2 id="media-image">画像生成</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/image</span>
+          <span class="endpoint-desc">テキストから画像を生成</span>
+          <span class="credits-badge">5-20 credits</span>
+        </div>
+        <div class="endpoint-body">
+          <p>DALL-E 3、Flux Pro、Flux Schnell、Flux Realismで高品質な画像を生成。</p>
+
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+            <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>生成する画像の説明</td></tr>
+            <tr><td><code>model</code></td><td>string</td><td>No</td><td><code>flux-schnell</code>（デフォルト）, <code>flux-pro</code>, <code>flux-realism</code>, <code>dalle-3</code></td></tr>
+            <tr><td><code>size</code></td><td>string</td><td>No</td><td><code>1024x1024</code>（デフォルト）, <code>1792x1024</code>, <code>1024x1792</code></td></tr>
+            <tr><td><code>quality</code></td><td>string</td><td>No</td><td><code>standard</code>（デフォルト）, <code>hd</code>（DALL-E 3のみ）</td></tr>
+          </table>
+
+          <h3>モデル比較</h3>
+          <table>
+            <tr><th>モデル</th><th>クレジット</th><th>速度</th><th>品質</th></tr>
+            <tr><td><code>flux-schnell</code></td><td>5</td><td>高速（約15秒）</td><td>良好</td></tr>
+            <tr><td><code>flux-realism</code></td><td>10</td><td>中速（約30秒）</td><td>超リアル</td></tr>
+            <tr><td><code>flux-pro</code></td><td>15</td><td>低速（約60秒）</td><td>最高品質</td></tr>
+            <tr><td><code>dalle-3</code></td><td>10 (HD: 20)</td><td>中速（約30秒）</td><td>優秀</td></tr>
+          </table>
+
+          <h3>レスポンス</h3>
+          <div class="code-block">
+{
+  <span class="key">"images"</span>: [{
+    <span class="key">"url"</span>: <span class="string">"https://..."</span>
+  }],
+  <span class="key">"model"</span>: <span class="string">"flux-schnell"</span>,
+  <span class="key">"credits_used"</span>: <span class="number">5</span>
+}
+          </div>
+
+          <h3>例</h3>
+          <div class="code-block" id="code-image">
+            <button class="copy-btn" onclick="copyCode('code-image')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/media/image \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "prompt": "雪の中の可愛い猫、シネマティックライティング、4K",
+    "model": "flux-schnell",
+    "size": "1024x1024"
+  }'</span>
+          </div>
+          <a href="/media" class="demo-link">🎨 デモで試す →</a>
+        </div>
+      </div>
+
+      <!-- Remove Background -->
+      <h2 id="media-remove-bg">背景削除 <span class="badge-new">NEW</span></h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/remove-bg</span>
+          <span class="endpoint-desc">画像の背景を自動で削除</span>
+          <span class="credits-badge">8-15 credits</span>
+        </div>
+        <div class="endpoint-body">
+          <p>BRIA RMBGモデルを使用して、画像の背景を高精度に削除します。ECサイト商品画像、プロフィール写真加工、デザイン素材作成に最適。</p>
+
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+            <tr><td><code>image_url</code></td><td>string</td><td>Yes*</td><td>画像URL</td></tr>
+            <tr><td><code>image_base64</code></td><td>string</td><td>Yes*</td><td>Base64エンコードされた画像（image_urlの代替）</td></tr>
+            <tr><td><code>quality</code></td><td>string</td><td>No</td><td><code>standard</code>（デフォルト、8 credits）, <code>hd</code>（15 credits）</td></tr>
+          </table>
+          <p style="font-size:12px;color:var(--muted);">* image_url または image_base64 のいずれかが必須</p>
+
+          <h3>料金</h3>
+          <table>
+            <tr><th>品質</th><th>クレジット</th><th>モデル</th></tr>
+            <tr><td>standard</td><td>8</td><td>BRIA RMBG</td></tr>
+            <tr><td>hd</td><td>15</td><td>BRIA RMBG v2</td></tr>
+          </table>
+
+          <h3>レスポンス</h3>
+          <div class="code-block">
+{
+  <span class="key">"url"</span>: <span class="string">"https://..."</span>,
+  <span class="key">"credits_used"</span>: <span class="number">8</span>
+}
+          </div>
+
+          <h3>例</h3>
+          <div class="code-block" id="code-remove-bg">
+            <button class="copy-btn" onclick="copyCode('code-remove-bg')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/media/remove-bg \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "image_url": "https://example.com/photo.jpg",
+    "quality": "standard"
+  }'</span>
+          </div>
+          <a href="/media" class="demo-link">🎨 デモで試す →</a>
+        </div>
+      </div>
+
+      <!-- Upscale -->
+      <h2 id="media-upscale">アップスケール <span class="badge-new">NEW</span></h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/upscale</span>
+          <span class="endpoint-desc">画像を高解像度に拡大</span>
+          <span class="credits-badge">12-25 credits</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Real-ESRGAN / CCSRモデルを使用して、低解像度画像を2倍・4倍に高品質アップスケールします。印刷用高品質化やAI生成画像の精細化に。</p>
+
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+            <tr><td><code>image_url</code></td><td>string</td><td>Yes*</td><td>画像URL</td></tr>
+            <tr><td><code>image_base64</code></td><td>string</td><td>Yes*</td><td>Base64エンコードされた画像（image_urlの代替）</td></tr>
+            <tr><td><code>scale</code></td><td>number</td><td>No</td><td><code>2</code>（デフォルト）または <code>4</code></td></tr>
+            <tr><td><code>model</code></td><td>string</td><td>No</td><td><code>fast</code>（デフォルト）, <code>quality</code></td></tr>
+          </table>
+          <p style="font-size:12px;color:var(--muted);">* image_url または image_base64 のいずれかが必須</p>
+
+          <h3>料金</h3>
+          <table>
+            <tr><th>倍率</th><th>モデル</th><th>クレジット</th></tr>
+            <tr><td>2x</td><td>fast (Real-ESRGAN)</td><td>12</td></tr>
+            <tr><td>2x</td><td>quality (CCSR)</td><td>15</td></tr>
+            <tr><td>4x</td><td>fast (Real-ESRGAN)</td><td>20</td></tr>
+            <tr><td>4x</td><td>quality (CCSR)</td><td>25</td></tr>
+          </table>
+
+          <h3>レスポンス</h3>
+          <div class="code-block">
+{
+  <span class="key">"url"</span>: <span class="string">"https://..."</span>,
+  <span class="key">"original_size"</span>: <span class="string">"512x512"</span>,
+  <span class="key">"upscaled_size"</span>: <span class="string">"2048x2048"</span>,
+  <span class="key">"credits_used"</span>: <span class="number">20</span>
+}
+          </div>
+
+          <h3>例</h3>
+          <div class="code-block" id="code-upscale">
+            <button class="copy-btn" onclick="copyCode('code-upscale')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/media/upscale \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "image_url": "https://example.com/low-res.jpg",
+    "scale": 4,
+    "model": "quality"
+  }'</span>
+          </div>
+          <a href="/media" class="demo-link">🎨 デモで試す →</a>
+        </div>
+      </div>
+
+      <!-- OCR -->
+      <h2 id="media-ocr">OCR (文字認識) <span class="badge-new">NEW</span></h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/ocr</span>
+          <span class="endpoint-desc">画像からテキストを抽出</span>
+          <span class="credits-badge">5-10 credits</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Tesseract / Google Cloud Visionを使用して、画像内のテキストを高精度に認識します。レシート読み取り、名刺データ化、ドキュメントデジタル化に。日本語を含む100+言語に対応。</p>
+
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+            <tr><td><code>image_url</code></td><td>string</td><td>Yes*</td><td>画像URL</td></tr>
+            <tr><td><code>image_base64</code></td><td>string</td><td>Yes*</td><td>Base64エンコードされた画像（image_urlの代替）</td></tr>
+            <tr><td><code>language</code></td><td>string</td><td>No</td><td><code>ja</code>（デフォルト）, <code>en</code>, <code>premium</code>（Google Vision）</td></tr>
+            <tr><td><code>format</code></td><td>string</td><td>No</td><td><code>text</code>（デフォルト）, <code>json</code></td></tr>
+          </table>
+          <p style="font-size:12px;color:var(--muted);">* image_url または image_base64 のいずれかが必須</p>
+
+          <h3>料金</h3>
+          <table>
+            <tr><th>エンジン</th><th>クレジット</th><th>精度</th></tr>
+            <tr><td>Standard (Tesseract)</td><td>5</td><td>良好</td></tr>
+            <tr><td>Premium (Google Vision)</td><td>10</td><td>最高精度</td></tr>
+          </table>
+
+          <h3>レスポンス</h3>
+          <div class="code-block">
+{
+  <span class="key">"text"</span>: <span class="string">"認識されたテキスト..."</span>,
+  <span class="key">"confidence"</span>: <span class="number">0.95</span>,
+  <span class="key">"language"</span>: <span class="string">"ja"</span>,
+  <span class="key">"credits_used"</span>: <span class="number">5</span>
+}
+          </div>
+
+          <h3>例</h3>
+          <div class="code-block" id="code-ocr">
+            <button class="copy-btn" onclick="copyCode('code-ocr')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/media/ocr \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "image_url": "https://example.com/document.jpg",
+    "language": "ja",
+    "format": "text"
+  }'</span>
+          </div>
+          <a href="/media" class="demo-link">🎨 デモで試す →</a>
+        </div>
+      </div>
+
+      <!-- Sound Effects -->
+      <h2 id="media-sfx">効果音生成 <span class="badge-new">NEW</span></h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/sfx</span>
+          <span class="endpoint-desc">テキストから効果音を生成</span>
+          <span class="credits-badge">5-17 credits</span>
+        </div>
+        <div class="endpoint-body">
+          <p>テキスト説明から高品質な効果音を生成します。ゲームSE、動画編集、ポッドキャスト素材に最適。</p>
+
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+            <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>効果音の説明</td></tr>
+            <tr><td><code>duration</code></td><td>number</td><td>No</td><td>長さ（1-10秒）。デフォルト: 3</td></tr>
+          </table>
+
+          <h3>料金</h3>
+          <table>
+            <tr><th>長さ</th><th>クレジット</th></tr>
+            <tr><td>3秒</td><td>5</td></tr>
+            <tr><td>5秒</td><td>8</td></tr>
+            <tr><td>10秒</td><td>17</td></tr>
+          </table>
+
+          <h3>レスポンス</h3>
+          <div class="code-block">
+{
+  <span class="key">"audio_url"</span>: <span class="string">"https://..."</span>,
+  <span class="key">"duration"</span>: <span class="number">3</span>,
+  <span class="key">"credits_used"</span>: <span class="number">5</span>
+}
+          </div>
+
+          <h3>例</h3>
+          <div class="code-block" id="code-sfx">
+            <button class="copy-btn" onclick="copyCode('code-sfx')">Copy</button>
+curl -X POST https://api.chatweb.ai/api/v1/media/sfx \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "prompt": "ドアが閉まる重厚な音",
+    "duration": 3
+  }'</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Music -->
+      <h2 id="media-music">音楽生成 <span class="badge-new">NEW</span></h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/music</span>
+          <span class="endpoint-desc">テキストから音楽を生成（非同期）</span>
+          <span class="credits-badge">10-40 credits</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Stable Audioを使用して、テキスト説明からオリジナル音楽を生成します。BGM、ジングル、プロモーション音楽に。</p>
+
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+            <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>音楽の説明</td></tr>
+            <tr><td><code>type</code></td><td>string</td><td>No</td><td><code>music</code>（デフォルト）, <code>sfx</code></td></tr>
+            <tr><td><code>duration</code></td><td>number</td><td>No</td><td><code>10</code>（デフォルト）, <code>30</code>, <code>60</code>秒</td></tr>
+          </table>
+
+          <h3>料金</h3>
+          <table>
+            <tr><th>長さ</th><th>クレジット</th></tr>
+            <tr><td>10秒</td><td>10</td></tr>
+            <tr><td>30秒</td><td>20</td></tr>
+            <tr><td>60秒</td><td>40</td></tr>
+          </table>
+
+          <h3>レスポンス</h3>
+          <div class="code-block">
+{
+  <span class="key">"music_id"</span>: <span class="string">"mus_abc123..."</span>,
+  <span class="key">"status"</span>: <span class="string">"processing"</span>,
+  <span class="key">"credits_used"</span>: <span class="number">20</span>
+}
+          </div>
+
+          <h3>例</h3>
+          <div class="code-block" id="code-music">
+            <button class="copy-btn" onclick="copyCode('code-music')">Copy</button>
+<span class="comment"># 1. 音楽生成ジョブを作成</span>
+curl -X POST https://api.chatweb.ai/api/v1/media/music \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "prompt": "アコースティックギターのカフェBGM、Lo-fi、リラックス",
+    "duration": 30
+  }'</span>
+
+<span class="comment"># 2. ステータスを確認（ポーリング）</span>
+curl https://api.chatweb.ai/api/v1/media/music/mus_abc123 \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span>
+          </div>
+          <a href="/media" class="demo-link">🎨 デモで試す →</a>
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/media/music/{id}</span>
+          <span class="endpoint-desc">音楽生成のステータスを確認</span>
+        </div>
+        <div class="endpoint-body">
+          <p>ポーリングで音楽生成の完了を確認します。ステータス: <code>processing</code> → <code>completed</code> または <code>failed</code>。</p>
+          <h3>レスポンス（完了時）</h3>
+          <div class="code-block">
+{
+  <span class="key">"music_id"</span>: <span class="string">"mus_abc123..."</span>,
+  <span class="key">"status"</span>: <span class="string">"completed"</span>,
+  <span class="key">"audio_url"</span>: <span class="string">"https://..."</span>,
+  <span class="key">"duration"</span>: <span class="number">30</span>
+}
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Generation -->
+      <h2 id="media-video">動画生成</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/media/video</span>
+          <span class="endpoint-desc">テキストからショート動画を生成（非同期）</span>
+          <span class="credits-badge">50-300 credits</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Kling AIを使用して5-10秒のショート動画を生成。非同期処理のため、video_idをポーリングして完了を確認します。</p>
+
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+            <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>動画シーンの説明</td></tr>
+            <tr><td><code>duration</code></td><td>number</td><td>No</td><td><code>5</code>（デフォルト）または <code>10</code>秒</td></tr>
+            <tr><td><code>mode</code></td><td>string</td><td>No</td><td><code>standard</code>（デフォルト）, <code>pro</code></td></tr>
+          </table>
+
+          <h3>料金</h3>
+          <table>
+            <tr><th>長さ</th><th>モード</th><th>クレジット</th></tr>
+            <tr><td>5秒</td><td>standard</td><td>50</td></tr>
+            <tr><td>10秒</td><td>standard</td><td>100</td></tr>
+            <tr><td>5秒</td><td>pro</td><td>150</td></tr>
+            <tr><td>10秒</td><td>pro</td><td>300</td></tr>
+          </table>
+
+          <h3>レスポンス (202 Accepted)</h3>
+          <div class="code-block">
+{
+  <span class="key">"video_id"</span>: <span class="string">"abc123..."</span>,
+  <span class="key">"status"</span>: <span class="string">"queued"</span>,
+  <span class="key">"estimated_time"</span>: <span class="number">120</span>,
+  <span class="key">"credits_used"</span>: <span class="number">50</span>
+}
+          </div>
+
+          <h3>例</h3>
+          <div class="code-block" id="code-video">
+            <button class="copy-btn" onclick="copyCode('code-video')">Copy</button>
+<span class="comment"># 1. 動画生成ジョブを作成</span>
+curl -X POST https://api.chatweb.ai/api/v1/media/video \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
+  -d <span class="string">'{
+    "prompt": "犬がビーチで走る、夕暮れ時",
+    "duration": 5
+  }'</span>
+          </div>
+          <a href="/media" class="demo-link">🎨 デモで試す →</a>
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/media/video/{id}</span>
+          <span class="endpoint-desc">動画生成のステータスを確認</span>
+        </div>
+        <div class="endpoint-body">
+          <p>ポーリングで動画生成の完了を確認。ステータス: <code>queued</code> → <code>processing</code> → <code>completed</code> または <code>failed</code>。</p>
+          <h3>レスポンス</h3>
+          <div class="code-block">
+{
+  <span class="key">"video_id"</span>: <span class="string">"abc123..."</span>,
+  <span class="key">"status"</span>: <span class="string">"completed"</span>,
+  <span class="key">"url"</span>: <span class="string">"https://..."</span>,
+  <span class="key">"thumbnail_url"</span>: <span class="string">"https://..."</span>,
+  <span class="key">"created_at"</span>: <span class="string">"2026-02-18T12:00:00Z"</span>
+}
+          </div>
+          <h3>例</h3>
+          <div class="code-block" id="code-video-status">
+            <button class="copy-btn" onclick="copyCode('code-video-status')">Copy</button>
+<span class="comment"># 2. ステータスを確認（15秒ごとにポーリング）</span>
+curl https://api.chatweb.ai/api/v1/media/video/abc123 \
+  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== Account ========== -->
+      <h2 id="account">ユーザー情報</h2>
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/api/v1/account/{id}</span>
-          <span class="endpoint-desc">Get user profile and billing info</span>
+          <span class="endpoint-desc">プロフィールと課金情報を取得</span>
         </div>
         <div class="endpoint-body">
-          <h3>Response</h3>
+          <h3>レスポンス</h3>
           <table>
-            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-            <tr><td><code>user_id</code></td><td>string</td><td>Unified user identifier</td></tr>
-            <tr><td><code>plan</code></td><td>string</td><td>Current plan: free, starter, pro</td></tr>
-            <tr><td><code>credits_remaining</code></td><td>number</td><td>Available credits</td></tr>
-            <tr><td><code>credits_used</code></td><td>number</td><td>Total credits consumed</td></tr>
-            <tr><td><code>channels</code></td><td>array</td><td>Linked channels</td></tr>
-            <tr><td><code>allowed_models</code></td><td>array</td><td>Models available on current plan</td></tr>
+            <tr><th>フィールド</th><th>型</th><th>説明</th></tr>
+            <tr><td><code>user_id</code></td><td>string</td><td>統合ユーザーID</td></tr>
+            <tr><td><code>plan</code></td><td>string</td><td>現在のプラン: free, starter, pro</td></tr>
+            <tr><td><code>credits_remaining</code></td><td>number</td><td>残りクレジット</td></tr>
+            <tr><td><code>credits_used</code></td><td>number</td><td>消費済みクレジット</td></tr>
+            <tr><td><code>channels</code></td><td>array</td><td>リンク済みチャネル</td></tr>
+            <tr><td><code>allowed_models</code></td><td>array</td><td>利用可能なモデル</td></tr>
           </table>
           <div class="code-block" id="code-account">
             <button class="copy-btn" onclick="copyCode('code-account')">Copy</button>
@@ -442,35 +1409,139 @@ curl https://api.chatweb.ai/api/v1/account/my-session \
       </div>
 
       <!-- Usage -->
-      <h2 id="usage">Usage</h2>
+      <h2 id="usage">使用量</h2>
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/api/v1/usage</span>
-          <span class="endpoint-desc">Get usage statistics</span>
+          <span class="endpoint-desc">使用量統計を取得</span>
         </div>
         <div class="endpoint-body">
-          <p>Pass <code>X-User-Id</code> header to get usage for a specific user.</p>
-          <h3>Response</h3>
+          <p><code>X-User-Id</code>ヘッダーで特定ユーザーの使用量を取得可能。</p>
+          <h3>レスポンス</h3>
           <table>
-            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-            <tr><td><code>credits_used</code></td><td>number</td><td>Credits consumed</td></tr>
-            <tr><td><code>credits_remaining</code></td><td>number</td><td>Credits available</td></tr>
+            <tr><th>フィールド</th><th>型</th><th>説明</th></tr>
+            <tr><td><code>credits_used</code></td><td>number</td><td>消費済みクレジット</td></tr>
+            <tr><td><code>credits_remaining</code></td><td>number</td><td>残りクレジット</td></tr>
           </table>
         </div>
       </div>
 
-      <!-- Providers -->
-      <h2 id="providers">Providers</h2>
+      <!-- ========== Billing ========== -->
+      <h2 id="billing">チェックアウト</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/billing/checkout</span>
+          <span class="endpoint-desc">Stripeチェックアウトセッションを作成</span>
+        </div>
+        <div class="endpoint-body">
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>説明</th></tr>
+            <tr><td><code>plan</code></td><td>string</td><td><code>starter</code>（$9/月）または <code>pro</code>（$29/月）</td></tr>
+          </table>
+          <h3>レスポンス</h3>
+          <p>ユーザーをStripeにリダイレクトするための<code>checkout_url</code>を返します。</p>
+        </div>
+      </div>
+
+      <h2 id="portal">課金ポータル</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/api/v1/billing/portal</span>
+          <span class="endpoint-desc">Stripe課金ポータルURLを取得</span>
+        </div>
+        <div class="endpoint-body">
+          <p>サブスクリプション管理のためのStripeカスタマーポータルURLを返します。</p>
+        </div>
+      </div>
+
+      <h2 id="coupons">クーポン</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/api/v1/coupon/validate</span>
+          <span class="endpoint-desc">クーポンコードを検証</span>
+        </div>
+        <div class="endpoint-body">
+          <h3>リクエストボディ</h3>
+          <table>
+            <tr><th>フィールド</th><th>型</th><th>説明</th></tr>
+            <tr><td><code>code</code></td><td>string</td><td>検証するクーポンコード</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- ========== Channels ========== -->
+      <h2 id="line">LINE Webhook</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/webhooks/line</span>
+          <span class="endpoint-desc">LINE Messaging API Webhook</span>
+        </div>
+        <div class="endpoint-body">
+          <p>LINE Webhookイベントを受信します。<a href="https://developers.line.biz/console/">LINE Developer Console</a>で設定してください。</p>
+          <p>LINE Bot ID: <code>@619jcqqh</code></p>
+        </div>
+      </div>
+
+      <h2 id="telegram">Telegram Webhook</h2>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/webhooks/telegram</span>
+          <span class="endpoint-desc">Telegram Bot API Webhook</span>
+        </div>
+        <div class="endpoint-body">
+          <p>Telegram Webhookアップデートを受信します。<a href="https://core.telegram.org/bots/api#setwebhook">setWebhook</a>で設定してください。</p>
+          <p>Bot: <code>@chatweb_ai_bot</code></p>
+        </div>
+      </div>
+
+      <h2 id="linking">チャネル連携</h2>
+      <p>Web、LINE、Telegramの会話をリンクして、全チャネルでチャット履歴を共有できます。</p>
+
+      <h3>方法 1: 自動リンク（推奨）</h3>
+      <p><a href="https://chatweb.ai">chatweb.ai</a>のLINE/Telegramボタンをクリック。セッションIDがディープリンクに含まれ、Bot追加時に自動連携されます。</p>
+
+      <h3>方法 2: セッションID</h3>
+      <p>WebセッションID（チャットページに表示）をコピーし、LINEまたはTelegram Botに直接送信します。</p>
+
+      <h3>方法 3: リンクコード</h3>
+      <p>任意のチャネルで<code>/link</code>と入力して6桁コードを生成。別のチャネルで<code>/link CODE</code>と入力して連携。</p>
+
+      <h3>クレジットレート</h3>
+      <table>
+        <tr><th>モデル</th><th>1Kトークンあたり</th></tr>
+        <tr><td>GPT-4o-mini</td><td>4 credits</td></tr>
+        <tr><td>Gemini Flash</td><td>4 credits</td></tr>
+        <tr><td>GPT-4o</td><td>20 credits</td></tr>
+        <tr><td>Claude Sonnet</td><td>24 credits</td></tr>
+        <tr><td>Claude Opus</td><td>120 credits</td></tr>
+      </table>
+
+      <h3>プラン</h3>
+      <table>
+        <tr><th>プラン</th><th>料金</th><th>月間クレジット</th><th>モデル</th></tr>
+        <tr><td>Free</td><td>$0</td><td>1,000</td><td>GPT-4o-mini, Gemini Flash</td></tr>
+        <tr><td>Starter</td><td>$9/月</td><td>50,000</td><td>+ GPT-4o, Claude Sonnet</td></tr>
+        <tr><td>Pro</td><td>$29/月</td><td>200,000</td><td>+ Claude Opus, 全モデル</td></tr>
+      </table>
+
+      <!-- ========== Platform ========== -->
+      <h2 id="providers">プロバイダー</h2>
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/api/v1/providers</span>
-          <span class="endpoint-desc">List available AI providers</span>
+          <span class="endpoint-desc">利用可能なAIプロバイダー一覧</span>
         </div>
         <div class="endpoint-body">
-          <p>Returns a list of configured AI providers with their models and load balancing status.</p>
-          <h3>Response</h3>
+          <p>設定済みのAIプロバイダーとそのモデル、ロードバランシング状態を返します。</p>
+          <h3>レスポンス</h3>
           <div class="code-block">
 {
   <span class="key">"providers"</span>: [
@@ -485,35 +1556,37 @@ curl https://api.chatweb.ai/api/v1/account/my-session \
       </div>
 
       <!-- Integrations -->
-      <h2 id="integrations">Integrations</h2>
+      <h2 id="integrations">ツール</h2>
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/api/v1/integrations</span>
-          <span class="endpoint-desc">List available tools and integrations</span>
+          <span class="endpoint-desc">利用可能なツール一覧</span>
         </div>
         <div class="endpoint-body">
-          <p>Built-in tools are called automatically during chat when the AI determines they are needed.</p>
-          <h3>Active Tools</h3>
+          <p>内蔵ツールはチャット中にAIが必要と判断した際に自動で呼び出されます。</p>
+          <h3>アクティブなツール</h3>
           <table>
-            <tr><th>Tool</th><th>Description</th></tr>
-            <tr><td><code>web_search</code></td><td>Search the web using DuckDuckGo</td></tr>
-            <tr><td><code>weather</code></td><td>Get current weather for any location (Open-Meteo)</td></tr>
-            <tr><td><code>calculator</code></td><td>Evaluate mathematical expressions</td></tr>
-            <tr><td><code>web_fetch</code></td><td>Fetch and extract content from URLs</td></tr>
+            <tr><th>ツール</th><th>説明</th></tr>
+            <tr><td><code>web_search</code></td><td>DuckDuckGoでWeb検索</td></tr>
+            <tr><td><code>weather</code></td><td>任意の場所の現在の天気を取得（Open-Meteo）</td></tr>
+            <tr><td><code>calculator</code></td><td>数式を計算</td></tr>
+            <tr><td><code>web_fetch</code></td><td>URLからコンテンツを取得・抽出</td></tr>
+            <tr><td><code>code_execute</code></td><td>サンドボックスでコード実行</td></tr>
+            <tr><td><code>file_read</code></td><td>サンドボックス内ファイル読取</td></tr>
+            <tr><td><code>file_write</code></td><td>サンドボックス内ファイル書込</td></tr>
+            <tr><td><code>file_list</code></td><td>ディレクトリ一覧</td></tr>
           </table>
-          <h3>Coming Soon</h3>
-          <p>Gmail, Google Calendar, Notion, Slack, GitHub integrations via OAuth.</p>
         </div>
       </div>
 
       <!-- Health -->
-      <h2 id="health">Health Check</h2>
+      <h2 id="health">ヘルスチェック</h2>
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/health</span>
-          <span class="endpoint-desc">System health status</span>
+          <span class="endpoint-desc">システムヘルスステータス</span>
         </div>
         <div class="endpoint-body">
           <div class="code-block">
@@ -523,315 +1596,14 @@ curl https://api.chatweb.ai/health
         </div>
       </div>
 
-      <!-- Media API -->
-      <h2 id="media">Media API</h2>
-      <p>Generate images, audio, and video using state-of-the-art AI models. The Media API provides unified access to DALL-E 3, Flux, Qwen3 TTS, Polly, and Kling AI.</p>
-
-      <div class="alert info">
-        🎨 Try the <a href="/media" style="color:var(--accent-hover);font-weight:600;">interactive demo</a> to test all Media API features with a visual interface.
-      </div>
-
-      <h3>Credit Costs</h3>
-      <table>
-        <tr><th>Service</th><th>Credits</th><th>Notes</th></tr>
-        <tr><td>TTS (100 chars)</td><td>1</td><td>Polly, OpenAI, Qwen3</td></tr>
-        <tr><td>STT (per request)</td><td>1</td><td>Whisper</td></tr>
-        <tr><td>Image - Standard</td><td>5-10</td><td>Flux Schnell, DALL-E 3</td></tr>
-        <tr><td>Image - HD</td><td>15-20</td><td>Flux Pro, DALL-E 3 HD</td></tr>
-        <tr><td>Video - 5s</td><td>50</td><td>Kling AI Standard</td></tr>
-        <tr><td>Video - 10s</td><td>100</td><td>Kling AI Standard</td></tr>
-      </table>
-
-      <!-- TTS -->
-      <h2 id="media-tts">Text-to-Speech</h2>
-      <div class="endpoint">
-        <div class="endpoint-header">
-          <span class="method post">POST</span>
-          <span class="endpoint-path">/api/v1/media/tts</span>
-          <span class="endpoint-desc">Convert text to natural-sounding speech</span>
-        </div>
-        <div class="endpoint-body">
-          <p>Supports multiple TTS engines with automatic fallback: Polly (AWS), OpenAI TTS, Qwen3.</p>
-
-          <h3>Request Body</h3>
-          <table>
-            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
-            <tr><td><code>text</code></td><td>string</td><td>Yes</td><td>Text to convert to speech (max 4096 chars)</td></tr>
-            <tr><td><code>voice</code></td><td>string</td><td>No</td><td>Voice name. Default: <code>Kazuha</code></td></tr>
-            <tr><td><code>speed</code></td><td>number</td><td>No</td><td>Playback speed (0.25-4.0). Default: 1.0</td></tr>
-          </table>
-
-          <h3>Available Voices</h3>
-          <table>
-            <tr><th>Voice</th><th>Language</th><th>Gender</th><th>Engine</th></tr>
-            <tr><td><code>Kazuha</code></td><td>Japanese</td><td>Female</td><td>Polly (recommended)</td></tr>
-            <tr><td><code>Takumi</code></td><td>Japanese</td><td>Male</td><td>Polly</td></tr>
-            <tr><td><code>Mizuki</code></td><td>Japanese</td><td>Female</td><td>Polly</td></tr>
-            <tr><td><code>female_calm</code></td><td>Japanese</td><td>Female</td><td>Qwen3</td></tr>
-            <tr><td><code>male_calm</code></td><td>Japanese</td><td>Male</td><td>Qwen3</td></tr>
-            <tr><td><code>nova</code></td><td>English</td><td>Female</td><td>OpenAI</td></tr>
-            <tr><td><code>alloy</code></td><td>English</td><td>Neutral</td><td>OpenAI</td></tr>
-          </table>
-
-          <h3>Response</h3>
-          <p>Returns audio file as <code>audio/mpeg</code> (MP3 format).</p>
-
-          <h3>Example</h3>
-          <div class="code-block" id="code-tts">
-            <button class="copy-btn" onclick="copyCode('code-tts')">Copy</button>
-curl -X POST https://api.chatweb.ai/api/v1/media/tts \
-  -H <span class="string">"Content-Type: application/json"</span> \
-  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
-  -d <span class="string">'{
-    "text": "こんにちは、これはテストです",
-    "voice": "Kazuha",
-    "speed": 1.0
-  }'</span> \
-  --output audio.mp3
-          </div>
-        </div>
-      </div>
-
-      <!-- Image Generation -->
-      <h2 id="media-image">Image Generation</h2>
-      <div class="endpoint">
-        <div class="endpoint-header">
-          <span class="method post">POST</span>
-          <span class="endpoint-path">/api/v1/media/image</span>
-          <span class="endpoint-desc">Generate images from text descriptions</span>
-        </div>
-        <div class="endpoint-body">
-          <p>Generate high-quality images using DALL-E 3, Flux Pro, Flux Schnell, or Flux Realism models.</p>
-
-          <h3>Request Body</h3>
-          <table>
-            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
-            <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>Description of the image to generate</td></tr>
-            <tr><td><code>model</code></td><td>string</td><td>No</td><td>Model: <code>flux-schnell</code> (default), <code>flux-pro</code>, <code>flux-realism</code>, <code>dalle-3</code></td></tr>
-            <tr><td><code>size</code></td><td>string</td><td>No</td><td><code>1024x1024</code> (default), <code>1792x1024</code>, <code>1024x1792</code></td></tr>
-            <tr><td><code>quality</code></td><td>string</td><td>No</td><td><code>standard</code> (default), <code>hd</code> (DALL-E 3 only)</td></tr>
-          </table>
-
-          <h3>Models</h3>
-          <table>
-            <tr><th>Model</th><th>Credits</th><th>Speed</th><th>Quality</th></tr>
-            <tr><td><code>flux-schnell</code></td><td>5</td><td>Fast (~15s)</td><td>Good</td></tr>
-            <tr><td><code>flux-realism</code></td><td>10</td><td>Medium (~30s)</td><td>Very Realistic</td></tr>
-            <tr><td><code>flux-pro</code></td><td>15</td><td>Slow (~60s)</td><td>Best</td></tr>
-            <tr><td><code>dalle-3</code></td><td>10 (20 HD)</td><td>Medium (~30s)</td><td>Excellent</td></tr>
-          </table>
-
-          <h3>Response</h3>
-          <div class="code-block">
-{
-  <span class="key">"images"</span>: [{
-    <span class="key">"url"</span>: <span class="string">"https://..."</span>
-  }],
-  <span class="key">"model"</span>: <span class="string">"flux-schnell"</span>,
-  <span class="key">"credits_used"</span>: <span class="number">5</span>
-}
-          </div>
-
-          <h3>Example</h3>
-          <div class="code-block" id="code-image">
-            <button class="copy-btn" onclick="copyCode('code-image')">Copy</button>
-curl -X POST https://api.chatweb.ai/api/v1/media/image \
-  -H <span class="string">"Content-Type: application/json"</span> \
-  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
-  -d <span class="string">'{
-    "prompt": "a cute cat in the snow, cinematic lighting, 4k",
-    "model": "flux-schnell",
-    "size": "1024x1024"
-  }'</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Video Generation -->
-      <h2 id="media-video">Video Generation</h2>
-      <div class="endpoint">
-        <div class="endpoint-header">
-          <span class="method post">POST</span>
-          <span class="endpoint-path">/api/v1/media/video</span>
-          <span class="endpoint-desc">Generate short videos from text (async)</span>
-        </div>
-        <div class="endpoint-body">
-          <p>Generate 5-10 second videos using Kling AI. Video generation is asynchronous - the API returns immediately with a video_id that you can poll for completion.</p>
-
-          <h3>Request Body</h3>
-          <table>
-            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
-            <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>Description of the video scene</td></tr>
-            <tr><td><code>duration</code></td><td>number</td><td>No</td><td><code>5</code> (default) or <code>10</code> seconds</td></tr>
-            <tr><td><code>mode</code></td><td>string</td><td>No</td><td><code>standard</code> (default) or <code>pro</code></td></tr>
-          </table>
-
-          <h3>Response (202 Accepted)</h3>
-          <div class="code-block">
-{
-  <span class="key">"video_id"</span>: <span class="string">"abc123..."</span>,
-  <span class="key">"status"</span>: <span class="string">"queued"</span>,
-  <span class="key">"estimated_time"</span>: <span class="number">120</span>,
-  <span class="key">"credits_used"</span>: <span class="number">50</span>
-}
-          </div>
-
-          <h3>Example</h3>
-          <div class="code-block" id="code-video">
-            <button class="copy-btn" onclick="copyCode('code-video')">Copy</button>
-<span class="comment"># 1. Create video generation job</span>
-curl -X POST https://api.chatweb.ai/api/v1/media/video \
-  -H <span class="string">"Content-Type: application/json"</span> \
-  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span> \
-  -d <span class="string">'{
-    "prompt": "a dog running on the beach at sunset",
-    "duration": 5
-  }'</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="endpoint">
-        <div class="endpoint-header">
-          <span class="method get">GET</span>
-          <span class="endpoint-path">/api/v1/media/video/{id}</span>
-          <span class="endpoint-desc">Check video generation status</span>
-        </div>
-        <div class="endpoint-body">
-          <p>Poll this endpoint to check if your video is ready. Status progresses: <code>queued</code> → <code>processing</code> → <code>completed</code> or <code>failed</code>.</p>
-
-          <h3>Response</h3>
-          <div class="code-block">
-{
-  <span class="key">"video_id"</span>: <span class="string">"abc123..."</span>,
-  <span class="key">"status"</span>: <span class="string">"completed"</span>,
-  <span class="key">"url"</span>: <span class="string">"https://..."</span>,
-  <span class="key">"thumbnail_url"</span>: <span class="string">"https://..."</span>,
-  <span class="key">"created_at"</span>: <span class="string">"2026-02-17T12:00:00Z"</span>
-}
-          </div>
-
-          <h3>Example</h3>
-          <div class="code-block" id="code-video-status">
-            <button class="copy-btn" onclick="copyCode('code-video-status')">Copy</button>
-<span class="comment"># 2. Check status (poll every 15 seconds)</span>
-curl https://api.chatweb.ai/api/v1/media/video/abc123 \
-  -H <span class="string">"Authorization: Bearer nb_live_a1b2c3d4e5f6g7h8i9j0"</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Billing -->
-      <h2 id="billing">Billing - Checkout</h2>
-      <div class="endpoint">
-        <div class="endpoint-header">
-          <span class="method post">POST</span>
-          <span class="endpoint-path">/api/v1/billing/checkout</span>
-          <span class="endpoint-desc">Create a Stripe checkout session</span>
-        </div>
-        <div class="endpoint-body">
-          <h3>Request Body</h3>
-          <table>
-            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-            <tr><td><code>plan</code></td><td>string</td><td><code>starter</code> ($9/mo) or <code>pro</code> ($29/mo)</td></tr>
-          </table>
-          <h3>Response</h3>
-          <p>Returns a <code>checkout_url</code> to redirect the user to Stripe.</p>
-        </div>
-      </div>
-
-      <h2 id="portal">Billing - Portal</h2>
-      <div class="endpoint">
-        <div class="endpoint-header">
-          <span class="method get">GET</span>
-          <span class="endpoint-path">/api/v1/billing/portal</span>
-          <span class="endpoint-desc">Get Stripe billing portal URL</span>
-        </div>
-        <div class="endpoint-body">
-          <p>Returns a URL to the Stripe customer portal for managing subscriptions.</p>
-        </div>
-      </div>
-
-      <h2 id="coupons">Coupons</h2>
-      <div class="endpoint">
-        <div class="endpoint-header">
-          <span class="method post">POST</span>
-          <span class="endpoint-path">/api/v1/coupon/validate</span>
-          <span class="endpoint-desc">Validate a coupon code</span>
-        </div>
-        <div class="endpoint-body">
-          <h3>Request Body</h3>
-          <table>
-            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-            <tr><td><code>code</code></td><td>string</td><td>Coupon code to validate</td></tr>
-          </table>
-        </div>
-      </div>
-
-      <!-- Channels -->
-      <h2 id="line">LINE Webhook</h2>
-      <div class="endpoint">
-        <div class="endpoint-header">
-          <span class="method post">POST</span>
-          <span class="endpoint-path">/webhooks/line</span>
-          <span class="endpoint-desc">LINE Messaging API webhook</span>
-        </div>
-        <div class="endpoint-body">
-          <p>Receives LINE webhook events. Configure in the <a href="https://developers.line.biz/console/">LINE Developer Console</a>.</p>
-          <p>LINE Bot ID: <code>@619jcqqh</code></p>
-        </div>
-      </div>
-
-      <h2 id="telegram">Telegram Webhook</h2>
-      <div class="endpoint">
-        <div class="endpoint-header">
-          <span class="method post">POST</span>
-          <span class="endpoint-path">/webhooks/telegram</span>
-          <span class="endpoint-desc">Telegram Bot API webhook</span>
-        </div>
-        <div class="endpoint-body">
-          <p>Receives Telegram webhook updates. Configure via <a href="https://core.telegram.org/bots/api#setwebhook">setWebhook</a>.</p>
-          <p>Bot: <code>@chatweb_ai_bot</code></p>
-        </div>
-      </div>
-
-      <h2 id="linking">Channel Linking</h2>
-      <p>Users can link their Web, LINE, and Telegram conversations so all channels share the same chat history.</p>
-
-      <h3>Method 1: Auto-Link (Recommended)</h3>
-      <p>Click the LINE/Telegram button on <a href="https://chatweb.ai">chatweb.ai</a>. Your session ID is included in the deep link and auto-linked when you add the bot.</p>
-
-      <h3>Method 2: Session ID</h3>
-      <p>Copy your Web session ID (shown on the chat page) and send it directly to the LINE or Telegram bot.</p>
-
-      <h3>Method 3: Link Code</h3>
-      <p>Type <code>/link</code> in any channel to generate a 6-digit code. Then type <code>/link CODE</code> in another channel to link them.</p>
-
-      <h3>Credit Rates</h3>
-      <table>
-        <tr><th>Model</th><th>Credits per 1K tokens</th></tr>
-        <tr><td>GPT-4o-mini</td><td>4</td></tr>
-        <tr><td>Gemini Flash</td><td>4</td></tr>
-        <tr><td>GPT-4o</td><td>20</td></tr>
-        <tr><td>Claude Sonnet</td><td>24</td></tr>
-        <tr><td>Claude Opus</td><td>120</td></tr>
-      </table>
-
-      <h3>Plans</h3>
-      <table>
-        <tr><th>Plan</th><th>Price</th><th>Credits/month</th><th>Models</th></tr>
-        <tr><td>Free</td><td>$0</td><td>1,000</td><td>GPT-4o-mini, Gemini Flash</td></tr>
-        <tr><td>Starter</td><td>$9/mo</td><td>50,000</td><td>+ GPT-4o, Claude Sonnet</td></tr>
-        <tr><td>Pro</td><td>$29/mo</td><td>200,000</td><td>+ Claude Opus, all models</td></tr>
-      </table>
-
+      <!-- Footer -->
       <div style="margin-top:60px;padding-top:24px;border-top:1px solid var(--border);text-align:center;">
         <p style="color:var(--muted);font-size:12px;">
           <a href="https://chatweb.ai">chatweb.ai</a> &middot;
-          <a href="https://chatweb.ai/pricing">Pricing</a> &middot;
-          <a href="https://chatweb.ai/status">Status</a> &middot;
+          <a href="https://chatweb.ai/pricing">料金</a> &middot;
+          <a href="https://chatweb.ai/status">ステータス</a> &middot;
           <a href="https://github.com/yukihamada/nanobot">GitHub</a> &middot;
-          <a href="mailto:hello@chatweb.ai">Contact</a> &middot;
+          <a href="mailto:hello@chatweb.ai">お問い合わせ</a> &middot;
           &copy; 2025-2026
         </p>
       </div>
@@ -839,78 +1611,126 @@ curl https://api.chatweb.ai/api/v1/media/video/abc123 \
   </div>
 
   <script>
-    // Check login status and show prompt if not logged in
+    // Login status check
     async function checkLoginStatus() {
       const token = localStorage.getItem('auth_token');
       if (!token) return false;
-
       try {
-        const response = await fetch('https://api.chatweb.ai/api/v1/auth/me', {
-          headers: { 'Authorization': `Bearer ${token}` }
+        const r = await fetch('https://api.chatweb.ai/api/v1/auth/me', {
+          headers: { 'Authorization': 'Bearer ' + token }
         });
-        return response.ok;
-      } catch {
-        return false;
-      }
+        return r.ok;
+      } catch { return false; }
     }
 
     window.addEventListener('load', async () => {
-      const isLoggedIn = await checkLoginStatus();
-      if (!isLoggedIn) {
-        showLoginPrompt();
+      const ok = await checkLoginStatus();
+      if (!ok) showLoginPrompt();
+      // Pre-fill playground key from stored token
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        var pgKey = document.getElementById('pg-key');
+        if (pgKey) pgKey.value = token;
       }
     });
 
     function showLoginPrompt() {
-      const banner = document.createElement('div');
-      banner.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        background: linear-gradient(135deg, var(--accent), #7c3aed);
-        color: white;
-        padding: 16px;
-        text-align: center;
-        z-index: 1000;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-      `;
-      banner.innerHTML = `
-        <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 16px;">
-          <strong>🔐 API を使用するにはログインが必要です</strong>
-          <a href="https://chatweb.ai" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 20px; border-radius: 8px; font-weight: 600; transition: all 0.2s;">
-            ログイン
-          </a>
-          <button onclick="this.parentElement.parentElement.remove()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;">
-            閉じる
-          </button>
-        </div>
-      `;
-      document.body.prepend(banner);
-      if (window.innerWidth > 768) {
-        document.querySelector('.content').style.paddingTop = '100px';
+      var b = document.createElement('div');
+      b.style.cssText = 'position:fixed;top:48px;left:0;right:0;background:linear-gradient(135deg,var(--accent),#7c3aed);color:#fff;padding:14px;text-align:center;z-index:1000;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+      b.innerHTML = '<div style="max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;"><strong>API を使用するにはログインが必要です</strong><a href="https://chatweb.ai" style="color:#fff;text-decoration:none;background:rgba(255,255,255,0.2);padding:8px 20px;border-radius:8px;font-weight:600;">ログイン</a><button onclick="this.parentElement.parentElement.remove()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:13px;width:auto;">閉じる</button></div>';
+      document.body.prepend(b);
+    }
+
+    // Interactive Playground
+    async function runPlayground() {
+      var key = document.getElementById('pg-key').value.trim();
+      var model = document.getElementById('pg-model').value;
+      var msg = document.getElementById('pg-msg').value.trim();
+      var stream = document.getElementById('pg-stream').checked;
+
+      if (!key) { alert('APIキーを入力してください'); return; }
+      if (!msg) { alert('メッセージを入力してください'); return; }
+
+      var btn = document.getElementById('pg-btn');
+      var resultDiv = document.getElementById('pg-result');
+      var output = document.getElementById('pg-output');
+      btn.textContent = '送信中...';
+      btn.disabled = true;
+      resultDiv.style.display = 'block';
+      output.textContent = '';
+
+      var body = JSON.stringify({ model: model, messages: [{ role: 'user', content: msg }], stream: stream });
+
+      try {
+        var resp = await fetch('https://api.chatweb.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+          body: body
+        });
+
+        if (stream) {
+          var reader = resp.body.getReader();
+          var decoder = new TextDecoder();
+          var text = '';
+          while (true) {
+            var res = await reader.read();
+            if (res.done) break;
+            var lines = decoder.decode(res.value).split('\n');
+            for (var l of lines) {
+              if (!l.startsWith('data: ')) continue;
+              var d = l.slice(6).trim();
+              if (d === '[DONE]') break;
+              try {
+                var chunk = JSON.parse(d);
+                var delta = chunk.choices?.[0]?.delta?.content || '';
+                text += delta;
+                output.textContent = text;
+                output.scrollTop = output.scrollHeight;
+              } catch(e) {}
+            }
+          }
+        } else {
+          var json = await resp.json();
+          if (resp.ok) {
+            output.textContent = JSON.stringify(json, null, 2);
+          } else {
+            output.textContent = 'Error ' + resp.status + ':\n' + JSON.stringify(json, null, 2);
+          }
+        }
+      } catch(e) {
+        output.textContent = 'Error: ' + e.message;
+      } finally {
+        btn.textContent = '送信 →';
+        btn.disabled = false;
       }
     }
 
     function copyCode(id) {
-      const block = document.getElementById(id);
-      const text = block.innerText.replace('Copy', '').trim();
+      var block = document.getElementById(id);
+      var text = block.innerText.replace('Copy', '').trim();
       navigator.clipboard.writeText(text);
-      const btn = block.querySelector('.copy-btn');
+      var btn = block.querySelector('.copy-btn');
       btn.textContent = 'Copied!';
-      setTimeout(() => btn.textContent = 'Copy', 1500);
+      setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
     }
 
     // Highlight active nav on scroll
-    const sections = document.querySelectorAll('h2[id], h1[id]');
-    const navItems = document.querySelectorAll('.sidebar a.nav-item');
-    window.addEventListener('scroll', () => {
-      let current = '';
-      sections.forEach(s => {
-        if (window.scrollY >= s.offsetTop - 100) current = s.id;
+    var sections = document.querySelectorAll('h2[id], h1[id]');
+    var navItems = document.querySelectorAll('.sidebar a.nav-item');
+    window.addEventListener('scroll', function() {
+      var current = '';
+      sections.forEach(function(s) {
+        if (window.scrollY >= s.offsetTop - 120) current = s.id;
       });
-      navItems.forEach(a => {
+      navItems.forEach(function(a) {
         a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+      });
+    });
+
+    // Close mobile sidebar on nav click
+    document.querySelectorAll('.sidebar a.nav-item').forEach(function(a) {
+      a.addEventListener('click', function() {
+        document.querySelector('.sidebar').classList.remove('show');
       });
     });
 
@@ -918,134 +1738,137 @@ curl https://api.chatweb.ai/api/v1/media/video/abc123 \
     function setLang(l) {
       document.documentElement.lang = l;
       localStorage.setItem('nl', l);
-      var btn = document.getElementById('lang-btn');
-      btn.textContent = l === 'ja' ? 'EN' : 'JA';
+      document.getElementById('lang-btn').textContent = l === 'ja' ? 'EN' : 'JA';
 
       var t = {
         ja: {
           title: 'chatweb.ai API',
-          subtitle: 'マルチチャネルAIチャットAPI。ロードバランシング、ツール呼び出し、統一課金に対応。',
+          heroSubtitle: 'マルチチャネルAIチャットAPI。メディア生成、ツール呼び出し、統一課金に対応。',
+          mainDesc: 'chatweb.ai APIで、AIモデル（GPT-4o、Claude、Gemini）に単一エンドポイントからメッセージを送信できます。セッション管理、クロスチャネル同期（Web/LINE/Telegram）、ツール呼び出し、メディア生成（画像・音声・動画・OCR）、クレジット課金に対応しています。',
+          statModel: 'AI モデル', statProvider: 'プロバイダー', statCompat: 'OpenAI 互換',
           baseLabel: 'ベースURL',
-          desc: 'chatweb.ai APIで、AIモデル（GPT-4o、Claude、Gemini）に単一エンドポイントからメッセージを送信できます。セッション管理、クロスチャネル同期（Web/LINE/Telegram）、ツール呼び出し（Web検索、天気、計算）、クレジット課金に対応。',
-          auth: '認証',
-          authDesc: 'すべてのAPIリクエストにはAuthorizationヘッダーにAPIキーが必要です。',
-          quickstart: 'クイックスタート',
-          quickDesc: '数秒で最初のメッセージを送信:',
-          chat: 'メッセージ送信',
-          sessions: 'セッション',
-          account: 'アカウント',
-          usage: '使用量',
-          providers: 'プロバイダー',
-          integrations: 'インテグレーション',
-          health: 'ヘルスチェック',
-          billing: '課金 - チェックアウト',
-          portal: '課金 - ポータル',
-          coupons: 'クーポン',
-          line: 'LINE Webhook',
-          telegram: 'Telegram Webhook',
-          linking: 'チャネル連携',
-          plans: 'プラン',
-          creditRates: 'クレジットレート',
-          gettingStarted: 'はじめに',
-          overview: '概要',
-          quickStart: 'クイックスタート',
-          sendMessage: 'メッセージ送信',
-          accountInfo: 'アカウント情報',
-          platform: 'プラットフォーム',
-          channels: 'チャネル',
-          links: 'リンク',
-          checkout: 'チェックアウト',
-          billingPortal: '課金ポータル',
-          channelLinking: 'チャネル連携',
-          mediaApi: 'メディアAPI',
-          media: 'メディアAPI概要',
-          mediaTts: 'テキスト読み上げ',
-          mediaImage: '画像生成',
-          mediaVideo: '動画生成'
+          navHome: 'ホーム', navReference: 'リファレンス', navDemo: 'デモ', navPricing: '料金',
+          // Sidebar headings
+          sh: ['🚀 はじめに', '💬 チャット API', '🎨 メディア API', '👤 アカウント', '💳 課金', '📡 チャネル', '⚙️ プラットフォーム', '🔄 OpenAI互換 API'],
+          // Nav items
+          nav: {
+            overview: '概要', auth: '認証', quickstart: 'クイックスタート',
+            chat: 'メッセージ送信', streaming: 'ストリーミング', sessions: 'セッション',
+            'openai-compat': '概要', 'openai-models': 'モデル一覧', 'openai-chat': 'チャット補完', 'openai-audio': '音声合成',
+            media: '概要・料金表', 'media-tts': '音声合成 (TTS)', 'media-stt': '音声認識 (STT)',
+            'media-image': '画像生成', 'media-remove-bg': '背景削除', 'media-upscale': 'アップスケール',
+            'media-ocr': 'OCR', 'media-sfx': '効果音', 'media-music': '音楽生成', 'media-video': '動画生成',
+            account: 'ユーザー情報', usage: '使用量',
+            billing: 'チェックアウト', portal: '課金ポータル', coupons: 'クーポン',
+            line: 'LINE Webhook', telegram: 'Telegram Webhook', linking: 'チャネル連携',
+            providers: 'プロバイダー', integrations: 'ツール', health: 'ヘルスチェック'
+          },
+          // Section headings
+          auth: '認証', quickstart: 'クイックスタート',
+          chat: 'メッセージ送信', streaming: 'ストリーミング', sessions: 'セッション',
+          media: '🎨 メディア API',
+          'media-tts': '音声合成 (TTS)', 'media-stt': '音声認識 (STT)',
+          'media-image': '画像生成', 'media-video': '動画生成',
+          account: 'ユーザー情報', usage: '使用量',
+          billing: 'チェックアウト', portal: '課金ポータル', coupons: 'クーポン',
+          line: 'LINE Webhook', telegram: 'Telegram Webhook', linking: 'チャネル連携',
+          providers: 'プロバイダー', integrations: 'ツール', health: 'ヘルスチェック',
+          authDesc: 'すべてのAPIリクエストには<code>Authorization</code>ヘッダーにAPIキーが必要です。',
+          quickDesc: '数秒で最初のメッセージを送信:'
         },
         en: {
           title: 'chatweb.ai API',
-          subtitle: 'Multi-channel AI chat API with load balancing, tool calling, and unified billing.',
+          heroSubtitle: 'OpenAI-compatible multi-model AI gateway. Access Claude, GPT-4o, Gemini, DeepSeek from a single endpoint.',
+          mainDesc: 'The chatweb.ai API is an AI aggregation gateway supporting 13+ models from Anthropic, OpenAI, Google, DeepSeek, and more. OpenAI-compatible /v1/chat/completions endpoint — just change your base URL. Features session management, cross-channel sync (Web/LINE/Telegram), tool calling, media generation (images, audio, video, OCR), and credit-based billing.',
+          statModel: 'AI Models', statProvider: 'Providers', statCompat: 'OpenAI Compatible',
           baseLabel: 'Base URL',
-          desc: 'The chatweb.ai API lets you send messages to AI models (GPT-4o, Claude, Gemini) via a single unified endpoint. Features include session management, cross-channel sync (Web/LINE/Telegram), tool calling (web search, weather, calculator), and credit-based billing.',
-          auth: 'Authentication',
-          authDesc: 'All API requests require an API key passed in the Authorization header.',
-          quickstart: 'Quick Start',
-          quickDesc: 'Send your first message in seconds:',
-          chat: 'Send Message',
-          sessions: 'Sessions',
-          account: 'Account',
-          usage: 'Usage',
-          providers: 'Providers',
-          integrations: 'Integrations',
-          health: 'Health Check',
-          billing: 'Billing - Checkout',
-          portal: 'Billing - Portal',
-          coupons: 'Coupons',
-          line: 'LINE Webhook',
-          telegram: 'Telegram Webhook',
-          linking: 'Channel Linking',
-          plans: 'Plans',
-          creditRates: 'Credit Rates',
-          gettingStarted: 'Getting Started',
-          overview: 'Overview',
-          quickStart: 'Quick Start',
-          sendMessage: 'Send Message',
-          accountInfo: 'Account Info',
-          platform: 'Platform',
-          channels: 'Channels',
-          links: 'Links',
-          checkout: 'Checkout',
-          billingPortal: 'Billing Portal',
-          channelLinking: 'Channel Linking',
-          mediaApi: 'Media API',
-          media: 'Media API Overview',
-          mediaTts: 'Text-to-Speech',
-          mediaImage: 'Image Generation',
-          mediaVideo: 'Video Generation'
+          navHome: 'Home', navReference: 'Reference', navDemo: 'Demo', navPricing: 'Pricing',
+          sh: ['🚀 Getting Started', '💬 Chat API', '🎨 Media API', '👤 Account', '💳 Billing', '📡 Channels', '⚙️ Platform', '🔄 OpenAI-Compatible API'],
+          nav: {
+            overview: 'Overview', auth: 'Authentication', quickstart: 'Quick Start',
+            chat: 'Send Message', streaming: 'Streaming', sessions: 'Sessions',
+            'openai-compat': 'Overview', 'openai-models': 'Model List', 'openai-chat': 'Chat Completions', 'openai-audio': 'Audio Speech',
+            media: 'Overview & Pricing', 'media-tts': 'Text-to-Speech', 'media-stt': 'Speech-to-Text',
+            'media-image': 'Image Generation', 'media-remove-bg': 'Remove Background', 'media-upscale': 'Upscale',
+            'media-ocr': 'OCR', 'media-sfx': 'Sound Effects', 'media-music': 'Music Generation', 'media-video': 'Video Generation',
+            account: 'User Info', usage: 'Usage',
+            billing: 'Checkout', portal: 'Billing Portal', coupons: 'Coupons',
+            line: 'LINE Webhook', telegram: 'Telegram Webhook', linking: 'Channel Linking',
+            providers: 'Providers', integrations: 'Tools', health: 'Health Check'
+          },
+          auth: 'Authentication', quickstart: 'Quick Start',
+          chat: 'Send Message', streaming: 'Streaming', sessions: 'Sessions',
+          media: '🎨 Media API',
+          'media-tts': 'Text-to-Speech', 'media-stt': 'Speech-to-Text',
+          'media-image': 'Image Generation', 'media-video': 'Video Generation',
+          account: 'Account', usage: 'Usage',
+          billing: 'Checkout', portal: 'Billing Portal', coupons: 'Coupons',
+          line: 'LINE Webhook', telegram: 'Telegram Webhook', linking: 'Channel Linking',
+          providers: 'Providers', integrations: 'Tools', health: 'Health Check',
+          authDesc: 'All API requests require an API key passed in the <code>Authorization</code> header.',
+          quickDesc: 'Send your first message in seconds:'
         }
       };
       var s = t[l];
 
-      // Main content
+      // Hero
       document.getElementById('overview').textContent = s.title;
-      document.querySelector('.subtitle').textContent = s.subtitle;
-      document.querySelector('.base-url .label').textContent = s.baseLabel;
+      document.getElementById('hero-subtitle').textContent = s.heroSubtitle;
+      document.getElementById('main-desc').textContent = s.mainDesc;
 
-      // Section headings by id
-      var headingMap = {
-        auth: s.auth, quickstart: s.quickstart, chat: s.chat, sessions: s.sessions,
-        account: s.account, usage: s.usage, providers: s.providers, integrations: s.integrations,
-        health: s.health, media: s.media, 'media-tts': s.mediaTts, 'media-image': s.mediaImage,
-        'media-video': s.mediaVideo, billing: s.billing, portal: s.portal, coupons: s.coupons,
-        line: s.line, telegram: s.telegram, linking: s.linking
-      };
-      for (var id in headingMap) {
-        var el = document.getElementById(id);
-        if (el) el.textContent = headingMap[id];
-      }
+      // Stats
+      document.querySelectorAll('[data-i18n="stat-model"]').forEach(function(el) { el.textContent = s.statModel; });
+      document.querySelectorAll('[data-i18n="stat-provider"]').forEach(function(el) { el.textContent = s.statProvider; });
+      document.querySelectorAll('[data-i18n="stat-compat"]').forEach(function(el) { el.textContent = s.statCompat; });
 
-      // Sidebar nav headings (h3 in sidebar)
-      var sidebarH3 = document.querySelectorAll('.sidebar h3');
-      var h3Keys = ['gettingStarted', 'chat', 'account', 'platform', 'mediaApi', 'billing', 'channels', 'links'];
-      sidebarH3.forEach(function(h, i) { if (s[h3Keys[i]]) h.textContent = s[h3Keys[i]]; });
+      // Base URL
+      document.querySelectorAll('[data-i18n="base-label"]').forEach(function(el) { el.textContent = s.baseLabel; });
+
+      // Top nav
+      document.querySelectorAll('[data-i18n="nav-home"]').forEach(function(el) { el.textContent = s.navHome; });
+      document.querySelectorAll('[data-i18n="nav-reference"]').forEach(function(el) { el.textContent = s.navReference; });
+      document.querySelectorAll('[data-i18n="nav-demo"]').forEach(function(el) { el.textContent = s.navDemo; });
+      document.querySelectorAll('[data-i18n="nav-pricing"]').forEach(function(el) { el.textContent = s.navPricing; });
+
+      // Sidebar headings
+      document.querySelectorAll('.sidebar h3[data-sh]').forEach(function(h) {
+        var idx = parseInt(h.getAttribute('data-sh'));
+        if (s.sh[idx]) h.textContent = s.sh[idx];
+      });
 
       // Sidebar nav items
-      var navMap = {
-        '#overview': s.overview, '#auth': s.auth, '#quickstart': s.quickStart,
-        '#chat': s.sendMessage, '#sessions': s.sessions,
-        '#account': s.accountInfo, '#usage': s.usage,
-        '#providers': s.providers, '#integrations': s.integrations, '#health': s.health,
-        '#media': s.media, '#media-tts': s.mediaTts, '#media-image': s.mediaImage, '#media-video': s.mediaVideo,
-        '#billing': s.checkout, '#portal': s.billingPortal, '#coupons': s.coupons,
-        '#line': s.line, '#telegram': s.telegram, '#linking': s.channelLinking
-      };
-      document.querySelectorAll('.sidebar a.nav-item[href^="#"]').forEach(function(a) {
-        if (navMap[a.getAttribute('href')]) a.textContent = navMap[a.getAttribute('href')];
+      document.querySelectorAll('.sidebar a.nav-item[data-nav]').forEach(function(a) {
+        var key = a.getAttribute('data-nav');
+        if (s.nav[key]) {
+          // Preserve NEW badges
+          var badge = a.querySelector('.badge-new');
+          a.textContent = s.nav[key] + ' ';
+          if (badge) a.appendChild(badge);
+        }
       });
+
+      // Section headings
+      var headingKeys = ['auth', 'quickstart', 'chat', 'streaming', 'sessions', 'media',
+        'media-tts', 'media-stt', 'media-image', 'media-video',
+        'account', 'usage', 'billing', 'portal', 'coupons',
+        'line', 'telegram', 'linking', 'providers', 'integrations', 'health'];
+      headingKeys.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el && s[id]) {
+          // Preserve NEW badges in headings
+          var badge = el.parentElement ? el.parentElement.querySelector('.badge-new') : null;
+          if (el.querySelector('.badge-new')) badge = el.querySelector('.badge-new');
+          el.childNodes[0].textContent = s[id] + ' ';
+        }
+      });
+
+      // Description paragraphs
+      if (document.getElementById('auth-desc')) document.getElementById('auth-desc').innerHTML = s.authDesc;
+      if (document.getElementById('quick-desc')) document.getElementById('quick-desc').textContent = s.quickDesc;
     }
-    // Initialize language from localStorage or browser
-    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+
+    // Initialize: always default to Japanese
+    setLang(localStorage.getItem('nl') || 'ja');
   </script>
 </body>
 </html>

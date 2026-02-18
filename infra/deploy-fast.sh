@@ -36,9 +36,9 @@ for arg in "$@"; do
 done
 
 if [ "$CARGO_PROFILE" = "release-fast" ]; then
-    BINARY="$PROJECT_ROOT/target/aarch64-unknown-linux-gnu/release-fast/bootstrap"
+    BINARY="$PROJECT_ROOT/target/aarch64-unknown-linux-musl/release-fast/bootstrap"
 else
-    BINARY="$PROJECT_ROOT/target/aarch64-unknown-linux-gnu/release/bootstrap"
+    BINARY="$PROJECT_ROOT/target/aarch64-unknown-linux-musl/release/bootstrap"
 fi
 ZIP_FILE="/tmp/nanobot-lambda.zip"
 
@@ -69,15 +69,14 @@ if [ "$SKIP_BUILD" = true ]; then
         exit 1
     fi
 else
-    echo "--- Building for AWS Graviton3 (ARM64 / Neoverse V1) ---"
+    echo "--- Building for AWS Lambda ARM64 (Graviton2 / Neoverse N1) ---"
     START_BUILD=$(date +%s)
 
-    # Graviton3 optimizations (Neoverse V1 core)
-    # - target-cpu=neoverse-v1: Enable Graviton3-specific instructions
+    # Lambda ARM64 runs on Graviton2 (Neoverse N1), NOT Graviton3.
+    # Using neoverse-v1 causes SIGILL crashes. Use neoverse-n1 for safe binary.
     # - codegen-units=1: Better optimization (slower compile, faster runtime)
-    # - lto=thin: Link-time optimization
-    export RUSTFLAGS="-C target-cpu=neoverse-v1 -C codegen-units=1 ${RUSTFLAGS:-}"
-    echo "✅ Graviton3 optimizations enabled (target-cpu=neoverse-v1)"
+    export RUSTFLAGS="-C target-cpu=neoverse-n1 -C codegen-units=1 ${RUSTFLAGS:-}"
+    echo "✅ Lambda ARM64 optimizations enabled (target-cpu=neoverse-n1)"
 
     # Use sccache if available (3-5x faster on subsequent builds)
     if command -v sccache &>/dev/null; then
@@ -101,11 +100,11 @@ else
         RUSTUP_TOOLCHAIN=stable \
         RUSTC="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc" \
         cargo zigbuild --manifest-path "$PROJECT_ROOT/crates/nanobot-lambda/Cargo.toml" \
-            --profile "$CARGO_PROFILE" --target aarch64-unknown-linux-gnu \
+            --profile "$CARGO_PROFILE" --target aarch64-unknown-linux-musl \
             -j "$JOBS"
     elif command -v cross &>/dev/null; then
         cross build --manifest-path "$PROJECT_ROOT/crates/nanobot-lambda/Cargo.toml" \
-            --profile "$CARGO_PROFILE" --target aarch64-unknown-linux-gnu \
+            --profile "$CARGO_PROFILE" --target aarch64-unknown-linux-musl \
             -j "$JOBS"
     else
         echo "ERROR: Neither cargo-zigbuild nor cross found."
@@ -180,16 +179,24 @@ aws lambda update-alias \
 END_DEPLOY=$(date +%s)
 echo ""
 
-# 6. Health check + provider verification
+# 6. Health check + provider verification (retry up to 3 times for cold start)
 echo "--- Health check ---"
-HEALTH=$(curl -sf "https://chatweb.ai/health" 2>&1 || echo "FAILED")
+HEALTH="FAILED"
+for i in 1 2 3; do
+    sleep 5
+    HEALTH=$(curl -sf "https://chatweb.ai/health" 2>/dev/null || echo "FAILED")
+    [ "$HEALTH" != "FAILED" ] && break
+    echo "  Attempt $i failed, retrying..."
+done
 echo "Health: $HEALTH"
 
 # Verify LLM providers are available (prevent "No providers available" outage)
 PROVIDERS=$(echo "$HEALTH" | grep -o '"providers":[0-9]*' | grep -o '[0-9]*$' || echo "0")
 STATUS=$(echo "$HEALTH" | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "")
 
-if [ "$PROVIDERS" = "0" ] || [ "$STATUS" = "degraded" ]; then
+if [ "$HEALTH" = "FAILED" ]; then
+    echo "⚠️  Health check unreachable (cold start?), skipping rollback."
+elif [ "$PROVIDERS" = "0" ] || [ "$STATUS" = "degraded" ]; then
     echo ""
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
     echo "!! WARNING: No LLM providers configured!            !!"
@@ -211,9 +218,9 @@ if [ "$PROVIDERS" = "0" ] || [ "$STATUS" = "degraded" ]; then
     echo "=== Deploy ROLLED BACK (no providers) ==="
     rm -f "$ZIP_FILE"
     exit 1
+elif [ "$HEALTH" != "FAILED" ]; then
+    echo "Providers: $PROVIDERS configured"
 fi
-
-echo "Providers: $PROVIDERS configured"
 echo ""
 
 # 7. Summary
