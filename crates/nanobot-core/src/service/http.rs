@@ -17567,7 +17567,7 @@ async fn handle_media_video_status(
     #[cfg(not(feature = "dynamodb-backend"))]
     let _ = (&state, &video_id);
 
-    Err::<Json<serde_json::Value>, _>((StatusCode::NOT_FOUND, "Video job not found".to_string()))
+    Err((StatusCode::NOT_FOUND, "Video job not found".to_string()))
 }
 
 /// Background task to poll Kling API for video generation completion
@@ -17975,7 +17975,7 @@ async fn handle_media_music_status(
     #[cfg(not(feature = "dynamodb-backend"))]
     let _ = (&state, &music_id);
 
-    Err::<Json<serde_json::Value>, _>((StatusCode::NOT_FOUND, "Music job not found".to_string()))
+    Err((StatusCode::NOT_FOUND, "Music job not found".to_string()))
 }
 
 // ==================== 実用系Media API Handlers ====================
