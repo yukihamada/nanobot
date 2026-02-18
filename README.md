@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/yukihamada/nanobot/main/web/og-teai.svg" alt="nanobot" width="600" />
+<img src="docs/images/hero.png" alt="nanobot — Boot in 0.1s! Hosted at chatweb.ai" width="700" />
 
 # nanobot
 
@@ -222,15 +222,22 @@ See [deployment guide](docs/deployment.md) for details.
 
 ## 📊 Comparison
 
-| | **nanobot** | OpenClaw | PicoClaw | ChatGPT |
-|---|:---:|:---:|:---:|:---:|
-| **Cold Start** | **<50 ms** | ~1000 ms | <1s | N/A |
-| **Language** | Rust | TypeScript | Go | Proprietary |
-| **Channels** | **13** | 13+ | 5+ | 4 |
-| **Voice** | ✅ Native | ⚠️ Partial | ❌ | ✅ |
-| **Auto Failover** | ✅ | ❌ | ❌ | ❌ |
-| **Self-Hosted** | ✅ | ✅ | ✅ | ❌ |
-| **License** | MIT | MIT | MIT | Proprietary |
+<div align="center">
+<img src="docs/images/comparison.png" alt="nanobot vs PicoClaw vs openClaw comparison" width="800" />
+</div>
+
+| | **nanobot** | openClaw | PicoClaw |
+|---|:---:|:---:|:---:|
+| **Price** | **$5/mo** | $599 (Mac Mini) | $10 (hardware) |
+| **Binary Size** | **~50 MB** | >1000 MB | <10 MB |
+| **Cold Start** | **0.1s** | ~1s | <1s |
+| **Language** | Rust | TypeScript | Go |
+| **Self-Improving** | ✅ | ❌ | ❌ |
+| **Voice** | ✅ Native | ⚠️ Partial | ❌ |
+| **Auto Failover** | ✅ | ❌ | ❌ |
+
+**Runs on any Linux board as low as $10** (LicheeRV Nano, Raspberry Pi, etc.)
+> **ESP32 support (experimental):** `no_std` + Rust on ESP32-C3 は理論上動作可能。未検証ですが、挑戦者募集中！ 🦐
 
 **Origins:** Inspired by [sipeed/picoclaw](https://github.com/sipeed/picoclaw), rewritten in Rust for production scale.
 
