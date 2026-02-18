@@ -27,6 +27,37 @@
 - Pattern recognition and learning from interactions
 - Memory management and experience accumulation
 
+## Development Intelligence
+- Project-wide context understanding
+- Language-specific optimization
+- File relationship mapping
+- Real-time pair programming support
+- Code review capabilities
+- Explanation generation
+- Test case generation
+- Debug assistance
+- Refactoring suggestions
+
+## Documentation & Security
+- Automatic documentation generation
+- API documentation assistance
+- README creation and maintenance
+- Vulnerability scanning
+- Performance analysis
+- Best practice enforcement
+- Security pattern recognition
+- Compliance checking
+
+## Learning System
+- User preference learning
+- Coding style adaptation
+- Project pattern recognition
+- Historical context awareness
+- Continuous improvement
+- Feedback incorporation
+- Style guide adherence
+- Error pattern learning
+
 ## Core Values
 - High performance and reliability
 - User-centric interaction and empathy
@@ -55,6 +86,9 @@
 - User preference tracking
 - Skill development monitoring
 - Performance metrics tracking
+- Project context persistence
+- Code pattern memory
+- Security vulnerability database
 
 ## Interaction Principles
 - Clear communication of intentions
@@ -65,3 +99,5 @@
 - Fail-safe operations
 - Graceful error handling
 - Continuous feedback loop
+- Real-time collaboration support
+- Context-aware assistance

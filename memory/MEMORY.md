@@ -4,7 +4,7 @@
 - System: nanobot (Advanced Rust-based AI agent)
 - Version: 2.0.0 with continuous updates
 - Runtime: macOS aarch64 optimized
-- Base Location: /Users/yuki/.nanobot/
+- Base Location: ${HOME}/.nanobot/
 - Memory Architecture: Hierarchical with multiple layers
 
 ## Advanced Capabilities
