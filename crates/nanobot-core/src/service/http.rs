@@ -2756,9 +2756,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/chat/race", post(handle_chat_race))
         // Progressive response: first ~200 chars for immediate playback
         .route("/api/v1/chat/first-chunk", post(handle_first_chunk))
-        // Memory (read / clear)
+        // Memory (read / clear / search)
         .route("/api/v1/memory", get(handle_get_memory))
         .route("/api/v1/memory", delete(handle_delete_memory))
+        .route("/api/v1/memory/search", post(handle_memory_search))
         // Webhooks
         .route("/webhooks/line", post(handle_line_webhook))
         .route("/webhooks/telegram", post(handle_telegram_webhook))
@@ -17745,6 +17746,104 @@ async fn handle_delete_memory(
         }
     }
     Json(serde_json::json!({"ok": true})).into_response()
+}
+
+/// POST /api/v1/memory/search — Semantic search through user's memories
+#[derive(serde::Deserialize)]
+struct MemorySearchRequest {
+    query: String,
+    #[serde(default = "default_top_k")]
+    top_k: usize,
+}
+
+fn default_top_k() -> usize {
+    5
+}
+
+async fn handle_memory_search(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<MemorySearchRequest>,
+) -> impl axum::response::IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        use crate::provider::embeddings::EmbeddingsProvider;
+
+        // Auth
+        let user_id = if let Some(uid) = auth_user_id(&state, &headers).await {
+            uid
+        } else {
+            return (
+                axum::http::StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Unauthorized"})),
+            )
+                .into_response();
+        };
+
+        // Get OpenAI API key for embeddings
+        let openai_key = std::env::var("OPENAI_API_KEY").ok();
+        if openai_key.is_none() {
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": "Embeddings service not configured"})),
+            )
+                .into_response();
+        }
+
+        let embedder = EmbeddingsProvider::new(openai_key.unwrap());
+
+        // Generate query embedding
+        let query_embedding = match embedder.embed(&req.query).await {
+            Ok(emb) => emb,
+            Err(e) => {
+                return (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": format!("Failed to generate embedding: {}", e)})),
+                )
+                    .into_response();
+            }
+        };
+
+        // Search memories
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            use crate::memory::dynamo_backend::DynamoMemoryBackend;
+            let backend = DynamoMemoryBackend::new(dynamo.clone(), table.clone(), user_id.clone());
+
+            match backend.search_memories(&user_id, &query_embedding, req.top_k).await {
+                Ok(results) => {
+                    let response = results
+                        .into_iter()
+                        .map(|(key, content, similarity)| {
+                            serde_json::json!({
+                                "key": key,
+                                "content": content,
+                                "similarity": similarity,
+                            })
+                        })
+                        .collect::<Vec<_>>();
+
+                    return Json(serde_json::json!({
+                        "results": response,
+                        "query": req.query,
+                    }))
+                    .into_response();
+                }
+                Err(e) => {
+                    return (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({"error": format!("Search failed: {}", e)})),
+                    )
+                        .into_response();
+                }
+            }
+        }
+    }
+
+    (
+        axum::http::StatusCode::SERVICE_UNAVAILABLE,
+        Json(serde_json::json!({"error": "Memory search not available"})),
+    )
+        .into_response()
 }
 
 /// Extract session key from Bearer token

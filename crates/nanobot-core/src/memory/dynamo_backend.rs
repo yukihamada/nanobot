@@ -279,4 +279,97 @@ impl PersonalityBackend for DynamoMemoryBackend {
 
         Ok(())
     }
+
+    /// Store memory with embedding vector
+    pub async fn store_memory_with_embedding(
+        &self,
+        user_id: &str,
+        memory_key: &str,
+        content: &str,
+        embedding: &[f32],
+    ) -> anyhow::Result<()> {
+        // Convert embedding to bytes
+        let embedding_bytes: Vec<u8> = embedding
+            .iter()
+            .flat_map(|f| f.to_le_bytes())
+            .collect();
+
+        self.client
+            .put_item()
+            .table_name(&self.table_name)
+            .item("tenant_id", AttributeValue::S(format!("MEMORY#{}", user_id)))
+            .item("session_key", AttributeValue::S(memory_key.to_string()))
+            .item("content", AttributeValue::S(content.to_string()))
+            .item("embedding", AttributeValue::B(embedding_bytes.into()))
+            .item("timestamp", AttributeValue::N(chrono::Utc::now().timestamp().to_string()))
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    /// Search memories by semantic similarity
+    pub async fn search_memories(
+        &self,
+        user_id: &str,
+        query_embedding: &[f32],
+        top_k: usize,
+    ) -> anyhow::Result<Vec<(String, String, f32)>> {
+        use crate::provider::embeddings::cosine_similarity;
+
+        // Query all memories for user
+        let resp = self
+            .client
+            .query()
+            .table_name(&self.table_name)
+            .key_condition_expression("tenant_id = :tid")
+            .expression_attribute_values(
+                ":tid",
+                AttributeValue::S(format!("MEMORY#{}", user_id)),
+            )
+            .send()
+            .await?;
+
+        let mut results = Vec::new();
+
+        if let Some(items) = resp.items {
+            for item in items {
+                let content = item
+                    .get("content")
+                    .and_then(|v| v.as_s().ok())
+                    .map(|s| s.to_string());
+
+                let embedding_bytes = item.get("embedding").and_then(|v| v.as_b().ok());
+
+                if let (Some(content), Some(bytes)) = (content, embedding_bytes) {
+                    // Convert bytes back to f32 vector
+                    let embedding: Vec<f32> = bytes
+                        .as_ref()
+                        .chunks_exact(4)
+                        .map(|chunk| {
+                            let arr: [u8; 4] = chunk.try_into().unwrap();
+                            f32::from_le_bytes(arr)
+                        })
+                        .collect();
+
+                    // Calculate similarity
+                    let similarity = cosine_similarity(query_embedding, &embedding);
+
+                    let memory_key = item
+                        .get("session_key")
+                        .and_then(|v| v.as_s().ok())
+                        .unwrap_or("")
+                        .to_string();
+
+                    results.push((memory_key, content, similarity));
+                }
+            }
+        }
+
+        // Sort by similarity (descending) and take top k
+        results.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(top_k);
+
+        Ok(results)
+    }
 }

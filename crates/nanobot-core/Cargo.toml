@@ -48,6 +48,9 @@ urlencoding = "2"
 # Random number generation
 rand = "0.8"
 
+# Vector operations for embeddings
+ndarray = "0.16"
+
 # Async trait support
 async-trait = "0.1"
 
