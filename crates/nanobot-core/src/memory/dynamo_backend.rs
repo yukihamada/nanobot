@@ -361,8 +361,8 @@ impl DynamoMemoryBackend {
                     let memory_key = item
                         .get("session_key")
                         .and_then(|v| v.as_s().ok())
-                        .unwrap_or("")
-                        .to_string();
+                        .map(|s| s.to_string())
+                        .unwrap_or_default();
 
                     results.push((memory_key, content, similarity));
                 }
