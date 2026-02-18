@@ -142,7 +142,7 @@ fn validate_session_id(session_id: &str) -> bool {
     let id = parts[1];
 
     // Validate prefix
-    let valid_prefixes = ["api", "webchat", "tg", "line", "fb", "teams", "discord", "slack"];
+    let valid_prefixes = ["api", "webchat", "tg", "line", "fb", "teams", "discord", "slack", "cli"];
     if !valid_prefixes.contains(&prefix) {
         return false;
     }
@@ -2728,7 +2728,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Skills
         .route("/api/v1/skills", get(handle_list_skills))
         .route("/api/v1/skills/search", post(handle_search_skills))
-        .route("/api/v1/skills/:name", get(handle_get_skill))
+        .route("/api/v1/skills/{name}", get(handle_get_skill))
         // Agents
         .route("/api/v1/agents", get(handle_agents))
         // Devices

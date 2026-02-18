@@ -76,7 +76,7 @@ else
     # - target-cpu=neoverse-v1: Enable Graviton3-specific instructions
     # - codegen-units=1: Better optimization (slower compile, faster runtime)
     # - lto=thin: Link-time optimization
-    export RUSTFLAGS="-C target-cpu=neoverse-v1 -C codegen-units=1 $RUSTFLAGS"
+    export RUSTFLAGS="-C target-cpu=neoverse-v1 -C codegen-units=1 ${RUSTFLAGS:-}"
     echo "✅ Graviton3 optimizations enabled (target-cpu=neoverse-v1)"
 
     # Use sccache if available (3-5x faster on subsequent builds)
@@ -186,8 +186,8 @@ HEALTH=$(curl -sf "https://chatweb.ai/health" 2>&1 || echo "FAILED")
 echo "Health: $HEALTH"
 
 # Verify LLM providers are available (prevent "No providers available" outage)
-PROVIDERS=$(echo "$HEALTH" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('providers',0))" 2>/dev/null || echo "0")
-STATUS=$(echo "$HEALTH" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null || echo "")
+PROVIDERS=$(echo "$HEALTH" | grep -o '"providers":[0-9]*' | grep -o '[0-9]*$' || echo "0")
+STATUS=$(echo "$HEALTH" | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "")
 
 if [ "$PROVIDERS" = "0" ] || [ "$STATUS" = "degraded" ]; then
     echo ""

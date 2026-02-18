@@ -3435,6 +3435,13 @@
       <p id="t-subtitle">チャットで頼むだけ。検索、コード実行、ファイル操作、定期監視まで — 声でもテキストでも。</p>
       <div class="hero-cta" id="t-hero-cta">
         <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="if(!currentUser){openAuthModal();return false;}document.getElementById('input').focus();return false;">今すぐ無料で試す</a>
+        <div style="margin-top:10px;font-size:12px;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
+          <span>🎁 登録で <b style="color:var(--accent);">100クレジット</b> 無料</span>
+          <span style="opacity:0.4;">|</span>
+          <span>💳 カード不要</span>
+          <span style="opacity:0.4;">|</span>
+          <span>🚀 30秒で開始</span>
+        </div>
       </div>
     </div>
 
@@ -8540,7 +8547,7 @@
       updateConversationIdDisplay();
 
       // Generate new session ID immediately
-      webSessionId = 'web:' + crypto.randomUUID();
+      webSessionId = 'webchat:' + crypto.randomUUID();
       localStorage.setItem('webSessionId', webSessionId);
 
       // Reset UI
@@ -12102,10 +12109,31 @@
         display.classList.add('credit-flash');
         setTimeout(() => display.classList.remove('credit-flash'), 600);
       }
-      if (remaining <= 20 && remaining > 0 && !lowCreditShown) {
+      if (remaining <= 30 && remaining > 0 && !lowCreditShown) {
         lowCreditShown = true;
         setTimeout(() => showLowCreditBanner(remaining), 800);
       }
+      if (remaining <= 5 && remaining > 0 && !document.getElementById('low-credit-urgent')) {
+        setTimeout(() => showUrgentCreditBanner(remaining), 400);
+      }
+    }
+
+    function showUrgentCreditBanner(remaining) {
+      if (document.getElementById('low-credit-urgent')) return;
+      if (currentUser && currentUser.plan && currentUser.plan !== 'free') return;
+      const l = window._lang || 'ja';
+      const banner = document.createElement('div');
+      banner.id = 'low-credit-urgent';
+      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:300;background:linear-gradient(135deg,#7f1d1d,#1a0000);border-bottom:2px solid #ef4444;padding:12px 20px;animation:slideDown .4s ease-out;text-align:center;';
+      banner.innerHTML = '<div style="max-width:540px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">'
+        + '<span style="font-size:13px;font-weight:700;color:#fca5a5;">'
+        + (l === 'ja' ? '⚠️ 残り <b style="color:#ef4444;font-size:16px;">' + remaining + '</b> クレジットのみ！今すぐアップグレードで会話継続' : '⚠️ Only <b style="color:#ef4444;font-size:16px;">' + remaining + '</b> credits left!')
+        + '</span>'
+        + '<button onclick="document.getElementById(\'low-credit-urgent\').remove();document.getElementById(\'topup-modal\').classList.add(\'show\');" style="padding:8px 20px;background:#ef4444;color:#fff;font-weight:700;font-size:13px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;">'
+        + (l === 'ja' ? '今すぐ Starter $9/月' : 'Upgrade $9/mo') + '</button>'
+        + '<button onclick="this.parentElement.parentElement.remove();" style="padding:8px 12px;background:transparent;color:#9ca3af;border:none;cursor:pointer;font-size:12px;">✕</button>'
+        + '</div>';
+      document.body.prepend(banner);
     }
 
     function showLowCreditBanner(remaining) {

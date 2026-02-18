@@ -13,6 +13,10 @@ license = "MIT"
 name = "chatweb"
 path = "src/main.rs"
 
+[[bin]]
+name = "nanobot"
+path = "src/main.rs"
+
 [features]
 default = []
 http-api = ["nanobot-core/http-api"]

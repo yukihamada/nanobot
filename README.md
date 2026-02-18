@@ -137,45 +137,51 @@ docker run -p 3000:3000 \
 ```bash
 git clone https://github.com/yukihamada/nanobot.git
 cd nanobot
-export OPENAI_API_KEY=sk-...
 
-# Option 1: Run as HTTP gateway (Web UI)
-cargo run --release -- gateway --http --http-port 3000
+# Set at least one API key
+export ANTHROPIC_API_KEY=sk-ant-...   # recommended
+export OPENAI_API_KEY=sk-...          # or OpenAI
+export OPENROUTER_API_KEY=sk-or-...   # or OpenRouter (100+ models)
 
-# Option 2: Run as CLI (Interactive terminal)
-cargo run --release -- chat --model claude-sonnet-4-5
+# Build (takes a few minutes on first run)
+cargo build --bin chatweb
 
-# Option 3: Execute single command
-echo "Search for Rust async best practices" | cargo run --release -- chat --model claude-sonnet-4-5
+# Confirm everything is wired up
+./target/debug/chatweb status
 ```
 
-**CLI Mode Features:**
-- Interactive conversation with autonomous coding agent
-- Access to all 30 tools (git, linter, tests, file ops, web search)
-- Self-correction loop: automatically fixes linter/test errors
-- OODA Loop: systematic approach to complex tasks
-- Workspace memory: persistent context in `~/.nanobot/workspace/memory/`
+**CLI コマンド一覧:**
 
-**Quick Test:**
 ```bash
-cargo run --release -- chat --model claude-sonnet-4-5 <<< "Show git status and run tests for this project"
+# エージェントモード（ローカルAPIキー直接使用）
+./target/debug/chatweb agent                        # 対話モード
+./target/debug/chatweb agent -m "今日の天気は？"    # 1回送信
+
+# チャットモード（chatweb.ai API 経由）
+./target/debug/chatweb chat                         # 対話モード
+./target/debug/chatweb chat "Hello!"                # 1回送信
+
+# HTTPゲートウェイ（Web UI をローカルで起動）
+./target/debug/chatweb gateway --http --http-port 3000
+# → http://localhost:3000 をブラウザで開く
+
+# その他
+./target/debug/chatweb status    # APIキー・設定確認
+./target/debug/chatweb --help    # 全コマンド表示
 ```
 
-**After Building:**
+**グローバルインストール:**
 ```bash
-# Binary location: target/release/chatweb
-./target/release/chatweb chat  # Interactive mode
-./target/release/chatweb chat "Your message here"  # Single command
-
-# Or install globally:
 cargo install --path .
-chatweb chat  # Now available from anywhere
+chatweb agent  # どこからでも使える
 ```
 
 **Environment Variables:**
-- `OPENAI_API_KEY` (required): Your OpenAI API key
-- `ANTHROPIC_API_KEY` (optional): For Claude models (recommended)
-- `NANOBOT_WORKSPACE` (optional): Workspace directory (default: `~/.nanobot/workspace`)
+- `ANTHROPIC_API_KEY`: Claude モデル用（推奨）
+- `OPENAI_API_KEY`: GPT-4o 等用
+- `OPENROUTER_API_KEY`: 100+ モデルを一括管理
+- `GOOGLE_API_KEY`: Gemini 用
+- `NANOBOT_WORKSPACE`: ワークスペースディレクトリ（デフォルト: `~/.nanobot/workspace`）
 
 ### Supported LLM Providers
 
