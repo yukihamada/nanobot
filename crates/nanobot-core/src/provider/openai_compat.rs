@@ -10,7 +10,7 @@ use crate::util::http;
 use super::{LlmProvider, ChatExtra};
 
 /// OpenAI-compatible provider.
-/// Works with OpenRouter, DeepSeek, Groq, Moonshot, vLLM, and any OpenAI-compatible API.
+/// Works with OpenRouter, DeepSeek, Groq, Moonshot/Kimi, Qwen, MiniMax, vLLM, and any OpenAI-compatible API.
 pub struct OpenAiCompatProvider {
     api_key: String,
     api_base: String,
@@ -29,6 +29,10 @@ impl OpenAiCompatProvider {
                 "https://api.groq.com/openai/v1".to_string()
             } else if model.contains("moonshot") || model.contains("kimi") {
                 "https://api.moonshot.cn/v1".to_string()
+            } else if model.contains("qwen") || model.contains("tongyi") {
+                "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string()
+            } else if model.contains("minimax") {
+                "https://api.minimax.chat/v1".to_string()
             } else {
                 "https://api.openai.com/v1".to_string()
             }
@@ -44,7 +48,17 @@ impl OpenAiCompatProvider {
     /// Normalize model name for the API (strip provider prefixes).
     fn normalize_model(&self, model: &str) -> String {
         // Strip common provider prefixes
-        for prefix in &["openrouter/", "openai/", "deepseek/", "groq/", "moonshot/"] {
+        for prefix in &[
+            "openrouter/",
+            "openai/",
+            "deepseek/",
+            "groq/",
+            "moonshot/",
+            "kimi/",
+            "qwen/",
+            "tongyi/",
+            "minimax/",
+        ] {
             if let Some(rest) = model.strip_prefix(prefix) {
                 return rest.to_string();
             }

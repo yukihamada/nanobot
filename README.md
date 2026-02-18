@@ -175,6 +175,29 @@ chatweb chat  # Now available from anywhere
 - `ANTHROPIC_API_KEY` (optional): For Claude models (recommended)
 - `NANOBOT_WORKSPACE` (optional): Workspace directory (default: `~/.nanobot/workspace`)
 
+### Supported LLM Providers
+
+nanobot supports **8+ LLM providers** with automatic API base detection:
+
+| Provider | API Key | Models | Notes |
+|----------|---------|--------|-------|
+| **OpenAI** | `OPENAI_API_KEY` | GPT-4o, GPT-4, GPT-3.5 | Default provider |
+| **Anthropic** | `ANTHROPIC_API_KEY` | Claude Opus/Sonnet/Haiku | Recommended for coding |
+| **Google** | `GOOGLE_API_KEY` | Gemini Pro/Flash | Free tier available |
+| **OpenRouter** | `OPENROUTER_API_KEY` | 100+ models | Multi-provider aggregator |
+| **DeepSeek** | `DEEPSEEK_API_KEY` | DeepSeek-V3 | Chinese provider, coding-focused |
+| **Moonshot** | `MOONSHOT_API_KEY` | Moonshot-v1, Kimi | Chinese provider, long context |
+| **Qwen** | `QWEN_API_KEY` | Qwen-Max, Qwen-Plus | Alibaba Cloud (通义千问) |
+| **MiniMax** | `MINIMAX_API_KEY` | MiniMax models | Chinese provider |
+
+**Auto-detection**: Just set the API key and use model names like `deepseek/deepseek-chat` or `qwen/qwen-max`.
+
+**Example:**
+```bash
+export DEEPSEEK_API_KEY=sk-...
+cargo run -- chat --model deepseek/deepseek-chat
+```
+
 <details>
 <summary><b>Deploy to AWS Lambda (Production)</b></summary>
 
