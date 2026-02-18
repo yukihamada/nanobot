@@ -228,7 +228,7 @@ See [deployment guide](docs/deployment.md) for details.
 
 | | **nanobot** | openClaw | PicoClaw |
 |---|:---:|:---:|:---:|
-| **Price** | **$5/mo** | $599 (Mac Mini) | $10 (hardware) |
+| **Price** | **$5 (hardware)** | $599 (Mac Mini) | $10 (hardware) |
 | **Binary Size** | **~50 MB** | >1000 MB | <10 MB |
 | **Cold Start** | **0.1s** | ~1s | <1s |
 | **Language** | Rust | TypeScript | Go |
@@ -236,8 +236,12 @@ See [deployment guide](docs/deployment.md) for details.
 | **Voice** | ✅ Native | ⚠️ Partial | ❌ |
 | **Auto Failover** | ✅ | ❌ | ❌ |
 
-**Runs on any Linux board as low as $10** (LicheeRV Nano, Raspberry Pi, etc.)
+**Runs on any Linux board as low as $5** (Raspberry Pi Zero, LicheeRV Nano, etc.)
 > **ESP32 support (experimental):** `no_std` + Rust on ESP32-C3 は理論上動作可能。未検証ですが、挑戦者募集中！ 🦐
+
+**ハードウェア不要で今すぐ試す:**
+- 🌐 **[chatweb.ai](https://chatweb.ai)** — 音声AIアシスタント（フリーミアム、登録不要でお試し可）
+- 🛠️ **[teai.io](https://teai.io)** — 開発者向けAPI（フリーミアム、無料枠あり）
 
 **Origins:** Inspired by [sipeed/picoclaw](https://github.com/sipeed/picoclaw), rewritten in Rust for production scale.
 
