@@ -279,7 +279,10 @@ impl PersonalityBackend for DynamoMemoryBackend {
 
         Ok(())
     }
+}
 
+// Additional methods for DynamoMemoryBackend
+impl DynamoMemoryBackend {
     /// Store memory with embedding vector
     pub async fn store_memory_with_embedding(
         &self,
