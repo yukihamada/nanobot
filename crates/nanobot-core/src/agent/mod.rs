@@ -3,6 +3,7 @@ pub mod personality;
 pub mod subagent;
 
 use serde_json::json;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -297,15 +298,26 @@ impl AgentLoop {
                 // Execute tools (concurrently if multiple)
                 if response.tool_calls.len() == 1 {
                     let tc = &response.tool_calls[0];
-                    info!("🔧 Using tool: {}", tc.name);
+                    let args_preview = Self::format_tool_args(&tc.arguments);
+                    info!("🔧 Executing: {}({})", tc.name, args_preview);
+
+                    let start = std::time::Instant::now();
                     let result = self.tools.execute(&tc.name, tc.arguments.clone()).await;
+                    let elapsed = start.elapsed();
+
+                    info!("✅ {} completed in {:.2}s", tc.name, elapsed.as_secs_f64());
                     messages.push(Message::tool_result(&tc.id, &tc.name, &result));
                 } else {
                     // Parallel execution with join_all
-                    info!("🔧 Using {} tools in parallel: {}",
+                    let tool_names: Vec<String> = response.tool_calls.iter()
+                        .map(|tc| format!("{}({})", tc.name, Self::format_tool_args(&tc.arguments)))
+                        .collect();
+                    info!("🔧 Executing {} tools in parallel: {}",
                         response.tool_calls.len(),
-                        response.tool_calls.iter().map(|tc| tc.name.as_str()).collect::<Vec<_>>().join(", ")
+                        tool_names.join(", ")
                     );
+
+                    let start = std::time::Instant::now();
                     let futures: Vec<_> = response
                         .tool_calls
                         .iter()
@@ -322,6 +334,9 @@ impl AgentLoop {
                         .collect();
 
                     let results = futures::future::join_all(futures).await;
+                    let elapsed = start.elapsed();
+                    info!("✅ All tools completed in {:.2}s", elapsed.as_secs_f64());
+
                     for (id, name, result) in results {
                         messages.push(Message::tool_result(&id, &name, &result));
                     }
@@ -333,6 +348,38 @@ impl AgentLoop {
         }
 
         Ok(None)
+    }
+
+    /// Format tool arguments for logging (abbreviated to avoid clutter).
+    fn format_tool_args(args: &HashMap<String, serde_json::Value>) -> String {
+        if args.is_empty() {
+            return String::new();
+        }
+
+        let mut parts = Vec::new();
+        for (key, value) in args.iter().take(3) {
+            let value_str = match value {
+                serde_json::Value::String(s) => {
+                    if s.len() > 50 {
+                        format!("\"{}...\"", &s[..50])
+                    } else {
+                        format!("\"{}\"", s)
+                    }
+                }
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                serde_json::Value::Array(a) => format!("[{} items]", a.len()),
+                serde_json::Value::Object(o) => format!("{{{} fields}}", o.len()),
+                serde_json::Value::Null => "null".to_string(),
+            };
+            parts.push(format!("{}={}", key, value_str));
+        }
+
+        if args.len() > 3 {
+            parts.push(format!("...+{} more", args.len() - 3));
+        }
+
+        parts.join(", ")
     }
 
     /// Process a message directly (for CLI or cron usage).

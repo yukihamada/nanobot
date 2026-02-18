@@ -72,6 +72,13 @@ impl ToolRegistry {
             Box::new(CsvAnalysisTool),
             Box::new(FilesystemTool),
             Box::new(BrowserTool),
+            // Git operations tools
+            Box::new(GitStatusTool),
+            Box::new(GitDiffTool),
+            Box::new(GitCommitTool),
+            // Quality assurance tools
+            Box::new(RunLinterTool),
+            Box::new(RunTestsTool),
         ];
 
         // Register GitHub tools (read works on public repos without token)
@@ -5358,9 +5365,9 @@ mod tests {
         std::env::remove_var("SPOTIFY_CLIENT_ID");
         std::env::remove_var("POSTGRES_URL");
         let registry = ToolRegistry::with_builtins();
-        // 22 base (19 original + 3 always-on: csv_analysis, filesystem, browser)
-        // + 2 http-api only (youtube_transcript, arxiv_search) + 1 github_read_file = 25 when http-api
-        let expected = if cfg!(feature = "http-api") { 25 } else { 22 };
+        // 27 base (19 original + 3 always-on: csv_analysis, filesystem, browser + 5 new: git_status, git_diff, git_commit, run_linter, run_tests)
+        // + 2 http-api only (youtube_transcript, arxiv_search) + 1 github_read_file = 30 when http-api
+        let expected = if cfg!(feature = "http-api") { 30 } else { 27 };
         assert_eq!(registry.len(), expected);
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
@@ -5457,5 +5464,373 @@ mod tests {
         let params = HashMap::new();
         let result = registry.execute("nonexistent", &params).await;
         assert!(result.contains("Unknown tool"));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Git Operations Tools
+// ---------------------------------------------------------------------------
+
+struct GitStatusTool;
+
+#[async_trait]
+impl Tool for GitStatusTool {
+    fn name(&self) -> &str {
+        "git_status"
+    }
+
+    fn description(&self) -> &str {
+        "Get git repository status - shows modified, staged, and untracked files. Essential for understanding what changes exist before committing."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Optional: Path to git repository (defaults to current directory)"
+                }
+            }
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let path = params
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+
+        match tokio::process::Command::new("git")
+            .args(&["status", "--short"])
+            .current_dir(path)
+            .output()
+            .await
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if stdout.trim().is_empty() {
+                        "✅ Working directory clean - no changes".to_string()
+                    } else {
+                        format!("Git status:\n{}", stdout)
+                    }
+                } else {
+                    format!("Error: {}", String::from_utf8_lossy(&output.stderr))
+                }
+            }
+            Err(e) => format!("Failed to run git status: {}", e),
+        }
+    }
+}
+
+struct GitDiffTool;
+
+#[async_trait]
+impl Tool for GitDiffTool {
+    fn name(&self) -> &str {
+        "git_diff"
+    }
+
+    fn description(&self) -> &str {
+        "Show git diff - displays changes in files. Use this to review what will be committed. Can show staged changes (--staged) or unstaged changes (default)."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Optional: Path to git repository or specific file"
+                },
+                "staged": {
+                    "type": "boolean",
+                    "description": "Show staged changes (--staged). Default: false (shows unstaged changes)"
+                },
+                "file": {
+                    "type": "string",
+                    "description": "Optional: Specific file to diff"
+                }
+            }
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let path = params
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+        let staged = params
+            .get("staged")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let file = params.get("file").and_then(|v| v.as_str());
+
+        let mut cmd = tokio::process::Command::new("git");
+        cmd.arg("diff");
+
+        if staged {
+            cmd.arg("--staged");
+        }
+
+        if let Some(f) = file {
+            cmd.arg(f);
+        }
+
+        cmd.current_dir(path);
+
+        match cmd.output().await {
+            Ok(output) => {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if stdout.trim().is_empty() {
+                        "No changes to show".to_string()
+                    } else {
+                        format!("Git diff:\n{}", stdout)
+                    }
+                } else {
+                    format!("Error: {}", String::from_utf8_lossy(&output.stderr))
+                }
+            }
+            Err(e) => format!("Failed to run git diff: {}", e),
+        }
+    }
+}
+
+struct GitCommitTool;
+
+#[async_trait]
+impl Tool for GitCommitTool {
+    fn name(&self) -> &str {
+        "git_commit"
+    }
+
+    fn description(&self) -> &str {
+        "Create a git commit with a message. Files must be staged first (use git add). This saves your changes to version control history."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "Commit message describing the changes"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Optional: Path to git repository"
+                }
+            },
+            "required": ["message"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let message = match params.get("message").and_then(|v| v.as_str()) {
+            Some(m) => m,
+            None => return "Error: commit message is required".to_string(),
+        };
+
+        let path = params
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+
+        match tokio::process::Command::new("git")
+            .args(&["commit", "-m", message])
+            .current_dir(path)
+            .output()
+            .await
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    format!(
+                        "✅ Commit created:\n{}",
+                        String::from_utf8_lossy(&output.stdout)
+                    )
+                } else {
+                    format!("Error: {}", String::from_utf8_lossy(&output.stderr))
+                }
+            }
+            Err(e) => format!("Failed to run git commit: {}", e),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Quality Assurance Tools
+// ---------------------------------------------------------------------------
+
+struct RunLinterTool;
+
+#[async_trait]
+impl Tool for RunLinterTool {
+    fn name(&self) -> &str {
+        "run_linter"
+    }
+
+    fn description(&self) -> &str {
+        "Run code linter to detect syntax errors, style issues, and potential bugs. Supports multiple languages (clippy for Rust, eslint for JS/TS, pylint for Python, etc.). Returns list of issues found."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "language": {
+                    "type": "string",
+                    "enum": ["rust", "javascript", "typescript", "python", "go"],
+                    "description": "Programming language to lint"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Optional: Path to file or directory to lint (defaults to current directory)"
+                },
+                "fix": {
+                    "type": "boolean",
+                    "description": "Auto-fix issues if possible (default: false)"
+                }
+            },
+            "required": ["language"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let language = match params.get("language").and_then(|v| v.as_str()) {
+            Some(l) => l,
+            None => return "Error: language is required".to_string(),
+        };
+
+        let path = params
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+        let fix = params
+            .get("fix")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let (cmd, args) = match language {
+            "rust" => {
+                let mut args = vec!["clippy", "--", "-D", "warnings"];
+                if fix {
+                    args = vec!["clippy", "--fix", "--allow-dirty"];
+                }
+                ("cargo", args)
+            }
+            "javascript" | "typescript" => {
+                let mut args = vec!["eslint", path];
+                if fix {
+                    args.push("--fix");
+                }
+                ("npx", args)
+            }
+            "python" => ("pylint", vec![path]),
+            "go" => ("golint", vec![path]),
+            _ => return format!("Unsupported language: {}", language),
+        };
+
+        match tokio::process::Command::new(cmd)
+            .args(&args)
+            .output()
+            .await
+        {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let combined = format!("{}\n{}", stdout, stderr);
+
+                if output.status.success() {
+                    format!("✅ Linter passed - no issues found\n{}", combined)
+                } else {
+                    format!("⚠️ Linter found issues:\n{}", combined)
+                }
+            }
+            Err(e) => format!("Failed to run linter (is {} installed?): {}", cmd, e),
+        }
+    }
+}
+
+struct RunTestsTool;
+
+#[async_trait]
+impl Tool for RunTestsTool {
+    fn name(&self) -> &str {
+        "run_tests"
+    }
+
+    fn description(&self) -> &str {
+        "Run test suite to verify code correctness. Supports multiple test frameworks (cargo test for Rust, jest for JS/TS, pytest for Python, etc.). Returns test results with pass/fail status."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "language": {
+                    "type": "string",
+                    "enum": ["rust", "javascript", "typescript", "python", "go"],
+                    "description": "Programming language / test framework"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Optional: Path to test file or directory"
+                },
+                "test_name": {
+                    "type": "string",
+                    "description": "Optional: Specific test name to run (default: run all tests)"
+                }
+            },
+            "required": ["language"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let language = match params.get("language").and_then(|v| v.as_str()) {
+            Some(l) => l,
+            None => return "Error: language is required".to_string(),
+        };
+
+        let path = params.get("path").and_then(|v| v.as_str());
+        let test_name = params.get("test_name").and_then(|v| v.as_str());
+
+        let (cmd, mut args) = match language {
+            "rust" => ("cargo", vec!["test"]),
+            "javascript" | "typescript" => ("npm", vec!["test"]),
+            "python" => ("pytest", vec!["-v"]),
+            "go" => ("go", vec!["test", "-v"]),
+            _ => return format!("Unsupported language: {}", language),
+        };
+
+        if let Some(p) = path {
+            args.push(p);
+        }
+
+        if let Some(t) = test_name {
+            if language == "rust" {
+                args.push(t);
+            }
+        }
+
+        match tokio::process::Command::new(cmd)
+            .args(&args)
+            .output()
+            .await
+        {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let combined = format!("{}\n{}", stdout, stderr);
+
+                if output.status.success() {
+                    format!("✅ Tests passed\n{}", combined)
+                } else {
+                    format!("❌ Tests failed\n{}", combined)
+                }
+            }
+            Err(e) => format!("Failed to run tests (is {} installed?): {}", cmd, e),
+        }
     }
 }
