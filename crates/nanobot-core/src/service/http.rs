@@ -17726,7 +17726,7 @@ async fn handle_media_ocr(
     let client = reqwest::Client::new();
     let body = serde_json::json!({
         "image_url": req.image_url.unwrap_or_else(|| format!("data:image/png;base64,{}", req.image_base64.unwrap_or_default())),
-        "language": req.language.unwrap_or_else(|| "jpn+eng".to_string()),
+        "language": req.language.clone().unwrap_or_else(|| "jpn+eng".to_string()),
     });
 
     let resp = client.post("https://fal.run/fal-ai/tesseract")
