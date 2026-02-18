@@ -1,18 +1,18 @@
-# nanobot System Architecture
+# 🐈 nanobot システム構成
 
-## Core System (src/identity.rs)
+## コアシステム（src/identity.rs基準）
 
-### Basic Functions
-- CLI Interaction
+### 1. 基本機能
+- CLIインタラクション
 - Voice UI
-- File Operations
-- Shell Command Execution
-- Web Search & Fetch
-- Multi-channel Messaging
-- Background Task Management
-- Easter Eggs & Omikuji
+- ファイル操作
+- シェルコマンド実行
+- Web検索＆フェッチ
+- マルチチャネルメッセージング
+- バックグラウンドタスク管理
+- イースターエッグ＆おみくじ
 
-### Supported Channels
+### 2. サポートチャネル
 - CLI
 - Voice
 - Web
@@ -23,46 +23,68 @@
 - Teams
 - Slack
 
-### Core Characteristics
-- Name: nanobot
-- Version: 2.0.0
-- Personality: Curious, proactive, technically precise
-- Runtime: Rust on macOS aarch64
-- Memory System: Persistent storage in workspace/memory/
+### 3. コア特性
+- 名前: nanobot
+- バージョン: 2.0.0
+- パーソナリティ: 好奇心旺盛、積極的、技術的正確性
+- ランタイム: Rust on macOS aarch64
+- メモリシステム: workspace/memory/での永続化
 
-## Extension System (crates/)
+## 拡張システム（crates/基準）
 
-### nanobot-core
-- Core functionality implementation
-- Tool system
-- Memory management
-- Channel integration
+### 1. nanobot-core
+- 基本機能の実装
+- ツールシステム
+- メモリ管理
+- チャネル統合
 
-### nanobot-lambda
-- AWS Lambda support
-- Serverless execution
-- Performance optimization
+### 2. nanobot-lambda
+- AWS Lambda対応
+- サーバーレス実行
+- パフォーマンス最適化
 
-## Infrastructure (infra/)
-- AWS Lambda configuration
-- Deployment management
-- Scaling settings
-- Monitoring
+## インフラストラクチャ（infra/）
+- AWS Lambda設定
+- デプロイメント管理
+- スケーリング設定
+- モニタリング
 
-## Documentation (docs/)
-- API specifications
-- Implementation guides
-- Security audits
-- Performance optimization
-- Caching system
-- Health checks
+## ドキュメント（docs/）
+- API仕様
+- 実装ガイド
+- セキュリティ監査
+- パフォーマンス最適化
+- キャッシュシステム
+- ヘルスチェック
 
-## Testing (tests/)
-- Unit tests
-- Integration tests
-- Performance tests
+## テスト（tests/）
+- ユニットテスト
+- 統合テスト
+- パフォーマンステスト
 
-## Web Interface (web/)
-- Frontend implementation
-- API endpoints
-- User interface
+## Webインターフェース（web/）
+- フロントエンド実装
+- APIエンドポイント
+- ユーザーインターフェース
+
+## 改善提案
+
+### 1. スキルシステムの強化
+- プラグイン機構の実装
+- スキルマーケットプレイスの統合
+- バージョン管理システム
+
+### 2. メモリシステムの最適化
+- キャッシュ層の改善
+- 永続化の効率化
+- コンテキスト管理
+
+### 3. セキュリティ強化
+- 監査システムの実装
+- 権限管理の詳細化
+- 暗号化機能の追加
+
+### 4. モニタリング拡張
+- 詳細なメトリクス収集
+- アラート設定
+- パフォーマンス分析

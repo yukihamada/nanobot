@@ -1,93 +1,93 @@
-# nanobot Skills System
+# 🐈 nanobot スキルシステム
 
-## Core Skills (Built-in)
+## コアスキル（組み込み）
 
-### File Operations
-- Read (read_file)
-- Write (write_file)
-- Edit (edit_file)
-- Directory listing (list_dir)
+### 1. ファイル操作
+- 読み取り（read_file）
+- 書き込み（write_file）
+- 編集（edit_file）
+- ディレクトリ一覧（list_dir）
 
-### Web Operations
-- Search (web_search)
-- Content fetch (web_fetch)
-- Page analysis
+### 2. Web操作
+- 検索（web_search）
+- コンテンツ取得（web_fetch）
+- ページ解析
 
-### System Operations
-- Shell command execution (exec)
-- Process management
-- Environment variable handling
+### 3. システム操作
+- シェルコマンド実行（exec）
+- プロセス管理
+- 環境変数操作
 
-### Communication
-- Message sending (message)
-- Multi-channel support
-- Auto language switching (JP/EN)
+### 4. コミュニケーション
+- メッセージ送信（message）
+- マルチチャンネル対応
+- 言語自動切替（日英）
 
-## Extension Skills (Plugins)
+## 拡張スキル（プラグイン）
 
-### Development Support
-- Code review
-- Bug analysis
-- Documentation generation
+### 1. 開発支援
+- コードレビュー
+- バグ分析
+- ドキュメント生成
 
-### Data Processing
-- JSON parsing
-- CSV operations
-- Data transformation
+### 2. データ処理
+- JSONパース
+- CSV操作
+- データ変換
 
-### AI Integration
-- Image generation
-- Voice recognition
-- Text summarization
+### 3. AI統合
+- 画像生成
+- 音声認識
+- テキスト要約
 
-### Project Management
-- Task tracking
-- Progress reporting
-- Schedule management
+### 4. プロジェクト管理
+- タスク追跡
+- 進捗レポート
+- スケジュール管理
 
-## Skills Marketplace
+## スキルマーケットプレイス
 
-### Distribution System
-- Skill search
-- Installation
-- Version management
-- Ratings and reviews
+### 1. 配布システム
+- スキルの検索
+- インストール
+- バージョン管理
+- 評価とレビュー
 
-### For Developers
-- Skill Development Kit
-- Templates
-- Debug tools
-- Documentation
+### 2. 開発者向け
+- スキル開発キット
+- テンプレート
+- デバッグツール
+- ドキュメント
 
-### Security
-- Signature verification
-- Permission management
-- Execution environment isolation
+### 3. セキュリティ
+- 署名検証
+- 権限管理
+- 実行環境の分離
 
-### Community
-- Skill sharing
-- Feedback
-- Improvement proposals
+### 4. コミュニティ
+- スキル共有
+- フィードバック
+- 改善提案
 
-## yukihamada.jp Service Integration
+## yukihamada.jpサービス統合
 
-### chatweb.ai
-- Website analysis
-- Content generation
-- SEO optimization
+### 1. chatweb.ai
+- Webサイト分析
+- コンテンツ生成
+- SEO最適化
 
-### teai.io
-- AI development support
-- Model optimization
-- Performance analysis
+### 2. teai.io
+- AI開発支援
+- モデル最適化
+- パフォーマンス分析
 
-### ElioChat
-- Chatbot creation
-- Dialog systems
-- Integration
+### 3. ElioChat
+- チャットボット作成
+- 対話システム
+- インテグレーション
 
-### Others
-- kouzou: Structural analysis
-- taishin: Seismic design
-- TOTONO: Audio processing
-- BANTO: Financial analysis
+### 4. その他
+- kouzou: 構造解析
+- taishin: 耐震設計
+- TOTONO: 音声処理
+- BANTO: 金融分析
