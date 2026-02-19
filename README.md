@@ -1,10 +1,12 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/yukihamada/nanobot/main/web/og-teai.svg" alt="nanobot" width="600" />
+<img src="docs/images/hero.png" alt="nanobot — Boot in 0.1s! Hosted at chatweb.ai" width="700" />
 
 # nanobot
 
 ### Production-Ready AI Agent Platform in Pure Rust 🦀
+
+> **Fork notice:** This is a complete rewrite of [HKUDS/nanobot](https://github.com/HKUDS/nanobot) (Python) in Rust — same philosophy of minimal, hackable AI agents, rebuilt for production scale and voice-first deployment.
 
 [![CI](https://github.com/yukihamada/nanobot/actions/workflows/ci.yml/badge.svg)](https://github.com/yukihamada/nanobot/actions/workflows/ci.yml)
 [![Deploy](https://github.com/yukihamada/nanobot/actions/workflows/deploy.yml/badge.svg)](https://github.com/yukihamada/nanobot/actions/workflows/deploy.yml)
@@ -136,7 +138,66 @@ docker run -p 3000:3000 \
 git clone https://github.com/yukihamada/nanobot.git
 cd nanobot
 export OPENAI_API_KEY=sk-...
+
+# Option 1: Run as HTTP gateway (Web UI)
 cargo run --release -- gateway --http --http-port 3000
+
+# Option 2: Run as CLI (Interactive terminal)
+cargo run --release -- chat --model claude-sonnet-4-5
+
+# Option 3: Execute single command
+echo "Search for Rust async best practices" | cargo run --release -- chat --model claude-sonnet-4-5
+```
+
+**CLI Mode Features:**
+- Interactive conversation with autonomous coding agent
+- Access to all 30 tools (git, linter, tests, file ops, web search)
+- Self-correction loop: automatically fixes linter/test errors
+- OODA Loop: systematic approach to complex tasks
+- Workspace memory: persistent context in `~/.nanobot/workspace/memory/`
+
+**Quick Test:**
+```bash
+cargo run --release -- chat --model claude-sonnet-4-5 <<< "Show git status and run tests for this project"
+```
+
+**After Building:**
+```bash
+# Binary location: target/release/chatweb
+./target/release/chatweb chat  # Interactive mode
+./target/release/chatweb chat "Your message here"  # Single command
+
+# Or install globally:
+cargo install --path .
+chatweb chat  # Now available from anywhere
+```
+
+**Environment Variables:**
+- `OPENAI_API_KEY` (required): Your OpenAI API key
+- `ANTHROPIC_API_KEY` (optional): For Claude models (recommended)
+- `NANOBOT_WORKSPACE` (optional): Workspace directory (default: `~/.nanobot/workspace`)
+
+### Supported LLM Providers
+
+nanobot supports **8+ LLM providers** with automatic API base detection:
+
+| Provider | API Key | Models | Notes |
+|----------|---------|--------|-------|
+| **OpenAI** | `OPENAI_API_KEY` | GPT-4o, GPT-4, GPT-3.5 | Default provider |
+| **Anthropic** | `ANTHROPIC_API_KEY` | Claude Opus/Sonnet/Haiku | Recommended for coding |
+| **Google** | `GOOGLE_API_KEY` | Gemini Pro/Flash | Free tier available |
+| **OpenRouter** | `OPENROUTER_API_KEY` | 100+ models | Multi-provider aggregator |
+| **DeepSeek** | `DEEPSEEK_API_KEY` | DeepSeek-V3 | Chinese provider, coding-focused |
+| **Moonshot** | `MOONSHOT_API_KEY` | Moonshot-v1, Kimi | Chinese provider, long context |
+| **Qwen** | `QWEN_API_KEY` | Qwen-Max, Qwen-Plus | Alibaba Cloud (通义千问) |
+| **MiniMax** | `MINIMAX_API_KEY` | MiniMax models | Chinese provider |
+
+**Auto-detection**: Just set the API key and use model names like `deepseek/deepseek-chat` or `qwen/qwen-max`.
+
+**Example:**
+```bash
+export DEEPSEEK_API_KEY=sk-...
+cargo run -- chat --model deepseek/deepseek-chat
 ```
 
 <details>
@@ -163,19 +224,46 @@ See [deployment guide](docs/deployment.md) for details.
 
 ## 📊 Comparison
 
-| | **nanobot** | OpenClaw | PicoClaw | ChatGPT |
-|---|:---:|:---:|:---:|:---:|
-| **Cold Start** | **<50 ms** | ~1000 ms | <1s | N/A |
-| **Language** | Rust | TypeScript | Go | Proprietary |
-| **Channels** | **13** | 13+ | 5+ | 4 |
-| **Voice** | ✅ Native | ⚠️ Partial | ❌ | ✅ |
-| **Auto Failover** | ✅ | ❌ | ❌ | ❌ |
-| **Self-Hosted** | ✅ | ✅ | ✅ | ❌ |
-| **License** | MIT | MIT | MIT | Proprietary |
+<div align="center">
+<img src="docs/images/comparison.png" alt="nanobot vs PicoClaw vs openClaw comparison" width="800" />
+</div>
 
-**Origins:** Inspired by [sipeed/picoclaw](https://github.com/sipeed/picoclaw), rewritten in Rust for production scale.
+### nanobot (Rust) vs HKUDS/nanobot (Python)
 
-[View detailed comparison →](https://chatweb.ai/comparison)
+| | **yukihamada/nanobot** (Rust) | [HKUDS/nanobot](https://github.com/HKUDS/nanobot) (Python) |
+|---|:---:|:---:|
+| **Language** | Rust | Python |
+| **Binary Size** | ~50 MB | ~4,000 lines (interpreter required) |
+| **Cold Start** | **0.1s** | ~3–5s |
+| **Voice** | ✅ Native STT/TTS | ❌ |
+| **Self-Improving** | ✅ `/improve` command | ❌ |
+| **Channels** | 13 (LINE, Telegram, Discord…) | 9+ (Telegram, Discord, Slack…) |
+| **LLM Providers** | 8+ with auto failover | 13+ (no failover) |
+| **Hosted Service** | ✅ chatweb.ai / teai.io | ❌ self-host only |
+| **Target** | Production / Voice-first | Research / Hackable |
+
+### nanobot vs Others
+
+| | **nanobot** | openClaw | PicoClaw |
+|---|:---:|:---:|:---:|
+| **Price** | **$5 (hardware)** | $599 (Mac Mini) | $10 (hardware) |
+| **Binary Size** | **~50 MB** | >1000 MB | <10 MB |
+| **Cold Start** | **0.1s** | ~1s | <1s |
+| **Language** | Rust | TypeScript | Go |
+| **Self-Improving** | ✅ | ❌ | ❌ |
+| **Voice** | ✅ Native | ⚠️ Partial | ❌ |
+| **Auto Failover** | ✅ | ❌ | ❌ |
+
+**Runs on any Linux board as low as $5** (Raspberry Pi Zero, LicheeRV Nano, etc.)
+> **ESP32 support (experimental):** `no_std` + Rust on ESP32-C3 は理論上動作可能。未検証ですが、挑戦者募集中！ 🦐
+
+**ハードウェア不要で今すぐ試す:**
+- 🌐 **[chatweb.ai](https://chatweb.ai)** — 音声AIアシスタント（フリーミアム、登録不要でお試し可）
+- 🛠️ **[teai.io](https://teai.io)** — 開発者向けAPI（フリーミアム、無料枠あり）
+
+**Origins:** Complete Rust rewrite of [HKUDS/nanobot](https://github.com/HKUDS/nanobot), inspired by [sipeed/picoclaw](https://github.com/sipeed/picoclaw).
+
+[View full comparison →](https://chatweb.ai/comparison)
 
 ---
 
@@ -336,6 +424,7 @@ cargo clippy --all-targets
 ## 🙏 Acknowledgments
 
 Built on the shoulders of giants:
+- [HKUDS/nanobot](https://github.com/HKUDS/nanobot) - Original Python nanobot (this project is a complete Rust rewrite)
 - [sipeed/picoclaw](https://github.com/sipeed/picoclaw) - MCP architecture inspiration
 - [openclaw/openclaw](https://github.com/openclaw/openclaw) - Multi-channel patterns
 - Anthropic Claude, OpenAI, Google Gemini - LLM providers

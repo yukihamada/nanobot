@@ -3417,6 +3417,9 @@
 
     <div class="sidebar-footer">
       <div class="sidebar-section-title">⚙️ Settings</div>
+      <button class="sidebar-btn" id="theme-toggle-btn" onclick="quickToggleTheme()">
+        <span id="theme-icon">🌙</span> <span id="theme-label">Dark Mode</span>
+      </button>
       <button class="sidebar-btn" onclick="openApiKeysModal()">🔐 API Keys</button>
       <button class="sidebar-btn" onclick="openWebhookSettings()">🔗 Webhook Settings</button>
       <button class="sidebar-btn" id="line-connect-btn" onclick="toggleLineConnection()">📱 Connect LINE</button>
@@ -4885,6 +4888,11 @@
     let webSessionId = localStorage.getItem('webSessionId');
     if (webSessionId && webSessionId.startsWith('api:')) {
       webSessionId = 'webchat:' + webSessionId.slice(4);
+      localStorage.setItem('webSessionId', webSessionId);
+    }
+    // Migrate legacy cw_xxx format → webchat:xxx
+    if (webSessionId && webSessionId.startsWith('cw_')) {
+      webSessionId = 'webchat:' + webSessionId.slice(3);
       localStorage.setItem('webSessionId', webSessionId);
     }
     if (!webSessionId) {
@@ -10973,6 +10981,36 @@
       const select = document.getElementById('settings-theme');
       if (select) select.value = savedTheme;
       applyTheme(savedTheme);
+      updateThemeButton(savedTheme);
+    }
+
+    function quickToggleTheme() {
+      const currentTheme = localStorage.getItem('theme') || 'system';
+      let newTheme;
+
+      // Toggle: system/light → dark, dark → light
+      if (currentTheme === 'dark') {
+        newTheme = 'light';
+      } else {
+        newTheme = 'dark';
+      }
+
+      changeTheme(newTheme);
+      updateThemeButton(newTheme);
+    }
+
+    function updateThemeButton(theme) {
+      const icon = document.getElementById('theme-icon');
+      const label = document.getElementById('theme-label');
+      if (!icon || !label) return;
+
+      if (theme === 'dark') {
+        icon.textContent = '☀️';
+        label.textContent = 'Light Mode';
+      } else {
+        icon.textContent = '🌙';
+        label.textContent = 'Dark Mode';
+      }
     }
 
     // --- Account Actions ---

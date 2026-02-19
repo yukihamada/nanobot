@@ -1,8 +1,10 @@
 pub mod context;
+pub mod ooda;
 pub mod personality;
 pub mod subagent;
 
 use serde_json::json;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -297,15 +299,26 @@ impl AgentLoop {
                 // Execute tools (concurrently if multiple)
                 if response.tool_calls.len() == 1 {
                     let tc = &response.tool_calls[0];
-                    info!("🔧 Using tool: {}", tc.name);
+                    let args_preview = Self::format_tool_args(&tc.arguments);
+                    info!("🔧 Executing: {}({})", tc.name, args_preview);
+
+                    let start = std::time::Instant::now();
                     let result = self.tools.execute(&tc.name, tc.arguments.clone()).await;
+                    let elapsed = start.elapsed();
+
+                    info!("✅ {} completed in {:.2}s", tc.name, elapsed.as_secs_f64());
                     messages.push(Message::tool_result(&tc.id, &tc.name, &result));
                 } else {
                     // Parallel execution with join_all
-                    info!("🔧 Using {} tools in parallel: {}",
+                    let tool_names: Vec<String> = response.tool_calls.iter()
+                        .map(|tc| format!("{}({})", tc.name, Self::format_tool_args(&tc.arguments)))
+                        .collect();
+                    info!("🔧 Executing {} tools in parallel: {}",
                         response.tool_calls.len(),
-                        response.tool_calls.iter().map(|tc| tc.name.as_str()).collect::<Vec<_>>().join(", ")
+                        tool_names.join(", ")
                     );
+
+                    let start = std::time::Instant::now();
                     let futures: Vec<_> = response
                         .tool_calls
                         .iter()
@@ -322,6 +335,9 @@ impl AgentLoop {
                         .collect();
 
                     let results = futures::future::join_all(futures).await;
+                    let elapsed = start.elapsed();
+                    info!("✅ All tools completed in {:.2}s", elapsed.as_secs_f64());
+
                     for (id, name, result) in results {
                         messages.push(Message::tool_result(&id, &name, &result));
                     }
@@ -333,6 +349,38 @@ impl AgentLoop {
         }
 
         Ok(None)
+    }
+
+    /// Format tool arguments for logging (abbreviated to avoid clutter).
+    fn format_tool_args(args: &HashMap<String, serde_json::Value>) -> String {
+        if args.is_empty() {
+            return String::new();
+        }
+
+        let mut parts = Vec::new();
+        for (key, value) in args.iter().take(3) {
+            let value_str = match value {
+                serde_json::Value::String(s) => {
+                    if s.len() > 50 {
+                        format!("\"{}...\"", &s[..50])
+                    } else {
+                        format!("\"{}\"", s)
+                    }
+                }
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                serde_json::Value::Array(a) => format!("[{} items]", a.len()),
+                serde_json::Value::Object(o) => format!("{{{} fields}}", o.len()),
+                serde_json::Value::Null => "null".to_string(),
+            };
+            parts.push(format!("{}={}", key, value_str));
+        }
+
+        if args.len() > 3 {
+            parts.push(format!("...+{} more", args.len() - 3));
+        }
+
+        parts.join(", ")
     }
 
     /// Process a message directly (for CLI or cron usage).
@@ -347,4 +395,121 @@ impl AgentLoop {
         let response = self.process_message(&msg).await?;
         Ok(response.map(|r| r.content).unwrap_or_default())
     }
+
+    /// Self-correction loop: verify code with linter/tests, auto-fix if errors found.
+    /// Returns (success: bool, final_output: String, iterations: u32)
+    pub async fn self_correct(
+        &mut self,
+        language: &str,
+        path: &str,
+        max_iterations: u32,
+    ) -> anyhow::Result<(bool, String, u32)> {
+        info!("🔄 Starting self-correction loop (max {} iterations)", max_iterations);
+
+        let mut iteration = 0;
+        let mut last_output = String::new();
+
+        while iteration < max_iterations {
+            iteration += 1;
+            info!("🔄 Self-correction iteration {}/{}", iteration, max_iterations);
+
+            // Step 1: Run linter
+            info!("🔍 Running linter...");
+            let mut lint_args = HashMap::new();
+            lint_args.insert("language".to_string(), serde_json::json!(language));
+            lint_args.insert("path".to_string(), serde_json::json!(path));
+            let lint_result = self.tools.execute("run_linter", lint_args).await;
+
+            // Step 2: Run tests
+            info!("🧪 Running tests...");
+            let mut test_args = HashMap::new();
+            test_args.insert("language".to_string(), serde_json::json!(language));
+            test_args.insert("path".to_string(), serde_json::json!(path));
+            let test_result = self.tools.execute("run_tests", test_args).await;
+
+            last_output = format!("Linter:\n{}\n\nTests:\n{}", lint_result, test_result);
+
+            // Step 3: Check if passed
+            let lint_passed = lint_result.contains("✅") || lint_result.contains("no issues");
+            let tests_passed = test_result.contains("✅") || test_result.contains("passed");
+
+            if lint_passed && tests_passed {
+                info!("✅ All checks passed!");
+                return Ok((true, last_output, iteration));
+            }
+
+            // Step 4: If last iteration, return failure
+            if iteration >= max_iterations {
+                info!("❌ Max iterations reached, checks still failing");
+                return Ok((false, last_output, iteration));
+            }
+
+            // Step 5: Ask LLM to fix errors
+            info!("🤖 Asking LLM to fix errors...");
+            let fix_prompt = format!(
+                "The following linter and test errors were found:\n\n{}\n\n\
+                Please analyze these errors and fix the code. Use file operations tools \
+                (read_file, write_file, edit_file) to make the necessary changes. \
+                Focus on fixing the actual errors, not refactoring or adding features.",
+                last_output
+            );
+
+            let msg = InboundMessage::new("cli", "system", "self-correction", &fix_prompt);
+            match self.process_message(&msg).await? {
+                Some(response) => {
+                    info!("🔧 LLM applied fixes:\n{}", response.content);
+                }
+                None => {
+                    error!("❌ LLM failed to respond");
+                    return Ok((false, "LLM failed to respond".to_string(), iteration));
+                }
+            }
+
+            // Loop continues to re-check
+        }
+
+        Ok((false, last_output, iteration))
+    }
+
+    /// Verify code quality: run linter + tests, return detailed report.
+    pub async fn verify_code(
+        &self,
+        language: &str,
+        path: &str,
+    ) -> anyhow::Result<CodeVerificationReport> {
+        info!("🔍 Verifying code quality for {} at {}", language, path);
+
+        // Run linter
+        let mut lint_args = HashMap::new();
+        lint_args.insert("language".to_string(), serde_json::json!(language));
+        lint_args.insert("path".to_string(), serde_json::json!(path));
+        let lint_result = self.tools.execute("run_linter", lint_args).await;
+
+        // Run tests
+        let mut test_args = HashMap::new();
+        test_args.insert("language".to_string(), serde_json::json!(language));
+        test_args.insert("path".to_string(), serde_json::json!(path));
+        let test_result = self.tools.execute("run_tests", test_args).await;
+
+        let lint_passed = lint_result.contains("✅") || lint_result.contains("no issues");
+        let tests_passed = test_result.contains("✅") || test_result.contains("passed");
+
+        Ok(CodeVerificationReport {
+            lint_passed,
+            lint_output: lint_result,
+            tests_passed,
+            test_output: test_result,
+            overall_passed: lint_passed && tests_passed,
+        })
+    }
+}
+
+/// Code verification report from linter + tests
+#[derive(Debug, Clone)]
+pub struct CodeVerificationReport {
+    pub lint_passed: bool,
+    pub lint_output: String,
+    pub tests_passed: bool,
+    pub test_output: String,
+    pub overall_passed: bool,
 }

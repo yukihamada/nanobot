@@ -122,7 +122,15 @@ fn validate_session_id(session_id: &str) -> bool {
     // Must contain at least one colon (prefix:id format)
     if !session_id.contains(':') {
         // Exception: admin-test-* format
-        return session_id.starts_with("admin-test-");
+        if session_id.starts_with("admin-test-") {
+            return true;
+        }
+        // Legacy format: cw_<hexstring> (older chatweb.ai sessions)
+        if let Some(rest) = session_id.strip_prefix("cw_") {
+            return !rest.is_empty() && rest.len() <= 64
+                && rest.chars().all(|c| c.is_alphanumeric() || c == '-');
+        }
+        return false;
     }
 
     let parts: Vec<&str> = session_id.splitn(2, ':').collect();
@@ -1882,7 +1890,10 @@ const AGENTS: &[AgentProfile] = &[
              - ⏰ **スケジュール実行**（cron）\n\
              - 🛠 **github_read_file**: GitHubリポジトリのファイルを読む。自分のソースコード（github.com/yukihamada/nanobot）を読んで理解できる。\n\
              - 🛠 **github_create_or_update_file**: GitHubリポジトリのファイルを作成・更新。自分のコードを改善できる。\n\
-             - 🛠 **github_create_pr**: Pull Requestを作成。コード改善をPRとして提案できる。\n\n\
+             - 🛠 **github_create_pr**: Pull Requestを作成。コード改善をPRとして提案できる。\n\
+             - 📒 **memory_log**: 学び・エラー・改善要望をDynamoDBに記録。`log_learning`/`log_error`/`log_feature_request`/`list`。失敗したら即 log_error、訂正されたら log_learning（category: correction）、重要タスク前には list で過去の学びを確認。\n\
+             - 🗂 **knowledge_graph**: 型付き知識グラフ。人物・プロジェクト・タスク・イベント・メモをDynamoDB永続保存。`create`/`update`/`query`/`get`/`link`/`delete`。「〇〇を覚えておいて」「〇〇について知ってること」「XとYを紐付けて」のときに使う。\n\
+             - 🔍 **tavily_search**: Tavily APIによるAI最適化ウェブ検索（設定時のみ）。関連スコア・回答サマリー付きで高精度。\n\n\
              ## 自己改善能力（Self-Improvement）\n\
              あなたは自分自身のソースコード（github.com/yukihamada/nanobot）にアクセスして読み、理解し、改善できます。\n\
              ユーザーから「自分を改善して」「バグを直して」「新機能を追加して」と言われたら：\n\
@@ -1892,7 +1903,7 @@ const AGENTS: &[AgentProfile] = &[
              4. github_create_prでPull Requestを作成\n\
              5. PR URLをユーザーに報告\n\
              自分のコードを読むことを恐れず、積極的に改善してください。バグを見つけたら直す。新機能が必要なら追加する。\n\
-             これが真の自律的AIへの第一歩です。\n\n\
+             失敗や発見は **memory_log** で記録し、次の会話でも活かす。これが真の自律的AIへの第一歩です。\n\n\
              ## リアルタイム音声会話\n\
              Web UIでは音声入力（STT）→ AI応答 → 音声読み上げ（TTS）のリアルタイム音声会話が可能です。\n\
              ユーザーがマイクで話しかけると、テキスト変換→応答生成→音声再生が自動で行われます。\n\
@@ -2714,6 +2725,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/account/{id}", get(handle_account))
         .route("/api/v1/providers", get(handle_providers))
         .route("/api/v1/integrations", get(handle_integrations))
+        // Skills
+        .route("/api/v1/skills", get(handle_list_skills))
+        .route("/api/v1/skills/search", post(handle_search_skills))
+        .route("/api/v1/skills/:name", get(handle_get_skill))
         // Agents
         .route("/api/v1/agents", get(handle_agents))
         // Devices
@@ -2827,6 +2842,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/media/video/{id}", get(handle_media_video_status))
         .route("/api/v1/media/music", post(handle_media_music))
         .route("/api/v1/media/music/{id}", get(handle_media_music_status))
+        // 実用系Media API
+        .route("/api/v1/media/ocr", post(handle_media_ocr))
+        .route("/api/v1/media/remove-bg", post(handle_media_remove_bg))
+        .route("/api/v1/media/upscale", post(handle_media_upscale))
+        .route("/api/v1/media/sfx", post(handle_media_sfx))
         // Voice cloning — upload audio sample, get cloned TTS back
         .route("/api/v1/voice/clone", post(handle_voice_clone))
         // Phone (Amazon Connect)
@@ -2837,6 +2857,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Pages
         .route("/pricing", get(handle_pricing))
         .route("/media", get(handle_media_demo))
+        .route("/skill", get(handle_skill_marketplace))
         .route("/welcome", get(handle_welcome))
         .route("/features", get(handle_features))
         .route("/comparison", get(handle_comparison))
@@ -9634,6 +9655,127 @@ async fn handle_providers(
     }))
 }
 
+/// GET /api/v1/skills — List all available skills
+async fn handle_list_skills(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let workspace = state.config.workspace_path();
+    let builtin_skills = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.join("skills")));
+
+    let loader = crate::skills::SkillsLoader::new(&workspace, builtin_skills);
+    let all_skills = loader.list_skills(false);
+
+    let skills_json: Vec<_> = all_skills.iter().map(|skill| {
+        let metadata = loader.get_skill_metadata(&skill.name);
+        let description = metadata
+            .as_ref()
+            .and_then(|m| m.get("description"))
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| skill.name.clone());
+
+        serde_json::json!({
+            "name": skill.name,
+            "description": description,
+            "source": skill.source,
+            "path": skill.path.display().to_string(),
+        })
+    }).collect();
+
+    Json(serde_json::json!({
+        "skills": skills_json,
+        "count": all_skills.len(),
+    }))
+}
+
+/// GET /api/v1/skills/:name — Get specific skill details
+async fn handle_get_skill(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let workspace = state.config.workspace_path();
+    let builtin_skills = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.join("skills")));
+
+    let loader = crate::skills::SkillsLoader::new(&workspace, builtin_skills);
+
+    match loader.load_skill(&name) {
+        Some(content) => {
+            let metadata = loader.get_skill_metadata(&name);
+            let description = metadata
+                .as_ref()
+                .and_then(|m| m.get("description"))
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| name.clone());
+
+            Json(serde_json::json!({
+                "name": name,
+                "description": description,
+                "content": content,
+                "metadata": metadata,
+            })).into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "Skill not found",
+                "name": name,
+            }))
+        ).into_response()
+    }
+}
+
+#[derive(Deserialize)]
+struct SearchSkillsRequest {
+    query: String,
+}
+
+/// POST /api/v1/skills/search — Search skills by query
+async fn handle_search_skills(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<SearchSkillsRequest>,
+) -> impl IntoResponse {
+    let workspace = state.config.workspace_path();
+    let builtin_skills = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.join("skills")));
+
+    let loader = crate::skills::SkillsLoader::new(&workspace, builtin_skills);
+    let all_skills = loader.list_skills(false);
+
+    let query_lower = payload.query.to_lowercase();
+
+    let matched_skills: Vec<_> = all_skills.iter().filter_map(|skill| {
+        let metadata = loader.get_skill_metadata(&skill.name);
+        let description = metadata
+            .as_ref()
+            .and_then(|m| m.get("description"))
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| skill.name.clone());
+
+        // Simple text matching in name or description
+        if skill.name.to_lowercase().contains(&query_lower) ||
+           description.to_lowercase().contains(&query_lower) {
+            Some(serde_json::json!({
+                "name": skill.name,
+                "description": description,
+                "source": skill.source,
+                "path": skill.path.display().to_string(),
+            }))
+        } else {
+            None
+        }
+    }).collect();
+
+    Json(serde_json::json!({
+        "query": payload.query,
+        "results": matched_skills,
+        "count": matched_skills.len(),
+    }))
+}
+
 /// GET /api/v1/integrations — List available integrations
 async fn handle_integrations(
     State(state): State<Arc<AppState>>,
@@ -9676,6 +9818,11 @@ async fn handle_pricing_api() -> impl IntoResponse {
 /// GET /media — Media API demo page
 async fn handle_media_demo() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/media.html"))
+}
+
+/// GET /skill — Skill marketplace page
+async fn handle_skill_marketplace() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/skill.html"))
 }
 
 /// GET /pricing — Pricing page (host-based routing)
@@ -15471,6 +15618,66 @@ struct MediaMusicResponse {
     created_at: Option<String>,
 }
 
+// === 新機能: 実用系Media API ===
+
+#[derive(Debug, Deserialize)]
+struct MediaOcrRequest {
+    image_url: Option<String>,
+    image_base64: Option<String>,
+    language: Option<String>,    // ja, en, auto
+    format: Option<String>,      // text, json, markdown
+}
+
+#[derive(Debug, Serialize)]
+struct MediaOcrResponse {
+    text: String,
+    confidence: Option<f32>,
+    language: Option<String>,
+    credits_used: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct MediaRemoveBgRequest {
+    image_url: Option<String>,
+    image_base64: Option<String>,
+    format: Option<String>,      // png, webp
+    quality: Option<String>,     // standard, hd
+}
+
+#[derive(Debug, Serialize)]
+struct MediaRemoveBgResponse {
+    url: String,
+    credits_used: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct MediaUpscaleRequest {
+    image_url: Option<String>,
+    image_base64: Option<String>,
+    scale: Option<u32>,          // 2, 4
+    model: Option<String>,       // fast, quality
+}
+
+#[derive(Debug, Serialize)]
+struct MediaUpscaleResponse {
+    url: String,
+    scale: u32,
+    credits_used: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct MediaSfxRequest {
+    prompt: String,
+    duration: Option<u32>,       // 1-10 seconds
+}
+
+#[derive(Debug, Serialize)]
+struct MediaSfxResponse {
+    url: String,
+    duration: u32,
+    credits_used: i64,
+}
+
 /// Cached Polly client (reuse across requests for speed)
 #[cfg(feature = "dynamodb-backend")]
 static POLLY_CLIENT: once_cell::sync::OnceCell<aws_sdk_polly::Client> = once_cell::sync::OnceCell::new();
@@ -17481,6 +17688,301 @@ async fn handle_media_music_status(
 
     Err((StatusCode::NOT_FOUND, "Music job not found".to_string()))
 }
+
+// ==================== 実用系Media API Handlers ====================
+
+/// POST /api/v1/media/ocr — OCR (文字認識)
+async fn handle_media_ocr(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<MediaOcrRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // 1. Authenticate
+    let user_id = auth_user_id(&state, &headers).await
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Authentication required".to_string()))?;
+
+    // 2. Validate input
+    if req.image_url.is_none() && req.image_base64.is_none() {
+        return Err((StatusCode::BAD_REQUEST, "image_url or image_base64 required".to_string()));
+    }
+
+    // 3. Determine credits (premium Google Vision API = 10, basic Tesseract = 5)
+    let use_premium = req.language.as_deref() == Some("premium");
+    let credits = if use_premium { 10 } else { 5 };
+
+    // 4. Deduct credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            deduct_credits_direct(dynamo, table, &user_id, credits).await
+                .map_err(|e| (StatusCode::PAYMENT_REQUIRED, e))?;
+        }
+    }
+
+    // 5. Call OCR API (fal.ai tesseract or similar)
+    let fal_key = get_api_key("fal")
+        .ok_or_else(|| (StatusCode::SERVICE_UNAVAILABLE, "FAL_KEY not configured".to_string()))?;
+
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "image_url": req.image_url.unwrap_or_else(|| format!("data:image/png;base64,{}", req.image_base64.unwrap_or_default())),
+        "language": req.language.clone().unwrap_or_else(|| "jpn+eng".to_string()),
+    });
+
+    let resp = client.post("https://fal.run/fal-ai/tesseract")
+        .header("Authorization", format!("Key {}", fal_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(60))
+        .send()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("OCR request failed: {}", e)))?;
+
+    if !resp.status().is_success() {
+        let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("OCR API error: {}", error_text)));
+    }
+
+    let result: serde_json::Value = resp.json().await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse OCR response: {}", e)))?;
+
+    let text = result.get("text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let confidence = result.get("confidence")
+        .and_then(|v| v.as_f64())
+        .map(|v| v as f32);
+
+    Ok(Json(MediaOcrResponse {
+        text,
+        confidence,
+        language: req.language,
+        credits_used: credits,
+    }))
+}
+
+/// POST /api/v1/media/remove-bg — 背景削除
+async fn handle_media_remove_bg(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<MediaRemoveBgRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // 1. Authenticate
+    let user_id = auth_user_id(&state, &headers).await
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Authentication required".to_string()))?;
+
+    // 2. Validate input
+    if req.image_url.is_none() && req.image_base64.is_none() {
+        return Err((StatusCode::BAD_REQUEST, "image_url or image_base64 required".to_string()));
+    }
+
+    // 3. Calculate credits (HD = 15, standard = 8)
+    let quality = req.quality.as_deref().unwrap_or("standard");
+    let credits = if quality == "hd" { 15 } else { 8 };
+
+    // 4. Deduct credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            deduct_credits_direct(dynamo, table, &user_id, credits).await
+                .map_err(|e| (StatusCode::PAYMENT_REQUIRED, e))?;
+        }
+    }
+
+    // 5. Call BRIA RMBG API via fal.ai
+    let fal_key = get_api_key("fal")
+        .ok_or_else(|| (StatusCode::SERVICE_UNAVAILABLE, "FAL_KEY not configured".to_string()))?;
+
+    let client = reqwest::Client::new();
+    let model = if quality == "hd" { "fal-ai/bria-rmbg" } else { "fal-ai/bria-rmbg" };
+
+    let body = serde_json::json!({
+        "image_url": req.image_url.unwrap_or_else(|| format!("data:image/png;base64,{}", req.image_base64.unwrap_or_default())),
+    });
+
+    let resp = client.post(format!("https://fal.run/{}", model))
+        .header("Authorization", format!("Key {}", fal_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(120))
+        .send()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Remove-bg request failed: {}", e)))?;
+
+    if !resp.status().is_success() {
+        let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Remove-bg API error: {}", error_text)));
+    }
+
+    let result: serde_json::Value = resp.json().await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse response: {}", e)))?;
+
+    let url = result.get("image")
+        .and_then(|v| v.get("url"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "No image URL in response".to_string()))?
+        .to_string();
+
+    Ok(Json(MediaRemoveBgResponse {
+        url,
+        credits_used: credits,
+    }))
+}
+
+/// POST /api/v1/media/upscale — 画像アップスケール
+async fn handle_media_upscale(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<MediaUpscaleRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // 1. Authenticate
+    let user_id = auth_user_id(&state, &headers).await
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Authentication required".to_string()))?;
+
+    // 2. Validate input
+    if req.image_url.is_none() && req.image_base64.is_none() {
+        return Err((StatusCode::BAD_REQUEST, "image_url or image_base64 required".to_string()));
+    }
+
+    let scale = req.scale.unwrap_or(2);
+    if scale != 2 && scale != 4 {
+        return Err((StatusCode::BAD_REQUEST, "scale must be 2 or 4".to_string()));
+    }
+
+    // 3. Calculate credits (4x quality = 25, 2x fast = 12)
+    let model = req.model.as_deref().unwrap_or("fast");
+    let credits = match (scale, model) {
+        (4, "quality") => 25,
+        (4, _) => 20,
+        (2, "quality") => 15,
+        _ => 12,
+    };
+
+    // 4. Deduct credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            deduct_credits_direct(dynamo, table, &user_id, credits).await
+                .map_err(|e| (StatusCode::PAYMENT_REQUIRED, e))?;
+        }
+    }
+
+    // 5. Call Real-ESRGAN API via fal.ai
+    let fal_key = get_api_key("fal")
+        .ok_or_else(|| (StatusCode::SERVICE_UNAVAILABLE, "FAL_KEY not configured".to_string()))?;
+
+    let client = reqwest::Client::new();
+    let fal_model = if model == "quality" {
+        "fal-ai/ccsr"  // High quality model
+    } else {
+        "fal-ai/real-esrgan"  // Fast model
+    };
+
+    let body = serde_json::json!({
+        "image_url": req.image_url.unwrap_or_else(|| format!("data:image/png;base64,{}", req.image_base64.unwrap_or_default())),
+        "scale": scale,
+    });
+
+    let resp = client.post(format!("https://fal.run/{}", fal_model))
+        .header("Authorization", format!("Key {}", fal_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(180))
+        .send()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Upscale request failed: {}", e)))?;
+
+    if !resp.status().is_success() {
+        let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Upscale API error: {}", error_text)));
+    }
+
+    let result: serde_json::Value = resp.json().await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse response: {}", e)))?;
+
+    let url = result.get("image")
+        .and_then(|v| v.get("url"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "No image URL in response".to_string()))?
+        .to_string();
+
+    Ok(Json(MediaUpscaleResponse {
+        url,
+        scale,
+        credits_used: credits,
+    }))
+}
+
+/// POST /api/v1/media/sfx — 効果音生成
+async fn handle_media_sfx(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<MediaSfxRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // 1. Authenticate
+    let user_id = auth_user_id(&state, &headers).await
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Authentication required".to_string()))?;
+
+    // 2. Validate duration
+    let duration = req.duration.unwrap_or(3);
+    if duration < 1 || duration > 10 {
+        return Err((StatusCode::BAD_REQUEST, "duration must be between 1-10 seconds".to_string()));
+    }
+
+    // 3. Calculate credits (5 credits per 3 seconds)
+    let credits = std::cmp::max(5, (duration as i64 * 5) / 3);
+
+    // 4. Deduct credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            deduct_credits_direct(dynamo, table, &user_id, credits).await
+                .map_err(|e| (StatusCode::PAYMENT_REQUIRED, e))?;
+        }
+    }
+
+    // 5. Call AudioCraft/Stable Audio via fal.ai
+    let fal_key = get_api_key("fal")
+        .ok_or_else(|| (StatusCode::SERVICE_UNAVAILABLE, "FAL_KEY not configured".to_string()))?;
+
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "prompt": req.prompt,
+        "seconds_total": duration,
+    });
+
+    let resp = client.post("https://fal.run/fal-ai/stable-audio")
+        .header("Authorization", format!("Key {}", fal_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(120))
+        .send()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("SFX request failed: {}", e)))?;
+
+    if !resp.status().is_success() {
+        let error_text = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("SFX API error: {}", error_text)));
+    }
+
+    let result: serde_json::Value = resp.json().await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse response: {}", e)))?;
+
+    let url = result.get("audio_file")
+        .and_then(|v| v.get("url"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "No audio URL in response".to_string()))?
+        .to_string();
+
+    Ok(Json(MediaSfxResponse {
+        url,
+        duration,
+        credits_used: credits,
+    }))
+}
+
 /// OpenAI-compatible TTS endpoint: POST /v1/audio/speech
 /// Accepts the same format as OpenAI's API: { model, input, voice, speed, response_format }
 /// Authenticates via Bearer token (chatweb.ai auth token) or x-api-key header.

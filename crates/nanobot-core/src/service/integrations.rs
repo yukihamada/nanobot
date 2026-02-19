@@ -72,6 +72,13 @@ impl ToolRegistry {
             Box::new(CsvAnalysisTool),
             Box::new(FilesystemTool),
             Box::new(BrowserTool),
+            // Git operations tools
+            Box::new(GitStatusTool),
+            Box::new(GitDiffTool),
+            Box::new(GitCommitTool),
+            // Quality assurance tools
+            Box::new(RunLinterTool),
+            Box::new(RunTestsTool),
         ];
 
         // Register GitHub tools (read works on public repos without token)
@@ -130,6 +137,16 @@ impl ToolRegistry {
             // YouTube transcript and arXiv are always available (no API key needed)
             tools.push(Box::new(YouTubeTranscriptTool));
             tools.push(Box::new(ArxivSearchTool));
+
+            // memory_log and knowledge_graph are always available (DynamoDB-backed, user-scoped)
+            tools.push(Box::new(MemoryLogTool));
+            tools.push(Box::new(KnowledgeGraphTool));
+
+            // Tavily web search (requires TAVILY_API_KEY)
+            if std::env::var("TAVILY_API_KEY").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering tavily_search tool (TAVILY_API_KEY present)");
+                tools.push(Box::new(TavilySearchTool));
+            }
         }
 
         Self { tools }
@@ -5358,9 +5375,9 @@ mod tests {
         std::env::remove_var("SPOTIFY_CLIENT_ID");
         std::env::remove_var("POSTGRES_URL");
         let registry = ToolRegistry::with_builtins();
-        // 22 base (19 original + 3 always-on: csv_analysis, filesystem, browser)
-        // + 2 http-api only (youtube_transcript, arxiv_search) + 1 github_read_file = 25 when http-api
-        let expected = if cfg!(feature = "http-api") { 25 } else { 22 };
+        // 27 base (19 original + 3 always-on: csv_analysis, filesystem, browser + 5 new: git_status, git_diff, git_commit, run_linter, run_tests)
+        // + 2 http-api only (youtube_transcript, arxiv_search) + 1 github_read_file = 30 when http-api
+        let expected = if cfg!(feature = "http-api") { 30 } else { 27 };
         assert_eq!(registry.len(), expected);
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
@@ -5458,4 +5475,1137 @@ mod tests {
         let result = registry.execute("nonexistent", &params).await;
         assert!(result.contains("Unknown tool"));
     }
+
+    // -----------------------------------------------------------------------
+    // New tools: memory_log, knowledge_graph, tavily_search
+    // -----------------------------------------------------------------------
+
+    #[test]
+    #[cfg(feature = "http-api")]
+    fn test_new_tools_registered() {
+        std::env::remove_var("GITHUB_TOKEN");
+        std::env::remove_var("CONNECT_INSTANCE_ID");
+        std::env::remove_var("SLACK_BOT_TOKEN");
+        std::env::remove_var("NOTION_API_KEY");
+        std::env::remove_var("DISCORD_WEBHOOK_URL");
+        std::env::remove_var("SPOTIFY_CLIENT_ID");
+        std::env::remove_var("POSTGRES_URL");
+        std::env::remove_var("TAVILY_API_KEY");
+        let registry = ToolRegistry::with_builtins();
+        let defs = registry.get_definitions();
+        let names: Vec<&str> = defs.iter()
+            .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
+            .collect();
+        assert!(names.contains(&"memory_log"), "memory_log should be registered");
+        assert!(names.contains(&"knowledge_graph"), "knowledge_graph should be registered");
+        // tavily_search should NOT be registered without API key
+        assert!(!names.contains(&"tavily_search"), "tavily_search should not be registered without TAVILY_API_KEY");
+    }
+
+    #[test]
+    #[cfg(feature = "http-api")]
+    fn test_tavily_registered_with_key() {
+        std::env::set_var("TAVILY_API_KEY", "test-key");
+        let registry = ToolRegistry::with_builtins();
+        let defs = registry.get_definitions();
+        let names: Vec<&str> = defs.iter()
+            .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
+            .collect();
+        assert!(names.contains(&"tavily_search"), "tavily_search should be registered with TAVILY_API_KEY");
+        std::env::remove_var("TAVILY_API_KEY");
+    }
+
+    #[tokio::test]
+    async fn test_memory_log_requires_content() {
+        let tool = MemoryLogTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("log_error"));
+        // no content
+        let result = tool.execute(params).await;
+        assert!(result.contains("content is required"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_memory_log_content_limit() {
+        let tool = MemoryLogTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("log_learning"));
+        params.insert("content".to_string(), serde_json::json!("x".repeat(4097)));
+        let result = tool.execute(params).await;
+        assert!(result.contains("4096"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_memory_log_list_no_dynamo() {
+        let tool = MemoryLogTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("list"));
+        let result = tool.execute(params).await;
+        // Without DynamoDB configured, should return fallback message
+        assert!(!result.starts_with("[TOOL_ERROR]"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_memory_log_write_no_dynamo() {
+        let tool = MemoryLogTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("log_error"));
+        params.insert("content".to_string(), serde_json::json!("test error message"));
+        params.insert("_session_key".to_string(), serde_json::json!("test-session"));
+        let result = tool.execute(params).await;
+        // Should succeed (either logged or graceful fallback)
+        assert!(!result.starts_with("[TOOL_ERROR]"), "got: {result}");
+        assert!(result.contains("ERROR") || result.contains("Logged"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_knowledge_graph_requires_name() {
+        let tool = KnowledgeGraphTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("create"));
+        params.insert("entity_type".to_string(), serde_json::json!("Person"));
+        // no name
+        let result = tool.execute(params).await;
+        assert!(result.contains("name is required"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_knowledge_graph_name_limit() {
+        let tool = KnowledgeGraphTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("create"));
+        params.insert("entity_type".to_string(), serde_json::json!("Person"));
+        params.insert("name".to_string(), serde_json::json!("a".repeat(257)));
+        let result = tool.execute(params).await;
+        assert!(result.contains("256"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_knowledge_graph_link_relation_validation() {
+        let tool = KnowledgeGraphTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("link"));
+        params.insert("entity_id".to_string(), serde_json::json!("abc123"));
+        params.insert("target_id".to_string(), serde_json::json!("def456"));
+        params.insert("relation".to_string(), serde_json::json!("bad relation!!")); // invalid
+        let result = tool.execute(params).await;
+        assert!(result.contains("alphanumeric"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_knowledge_graph_create_no_dynamo() {
+        let tool = KnowledgeGraphTool;
+        let mut params = HashMap::new();
+        params.insert("action".to_string(), serde_json::json!("create"));
+        params.insert("entity_type".to_string(), serde_json::json!("Project"));
+        params.insert("name".to_string(), serde_json::json!("nanobot"));
+        params.insert("properties".to_string(), serde_json::json!({"lang": "Rust"}));
+        params.insert("_session_key".to_string(), serde_json::json!("test-session"));
+        let result = tool.execute(params).await;
+        assert!(!result.starts_with("[TOOL_ERROR]"), "got: {result}");
+        assert!(result.contains("Created") || result.contains("nanobot"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_tavily_search_requires_query() {
+        let tool = TavilySearchTool;
+        let params = HashMap::new();
+        let result = tool.execute(params).await;
+        assert!(result.contains("query is required"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_tavily_search_query_limit() {
+        let tool = TavilySearchTool;
+        let mut params = HashMap::new();
+        params.insert("query".to_string(), serde_json::json!("q".repeat(401)));
+        let result = tool.execute(params).await;
+        assert!(result.contains("400"), "got: {result}");
+    }
+
+    #[tokio::test]
+    async fn test_tavily_search_no_api_key() {
+        std::env::remove_var("TAVILY_API_KEY");
+        let tool = TavilySearchTool;
+        let mut params = HashMap::new();
+        params.insert("query".to_string(), serde_json::json!("test query"));
+        let result = tool.execute(params).await;
+        assert!(result.contains("TAVILY_API_KEY"), "got: {result}");
+    }
+
+    #[test]
+    fn test_memory_log_tool_name_and_params() {
+        let tool = MemoryLogTool;
+        assert_eq!(tool.name(), "memory_log");
+        let params = tool.parameters();
+        let actions = params.pointer("/properties/action/enum").unwrap();
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("log_error")));
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("log_learning")));
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("list")));
+    }
+
+    #[test]
+    fn test_knowledge_graph_tool_name_and_params() {
+        let tool = KnowledgeGraphTool;
+        assert_eq!(tool.name(), "knowledge_graph");
+        let params = tool.parameters();
+        let actions = params.pointer("/properties/action/enum").unwrap();
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("create")));
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("link")));
+        assert!(actions.as_array().unwrap().iter().any(|v| v.as_str() == Some("query")));
+    }
+
+    #[test]
+    fn test_tavily_search_tool_name_and_params() {
+        let tool = TavilySearchTool;
+        assert_eq!(tool.name(), "tavily_search");
+        let params = tool.parameters();
+        assert!(params.pointer("/properties/query").is_some());
+        assert!(params.pointer("/properties/topic/enum").is_some());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Git Operations Tools
+// ---------------------------------------------------------------------------
+
+struct GitStatusTool;
+
+#[async_trait]
+impl Tool for GitStatusTool {
+    fn name(&self) -> &str {
+        "git_status"
+    }
+
+    fn description(&self) -> &str {
+        "Get git repository status - shows modified, staged, and untracked files. Essential for understanding what changes exist before committing."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Optional: Path to git repository (defaults to current directory)"
+                }
+            }
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let path = params
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+
+        match tokio::process::Command::new("git")
+            .args(&["status", "--short"])
+            .current_dir(path)
+            .output()
+            .await
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if stdout.trim().is_empty() {
+                        "✅ Working directory clean - no changes".to_string()
+                    } else {
+                        format!("Git status:\n{}", stdout)
+                    }
+                } else {
+                    format!("Error: {}", String::from_utf8_lossy(&output.stderr))
+                }
+            }
+            Err(e) => format!("Failed to run git status: {}", e),
+        }
+    }
+}
+
+struct GitDiffTool;
+
+#[async_trait]
+impl Tool for GitDiffTool {
+    fn name(&self) -> &str {
+        "git_diff"
+    }
+
+    fn description(&self) -> &str {
+        "Show git diff - displays changes in files. Use this to review what will be committed. Can show staged changes (--staged) or unstaged changes (default)."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Optional: Path to git repository or specific file"
+                },
+                "staged": {
+                    "type": "boolean",
+                    "description": "Show staged changes (--staged). Default: false (shows unstaged changes)"
+                },
+                "file": {
+                    "type": "string",
+                    "description": "Optional: Specific file to diff"
+                }
+            }
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let path = params
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+        let staged = params
+            .get("staged")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let file = params.get("file").and_then(|v| v.as_str());
+
+        let mut cmd = tokio::process::Command::new("git");
+        cmd.arg("diff");
+
+        if staged {
+            cmd.arg("--staged");
+        }
+
+        if let Some(f) = file {
+            cmd.arg(f);
+        }
+
+        cmd.current_dir(path);
+
+        match cmd.output().await {
+            Ok(output) => {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if stdout.trim().is_empty() {
+                        "No changes to show".to_string()
+                    } else {
+                        format!("Git diff:\n{}", stdout)
+                    }
+                } else {
+                    format!("Error: {}", String::from_utf8_lossy(&output.stderr))
+                }
+            }
+            Err(e) => format!("Failed to run git diff: {}", e),
+        }
+    }
+}
+
+struct GitCommitTool;
+
+#[async_trait]
+impl Tool for GitCommitTool {
+    fn name(&self) -> &str {
+        "git_commit"
+    }
+
+    fn description(&self) -> &str {
+        "Create a git commit with a message. Files must be staged first (use git add). This saves your changes to version control history."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "Commit message describing the changes"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Optional: Path to git repository"
+                }
+            },
+            "required": ["message"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let message = match params.get("message").and_then(|v| v.as_str()) {
+            Some(m) => m,
+            None => return "Error: commit message is required".to_string(),
+        };
+
+        let path = params
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+
+        match tokio::process::Command::new("git")
+            .args(&["commit", "-m", message])
+            .current_dir(path)
+            .output()
+            .await
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    format!(
+                        "✅ Commit created:\n{}",
+                        String::from_utf8_lossy(&output.stdout)
+                    )
+                } else {
+                    format!("Error: {}", String::from_utf8_lossy(&output.stderr))
+                }
+            }
+            Err(e) => format!("Failed to run git commit: {}", e),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Quality Assurance Tools
+// ---------------------------------------------------------------------------
+
+struct RunLinterTool;
+
+#[async_trait]
+impl Tool for RunLinterTool {
+    fn name(&self) -> &str {
+        "run_linter"
+    }
+
+    fn description(&self) -> &str {
+        "Run code linter to detect syntax errors, style issues, and potential bugs. Supports multiple languages (clippy for Rust, eslint for JS/TS, pylint for Python, etc.). Returns list of issues found."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "language": {
+                    "type": "string",
+                    "enum": ["rust", "javascript", "typescript", "python", "go"],
+                    "description": "Programming language to lint"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Optional: Path to file or directory to lint (defaults to current directory)"
+                },
+                "fix": {
+                    "type": "boolean",
+                    "description": "Auto-fix issues if possible (default: false)"
+                }
+            },
+            "required": ["language"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let language = match params.get("language").and_then(|v| v.as_str()) {
+            Some(l) => l,
+            None => return "Error: language is required".to_string(),
+        };
+
+        let path = params
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+        let fix = params
+            .get("fix")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let (cmd, args) = match language {
+            "rust" => {
+                let mut args = vec!["clippy", "--", "-D", "warnings"];
+                if fix {
+                    args = vec!["clippy", "--fix", "--allow-dirty"];
+                }
+                ("cargo", args)
+            }
+            "javascript" | "typescript" => {
+                let mut args = vec!["eslint", path];
+                if fix {
+                    args.push("--fix");
+                }
+                ("npx", args)
+            }
+            "python" => ("pylint", vec![path]),
+            "go" => ("golint", vec![path]),
+            _ => return format!("Unsupported language: {}", language),
+        };
+
+        match tokio::process::Command::new(cmd)
+            .args(&args)
+            .output()
+            .await
+        {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let combined = format!("{}\n{}", stdout, stderr);
+
+                if output.status.success() {
+                    format!("✅ Linter passed - no issues found\n{}", combined)
+                } else {
+                    format!("⚠️ Linter found issues:\n{}", combined)
+                }
+            }
+            Err(e) => format!("Failed to run linter (is {} installed?): {}", cmd, e),
+        }
+    }
+}
+
+struct RunTestsTool;
+
+#[async_trait]
+impl Tool for RunTestsTool {
+    fn name(&self) -> &str {
+        "run_tests"
+    }
+
+    fn description(&self) -> &str {
+        "Run test suite to verify code correctness. Supports multiple test frameworks (cargo test for Rust, jest for JS/TS, pytest for Python, etc.). Returns test results with pass/fail status."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "language": {
+                    "type": "string",
+                    "enum": ["rust", "javascript", "typescript", "python", "go"],
+                    "description": "Programming language / test framework"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Optional: Path to test file or directory"
+                },
+                "test_name": {
+                    "type": "string",
+                    "description": "Optional: Specific test name to run (default: run all tests)"
+                }
+            },
+            "required": ["language"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let language = match params.get("language").and_then(|v| v.as_str()) {
+            Some(l) => l,
+            None => return "Error: language is required".to_string(),
+        };
+
+        let path = params.get("path").and_then(|v| v.as_str());
+        let test_name = params.get("test_name").and_then(|v| v.as_str());
+
+        let (cmd, mut args) = match language {
+            "rust" => ("cargo", vec!["test"]),
+            "javascript" | "typescript" => ("npm", vec!["test"]),
+            "python" => ("pytest", vec!["-v"]),
+            "go" => ("go", vec!["test", "-v"]),
+            _ => return format!("Unsupported language: {}", language),
+        };
+
+        if let Some(p) = path {
+            args.push(p);
+        }
+
+        if let Some(t) = test_name {
+            if language == "rust" {
+                args.push(t);
+            }
+        }
+
+        match tokio::process::Command::new(cmd)
+            .args(&args)
+            .output()
+            .await
+        {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let combined = format!("{}\n{}", stdout, stderr);
+
+                if output.status.success() {
+                    format!("✅ Tests passed\n{}", combined)
+                } else {
+                    format!("❌ Tests failed\n{}", combined)
+                }
+            }
+            Err(e) => format!("Failed to run tests (is {} installed?): {}", cmd, e),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MemoryLogTool — inspired by clawhub self-improving-agent (24k DL, 208★)
+// Logs learnings, errors, and feature requests to DynamoDB for continuous improvement.
+// ---------------------------------------------------------------------------
+
+pub struct MemoryLogTool;
+
+#[async_trait]
+impl Tool for MemoryLogTool {
+    fn name(&self) -> &str { "memory_log" }
+
+    fn description(&self) -> &str {
+        "Log learnings, errors, and feature requests for continuous self-improvement. \
+        Use when: (1) A command/operation fails unexpectedly — log as 'error', \
+        (2) User corrects you ('No, that's wrong...') — log as 'learning' with category 'correction', \
+        (3) User requests a missing capability — log as 'feature_request', \
+        (4) An external API/tool fails — log as 'error', \
+        (5) A better approach is discovered — log as 'learning' with category 'best_practice'. \
+        Use action='list' to review past learnings before major tasks."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["log_learning", "log_error", "log_feature_request", "list"],
+                    "description": "Action to perform"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The learning, error, or feature request to log (required for log_* actions)"
+                },
+                "category": {
+                    "type": "string",
+                    "enum": ["correction", "best_practice", "knowledge_gap", "api_failure", "general"],
+                    "description": "Category for log_learning entries (default: general)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max entries to return for list action (default: 20)"
+                }
+            },
+            "required": ["action"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let action = match params.get("action").and_then(|v| v.as_str()) {
+            Some(a) => a,
+            None => return "[TOOL_ERROR] action is required".to_string(),
+        };
+        let session_key = params.get("_session_key").and_then(|v| v.as_str()).unwrap_or("anonymous");
+        match action {
+            "log_learning" | "log_error" | "log_feature_request" => {
+                let content = match params.get("content").and_then(|v| v.as_str()) {
+                    Some(c) if !c.trim().is_empty() => c.trim().to_string(),
+                    _ => return "[TOOL_ERROR] content is required for log actions".to_string(),
+                };
+                if content.len() > 4096 {
+                    return "[TOOL_ERROR] content exceeds 4096 character limit".to_string();
+                }
+                let category = params.get("category").and_then(|v| v.as_str()).unwrap_or("general").to_string();
+                let log_type = match action {
+                    "log_learning" => "LEARNING",
+                    "log_error" => "ERROR",
+                    _ => "FEATURE_REQUEST",
+                }.to_string();
+                execute_memory_log_write(session_key, &log_type, &category, &content).await
+            }
+            "list" => {
+                let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(20).min(100) as i32;
+                execute_memory_log_list(session_key, limit).await
+            }
+            _ => "[TOOL_ERROR] Unknown action. Use: log_learning, log_error, log_feature_request, list".to_string(),
+        }
+    }
+}
+
+async fn execute_memory_log_write(session_key: &str, log_type: &str, category: &str, content: &str) -> String {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        use aws_sdk_dynamodb::types::AttributeValue;
+        let table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+        if table.is_empty() {
+            return format!("✅ Logged [{log_type}/{category}]: {} [DynamoDB not configured]", &content[..content.len().min(80)]);
+        }
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let dynamo = aws_sdk_dynamodb::Client::new(&config);
+        let now = chrono::Utc::now();
+        let pk = format!("MEMLOG#{session_key}");
+        let sk = format!("{log_type}#{}", now.to_rfc3339());
+        let ttl = (now + chrono::Duration::days(365)).timestamp();
+        match dynamo.put_item()
+            .table_name(&table)
+            .item("pk", AttributeValue::S(pk))
+            .item("sk", AttributeValue::S(sk))
+            .item("log_type", AttributeValue::S(log_type.to_string()))
+            .item("category", AttributeValue::S(category.to_string()))
+            .item("content", AttributeValue::S(content.to_string()))
+            .item("ttl", AttributeValue::N(ttl.to_string()))
+            .send().await
+        {
+            Ok(_) => format!("✅ Logged [{log_type}/{category}]: {}", &content[..content.len().min(80)]),
+            Err(e) => format!("[TOOL_ERROR] Failed to log: {e}"),
+        }
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        tracing::info!("memory_log [{log_type}/{category}]: {content}");
+        format!("✅ Logged [{log_type}/{category}]: {}", &content[..content.len().min(80)])
+    }
+}
+
+async fn execute_memory_log_list(session_key: &str, limit: i32) -> String {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        use aws_sdk_dynamodb::types::AttributeValue;
+        let table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+        if table.is_empty() {
+            return "⚠️ DynamoDB not configured".to_string();
+        }
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let dynamo = aws_sdk_dynamodb::Client::new(&config);
+        let pk = format!("MEMLOG#{session_key}");
+        match dynamo.query()
+            .table_name(&table)
+            .key_condition_expression("pk = :pk")
+            .expression_attribute_values(":pk", AttributeValue::S(pk))
+            .scan_index_forward(false)
+            .limit(limit)
+            .send().await
+        {
+            Ok(output) => {
+                let items: Vec<String> = output.items().iter().map(|item| {
+                    let get_s = |k: &str| item.get(k).and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    format!("[{}][{}] {}", get_s("log_type"), get_s("category"), get_s("content"))
+                }).collect();
+                if items.is_empty() { "No learnings logged yet.".to_string() }
+                else { format!("📚 {} entries:\n{}", items.len(), items.join("\n")) }
+            }
+            Err(e) => format!("[TOOL_ERROR] Failed to list: {e}"),
+        }
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    { "No learnings available (DynamoDB not enabled)".to_string() }
+}
+
+// ---------------------------------------------------------------------------
+// KnowledgeGraphTool — inspired by clawhub ontology skill (17k DL, 17★)
+// Typed entity knowledge graph backed by DynamoDB.
+// ---------------------------------------------------------------------------
+
+pub struct KnowledgeGraphTool;
+
+#[async_trait]
+impl Tool for KnowledgeGraphTool {
+    fn name(&self) -> &str { "knowledge_graph" }
+
+    fn description(&self) -> &str {
+        "Typed knowledge graph for structured memory. Store and query entities: Person, Organization, \
+        Project, Task, Goal, Event, Document, Note. With typed properties and relations between entities. \
+        Use when: remembering facts about people/projects/tasks, linking related objects, tracking dependencies. \
+        Triggers: 'remember that...', 'what do I know about X?', 'link X to Y', 'show tasks for project Z'."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["create", "update", "query", "get", "link", "delete"],
+                    "description": "create entity, update entity, query by type/name, get by id, link two entities, delete entity"
+                },
+                "entity_type": {
+                    "type": "string",
+                    "enum": ["Person", "Organization", "Project", "Task", "Goal", "Event", "Document", "Note", "Account", "Other"],
+                    "description": "Entity type (required for create/query)"
+                },
+                "entity_id": {
+                    "type": "string",
+                    "description": "Entity ID (required for update/get/link/delete)"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Entity name (required for create)"
+                },
+                "properties": {
+                    "type": "object",
+                    "description": "Key-value properties (e.g. {\"email\": \"...\", \"status\": \"active\"})"
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Search string to filter by name/properties (for query action)"
+                },
+                "relation": {
+                    "type": "string",
+                    "description": "Relation type for link (e.g. 'belongs_to', 'assigned_to', 'depends_on')"
+                },
+                "target_id": {
+                    "type": "string",
+                    "description": "Target entity ID for link action"
+                }
+            },
+            "required": ["action"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let action = match params.get("action").and_then(|v| v.as_str()) {
+            Some(a) => a,
+            None => return "[TOOL_ERROR] action is required".to_string(),
+        };
+        let session_key = params.get("_session_key").and_then(|v| v.as_str()).unwrap_or("anonymous");
+        match action {
+            "create" => {
+                let entity_type = match params.get("entity_type").and_then(|v| v.as_str()) {
+                    Some(t) => t.to_string(),
+                    None => return "[TOOL_ERROR] entity_type is required for create".to_string(),
+                };
+                let name = match params.get("name").and_then(|v| v.as_str()) {
+                    Some(n) if !n.trim().is_empty() => n.trim().to_string(),
+                    _ => return "[TOOL_ERROR] name is required for create".to_string(),
+                };
+                if name.len() > 256 { return "[TOOL_ERROR] name exceeds 256 chars".to_string(); }
+                let props = params.get("properties").cloned().unwrap_or(serde_json::json!({}));
+                execute_kg_create(session_key, &entity_type, &name, &props).await
+            }
+            "update" => {
+                let entity_id = match params.get("entity_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id.to_string(),
+                    _ => return "[TOOL_ERROR] entity_id is required for update".to_string(),
+                };
+                let props = params.get("properties").cloned().unwrap_or(serde_json::json!({}));
+                let name = params.get("name").and_then(|v| v.as_str()).map(|s| s.to_string());
+                execute_kg_update(session_key, &entity_id, name.as_deref(), &props).await
+            }
+            "query" => {
+                let entity_type = params.get("entity_type").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                execute_kg_query(session_key, entity_type.as_deref(), &query).await
+            }
+            "get" => {
+                let entity_id = match params.get("entity_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id.to_string(),
+                    _ => return "[TOOL_ERROR] entity_id is required for get".to_string(),
+                };
+                execute_kg_get(session_key, &entity_id).await
+            }
+            "link" => {
+                let entity_id = match params.get("entity_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id.to_string(),
+                    _ => return "[TOOL_ERROR] entity_id is required for link".to_string(),
+                };
+                let target_id = match params.get("target_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id.to_string(),
+                    _ => return "[TOOL_ERROR] target_id is required for link".to_string(),
+                };
+                let relation = params.get("relation").and_then(|v| v.as_str()).unwrap_or("related_to").to_string();
+                execute_kg_link(session_key, &entity_id, &relation, &target_id).await
+            }
+            "delete" => {
+                let entity_id = match params.get("entity_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id.to_string(),
+                    _ => return "[TOOL_ERROR] entity_id is required for delete".to_string(),
+                };
+                execute_kg_delete(session_key, &entity_id).await
+            }
+            _ => "[TOOL_ERROR] Unknown action".to_string(),
+        }
+    }
+}
+
+fn new_entity_id() -> String {
+    uuid::Uuid::new_v4().to_string().replace('-', "")[..8].to_string()
+}
+
+async fn execute_kg_create(session_key: &str, entity_type: &str, name: &str, props: &serde_json::Value) -> String {
+    let entity_id = new_entity_id();
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        use aws_sdk_dynamodb::types::AttributeValue;
+        let table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+        if table.is_empty() {
+            return format!("✅ Created {entity_type} '{name}' (id: {entity_id}) [DynamoDB not configured]");
+        }
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let dynamo = aws_sdk_dynamodb::Client::new(&config);
+        let now = chrono::Utc::now();
+        let ttl = (now + chrono::Duration::days(365 * 3)).timestamp();
+        match dynamo.put_item()
+            .table_name(&table)
+            .item("pk", AttributeValue::S(format!("KG#{session_key}")))
+            .item("sk", AttributeValue::S(format!("ENTITY#{entity_id}")))
+            .item("entity_id", AttributeValue::S(entity_id.clone()))
+            .item("entity_type", AttributeValue::S(entity_type.to_string()))
+            .item("name", AttributeValue::S(name.to_string()))
+            .item("properties", AttributeValue::S(props.to_string()))
+            .item("created_at", AttributeValue::S(now.to_rfc3339()))
+            .item("updated_at", AttributeValue::S(now.to_rfc3339()))
+            .item("ttl", AttributeValue::N(ttl.to_string()))
+            .send().await
+        {
+            Ok(_) => format!("✅ Created {entity_type} '{name}' (id: {entity_id})"),
+            Err(e) => format!("[TOOL_ERROR] Failed to create entity: {e}"),
+        }
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    { format!("✅ Created {entity_type} '{name}' (id: {entity_id}) [in-memory]") }
+}
+
+async fn execute_kg_update(session_key: &str, entity_id: &str, name: Option<&str>, props: &serde_json::Value) -> String {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        use aws_sdk_dynamodb::types::AttributeValue;
+        let table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+        if table.is_empty() { return "[TOOL_ERROR] DynamoDB not configured".to_string(); }
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let dynamo = aws_sdk_dynamodb::Client::new(&config);
+        let now = chrono::Utc::now();
+        let mut update_expr = "SET updated_at = :ua, properties = :props".to_string();
+        let mut req = dynamo.update_item()
+            .table_name(&table)
+            .key("pk", AttributeValue::S(format!("KG#{session_key}")))
+            .key("sk", AttributeValue::S(format!("ENTITY#{entity_id}")))
+            .expression_attribute_values(":ua", AttributeValue::S(now.to_rfc3339()))
+            .expression_attribute_values(":props", AttributeValue::S(props.to_string()));
+        if let Some(n) = name {
+            update_expr.push_str(", #nm = :name");
+            req = req
+                .expression_attribute_names("#nm", "name")
+                .expression_attribute_values(":name", AttributeValue::S(n.to_string()));
+        }
+        match req.update_expression(&update_expr).send().await {
+            Ok(_) => format!("✅ Updated entity {entity_id}"),
+            Err(e) => format!("[TOOL_ERROR] Failed to update: {e}"),
+        }
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    { format!("✅ Updated entity {entity_id} [in-memory]") }
+}
+
+async fn execute_kg_query(session_key: &str, entity_type: Option<&str>, query: &str) -> String {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        use aws_sdk_dynamodb::types::AttributeValue;
+        let table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+        if table.is_empty() { return "⚠️ DynamoDB not configured".to_string(); }
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let dynamo = aws_sdk_dynamodb::Client::new(&config);
+        let pk = format!("KG#{session_key}");
+        let mut req = dynamo.query()
+            .table_name(&table)
+            .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+            .expression_attribute_values(":pk", AttributeValue::S(pk))
+            .expression_attribute_values(":prefix", AttributeValue::S("ENTITY#".to_string()))
+            .limit(50);
+        if let Some(et) = entity_type {
+            req = req
+                .filter_expression("entity_type = :et")
+                .expression_attribute_values(":et", AttributeValue::S(et.to_string()));
+        }
+        match req.send().await {
+            Ok(output) => {
+                let ql = query.to_lowercase();
+                let items: Vec<String> = output.items().iter().filter_map(|item| {
+                    let get_s = |k: &str| item.get(k).and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let name = get_s("name");
+                    let props = get_s("properties");
+                    if !ql.is_empty() && !name.to_lowercase().contains(&ql) && !props.to_lowercase().contains(&ql) {
+                        return None;
+                    }
+                    Some(format!("[{}] {} (id: {}) — {}", get_s("entity_type"), name, get_s("entity_id"), props))
+                }).collect();
+                if items.is_empty() { "No matching entities found.".to_string() }
+                else { format!("🔍 {} entities:\n{}", items.len(), items.join("\n")) }
+            }
+            Err(e) => format!("[TOOL_ERROR] Failed to query: {e}"),
+        }
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    { "No entities (DynamoDB not enabled)".to_string() }
+}
+
+async fn execute_kg_get(session_key: &str, entity_id: &str) -> String {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        use aws_sdk_dynamodb::types::AttributeValue;
+        let table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+        if table.is_empty() { return "[TOOL_ERROR] DynamoDB not configured".to_string(); }
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let dynamo = aws_sdk_dynamodb::Client::new(&config);
+        match dynamo.get_item()
+            .table_name(&table)
+            .key("pk", AttributeValue::S(format!("KG#{session_key}")))
+            .key("sk", AttributeValue::S(format!("ENTITY#{entity_id}")))
+            .send().await
+        {
+            Ok(output) => match output.item() {
+                Some(item) => {
+                    let get_s = |k: &str| item.get(k).and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    let props: serde_json::Value = serde_json::from_str(&get_s("properties")).unwrap_or(serde_json::json!({}));
+                    serde_json::json!({
+                        "id": get_s("entity_id"), "type": get_s("entity_type"),
+                        "name": get_s("name"), "properties": props,
+                        "created_at": get_s("created_at"), "updated_at": get_s("updated_at"),
+                    }).to_string()
+                }
+                None => format!("Entity {entity_id} not found"),
+            },
+            Err(e) => format!("[TOOL_ERROR] Failed to get entity: {e}"),
+        }
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    { format!("Entity {entity_id} not found (DynamoDB not enabled)") }
+}
+
+async fn execute_kg_link(session_key: &str, entity_id: &str, relation: &str, target_id: &str) -> String {
+    if !relation.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') || relation.len() > 64 {
+        return "[TOOL_ERROR] relation must be alphanumeric+underscore, max 64 chars".to_string();
+    }
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        use aws_sdk_dynamodb::types::AttributeValue;
+        let table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+        if table.is_empty() { return "[TOOL_ERROR] DynamoDB not configured".to_string(); }
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let dynamo = aws_sdk_dynamodb::Client::new(&config);
+        let now = chrono::Utc::now();
+        let ttl = (now + chrono::Duration::days(365 * 3)).timestamp();
+        match dynamo.put_item()
+            .table_name(&table)
+            .item("pk", AttributeValue::S(format!("KG#{session_key}")))
+            .item("sk", AttributeValue::S(format!("LINK#{entity_id}#{relation}#{target_id}")))
+            .item("from_id", AttributeValue::S(entity_id.to_string()))
+            .item("relation", AttributeValue::S(relation.to_string()))
+            .item("to_id", AttributeValue::S(target_id.to_string()))
+            .item("created_at", AttributeValue::S(now.to_rfc3339()))
+            .item("ttl", AttributeValue::N(ttl.to_string()))
+            .send().await
+        {
+            Ok(_) => format!("✅ Linked {entity_id} --[{relation}]--> {target_id}"),
+            Err(e) => format!("[TOOL_ERROR] Failed to link: {e}"),
+        }
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    { format!("✅ Linked {entity_id} --[{relation}]--> {target_id} [in-memory]") }
+}
+
+async fn execute_kg_delete(session_key: &str, entity_id: &str) -> String {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        use aws_sdk_dynamodb::types::AttributeValue;
+        let table = std::env::var("DYNAMODB_CONFIG_TABLE").unwrap_or_default();
+        if table.is_empty() { return "[TOOL_ERROR] DynamoDB not configured".to_string(); }
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let dynamo = aws_sdk_dynamodb::Client::new(&config);
+        match dynamo.delete_item()
+            .table_name(&table)
+            .key("pk", AttributeValue::S(format!("KG#{session_key}")))
+            .key("sk", AttributeValue::S(format!("ENTITY#{entity_id}")))
+            .send().await
+        {
+            Ok(_) => format!("✅ Deleted entity {entity_id}"),
+            Err(e) => format!("[TOOL_ERROR] Failed to delete: {e}"),
+        }
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    { format!("✅ Deleted entity {entity_id} [in-memory]") }
+}
+
+// ---------------------------------------------------------------------------
+// TavilySearchTool — inspired by clawhub tavily-search skill (21k DL, 53★)
+// AI-optimized web search. Requires TAVILY_API_KEY.
+// ---------------------------------------------------------------------------
+
+pub struct TavilySearchTool;
+
+#[async_trait]
+impl Tool for TavilySearchTool {
+    fn name(&self) -> &str { "tavily_search" }
+
+    fn description(&self) -> &str {
+        "AI-optimized web search via Tavily API. Returns concise, relevance-scored results ideal for AI agents. \
+        Better than raw web scraping for research and real-time information. Requires TAVILY_API_KEY."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string", "description": "Search query (max 400 chars)" },
+                "max_results": { "type": "integer", "description": "Max results (default: 5, max: 10)" },
+                "topic": {
+                    "type": "string",
+                    "enum": ["general", "news"],
+                    "description": "Search topic (default: general)"
+                },
+                "include_answer": { "type": "boolean", "description": "Include AI-generated answer summary (default: true)" }
+            },
+            "required": ["query"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let query = match params.get("query").and_then(|v| v.as_str()) {
+            Some(q) if !q.trim().is_empty() => q.trim().to_string(),
+            _ => return "[TOOL_ERROR] query is required".to_string(),
+        };
+        if query.len() > 400 { return "[TOOL_ERROR] query exceeds 400 character limit".to_string(); }
+        let api_key = match std::env::var("TAVILY_API_KEY") {
+            Ok(k) if !k.is_empty() => k,
+            _ => return "[TOOL_ERROR] TAVILY_API_KEY not configured".to_string(),
+        };
+        let max_results = params.get("max_results").and_then(|v| v.as_u64()).unwrap_or(5).min(10) as usize;
+        let topic = params.get("topic").and_then(|v| v.as_str()).unwrap_or("general").to_string();
+        let include_answer = params.get("include_answer").and_then(|v| v.as_bool()).unwrap_or(true);
+        execute_tavily_search(&query, &api_key, max_results, &topic, include_answer).await
+    }
+}
+
+async fn execute_tavily_search(query: &str, api_key: &str, max_results: usize, topic: &str, include_answer: bool) -> String {
+    tracing::info!("tavily_search: query={query}");
+    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build() {
+        Ok(c) => c,
+        Err(e) => return format!("[TOOL_ERROR] Failed to create HTTP client: {e}"),
+    };
+    let body = serde_json::json!({
+        "query": query, "max_results": max_results, "topic": topic,
+        "include_answer": include_answer, "include_raw_content": false,
+    });
+    let resp = match client
+        .post("https://api.tavily.com/search")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {api_key}"))
+        .json(&body)
+        .send().await
+    {
+        Ok(r) => r,
+        Err(e) => return format!("[TOOL_ERROR] Tavily request failed: {e}"),
+    };
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let err = resp.text().await.unwrap_or_default();
+        return format!("[TOOL_ERROR] Tavily API error {status}: {err}");
+    }
+    let data: serde_json::Value = match resp.json().await {
+        Ok(d) => d,
+        Err(e) => return format!("[TOOL_ERROR] Failed to parse Tavily response: {e}"),
+    };
+    let mut output = String::new();
+    if include_answer {
+        if let Some(answer) = data.get("answer").and_then(|v| v.as_str()) {
+            if !answer.is_empty() { output.push_str(&format!("**Answer:** {answer}\n\n")); }
+        }
+    }
+    if let Some(results) = data.get("results").and_then(|v| v.as_array()) {
+        output.push_str(&format!("**Search results for '{query}':**\n"));
+        for (i, r) in results.iter().enumerate() {
+            let title = r.get("title").and_then(|v| v.as_str()).unwrap_or("(no title)");
+            let url = r.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            let snippet = r.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            let score = r.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            output.push_str(&format!(
+                "{}. **{}** (score: {:.2})\n   {}\n   {}\n",
+                i + 1, title, score,
+                snippet.chars().take(200).collect::<String>(), url
+            ));
+        }
+    } else {
+        output.push_str("No results found.");
+    }
+    output
 }
