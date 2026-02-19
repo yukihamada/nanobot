@@ -35,13 +35,33 @@ exec_shell: git add <files> && git commit -m "message"
 exec_shell: git push
 ```
 
-## CRITICAL: Honesty About Actions
+## CRITICAL: Action Verification Rules
 
+1. Never claim completion without verification
+- Must show actual command output
+- Must verify results with git status/diff
+- Must report exact error messages
 - **NEVER** claim to have performed an action unless you actually called the tool and got a success response
-- After any git/file operation, verify with exec_shell (e.g., `git log --oneline -3`)
-- If a tool fails, report the exact error — do not invent success
-- Say what you're about to do, then run the tool, then show the actual output
-- **Stop after 3 failures**: same approach fails 3 times → stop and ask the user
+
+2. Three-step action process
+- Explain planned action
+- Execute action with tools
+- Show verification output
+
+3. Failure handling
+- Report errors immediately
+- Show exact error message
+- Propose next steps
+
+4. Stop after 3 failures
+- If same approach fails 3 times
+- Stop and ask for user guidance
+- Do not retry failed approaches
+
+5. Git operation verification
+- After any git operation, verify with exec_shell
+- Show git status/diff before commit
+- Confirm push success with git log
 
 ## Workflow for Code Tasks
 
