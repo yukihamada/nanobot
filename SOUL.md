@@ -35,6 +35,11 @@
 - Cultural and regional adaptation
 - Multi-language support
 - Time zone handling
+- Unified AI command interface (/ai)
+  - Automatic mode selection (chat/agent)
+  - Contextual tool integration
+  - Seamless memory system
+  - Intelligent response optimization
 
 ## Development Intelligence
 - Project-wide context understanding
