@@ -7,6 +7,19 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Safely truncate a string to at most `max_bytes`, respecting UTF-8 char boundaries.
+fn truncate_str(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    // Walk backwards from max_bytes to find a valid char boundary
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
 // ---------------------------------------------------------------------------
 // Tool trait + ToolRegistry — unified interface for built-in and MCP tools
 // ---------------------------------------------------------------------------
@@ -1341,7 +1354,7 @@ async fn jina_search(query: &str) -> String {
                         .collect::<Vec<_>>()
                         .join("\n");
                     if useful.len() > 50 {
-                        let snippet = if useful.len() > 4000 { &useful[..4000] } else { &useful };
+                        let snippet = truncate_str(&useful, 4000);
                         return format!("Search results for \"{query}\":\n\n{snippet}");
                     }
                     tracing::warn!("jina_search: response too small ({} useful chars)", useful.len());
@@ -1433,7 +1446,7 @@ async fn direct_site_search(query: &str) -> String {
                         .join("\n");
                     if useful.len() > 100 {
                         tracing::info!("direct_site_search: product page {} chars", useful.len());
-                        let snippet = if useful.len() > 5000 { &useful[..5000] } else { &useful };
+                        let snippet = truncate_str(&useful, 5000);
                         return format!("Product details from kakaku.com for \"{query}\":\nURL: {purl}\n\n{snippet}");
                     }
                 }
@@ -1450,7 +1463,7 @@ async fn direct_site_search(query: &str) -> String {
             .collect::<Vec<_>>()
             .join("\n");
         if useful.len() > 100 {
-            let snippet = if useful.len() > 3000 { &useful[..3000] } else { &useful };
+            let snippet = truncate_str(&useful, 3000);
             return format!("Search results from kakaku.com for \"{query}\":\n\n{snippet}");
         }
     }
@@ -1498,7 +1511,7 @@ pub(crate) async fn execute_web_fetch(url: &str) -> String {
                             .collect::<Vec<_>>()
                             .join("\n");
                         if cleaned.len() > 100 {
-                            let snippet = if cleaned.len() > 8000 { &cleaned[..8000] } else { &cleaned };
+                            let snippet = truncate_str(&cleaned, 8000);
                             return format!("Content from {url}:\n\n{snippet}");
                         }
                         tracing::warn!("web_fetch: Jina response too small ({} chars), trying direct", cleaned.len());
@@ -1535,7 +1548,7 @@ pub(crate) async fn execute_web_fetch(url: &str) -> String {
                         .collect::<Vec<_>>()
                         .join("\n");
                     if cleaned.len() > 8000 {
-                        format!("Content from {}:\n\n{}...\n\n[Truncated]", url, &cleaned[..8000])
+                        format!("Content from {}:\n\n{}...\n\n[Truncated]", url, truncate_str(&cleaned, 8000))
                     } else {
                         format!("Content from {url}:\n\n{cleaned}")
                     }
@@ -3890,7 +3903,7 @@ impl Tool for SlackTool {
                                 arr.iter().take(5).map(|m| {
                                     let ch = m["channel"]["name"].as_str().unwrap_or("?");
                                     let text = m["text"].as_str().unwrap_or("");
-                                    format!("[#{}] {}", ch, if text.len() > 200 { &text[..200] } else { text })
+                                    format!("[#{}] {}", ch, truncate_str(text, 200))
                                 }).collect::<Vec<_>>().join("\n---\n")
                             }).unwrap_or_default();
                             if matches.is_empty() { "No results found".to_string() } else { matches }
@@ -4231,7 +4244,7 @@ impl Tool for ArxivSearchTool {
                         .unwrap_or("").trim();
 
                     let summary_short = if summary.len() > 300 {
-                        format!("{}...", &summary[..300])
+                        format!("{}...", truncate_str(&summary, 300))
                     } else {
                         summary.to_string()
                     };
@@ -4593,7 +4606,7 @@ impl Tool for PostgresTool {
                             if status >= 200 && status < 300 {
                                 // Truncate if very long
                                 if body.len() > 15000 {
-                                    format!("{}... [truncated, {} chars total]", &body[..15000], body.len())
+                                    format!("{}... [truncated, {} chars total]", truncate_str(&body, 15000), body.len())
                                 } else {
                                     body
                                 }

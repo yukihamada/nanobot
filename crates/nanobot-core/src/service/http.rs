@@ -63,6 +63,18 @@ const ERR_MESSAGE_TOO_LONG: &str = "Message too long (max 32,000 characters)";
 const ERR_RATE_LIMIT: &str = "レート制限に達しました。1時間後に再度お試しください。/ Rate limit exceeded. Please try again in 1 hour.";
 const ERR_LOCAL_NOT_CONFIGURED: &str = "Local mode requested but local model is not configured. Set LOCAL_MODEL_URL environment variable.";
 
+/// Safely truncate a string to at most `max_bytes`, respecting UTF-8 char boundaries.
+fn truncate_str(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
 /// Loving fallback messages for when LLM takes too long.
 fn timeout_fallback_message() -> String {
     let messages = [
@@ -11180,7 +11192,7 @@ async fn handle_create_ticket(
                     let msg = format!(
                         "📩 新チケット {}\n{} (SLA: {})\n\n質問: {}\n\nユーザー: {}\nチャネル: {}\n\n管理画面: https://chatweb.ai/admin",
                         ticket_id, prio_label, sla,
-                        if question.len() > 100 { &question[..100] } else { question },
+                        truncate_str(question, 100),
                         if user_email.is_empty() { &user_id } else { &user_email },
                         notify_channel,
                     );
@@ -11365,7 +11377,7 @@ async fn handle_admin_ticket_respond(
             let notification = format!(
                 "💡 チケット {} への回答:\n\nご質問: {}\n\n回答: {}\n\n---\nchatweb.ai サポートチーム",
                 ticket_id,
-                if question.len() > 60 { format!("{}...", &question[..60]) } else { question },
+                if question.len() > 60 { format!("{}...", truncate_str(&question, 60)) } else { question },
                 response_text,
             );
 
@@ -11798,7 +11810,7 @@ async fn handle_admin_keys_test(
                 })).into_response()
             } else {
                 let body_text = resp.text().await.unwrap_or_default();
-                let msg = if body_text.len() > 200 { &body_text[..200] } else { &body_text };
+                let msg = truncate_str(&body_text, 200);
                 Json(serde_json::json!({
                     "status": "error",
                     "latency_ms": latency_ms,
