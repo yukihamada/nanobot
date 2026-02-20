@@ -169,6 +169,24 @@ impl ToolRegistry {
                 tools.push(Box::new(BrowserScreenshotTool));
                 tools.push(Box::new(BrowserPurchaseTool));
             }
+
+            // Philips Hue smart light control (requires HUE_BRIDGE_IP and HUE_API_KEY)
+            if std::env::var("HUE_BRIDGE_IP").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering hue tool (HUE_BRIDGE_IP present)");
+                tools.push(Box::new(HueTool));
+            }
+
+            // SwitchBot smart home (requires SWITCHBOT_TOKEN and SWITCHBOT_SECRET)
+            if std::env::var("SWITCHBOT_TOKEN").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering switchbot tool (SWITCHBOT_TOKEN present)");
+                tools.push(Box::new(SwitchBotTool));
+            }
+
+            // Nature Remo IR hub (requires NATURE_REMO_TOKEN)
+            if std::env::var("NATURE_REMO_TOKEN").map(|v| !v.is_empty()).unwrap_or(false) {
+                tracing::info!("Registering nature_remo tool (NATURE_REMO_TOKEN present)");
+                tools.push(Box::new(NatureRemoTool));
+            }
         }
 
         Self { tools }
@@ -7067,5 +7085,840 @@ impl Tool for BrowserPurchaseTool {
              Page: {page_title}\nURL: {page_url}\n\
              A confirmation screenshot has been captured."
         )
+    }
+}
+
+// ─── Philips Hue Smart Light Control Tool ───
+
+pub struct HueTool;
+
+/// Convert an RGB triplet to CIE 1931 xy chromaticity using the wide-gamut D65 matrix.
+fn hue_rgb_to_xy(r_raw: u8, g_raw: u8, b_raw: u8) -> (f32, f32) {
+    let gamma = |v: u8| -> f32 {
+        let v = v as f32 / 255.0;
+        if v > 0.04045 { ((v + 0.055) / 1.055_f32).powf(2.4) } else { v / 12.92 }
+    };
+    let r = gamma(r_raw);
+    let g = gamma(g_raw);
+    let b = gamma(b_raw);
+    let x = r * 0.664511 + g * 0.154324 + b * 0.162028;
+    let y = r * 0.283881 + g * 0.668433 + b * 0.047685;
+    let z = r * 0.000088 + g * 0.072310 + b * 0.986039;
+    let sum = x + y + z;
+    if sum < f32::EPSILON { (0.3127, 0.3290) } else { (x / sum, y / sum) }
+}
+
+/// Parse a color name or hex string into a Hue state fragment `{"xy": [x, y]}`.
+fn hue_parse_color(color: &str) -> Option<serde_json::Value> {
+    let color = color.trim().to_lowercase();
+    let xy: Option<(f32, f32)> = match color.as_str() {
+        "red"                      => Some((0.675, 0.322)),
+        "orange"                   => Some((0.600, 0.376)),
+        "yellow"                   => Some((0.500, 0.445)),
+        "lime" | "chartreuse"      => Some((0.400, 0.520)),
+        "green"                    => Some((0.214, 0.709)),
+        "cyan" | "teal"            => Some((0.170, 0.340)),
+        "blue" | "navy"            => Some((0.167, 0.040)),
+        "purple" | "violet"        => Some((0.250, 0.100)),
+        "magenta" | "fuchsia"      => Some((0.380, 0.150)),
+        "pink" | "hot_pink"        => Some((0.450, 0.220)),
+        "white"                    => Some((0.3127, 0.3290)),
+        _ => None,
+    };
+    if let Some((x, y)) = xy {
+        return Some(serde_json::json!({ "xy": [x, y] }));
+    }
+    // Hex #RRGGBB
+    if color.starts_with('#') && color.len() == 7 {
+        if let (Ok(r), Ok(g), Ok(b)) = (
+            u8::from_str_radix(&color[1..3], 16),
+            u8::from_str_radix(&color[3..5], 16),
+            u8::from_str_radix(&color[5..7], 16),
+        ) {
+            let (x, y) = hue_rgb_to_xy(r, g, b);
+            return Some(serde_json::json!({ "xy": [x, y] }));
+        }
+    }
+    None
+}
+
+#[async_trait::async_trait]
+impl Tool for HueTool {
+    fn name(&self) -> &str { "hue" }
+
+    fn description(&self) -> &str {
+        "Control Philips Hue smart lights via the local bridge API. \
+         Actions: 'list_lights' (all lights + state), 'get_light' (single light detail), \
+         'set_light' (on/off, brightness, color, color_temp), \
+         'list_rooms' (rooms/groups), 'set_room' (control all lights in a room), \
+         'list_scenes' (available scenes), 'activate_scene' (activate a scene in a room). \
+         Requires HUE_BRIDGE_IP and HUE_API_KEY environment variables."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list_lights", "get_light", "set_light", "list_rooms", "set_room", "list_scenes", "activate_scene"],
+                    "description": "Action to perform"
+                },
+                "light_id": {
+                    "type": "string",
+                    "description": "Light ID (for get_light, set_light)"
+                },
+                "room_id": {
+                    "type": "string",
+                    "description": "Room/group ID (for set_room, activate_scene, or filter list_scenes)"
+                },
+                "scene_id": {
+                    "type": "string",
+                    "description": "Scene ID (for activate_scene)"
+                },
+                "on": {
+                    "type": "boolean",
+                    "description": "Turn light on (true) or off (false)"
+                },
+                "brightness": {
+                    "type": "integer",
+                    "description": "Brightness 0-254 (1=minimum, 254=maximum)"
+                },
+                "color": {
+                    "type": "string",
+                    "description": "Color name (red/green/blue/yellow/orange/purple/pink/cyan/white/magenta) or hex #RRGGBB"
+                },
+                "color_temp": {
+                    "type": "integer",
+                    "description": "Color temperature in Kelvin (2000=warm candle to 6500=cool daylight)"
+                },
+                "transition": {
+                    "type": "integer",
+                    "description": "Transition time in tenths of a second (default 4 = 0.4 s)"
+                }
+            },
+            "required": ["action"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let bridge_ip = match std::env::var("HUE_BRIDGE_IP") {
+            Ok(v) if !v.is_empty() => v,
+            _ => return "[TOOL_ERROR] HUE_BRIDGE_IP not configured".to_string(),
+        };
+        let api_key = match std::env::var("HUE_API_KEY") {
+            Ok(v) if !v.is_empty() => v,
+            _ => return "[TOOL_ERROR] HUE_API_KEY not configured".to_string(),
+        };
+        let scheme = std::env::var("HUE_BRIDGE_SCHEME").unwrap_or_else(|_| "https".to_string());
+        let base = format!("{scheme}://{bridge_ip}/api/{api_key}");
+
+        // Hue bridges use self-signed TLS certs — accept them
+        let client = match reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+        {
+            Ok(c) => c,
+            Err(e) => return format!("[TOOL_ERROR] HTTP client build failed: {e}"),
+        };
+
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("list_lights");
+
+        match action {
+            // ── List all lights ──────────────────────────────────────────────
+            "list_lights" => {
+                let resp = match client.get(format!("{base}/lights")).send().await {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Hue bridge unreachable: {e}"),
+                };
+                let data: serde_json::Value = match resp.json().await {
+                    Ok(d) => d,
+                    Err(e) => return format!("[TOOL_ERROR] Invalid response: {e}"),
+                };
+                // Bridge may return an array of errors instead of an object
+                if let Some(arr) = data.as_array() {
+                    if let Some(desc) = arr.first().and_then(|i| i["error"]["description"].as_str()) {
+                        return format!("[TOOL_ERROR] {desc}");
+                    }
+                }
+                let obj = match data.as_object() {
+                    Some(o) => o,
+                    None => return format!("[TOOL_ERROR] Unexpected response: {data}"),
+                };
+                if obj.is_empty() {
+                    return "No lights found. Verify bridge pairing.".to_string();
+                }
+                let mut ids: Vec<&String> = obj.keys().collect();
+                ids.sort_by_key(|k| k.parse::<u32>().unwrap_or(9999));
+                let mut lines = vec!["Lights:".to_string()];
+                for id in ids {
+                    let light = &obj[id];
+                    let name = light["name"].as_str().unwrap_or("?");
+                    let on = light["state"]["on"].as_bool().unwrap_or(false);
+                    let bri = light["state"]["bri"].as_i64().unwrap_or(0);
+                    let reachable = light["state"]["reachable"].as_bool().unwrap_or(false);
+                    let status = if !reachable { "unreachable" } else if on { "on" } else { "off" };
+                    lines.push(format!("  [{id}] {name} — {status}, brightness={bri}"));
+                }
+                lines.join("\n")
+            }
+
+            // ── Get single light ─────────────────────────────────────────────
+            "get_light" => {
+                let light_id = match params.get("light_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id.to_string(),
+                    _ => return "[TOOL_ERROR] light_id is required for get_light".to_string(),
+                };
+                let resp = match client.get(format!("{base}/lights/{light_id}")).send().await {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Hue bridge unreachable: {e}"),
+                };
+                let data: serde_json::Value = match resp.json().await {
+                    Ok(d) => d,
+                    Err(e) => return format!("[TOOL_ERROR] Invalid response: {e}"),
+                };
+                if let Some(desc) = data[0]["error"]["description"].as_str() {
+                    return format!("[TOOL_ERROR] {desc}");
+                }
+                let name = data["name"].as_str().unwrap_or("?");
+                let s = &data["state"];
+                let on = s["on"].as_bool().unwrap_or(false);
+                let bri = s["bri"].as_i64().unwrap_or(0);
+                let reachable = s["reachable"].as_bool().unwrap_or(false);
+                let colormode = s["colormode"].as_str().unwrap_or("n/a");
+                let mut info = format!(
+                    "Light {light_id}: {name}\n  on={on}, brightness={bri}, reachable={reachable}, colormode={colormode}"
+                );
+                if let Some(h) = s["hue"].as_i64() { info.push_str(&format!(", hue={h}")); }
+                if let Some(sat) = s["sat"].as_i64() { info.push_str(&format!(", sat={sat}")); }
+                if let Some(ct) = s["ct"].as_i64() {
+                    let k = if ct > 0 { 1_000_000 / ct } else { 0 };
+                    info.push_str(&format!(", ct={ct} ({k}K)"));
+                }
+                info
+            }
+
+            // ── Set light state ──────────────────────────────────────────────
+            "set_light" => {
+                let light_id = match params.get("light_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id.to_string(),
+                    _ => return "[TOOL_ERROR] light_id is required for set_light".to_string(),
+                };
+                let mut body = serde_json::json!({});
+                if let Some(on) = params.get("on").and_then(|v| v.as_bool()) {
+                    body["on"] = serde_json::json!(on);
+                }
+                if let Some(bri) = params.get("brightness").and_then(|v| v.as_i64()) {
+                    body["bri"] = serde_json::json!(bri.clamp(0, 254));
+                }
+                if let Some(color) = params.get("color").and_then(|v| v.as_str()) {
+                    if let Some(cp) = hue_parse_color(color) {
+                        if let Some(xy) = cp.get("xy") { body["xy"] = xy.clone(); }
+                    }
+                }
+                if let Some(ct_k) = params.get("color_temp").and_then(|v| v.as_i64()) {
+                    let mired = 1_000_000 / ct_k.clamp(2000, 6500);
+                    body["ct"] = serde_json::json!(mired);
+                }
+                if let Some(t) = params.get("transition").and_then(|v| v.as_i64()) {
+                    body["transitiontime"] = serde_json::json!(t.clamp(0, 600));
+                }
+                if body.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+                    return "[TOOL_ERROR] Specify at least one of: on, brightness, color, color_temp".to_string();
+                }
+                let resp = match client.put(format!("{base}/lights/{light_id}/state"))
+                    .json(&body).send().await
+                {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Hue bridge unreachable: {e}"),
+                };
+                let data: serde_json::Value = match resp.json().await {
+                    Ok(d) => d,
+                    Err(e) => return format!("[TOOL_ERROR] Invalid response: {e}"),
+                };
+                let items = data.as_array().cloned().unwrap_or_default();
+                let results: Vec<String> = items.iter().map(|item| {
+                    if let Some(success) = item.get("success") {
+                        let keys: Vec<String> = success.as_object()
+                            .map(|o| o.keys().map(|k| k.split('/').last().unwrap_or(k).to_string()).collect())
+                            .unwrap_or_default();
+                        format!("OK: {}", keys.join(", "))
+                    } else if let Some(desc) = item["error"]["description"].as_str() {
+                        format!("Error: {desc}")
+                    } else {
+                        format!("? {item}")
+                    }
+                }).collect();
+                if results.is_empty() { "No response from bridge".to_string() } else { results.join("\n") }
+            }
+
+            // ── List rooms/groups ────────────────────────────────────────────
+            "list_rooms" => {
+                let resp = match client.get(format!("{base}/groups")).send().await {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Hue bridge unreachable: {e}"),
+                };
+                let data: serde_json::Value = match resp.json().await {
+                    Ok(d) => d,
+                    Err(e) => return format!("[TOOL_ERROR] Invalid response: {e}"),
+                };
+                if let Some(arr) = data.as_array() {
+                    if let Some(desc) = arr.first().and_then(|i| i["error"]["description"].as_str()) {
+                        return format!("[TOOL_ERROR] {desc}");
+                    }
+                }
+                let obj = match data.as_object() {
+                    Some(o) => o,
+                    None => return format!("[TOOL_ERROR] Unexpected response: {data}"),
+                };
+                if obj.is_empty() { return "No rooms/groups found.".to_string(); }
+                let mut ids: Vec<&String> = obj.keys().collect();
+                ids.sort_by_key(|k| k.parse::<u32>().unwrap_or(9999));
+                let mut lines = vec!["Rooms/Groups:".to_string()];
+                for id in ids {
+                    let g = &obj[id];
+                    let name = g["name"].as_str().unwrap_or("?");
+                    let gtype = g["type"].as_str().unwrap_or("?");
+                    let all_on = g["state"]["all_on"].as_bool().unwrap_or(false);
+                    let any_on = g["state"]["any_on"].as_bool().unwrap_or(false);
+                    let count = g["lights"].as_array().map(|l| l.len()).unwrap_or(0);
+                    let status = if all_on { "all on" } else if any_on { "partial" } else { "off" };
+                    lines.push(format!("  [{id}] {name} ({gtype}) — {count} lights, {status}"));
+                }
+                lines.join("\n")
+            }
+
+            // ── Set room state ───────────────────────────────────────────────
+            "set_room" => {
+                let room_id = match params.get("room_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id.to_string(),
+                    _ => return "[TOOL_ERROR] room_id is required for set_room".to_string(),
+                };
+                let mut body = serde_json::json!({});
+                if let Some(on) = params.get("on").and_then(|v| v.as_bool()) {
+                    body["on"] = serde_json::json!(on);
+                }
+                if let Some(bri) = params.get("brightness").and_then(|v| v.as_i64()) {
+                    body["bri"] = serde_json::json!(bri.clamp(0, 254));
+                }
+                if let Some(color) = params.get("color").and_then(|v| v.as_str()) {
+                    if let Some(cp) = hue_parse_color(color) {
+                        if let Some(xy) = cp.get("xy") { body["xy"] = xy.clone(); }
+                    }
+                }
+                if let Some(ct_k) = params.get("color_temp").and_then(|v| v.as_i64()) {
+                    let mired = 1_000_000 / ct_k.clamp(2000, 6500);
+                    body["ct"] = serde_json::json!(mired);
+                }
+                if let Some(t) = params.get("transition").and_then(|v| v.as_i64()) {
+                    body["transitiontime"] = serde_json::json!(t.clamp(0, 600));
+                }
+                if body.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+                    return "[TOOL_ERROR] Specify at least one of: on, brightness, color, color_temp".to_string();
+                }
+                let resp = match client.put(format!("{base}/groups/{room_id}/action"))
+                    .json(&body).send().await
+                {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Hue bridge unreachable: {e}"),
+                };
+                let data: serde_json::Value = match resp.json().await {
+                    Ok(d) => d,
+                    Err(e) => return format!("[TOOL_ERROR] Invalid response: {e}"),
+                };
+                let items = data.as_array().cloned().unwrap_or_default();
+                let ok = items.iter().filter(|i| i.get("success").is_some()).count();
+                let errs: Vec<&str> = items.iter()
+                    .filter_map(|i| i["error"]["description"].as_str()).collect();
+                if errs.is_empty() {
+                    format!("Room {room_id} updated ({ok} properties applied)")
+                } else {
+                    format!("Partial update: {ok} OK, errors: {}", errs.join("; "))
+                }
+            }
+
+            // ── List scenes ──────────────────────────────────────────────────
+            "list_scenes" => {
+                let resp = match client.get(format!("{base}/scenes")).send().await {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Hue bridge unreachable: {e}"),
+                };
+                let data: serde_json::Value = match resp.json().await {
+                    Ok(d) => d,
+                    Err(e) => return format!("[TOOL_ERROR] Invalid response: {e}"),
+                };
+                let obj = match data.as_object() {
+                    Some(o) => o,
+                    None => return format!("[TOOL_ERROR] Unexpected response: {data}"),
+                };
+                if obj.is_empty() { return "No scenes found.".to_string(); }
+                let room_filter = params.get("room_id").and_then(|v| v.as_str());
+                let mut scene_list: Vec<(&String, &serde_json::Value)> = obj.iter().collect();
+                scene_list.sort_by_key(|(_, v)| v["name"].as_str().unwrap_or("").to_string());
+                let mut lines = vec!["Scenes:".to_string()];
+                for (id, scene) in &scene_list {
+                    let name = scene["name"].as_str().unwrap_or("?");
+                    let group = scene["group"].as_str().unwrap_or("?");
+                    let stype = scene["type"].as_str().unwrap_or("?");
+                    if let Some(f) = room_filter { if group != f { continue; } }
+                    lines.push(format!("  [{id}] {name} (room={group}, type={stype})"));
+                }
+                if lines.len() == 1 { "No matching scenes found.".to_string() } else { lines.join("\n") }
+            }
+
+            // ── Activate scene ───────────────────────────────────────────────
+            "activate_scene" => {
+                let room_id = match params.get("room_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id.to_string(),
+                    _ => return "[TOOL_ERROR] room_id is required for activate_scene".to_string(),
+                };
+                let scene_id = match params.get("scene_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id.to_string(),
+                    _ => return "[TOOL_ERROR] scene_id is required for activate_scene".to_string(),
+                };
+                let body = serde_json::json!({ "scene": scene_id });
+                let resp = match client.put(format!("{base}/groups/{room_id}/action"))
+                    .json(&body).send().await
+                {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Hue bridge unreachable: {e}"),
+                };
+                let data: serde_json::Value = match resp.json().await {
+                    Ok(d) => d,
+                    Err(e) => return format!("[TOOL_ERROR] Invalid response: {e}"),
+                };
+                let ok = data.as_array().unwrap_or(&vec![]).iter().any(|i| i.get("success").is_some());
+                if ok {
+                    format!("Scene '{scene_id}' activated in room {room_id}")
+                } else {
+                    let desc = data[0]["error"]["description"].as_str().unwrap_or("unknown error");
+                    format!("[TOOL_ERROR] Failed to activate scene: {desc}")
+                }
+            }
+
+            _ => format!("[TOOL_ERROR] Unknown action: {action}"),
+        }
+    }
+}
+
+// ─── SwitchBot Smart Home Tool ───
+
+pub struct SwitchBotTool;
+
+/// Build SwitchBot v1.1 authentication headers (HMAC-SHA256 signed).
+/// Only compiled when the `http-api` feature provides hmac/sha2/hex crates.
+#[cfg(feature = "http-api")]
+fn switchbot_sign(token: &str, secret: &str) -> Vec<(&'static str, String)> {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    use base64::Engine as _;
+
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .to_string();
+    let nonce = uuid::Uuid::new_v4().to_string();
+    let msg = format!("{}{}{}", token, t, nonce);
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC init");
+    mac.update(msg.as_bytes());
+    let sign = base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes().as_slice());
+    vec![
+        ("Authorization", token.to_string()),
+        ("sign",          sign),
+        ("t",             t),
+        ("nonce",         nonce),
+        ("Content-Type",  "application/json; charset=utf8".to_string()),
+    ]
+}
+
+#[cfg(not(feature = "http-api"))]
+fn switchbot_sign(_token: &str, _secret: &str) -> Vec<(&'static str, String)> { vec![] }
+
+#[async_trait::async_trait]
+impl Tool for SwitchBotTool {
+    fn name(&self) -> &str { "switchbot" }
+
+    fn description(&self) -> &str {
+        "Control SwitchBot smart home devices via the cloud API. \
+         Actions: 'list_devices' (all devices + IR remotes), \
+         'get_device' (status: power/brightness/color/temperature/humidity), \
+         'command' (send a command: turnOn/turnOff/press/setBrightness/setColor/ \
+         setColorTemperature/setPosition/start/stop/dock). \
+         Requires SWITCHBOT_TOKEN and SWITCHBOT_SECRET env vars."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list_devices", "get_device", "command"],
+                    "description": "Action to perform"
+                },
+                "device_id": {
+                    "type": "string",
+                    "description": "Device ID (for get_device, command)"
+                },
+                "command": {
+                    "type": "string",
+                    "description": "Command: turnOn, turnOff, toggle, press, setBrightness, setColor, setColorTemperature, setPosition, start, stop, dock"
+                },
+                "parameter": {
+                    "type": "string",
+                    "description": "Command parameter: brightness 1-100, color 'R:G:B', colorTemp 2700-6500, position '0,ff,50'"
+                }
+            },
+            "required": ["action"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        switchbot_execute(params).await
+    }
+}
+
+#[cfg(feature = "http-api")]
+async fn switchbot_execute(params: HashMap<String, serde_json::Value>) -> String {
+    let token = match std::env::var("SWITCHBOT_TOKEN") {
+        Ok(v) if !v.is_empty() => v,
+        _ => return "[TOOL_ERROR] SWITCHBOT_TOKEN not configured".to_string(),
+    };
+    let secret = match std::env::var("SWITCHBOT_SECRET") {
+        Ok(v) if !v.is_empty() => v,
+        _ => return "[TOOL_ERROR] SWITCHBOT_SECRET not configured".to_string(),
+    };
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return format!("[TOOL_ERROR] HTTP client error: {e}"),
+    };
+
+    let base = "https://api.switch-bot.com/v1.1";
+    let auth = switchbot_sign(&token, &secret);
+    let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("list_devices");
+
+    match action {
+        "list_devices" => {
+            let mut req = client.get(format!("{base}/devices"));
+            for (k, v) in &auth { req = req.header(*k, v.as_str()); }
+            let data: serde_json::Value = match req.send().await.and_then(|r| {
+                futures::executor::block_on(r.json())
+            }) {
+                Ok(d) => d,
+                Err(e) => return format!("[TOOL_ERROR] SwitchBot API error: {e}"),
+            };
+            if data["statusCode"].as_i64() != Some(100) {
+                return format!("[TOOL_ERROR] {}", data["message"].as_str().unwrap_or("API error"));
+            }
+            let devices = data["body"]["deviceList"].as_array().cloned().unwrap_or_default();
+            let ir = data["body"]["infraredRemoteList"].as_array().cloned().unwrap_or_default();
+            let total = devices.len() + ir.len();
+            if total == 0 { return "No devices found.".to_string(); }
+            let mut lines = vec![format!("Devices ({total}):")];
+            for d in &devices {
+                let id   = d["deviceId"].as_str().unwrap_or("?");
+                let name = d["deviceName"].as_str().unwrap_or("?");
+                let typ  = d["deviceType"].as_str().unwrap_or("?");
+                let cloud = if d["enableCloudService"].as_bool().unwrap_or(false) { "cloud" } else { "local" };
+                lines.push(format!("  [{id}] {name} ({typ}) — {cloud}"));
+            }
+            if !ir.is_empty() {
+                lines.push(format!("IR Remotes ({}):", ir.len()));
+                for d in &ir {
+                    let id   = d["deviceId"].as_str().unwrap_or("?");
+                    let name = d["deviceName"].as_str().unwrap_or("?");
+                    let typ  = d["remoteType"].as_str().unwrap_or("?");
+                    lines.push(format!("  [{id}] {name} ({typ}) [IR]"));
+                }
+            }
+            lines.join("\n")
+        }
+
+        "get_device" => {
+            let device_id = match params.get("device_id").and_then(|v| v.as_str()) {
+                Some(id) if !id.is_empty() => id.to_string(),
+                _ => return "[TOOL_ERROR] device_id is required".to_string(),
+            };
+            let mut req = client.get(format!("{base}/devices/{device_id}/status"));
+            for (k, v) in &auth { req = req.header(*k, v.as_str()); }
+            let data: serde_json::Value = match req.send().await {
+                Ok(r) => r.json().await.unwrap_or_default(),
+                Err(e) => return format!("[TOOL_ERROR] SwitchBot API error: {e}"),
+            };
+            if data["statusCode"].as_i64() != Some(100) {
+                return format!("[TOOL_ERROR] {}", data["message"].as_str().unwrap_or("API error"));
+            }
+            let b = &data["body"];
+            let name = b["deviceName"].as_str().unwrap_or("?");
+            let typ  = b["deviceType"].as_str().unwrap_or("?");
+            let mut info = format!("Device: {name} ({typ})");
+            if let Some(p) = b["power"].as_str()              { info.push_str(&format!(", power={p}")); }
+            if let Some(b2) = b["brightness"].as_i64()        { info.push_str(&format!(", brightness={b2}%")); }
+            if let Some(c) = b["color"].as_str()              { info.push_str(&format!(", color={c}")); }
+            if let Some(ct) = b["colorTemperature"].as_i64()  { info.push_str(&format!(", colorTemp={ct}K")); }
+            if let Some(t) = b["temperature"].as_f64()        { info.push_str(&format!(", temp={t:.1}°C")); }
+            if let Some(h) = b["humidity"].as_i64()           { info.push_str(&format!(", humidity={h}%")); }
+            if let Some(pos) = b["slidePosition"].as_i64()    { info.push_str(&format!(", position={pos}%")); }
+            if let Some(mv) = b["moving"].as_bool()           { info.push_str(&format!(", moving={mv}")); }
+            info
+        }
+
+        "command" => {
+            let device_id = match params.get("device_id").and_then(|v| v.as_str()) {
+                Some(id) if !id.is_empty() => id.to_string(),
+                _ => return "[TOOL_ERROR] device_id is required".to_string(),
+            };
+            let command = match params.get("command").and_then(|v| v.as_str()) {
+                Some(c) if !c.is_empty() => c.to_string(),
+                _ => return "[TOOL_ERROR] command is required".to_string(),
+            };
+            let parameter = params.get("parameter").and_then(|v| v.as_str()).unwrap_or("default").to_string();
+            let body = serde_json::json!({
+                "command":     command,
+                "parameter":   parameter,
+                "commandType": "command"
+            });
+            let mut req = client.post(format!("{base}/devices/{device_id}/commands")).json(&body);
+            for (k, v) in &auth { req = req.header(*k, v.as_str()); }
+            let data: serde_json::Value = match req.send().await {
+                Ok(r) => r.json().await.unwrap_or_default(),
+                Err(e) => return format!("[TOOL_ERROR] SwitchBot API error: {e}"),
+            };
+            if data["statusCode"].as_i64() == Some(100) {
+                format!("Command '{command}' sent to {device_id}")
+            } else {
+                format!("[TOOL_ERROR] {}", data["message"].as_str().unwrap_or("command failed"))
+            }
+        }
+
+        _ => format!("[TOOL_ERROR] Unknown action: {action}"),
+    }
+}
+
+#[cfg(not(feature = "http-api"))]
+async fn switchbot_execute(_: HashMap<String, serde_json::Value>) -> String {
+    "[TOOL_ERROR] SwitchBot requires http-api feature".to_string()
+}
+
+// ─── Nature Remo Smart Home Tool ───
+
+pub struct NatureRemoTool;
+
+#[async_trait::async_trait]
+impl Tool for NatureRemoTool {
+    fn name(&self) -> &str { "nature_remo" }
+
+    fn description(&self) -> &str {
+        "Control Nature Remo smart home hub and IR-controlled appliances. \
+         Actions: 'list_devices' (Remo sensors: temp/humidity/illuminance), \
+         'list_appliances' (registered AC, lights, TV, custom IR), \
+         'control_ac' (set temperature/mode/fan/power), \
+         'control_light' (on/off/night button), \
+         'send_signal' (send a registered custom IR signal). \
+         Requires NATURE_REMO_TOKEN env var."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list_devices","list_appliances","control_ac","control_light","send_signal"],
+                    "description": "Action to perform"
+                },
+                "appliance_id": {
+                    "type": "string",
+                    "description": "Appliance ID (for control_ac, control_light, send_signal)"
+                },
+                "signal_id": {
+                    "type": "string",
+                    "description": "Signal ID (for send_signal)"
+                },
+                "temperature": {
+                    "type": "number",
+                    "description": "AC temperature in Celsius (16-30)"
+                },
+                "operation_mode": {
+                    "type": "string",
+                    "enum": ["auto","cool","warm","dry","blow"],
+                    "description": "AC operation mode"
+                },
+                "air_volume": {
+                    "type": "string",
+                    "description": "Fan speed: auto / 1 / 2 / 3 / 4"
+                },
+                "power": {
+                    "type": "string",
+                    "enum": ["on","off"],
+                    "description": "AC power"
+                },
+                "button": {
+                    "type": "string",
+                    "enum": ["on","off","night"],
+                    "description": "Light button"
+                }
+            },
+            "required": ["action"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let token = match std::env::var("NATURE_REMO_TOKEN") {
+            Ok(v) if !v.is_empty() => v,
+            _ => return "[TOOL_ERROR] NATURE_REMO_TOKEN not configured".to_string(),
+        };
+
+        let client = match reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+        {
+            Ok(c) => c,
+            Err(e) => return format!("[TOOL_ERROR] HTTP client error: {e}"),
+        };
+
+        let base = "https://api.nature.global/1";
+        let auth = format!("Bearer {token}");
+        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or("list_appliances");
+
+        match action {
+            "list_devices" => {
+                let data: serde_json::Value = match client.get(format!("{base}/devices"))
+                    .header("Authorization", &auth).send().await
+                {
+                    Ok(r) => r.json().await.unwrap_or_default(),
+                    Err(e) => return format!("[TOOL_ERROR] Nature Remo API error: {e}"),
+                };
+                let devs = data.as_array().cloned().unwrap_or_default();
+                if devs.is_empty() { return "No Remo devices found.".to_string(); }
+                let mut lines = vec!["Remo Devices:".to_string()];
+                for d in &devs {
+                    let id   = d["id"].as_str().unwrap_or("?");
+                    let name = d["name"].as_str().unwrap_or("?");
+                    let fw   = d["firmware_version"].as_str().unwrap_or("?");
+                    let ev   = &d["newest_events"];
+                    let mut st = vec![];
+                    if let Some(t) = ev["te"]["val"].as_f64()  { st.push(format!("{t:.1}°C")); }
+                    if let Some(h) = ev["hu"]["val"].as_f64()  { st.push(format!("{h:.0}%")); }
+                    if let Some(l) = ev["il"]["val"].as_f64()  { st.push(format!("{l:.0}lux")); }
+                    if ev["mo"]["val"].as_i64() == Some(1)     { st.push("motion".to_string()); }
+                    let st_str = if st.is_empty() { "no sensors".to_string() } else { st.join(", ") };
+                    lines.push(format!("  [{id}] {name} (fw:{fw}) — {st_str}"));
+                }
+                lines.join("\n")
+            }
+
+            "list_appliances" => {
+                let data: serde_json::Value = match client.get(format!("{base}/appliances"))
+                    .header("Authorization", &auth).send().await
+                {
+                    Ok(r) => r.json().await.unwrap_or_default(),
+                    Err(e) => return format!("[TOOL_ERROR] Nature Remo API error: {e}"),
+                };
+                let apps = data.as_array().cloned().unwrap_or_default();
+                if apps.is_empty() { return "No appliances registered.".to_string(); }
+                let mut lines = vec![format!("Appliances ({}):", apps.len())];
+                for a in &apps {
+                    let id   = a["id"].as_str().unwrap_or("?");
+                    let name = a["nickname"].as_str()
+                        .or_else(|| a["type"].as_str()).unwrap_or("?");
+                    let typ  = a["type"].as_str().unwrap_or("?");
+                    let detail = match typ {
+                        "AC" => {
+                            let s = &a["settings"];
+                            let temp = s["temp"].as_str().unwrap_or("?");
+                            let mode = s["mode"].as_str().unwrap_or("?");
+                            let btn  = s["button"].as_str().unwrap_or("?");
+                            format!(" — power={btn}, temp={temp}°C, mode={mode}")
+                        }
+                        "LIGHT" => {
+                            let pwr = a["light"]["state"]["power"].as_str().unwrap_or("?");
+                            format!(" — power={pwr}")
+                        }
+                        "TV" => " — [TV]".to_string(),
+                        _ => {
+                            let n = a["signals"].as_array().map(|s| s.len()).unwrap_or(0);
+                            if n > 0 { format!(" — {n} signals") } else { String::new() }
+                        }
+                    };
+                    lines.push(format!("  [{id}] {name} ({typ}){detail}"));
+                }
+                lines.join("\n")
+            }
+
+            "control_ac" => {
+                let id = match params.get("appliance_id").and_then(|v| v.as_str()) {
+                    Some(s) if !s.is_empty() => s.to_string(),
+                    _ => return "[TOOL_ERROR] appliance_id is required".to_string(),
+                };
+                let mut form: Vec<(String, String)> = vec![];
+                if let Some(t) = params.get("temperature").and_then(|v| v.as_f64()) {
+                    form.push(("temperature".into(), format!("{}", t as i32)));
+                }
+                if let Some(m) = params.get("operation_mode").and_then(|v| v.as_str()) {
+                    form.push(("operation_mode".into(), m.into()));
+                }
+                if let Some(v) = params.get("air_volume").and_then(|v| v.as_str()) {
+                    form.push(("air_volume".into(), v.into()));
+                }
+                if let Some(p) = params.get("power").and_then(|v| v.as_str()) {
+                    form.push(("button".into(), if p == "off" { "power-off".into() } else { String::new() }));
+                }
+                if form.is_empty() {
+                    return "[TOOL_ERROR] Specify at least one of: temperature, operation_mode, air_volume, power".to_string();
+                }
+                let form_ref: Vec<(&str, &str)> = form.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+                let resp = match client.post(format!("{base}/appliances/{id}/aircon_settings"))
+                    .header("Authorization", &auth).form(&form_ref).send().await
+                {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Nature Remo API error: {e}"),
+                };
+                if resp.status().is_success() { "AC settings updated".to_string() }
+                else { format!("[TOOL_ERROR] HTTP {}", resp.status()) }
+            }
+
+            "control_light" => {
+                let id = match params.get("appliance_id").and_then(|v| v.as_str()) {
+                    Some(s) if !s.is_empty() => s.to_string(),
+                    _ => return "[TOOL_ERROR] appliance_id is required".to_string(),
+                };
+                let btn = params.get("button").and_then(|v| v.as_str()).unwrap_or("on");
+                let resp = match client.post(format!("{base}/appliances/{id}/light"))
+                    .header("Authorization", &auth).form(&[("button", btn)]).send().await
+                {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Nature Remo API error: {e}"),
+                };
+                if resp.status().is_success() { format!("Light '{btn}' sent") }
+                else { format!("[TOOL_ERROR] HTTP {}", resp.status()) }
+            }
+
+            "send_signal" => {
+                let sig_id = match params.get("signal_id").and_then(|v| v.as_str()) {
+                    Some(s) if !s.is_empty() => s.to_string(),
+                    _ => return "[TOOL_ERROR] signal_id is required".to_string(),
+                };
+                let resp = match client.post(format!("{base}/signals/{sig_id}/send"))
+                    .header("Authorization", &auth)
+                    .header("Content-Length", "0")
+                    .send().await
+                {
+                    Ok(r) => r,
+                    Err(e) => return format!("[TOOL_ERROR] Nature Remo API error: {e}"),
+                };
+                if resp.status().is_success() { format!("Signal {sig_id} sent") }
+                else { format!("[TOOL_ERROR] HTTP {}", resp.status()) }
+            }
+
+            _ => format!("[TOOL_ERROR] Unknown action: {action}"),
+        }
     }
 }
