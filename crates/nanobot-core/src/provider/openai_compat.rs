@@ -45,9 +45,15 @@ impl OpenAiCompatProvider {
         }
     }
 
-    /// Normalize model name for the API (strip provider prefixes).
+    /// Normalize model name for the API.
+    /// OpenRouter requires full model paths (e.g. "minimax/minimax-m2.5").
+    /// Native provider APIs require bare model names (e.g. "minimax-m2.5").
     fn normalize_model(&self, model: &str) -> String {
-        // Strip common provider prefixes
+        // OpenRouter needs the full "provider/model" format — do not strip
+        if self.api_base.contains("openrouter.ai") {
+            return model.to_string();
+        }
+        // Strip provider prefixes for native APIs
         for prefix in &[
             "openrouter/",
             "openai/",
@@ -58,6 +64,10 @@ impl OpenAiCompatProvider {
             "qwen/",
             "tongyi/",
             "minimax/",
+            "moonshotai/",
+            "z-ai/",
+            "google/",
+            "anthropic/",
         ] {
             if let Some(rest) = model.strip_prefix(prefix) {
                 return rest.to_string();

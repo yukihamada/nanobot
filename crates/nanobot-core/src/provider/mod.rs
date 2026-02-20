@@ -288,17 +288,21 @@ impl LoadBalancedProvider {
 
         // OpenRouter keys (backup provider — routes to multiple models)
         for key in Self::read_keys("OPENROUTER_API_KEY") {
-            // Kimi K2.5 via OpenRouter (kimi family)
+            // MiniMax M2.5 via OpenRouter — default Normal tier model (#1 usage, #1 coding)
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "minimax/minimax-m2.5".to_string(),
+            )));
+            // Kimi K2.5 via OpenRouter — Normal tier fallback #2
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
                 key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "moonshotai/kimi-k2.5".to_string(),
             )));
-            // Gemini 3 Flash via OpenRouter (tool calling strength)
+            // o4-mini via OpenRouter — Normal tier fallback #3
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "google/gemini-3-flash-preview".to_string(),
+                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "openai/o4-mini".to_string(),
             )));
-            // MiniMax M2.5 via OpenRouter (Usage #1, programming #1)
+            // Gemini 2.5 Flash via OpenRouter (tool calling strength)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "minimax/minimax-m2.5".to_string(),
+                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "google/gemini-2.5-flash-preview".to_string(),
             )));
             // GLM 5 via OpenRouter (Intelligence #6, fast-growing)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
@@ -763,7 +767,7 @@ impl LoadBalancedProvider {
         // Each tier has a fallback chain: primary → secondary → tertiary
         let candidates: &[&str] = match tier {
             "economy"  => &["gemini-2.5-flash", "deepseek-chat", "qwen/qwen3-32b"],
-            "normal"   => &["moonshotai/kimi-k2.5", "deepseek-chat", "gemini-2.5-flash"],
+            "normal"   => &["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "openai/o4-mini", "claude-sonnet-4-6"],
             "powerful" => &["claude-sonnet-4-6", "gpt-4o", "gemini-2.5-pro"],
             _ => return None,
         };
