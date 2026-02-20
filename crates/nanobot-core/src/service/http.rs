@@ -3135,6 +3135,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // OpenAI-compatible Chat API — drop-in replacement for OpenAI API
         .route("/v1/chat/completions", post(handle_openai_chat_completions))
         .route("/v1/models", get(handle_openai_models))
+        .route("/api/v1/models", get(handle_list_models))
         // Media API — unified multimodal generation
         .route("/api/v1/media/tts", post(handle_media_tts))
         .route("/api/v1/media/stt", post(handle_media_stt))
@@ -19007,39 +19008,48 @@ async fn handle_tts_openai_compat(
 
 // ─── OpenAI-Compatible Chat API (/v1/chat/completions, /v1/models) ───
 
-/// GET /v1/models — List all supported models in OpenAI format.
+/// GET /v1/models — List all supported models in OpenAI format (generated from PRICING_TABLE).
 async fn handle_openai_models(
     State(_state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    use crate::provider::pricing::PRICING_TABLE;
+
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
 
-    let models = serde_json::json!({
-        "object": "list",
-        "data": [
-            {"id":"claude-opus-4-6","object":"model","created":now,"owned_by":"anthropic"},
-            {"id":"claude-sonnet-4-6","object":"model","created":now,"owned_by":"anthropic"},
-            {"id":"claude-sonnet-4-5","object":"model","created":now,"owned_by":"anthropic"},
-            {"id":"claude-haiku-4-5","object":"model","created":now,"owned_by":"anthropic"},
-            {"id":"gpt-4o","object":"model","created":now,"owned_by":"openai"},
-            {"id":"gpt-4o-mini","object":"model","created":now,"owned_by":"openai"},
-            {"id":"o3-mini","object":"model","created":now,"owned_by":"openai"},
-            {"id":"gemini-2.5-pro","object":"model","created":now,"owned_by":"google"},
-            {"id":"gemini-2.0-flash","object":"model","created":now,"owned_by":"google"},
-            {"id":"deepseek-chat","object":"model","created":now,"owned_by":"deepseek"},
-            {"id":"deepseek-reasoner","object":"model","created":now,"owned_by":"deepseek"},
-            {"id":"llama-3.3-70b-versatile","object":"model","created":now,"owned_by":"meta"},
-            {"id":"kimi-k2","object":"model","created":now,"owned_by":"moonshot"},
-        ]
-    });
+    let data: Vec<serde_json::Value> = PRICING_TABLE.iter().map(|p| {
+        serde_json::json!({
+            "id": p.model,
+            "object": "model",
+            "created": now,
+            "owned_by": p.provider,
+        })
+    }).collect();
 
     (
         StatusCode::OK,
         [(axum::http::header::CONTENT_TYPE, "application/json")],
-        Json(models),
+        Json(serde_json::json!({ "object": "list", "data": data })),
     )
+}
+
+/// GET /api/v1/models — List all models with pricing and context window info.
+async fn handle_list_models() -> impl IntoResponse {
+    use crate::provider::pricing::PRICING_TABLE;
+
+    let models: Vec<serde_json::Value> = PRICING_TABLE.iter().map(|p| {
+        serde_json::json!({
+            "id": p.model,
+            "provider": p.provider,
+            "input_per_1m": p.input_per_1m,
+            "output_per_1m": p.output_per_1m,
+            "context_window": p.context_window,
+        })
+    }).collect();
+
+    Json(serde_json::json!({ "models": models }))
 }
 
 /// POST /v1/chat/completions — OpenAI-compatible chat completions endpoint.

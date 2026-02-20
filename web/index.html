@@ -4273,29 +4273,6 @@
           <div class="settings-item-label" style="margin-bottom:6px;">Model</div>
           <select class="settings-select" id="settings-model" onchange="saveLlmSettings()">
             <option value="">Auto (default)</option>
-            <optgroup label="Anthropic">
-              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
-              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
-              <option value="claude-opus-4-6">Claude Opus 4.6</option>
-            </optgroup>
-            <optgroup label="OpenAI">
-              <option value="gpt-4.1">GPT-4.1</option>
-              <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
-              <option value="gpt-4.1-nano">GPT-4.1 Nano</option>
-              <option value="gpt-4o">GPT-4o</option>
-              <option value="gpt-4o-mini">GPT-4o Mini</option>
-              <option value="o4-mini">o4-mini</option>
-            </optgroup>
-            <optgroup label="Google">
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-            </optgroup>
-            <optgroup label="Other">
-              <option value="moonshotai/kimi-k2-instruct-0905">Kimi K2 (Groq)</option>
-              <option value="qwen/qwen3-32b">Qwen3 32B (Groq)</option>
-              <option value="deepseek-chat">DeepSeek Chat</option>
-            </optgroup>
           </select>
         </div>
 
@@ -11139,7 +11116,66 @@
         document.getElementById('activity-log-list').innerHTML = '<div style="padding:16px;text-align:center;color:#e53e3e;">Error: ' + e.message + '</div>';
       }
     }
+    let _modelsLoaded = false;
+    async function loadModelOptions() {
+      if (_modelsLoaded) return;
+      const sel = document.getElementById('settings-model');
+      const saved = JSON.parse(localStorage.getItem('llmSettings') || '{}');
+      const savedModel = saved.model || '';
+      try {
+        const resp = await fetch('/api/v1/models');
+        if (!resp.ok) throw new Error('fetch failed');
+        const data = await resp.json();
+        const models = data.models || [];
+        // Group by provider
+        const providerNames = { anthropic:'Anthropic', openai:'OpenAI', google:'Google', deepseek:'DeepSeek', groq:'Groq', moonshot:'Moonshot', openrouter:'OpenRouter' };
+        const groups = {};
+        models.forEach(m => {
+          const prov = m.provider || 'other';
+          if (!groups[prov]) groups[prov] = [];
+          groups[prov] .push(m);
+        });
+        // Clear existing optgroups (keep Auto option)
+        while (sel.children.length > 1) sel.removeChild(sel.lastChild);
+        // Build optgroups
+        const provOrder = ['anthropic','openai','google','deepseek','groq','moonshot','openrouter'];
+        provOrder.forEach(prov => {
+          const list = groups[prov];
+          if (!list || !list.length) return;
+          const og = document.createElement('optgroup');
+          og.label = providerNames[prov] || prov;
+          list.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            const ctx = m.context_window >= 1000000 ? (m.context_window/1000000)+'M' : (m.context_window/1000)+'K';
+            opt.textContent = m.id + ' ($' + m.input_per_1m.toFixed(2) + '/' + m.output_per_1m.toFixed(2) + ', ' + ctx + ')';
+            og.appendChild(opt);
+          });
+          sel.appendChild(og);
+        });
+        _modelsLoaded = true;
+      } catch(e) {
+        // Fallback: hardcoded models
+        if (sel.children.length <= 1) {
+          const fallback = [
+            {g:'Anthropic', items:[['claude-sonnet-4-5-20250929','Claude Sonnet 4.5'],['claude-sonnet-4-6','Claude Sonnet 4.6'],['claude-haiku-4-5-20251001','Claude Haiku 4.5'],['claude-opus-4-6','Claude Opus 4.6']]},
+            {g:'OpenAI', items:[['gpt-4.1','GPT-4.1'],['gpt-4o','GPT-4o'],['gpt-4o-mini','GPT-4o Mini'],['o4-mini','o4-mini']]},
+            {g:'Google', items:[['gemini-2.5-flash','Gemini 2.5 Flash'],['gemini-2.5-pro','Gemini 2.5 Pro']]},
+            {g:'Other', items:[['deepseek-chat','DeepSeek Chat'],['qwen/qwen3-32b','Qwen3 32B']]}
+          ];
+          fallback.forEach(({g,items}) => {
+            const og = document.createElement('optgroup');
+            og.label = g;
+            items.forEach(([v,t]) => { const o=document.createElement('option'); o.value=v; o.textContent=t; og.appendChild(o); });
+            sel.appendChild(og);
+          });
+        }
+      }
+      // Restore saved selection
+      if (savedModel) sel.value = savedModel;
+    }
     function loadLlmSettings() {
+      loadModelOptions();
       const saved = JSON.parse(localStorage.getItem('llmSettings') || '{}');
       if (saved.model) document.getElementById('settings-model').value = saved.model;
       if (saved.temperature !== undefined) {
