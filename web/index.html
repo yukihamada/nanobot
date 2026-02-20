@@ -2150,6 +2150,307 @@
     .phone-transcript .segment { margin-bottom: 4px; }
     .phone-transcript .segment .speaker { font-weight: 600; color: var(--text); }
 
+    /* Hue smart light button */
+    .app-chat-hue-btn {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .app-chat-hue-btn:hover { background: rgba(251,191,36,0.15); color: #f59e0b; border-color: #f59e0b; }
+    .app-chat-hue-btn.active { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+    body.hue-enabled .app-chat-hue-btn { display: flex; }
+
+    /* Hue panel */
+    .hue-panel {
+      display: none;
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      width: 340px;
+      max-height: 560px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      z-index: 1000;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .hue-panel.open { display: flex; }
+    .hue-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .hue-panel-header .hue-header-left { display: flex; align-items: center; gap: 8px; }
+    .hue-panel-header .close-btn { cursor: pointer; color: var(--muted); font-size: 18px; }
+    .hue-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .hue-tab {
+      flex: 1;
+      padding: 8px 4px;
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
+      cursor: pointer;
+      color: var(--muted);
+      border: none;
+      background: none;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .hue-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .hue-tab-content { display: none; flex: 1; overflow-y: auto; padding: 12px; flex-direction: column; gap: 8px; }
+    .hue-tab-content.active { display: flex; }
+    .hue-light-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .hue-light-card.off { opacity: 0.6; }
+    .hue-light-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .hue-light-name { font-size: 13px; font-weight: 600; }
+    .hue-light-meta { font-size: 11px; color: var(--muted); }
+    .hue-toggle {
+      position: relative; width: 40px; height: 22px;
+      background: var(--border); border-radius: 11px;
+      cursor: pointer; border: none;
+      transition: background 0.2s; flex-shrink: 0;
+    }
+    .hue-toggle.on { background: #f59e0b; }
+    .hue-toggle::after {
+      content: ''; position: absolute;
+      top: 2px; left: 2px;
+      width: 18px; height: 18px;
+      background: #fff; border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .hue-toggle.on::after { transform: translateX(18px); }
+    .hue-bri-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 6px;
+    }
+    .hue-bri-row label { font-size: 11px; color: var(--muted); min-width: 50px; }
+    .hue-bri-row input[type=range] { flex: 1; accent-color: #f59e0b; }
+    .hue-bri-row .hue-val { font-size: 11px; color: var(--muted); min-width: 28px; text-align: right; }
+    .hue-colors {
+      display: flex; flex-wrap: wrap; gap: 5px;
+      margin-top: 4px;
+    }
+    .hue-swatch {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .hue-swatch:hover { transform: scale(1.2); }
+    .hue-swatch.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+    .hue-swatch-ct {
+      width: 22px; height: 22px;
+      border-radius: 6px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .hue-swatch-ct:hover { transform: scale(1.1); }
+    .hue-swatch-ct.active { border-color: var(--text); }
+    .hue-scene-row {
+      display: flex; align-items: center;
+      gap: 8px; padding: 8px 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .hue-scene-row:hover { background: var(--surface2); }
+    .hue-scene-name { font-size: 13px; flex: 1; }
+    .hue-scene-room { font-size: 11px; color: var(--muted); }
+    .hue-activate-btn {
+      padding: 4px 10px; font-size: 11px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 8px; cursor: pointer;
+    }
+    .hue-activate-btn:hover { opacity: 0.85; }
+    .hue-loading { text-align: center; padding: 24px; color: var(--muted); font-size: 13px; }
+    .hue-error { color: #ef4444; font-size: 12px; padding: 8px; }
+    .hue-refresh-btn {
+      width: 28px; height: 28px;
+      border-radius: 50%; background: none;
+      border: 1px solid var(--border); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 14px;
+      transition: all 0.2s;
+    }
+    .hue-refresh-btn:hover { background: var(--surface2); color: var(--text); }
+    .hue-section-title {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--muted);
+      margin-bottom: 6px; margin-top: 4px;
+    }
+
+    /* Smart Home panel (SwitchBot + Nature Remo) */
+    .app-chat-smarthome-btn {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 17px;
+      line-height: 1;
+      transition: all 0.2s;
+    }
+    .app-chat-smarthome-btn:hover { background: rgba(34,197,94,0.12); color: #22c55e; border-color: #22c55e; }
+    .app-chat-smarthome-btn.active { background: #22c55e; border-color: #22c55e; color: #fff; }
+    body.smarthome-enabled .app-chat-smarthome-btn { display: flex; }
+
+    .smarthome-panel {
+      display: none;
+      position: fixed;
+      bottom: 80px;
+      right: 70px;          /* offset from hue panel so they don't stack */
+      width: 360px;
+      max-height: 580px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      z-index: 999;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .smarthome-panel.open { display: flex; }
+    .smarthome-panel-header {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600; font-size: 14px;
+      flex-shrink: 0;
+    }
+    .smarthome-header-left { display: flex; align-items: center; gap: 8px; }
+    .smarthome-plat-tabs {
+      display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .smarthome-plat-tab {
+      flex: 1; padding: 7px 4px;
+      font-size: 12px; font-weight: 600;
+      text-align: center; cursor: pointer;
+      color: var(--muted); border: none; background: none;
+      border-bottom: 2px solid transparent; transition: all 0.15s;
+    }
+    .smarthome-plat-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .smarthome-plat-content { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+    .smarthome-plat-content.active { display: flex; }
+    /* inner tab strip (Lights/Rooms/Scenes inside SwitchBot or Devices/Appliances inside Remo) */
+    .sh-inner-tabs {
+      display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface);
+    }
+    .sh-inner-tab {
+      flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 500;
+      text-align: center; cursor: pointer; color: var(--muted);
+      border: none; background: none; border-bottom: 2px solid transparent; transition: all 0.15s;
+    }
+    .sh-inner-tab.active { color: var(--text); border-bottom-color: var(--text); }
+    .sh-inner-content { display: none; flex: 1; overflow-y: auto; padding: 10px 12px; flex-direction: column; gap: 8px; }
+    .sh-inner-content.active { display: flex; }
+    /* device card — reused for both SwitchBot and Nature Remo */
+    .sh-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 10px 12px;
+    }
+    .sh-card.off { opacity: 0.65; }
+    .sh-card-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+    }
+    .sh-card-title { font-size: 13px; font-weight: 600; }
+    .sh-card-meta  { font-size: 11px; color: var(--muted); }
+    /* AC control */
+    .sh-ac-temp {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface2); border-radius: 10px;
+      padding: 6px 12px; margin-bottom: 8px;
+    }
+    .sh-ac-temp-val { font-size: 22px; font-weight: 700; flex: 1; text-align: center; }
+    .sh-ac-btn {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--bg); border: 1px solid var(--border);
+      font-size: 16px; cursor: pointer; display: flex;
+      align-items: center; justify-content: center; transition: all 0.15s;
+    }
+    .sh-ac-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .sh-mode-row { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+    .sh-mode-btn {
+      padding: 4px 10px; font-size: 11px; border-radius: 8px;
+      border: 1px solid var(--border); background: none; cursor: pointer;
+      color: var(--muted); transition: all 0.15s;
+    }
+    .sh-mode-btn:hover, .sh-mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .sh-power-row { display: flex; gap: 8px; margin-top: 4px; }
+    .sh-power-on  { flex: 1; padding: 7px; font-size: 12px; font-weight: 600; border-radius: 10px; border: none; background: #22c55e; color: #fff; cursor: pointer; }
+    .sh-power-off { flex: 1; padding: 7px; font-size: 12px; font-weight: 600; border-radius: 10px; border: none; background: #ef4444; color: #fff; cursor: pointer; }
+    .sh-power-on:hover  { opacity: 0.85; }
+    .sh-power-off:hover { opacity: 0.85; }
+    /* signal/scene button grid */
+    .sh-signal-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .sh-signal-btn {
+      padding: 5px 12px; font-size: 12px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--bg);
+      cursor: pointer; color: var(--text); transition: all 0.15s;
+    }
+    .sh-signal-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    /* sensors display */
+    .sh-sensor-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sh-sensor-chip {
+      background: var(--surface2); border-radius: 8px; padding: 4px 10px;
+      font-size: 12px; font-weight: 600;
+    }
+    .sh-sensor-label { font-size: 10px; color: var(--muted); margin-top: 1px; }
+    .sh-loading { text-align: center; padding: 20px; color: var(--muted); font-size: 13px; }
+    .sh-error   { color: #ef4444; font-size: 12px; padding: 8px; }
+    .sh-section-title {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--muted);
+      padding: 4px 0 4px; margin-top: 4px;
+    }
+    .sh-refresh-btn {
+      width: 28px; height: 28px; border-radius: 50%; background: none;
+      border: 1px solid var(--border); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 14px; transition: all 0.2s;
+    }
+    .sh-refresh-btn:hover { background: var(--surface2); color: var(--text); }
+
     /* Floating TTS stop button — visible during playback */
     .tts-stop-float {
       display: none;
@@ -2955,28 +3256,102 @@
     /* Agent progress (tool execution steps) */
     .agent-progress {
       margin: 8px 0;
-      padding: 8px 12px;
-      background: var(--surface, #f5f5f5);
-      border-radius: 8px;
+      padding: 0;
+      background: var(--surface, #f4f4f8);
+      border-radius: 10px;
       font-size: 13px;
       color: var(--muted, #888);
-      border-left: 3px solid var(--primary, #4f46e5);
+      border: 1px solid rgba(0,0,0,0.07);
+      overflow: hidden;
     }
     [data-theme="dark"] .agent-progress {
-      background: #1a1a2e;
+      background: #13131f;
+      border-color: rgba(255,255,255,0.06);
     }
-    .agent-progress .tool-step { padding: 4px 0; }
-    .agent-progress .tool-step pre {
-      margin: 2px 0 0 18px;
-      font-size: 12px;
-      max-height: 120px;
+    .agent-progress-header {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary, #4f46e5);
+      background: rgba(79,70,229,0.05);
+      border-bottom: 1px solid rgba(79,70,229,0.1);
+      letter-spacing: 0.2px;
+    }
+    [data-theme="dark"] .agent-progress-header {
+      background: rgba(99,102,241,0.08);
+      border-bottom-color: rgba(99,102,241,0.15);
+    }
+    .agent-progress-body { padding: 6px 12px 8px; }
+    .tool-step { padding: 3px 0; }
+    .tool-step-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 22px;
+    }
+    .tool-step-icon { font-size: 13px; width: 18px; text-align: center; flex-shrink: 0; }
+    .tool-step-label { flex: 1; font-weight: 500; color: var(--text, #222); font-size: 12px; }
+    [data-theme="dark"] .tool-step-label { color: #ddd; }
+    .tool-step.is-running .tool-step-label { color: var(--primary, #4f46e5); }
+    .tool-step.is-error .tool-step-label { color: #ef4444; }
+    .tool-step.is-no-results .tool-step-label { color: #f59e0b; }
+    .tool-step-args {
+      font-size: 11px;
+      color: var(--muted, #999);
+      margin: 1px 0 0 24px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 380px;
+    }
+    .tool-duration {
+      font-size: 10px;
+      color: var(--muted, #aaa);
+      background: rgba(0,0,0,0.05);
+      border-radius: 4px;
+      padding: 1px 5px;
+      flex-shrink: 0;
+    }
+    [data-theme="dark"] .tool-duration { background: rgba(255,255,255,0.07); }
+    .tool-result-details { margin: 3px 0 3px 24px; }
+    .tool-result-details summary {
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--muted, #999);
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 1px 0;
+    }
+    .tool-result-details summary::-webkit-details-marker { display: none; }
+    .tool-result-details:not([open]) summary::before { content: '▸ '; font-size: 9px; }
+    .tool-result-details[open] summary::before { content: '▾ '; font-size: 9px; }
+    .tool-result-details pre {
+      margin: 4px 0 0;
+      font-size: 11px;
+      max-height: 150px;
       overflow: auto;
       background: var(--code-bg, #1e1e1e);
       color: var(--code-fg, #d4d4d4);
       padding: 6px 8px;
-      border-radius: 4px;
+      border-radius: 6px;
       white-space: pre-wrap;
       word-break: break-all;
+      line-height: 1.45;
+    }
+    .thinking-step-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+      color: var(--muted, #999);
+      font-style: italic;
+      font-size: 12px;
     }
     @keyframes pulse {
       0%, 100% { opacity: 1; }
@@ -3436,7 +3811,7 @@
       <h1 id="t-title">お願いしたら、本当にやってくれるAI。</h1>
       <p id="t-subtitle">チャットで頼むだけ。検索、コード実行、ファイル操作、定期監視まで — 声でもテキストでも。</p>
       <div class="hero-cta" id="t-hero-cta">
-        <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="if(!currentUser){openAuthModal();return false;}document.getElementById('input').focus();return false;">今すぐ無料で試す</a>
+        <a href="#chat-area" class="cta-primary" id="t-hero-try" onclick="AB.track('hero_cta_click');if(!currentUser){openAuthModal();return false;}document.getElementById('input').focus();return false;">今すぐ無料で試す</a>
         <div style="margin-top:10px;font-size:12px;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
           <span>🎁 登録で <b style="color:var(--accent);">100クレジット</b> 無料</span>
           <span style="opacity:0.4;">|</span>
@@ -3798,6 +4173,11 @@
 
   <div class="modal-overlay" id="auth-modal" onclick="closeAuthModal(event)" style="z-index:300;">
     <div class="modal auth-modal" onclick="event.stopPropagation()">
+      <div id="auth-value-prop" style="display:none;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:10px;padding:12px 16px;margin-bottom:14px;text-align:center;">
+        <div style="font-size:22px;margin-bottom:4px;">🎁</div>
+        <div style="color:#fff;font-weight:700;font-size:15px;">無料で100クレジットプレゼント</div>
+        <div style="color:rgba(255,255,255,0.85);font-size:12px;margin-top:2px;">登録するだけ。クレジットカード不要。</div>
+      </div>
       <h3 id="auth-modal-title">ログイン</h3>
       <div class="auth-error" id="auth-error" style="display:none;"></div>
       <div id="auth-form-email">
@@ -4775,6 +5155,8 @@
           <button class="app-chat-send-btn" id="app-send-btn" onclick="appSend()">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14l12-6L2 2v5l8 1-8 1v5z" fill="currentColor"/></svg>
           </button>
+          <button class="app-chat-smarthome-btn" id="app-smarthome-btn" onclick="toggleSmartHomePanel()" title="スマートホーム">🏠</button>
+          <button class="app-chat-hue-btn" id="app-hue-btn" onclick="toggleHuePanel()" title="Hue照明">💡</button>
           <button class="app-chat-phone-btn" id="app-phone-btn" onclick="togglePhonePanel()" title="Phone call">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
@@ -4827,6 +5209,72 @@
       </div>
     </div>
     <div class="phone-transcript" id="phone-transcript"></div>
+  </div>
+
+  <!-- Smart Home panel: SwitchBot + Nature Remo -->
+  <div class="smarthome-panel" id="smarthome-panel">
+    <div class="smarthome-panel-header">
+      <div class="smarthome-header-left">
+        <span>🏠 スマートホーム</span>
+        <button class="sh-refresh-btn" id="sh-refresh-btn" onclick="loadSmartHomeData()" title="更新">↻</button>
+      </div>
+      <span class="close-btn" onclick="toggleSmartHomePanel()">&times;</span>
+    </div>
+    <!-- Platform tabs -->
+    <div class="smarthome-plat-tabs" id="sh-plat-tabs">
+      <!-- filled dynamically based on what's configured -->
+    </div>
+    <!-- SwitchBot content -->
+    <div class="smarthome-plat-content" id="sh-plat-switchbot">
+      <div class="sh-inner-tabs">
+        <button class="sh-inner-tab active" id="sh-sb-tab-devices"  onclick="switchSBTab('devices')">デバイス</button>
+        <button class="sh-inner-tab"        id="sh-sb-tab-ir"       onclick="switchSBTab('ir')">IRリモコン</button>
+      </div>
+      <div class="sh-inner-content active" id="sh-sb-content-devices">
+        <div class="sh-loading">読み込み中...</div>
+      </div>
+      <div class="sh-inner-content" id="sh-sb-content-ir">
+        <div class="sh-loading">読み込み中...</div>
+      </div>
+    </div>
+    <!-- Nature Remo content -->
+    <div class="smarthome-plat-content" id="sh-plat-remo">
+      <div class="sh-inner-tabs">
+        <button class="sh-inner-tab active" id="sh-remo-tab-appliances" onclick="switchRemoTab('appliances')">家電</button>
+        <button class="sh-inner-tab"        id="sh-remo-tab-sensors"    onclick="switchRemoTab('sensors')">センサー</button>
+      </div>
+      <div class="sh-inner-content active" id="sh-remo-content-appliances">
+        <div class="sh-loading">読み込み中...</div>
+      </div>
+      <div class="sh-inner-content" id="sh-remo-content-sensors">
+        <div class="sh-loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Philips Hue smart light control panel -->
+  <div class="hue-panel" id="hue-panel">
+    <div class="hue-panel-header">
+      <div class="hue-header-left">
+        <span>💡 Hue</span>
+        <button class="hue-refresh-btn" id="hue-refresh-btn" onclick="loadHueData()" title="更新">↻</button>
+      </div>
+      <span class="close-btn" onclick="toggleHuePanel()">&times;</span>
+    </div>
+    <div class="hue-tabs">
+      <button class="hue-tab active" id="hue-tab-lights" onclick="switchHueTab('lights')">ライト</button>
+      <button class="hue-tab" id="hue-tab-rooms" onclick="switchHueTab('rooms')">ルーム</button>
+      <button class="hue-tab" id="hue-tab-scenes" onclick="switchHueTab('scenes')">シーン</button>
+    </div>
+    <div class="hue-tab-content active" id="hue-content-lights">
+      <div class="hue-loading" id="hue-lights-loading">読み込み中...</div>
+    </div>
+    <div class="hue-tab-content" id="hue-content-rooms">
+      <div class="hue-loading" id="hue-rooms-loading">読み込み中...</div>
+    </div>
+    <div class="hue-tab-content" id="hue-content-scenes">
+      <div class="hue-loading" id="hue-scenes-loading">読み込み中...</div>
+    </div>
   </div>
 
   <div id="ccp-container" style="display:none;width:0;height:0;overflow:hidden;"></div>
@@ -5247,8 +5695,68 @@
       news_search: { icon: '\uD83D\uDCF0', ja: '\u30CB\u30E5\u30FC\u30B9', en: 'News' },
     };
 
+    // ===== A/B Test Framework =====
+    const AB = (() => {
+      let _uid = localStorage.getItem('_ab_uid');
+      if (!_uid) {
+        _uid = (Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 14);
+        localStorage.setItem('_ab_uid', _uid);
+      }
+      function _hash(s) {
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+        return Math.abs(h);
+      }
+      function assign(testId, variants) {
+        const key = '_ab_' + testId;
+        const cached = localStorage.getItem(key);
+        if (cached && variants.includes(cached)) return cached;
+        const chosen = variants[_hash(_uid + testId) % variants.length];
+        localStorage.setItem(key, chosen);
+        return chosen;
+      }
+      function variant(testId) { return localStorage.getItem('_ab_' + testId); }
+      function track(event, props) {
+        const tests = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('_ab_')) tests[k.slice(4)] = localStorage.getItem(k);
+        }
+        fetch(API + '/api/v1/ab/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event, uid: _uid, ts: Date.now(), ...tests, ...(props || {}) })
+        }).catch(() => {});
+      }
+      return { assign, variant, track };
+    })();
+
+    // ===== A/B Tests: assign variants on page load =====
+    // Test 1: guest_turns — how many free turns before requiring signup?
+    //   '0' = gate immediately (control), '2' = 2 free turns before signup nudge
+    const _abGuestTurns = AB.assign('guest_turns', ['0', '2']);
+
+    // Test 2: hero_cta — CTA button copy
+    //   'control' = current text, 'gift' = gift-framing with credits
+    const _abHeroCta = AB.assign('hero_cta', ['control', 'gift']);
+
+    // Test 3: auth_value_prop — show value prop in auth modal?
+    //   'control' = plain login form, 'value' = show 100 credit gift header
+    const _abAuthValue = AB.assign('auth_value_prop', ['control', 'value']);
+
+    // Apply hero CTA variant immediately (element may not exist yet; safe to call later)
+    function _applyHeroCtaVariant() {
+      const el = document.getElementById('t-hero-try');
+      if (!el) return;
+      if (_abHeroCta === 'gift') {
+        el.textContent = '🎁 無料で試す（100クレジット付き）';
+      }
+    }
+    if (document.readyState !== 'loading') _applyHeroCtaVariant();
+    else document.addEventListener('DOMContentLoaded', _applyHeroCtaVariant);
+
     // Guest Trial Tracking
-    const GUEST_MAX_TURNS = 0;
+    const GUEST_MAX_TURNS = parseInt(_abGuestTurns, 10);
     function getGuestTurns() { return parseInt(localStorage.getItem('guestTurns') || '0'); }
     function incGuestTurns() { const t = getGuestTurns() + 1; localStorage.setItem('guestTurns', t.toString()); return t; }
     function clearGuestTrial() { localStorage.removeItem('guestTurns'); }
@@ -5264,6 +5772,9 @@
       // Hide demo messages on first guest send
       if (!currentUser && getGuestTurns() === 0) {
         document.querySelectorAll('.demo-msg').forEach(el => el.style.display = 'none');
+        AB.track('first_message_sent', { guest: true });
+      } else if (!currentUser) {
+        AB.track('message_sent', { guest: true, turn: getGuestTurns() });
       }
       addMsg(text, 'user');
 
@@ -6972,6 +7483,9 @@
     let currentUser = null;
 
     function openAuthModal() {
+      AB.track('auth_modal_open');
+      const vp = document.getElementById('auth-value-prop');
+      if (vp) vp.style.display = (_abAuthValue === 'value') ? '' : 'none';
       document.getElementById('auth-modal').classList.add('show');
       document.getElementById('auth-error').style.display = 'none';
     }
@@ -7078,6 +7592,7 @@
         });
         const d = await r.json();
         if (d.ok) {
+          AB.track('auth_completed', { new_user: !!d.new_user });
           localStorage.setItem('authToken', d.token);
           authToken = d.token;
           localStorage.removeItem('pending_referral');
@@ -9523,15 +10038,47 @@
           let gotContent = false;
           let streamingEl = null;
 
+          const TOOL_ICONS = {
+            web_search:'🔍', web_fetch:'🌐', wikipedia:'📖', news_search:'📰', arxiv_search:'🎓',
+            calculator:'🔢', weather:'🌤', translate:'🌐', datetime:'🕐',
+            code_execute:'💻', file_read:'📄', file_write:'✏️', file_list:'📂', filesystem:'📂',
+            image_generate:'🎨', music_generate:'🎵', video_generate:'🎬', qr_code:'◼',
+            google_calendar:'📅', gmail:'📧', slack:'💬', discord:'💬', notion:'📝',
+            github_read_file:'📁', github_create_or_update_file:'📝', github_create_pr:'🔀',
+            git_status:'🌿', git_diff:'🔍', git_commit:'💾',
+            browser:'🖥', browser_screenshot:'📸', browser_action:'🖱', browser_purchase:'🛒',
+            hue:'💡', switchbot:'🔌', nature_remo:'🌡',
+            phone_call:'📞', web_deploy:'🚀', spotify:'🎧',
+            csv_analysis:'📊', memory_log:'🧠', knowledge_graph:'🕸',
+          };
+          const TOOL_LABELS = {
+            web_search:'Web検索', web_fetch:'ページ取得', wikipedia:'Wikipedia', news_search:'ニュース',
+            calculator:'計算', weather:'天気', translate:'翻訳', datetime:'日時',
+            code_execute:'コード実行', file_read:'ファイル読込', file_write:'ファイル書込', file_list:'ファイル一覧',
+            image_generate:'画像生成', music_generate:'音楽生成', video_generate:'動画生成', qr_code:'QRコード',
+            google_calendar:'カレンダー', gmail:'メール', github_read_file:'GitHub',
+            github_create_pr:'PR作成', git_commit:'コミット',
+            browser:'ブラウザ', browser_screenshot:'スクショ', browser_purchase:'購入',
+            hue:'スマートライト', switchbot:'SwitchBot', nature_remo:'Nature Remo',
+            phone_call:'電話', web_deploy:'デプロイ', csv_analysis:'CSV分析', memory_log:'記憶',
+          };
+
           let agentProgressEl = null;
           function ensureAgentProgress() {
-            if (agentProgressEl) return agentProgressEl;
+            if (agentProgressEl) return agentProgressEl.querySelector('.agent-progress-body') || agentProgressEl;
             agentProgressEl = document.createElement('div');
             agentProgressEl.className = 'agent-progress';
-            agentProgressEl.style.cssText = 'margin:8px 0;padding:8px 12px;background:var(--surface,#f5f5f5);border-radius:8px;font-size:13px;color:var(--muted,#888);';
+            const hdr = document.createElement('div');
+            hdr.className = 'agent-progress-header';
+            hdr.id = 'agent-progress-header';
+            hdr.innerHTML = '<span>⚙️</span><span>' + (lang === 'ja' ? 'エージェント処理中' : 'Agent working') + '</span>';
+            agentProgressEl.appendChild(hdr);
+            const body = document.createElement('div');
+            body.className = 'agent-progress-body';
+            agentProgressEl.appendChild(body);
             const msgsEl = document.getElementById('app-messages');
             if (msgsEl) msgsEl.appendChild(agentProgressEl);
-            return agentProgressEl;
+            return body;
           }
 
           function processEvent(evt) {
@@ -9550,24 +10097,62 @@
               if (textEl) textEl.textContent = label + (est ? ' (' + est + ')' : '');
             } else if (evt.type === 'tool_start') {
               const p = ensureAgentProgress();
+              const icon = TOOL_ICONS[evt.tool] || '⚙️';
+              const label = (lang === 'ja' ? TOOL_LABELS[evt.tool] : null) || evt.tool;
               const toolEl = document.createElement('div');
-              toolEl.className = 'tool-step';
+              toolEl.className = 'tool-step is-running';
               toolEl.id = 'tool-step-' + evt.tool + '-' + evt.iteration;
-              toolEl.innerHTML = '<span class="dot-pulse" style="display:inline-block;width:6px;height:6px;background:var(--primary,#4f46e5);border-radius:50%;animation:pulse 1s infinite;margin-right:6px;"></span>' +
-                '<strong>' + evt.tool + '</strong> ' + (lang === 'ja' ? '実行中...' : 'running...');
-              toolEl.style.cssText = 'padding:4px 0;';
+              toolEl.dataset.startTs = Date.now();
+              const row = document.createElement('div');
+              row.className = 'tool-step-row';
+              row.innerHTML = '<span class="tool-step-icon">' + icon + '</span>'
+                + '<span class="tool-step-label">' + label + '</span>'
+                + '<span class="dot-pulse" style="display:inline-block;width:5px;height:5px;background:var(--primary,#4f46e5);border-radius:50%;animation:pulse 1s infinite;flex-shrink:0;"></span>';
+              toolEl.appendChild(row);
+              if (evt.args_preview) {
+                const argsEl = document.createElement('div');
+                argsEl.className = 'tool-step-args';
+                argsEl.textContent = evt.args_preview;
+                toolEl.appendChild(argsEl);
+              }
               p.appendChild(toolEl);
+              // Update header with current step info
+              const hdr = document.getElementById('agent-progress-header');
+              if (hdr && evt.max_iter) {
+                const stepInfo = lang === 'ja' ? 'ステップ ' + evt.iteration + '/' + evt.max_iter : 'Step ' + evt.iteration + '/' + evt.max_iter;
+                hdr.innerHTML = '<span>⚙️</span><span>' + stepInfo + '</span>';
+              }
             } else if (evt.type === 'tool_result') {
               const stepEl = document.getElementById('tool-step-' + evt.tool + '-' + evt.iteration);
               if (stepEl) {
-                const preview = (evt.result || '').substring(0, 200);
-                const isError = preview.startsWith('[TOOL_ERROR]');
-                stepEl.innerHTML = (isError ? '&#10060;' : '&#9989;') + ' <strong>' + evt.tool + '</strong>';
+                const isError = evt.is_error || (evt.result || '').startsWith('[TOOL_ERROR]');
+                const isNoResults = evt.is_no_results || (evt.result || '').startsWith('[NO_RESULTS]');
+                const icon = TOOL_ICONS[evt.tool] || '⚙️';
+                const label = (lang === 'ja' ? TOOL_LABELS[evt.tool] : null) || evt.tool;
+                const statusIcon = isError ? '❌' : isNoResults ? '⚠️' : '✅';
+                const durationMs = evt.duration_ms || (Date.now() - (parseInt(stepEl.dataset.startTs) || Date.now()));
+                const durationStr = durationMs >= 1000 ? (durationMs / 1000).toFixed(1) + 's' : durationMs + 'ms';
+                stepEl.classList.remove('is-running');
+                stepEl.classList.add(isError ? 'is-error' : isNoResults ? 'is-no-results' : 'is-done');
+                const row = stepEl.querySelector('.tool-step-row');
+                if (row) {
+                  row.innerHTML = '<span class="tool-step-icon">' + statusIcon + '</span>'
+                    + '<span class="tool-step-label">' + label + '</span>'
+                    + '<span class="tool-duration">' + durationStr + '</span>';
+                }
+                // Collapsible result preview
+                const preview = (evt.result || '').substring(0, 500);
                 if (preview) {
+                  const details = document.createElement('details');
+                  details.className = 'tool-result-details';
+                  const summary = document.createElement('summary');
+                  const shortPreview = preview.substring(0, 60).replace(/[\n\r]+/g, ' ');
+                  summary.textContent = shortPreview + (preview.length > 60 ? '…' : '');
                   const pre = document.createElement('pre');
-                  pre.style.cssText = 'margin:2px 0 0 18px;font-size:12px;max-height:120px;overflow:auto;background:var(--code-bg,#1e1e1e);color:var(--code-fg,#d4d4d4);padding:6px 8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;';
                   pre.textContent = preview;
-                  stepEl.appendChild(pre);
+                  details.appendChild(summary);
+                  details.appendChild(pre);
+                  stepEl.appendChild(details);
                 }
               }
             } else if (evt.type === 'browser_screenshot') {
@@ -9597,11 +10182,19 @@
               // Show purchase confirmation modal
               showPurchaseConfirmModal(evt);
             } else if (evt.type === 'thinking') {
+              // Update header to show thinking state
+              const hdr = document.getElementById('agent-progress-header');
+              if (hdr) {
+                const iterLabel = (evt.max_iter && evt.iteration)
+                  ? (lang === 'ja' ? 'ステップ ' + evt.iteration + '/' + evt.max_iter + ' — 分析中' : 'Step ' + evt.iteration + '/' + evt.max_iter + ' — Analyzing')
+                  : (lang === 'ja' ? '分析中...' : 'Analyzing...');
+                hdr.innerHTML = '<span>🤔</span><span>' + iterLabel + '</span>';
+              }
               const p = ensureAgentProgress();
               const thinkEl = document.createElement('div');
-              thinkEl.style.cssText = 'padding:4px 0;color:var(--muted,#888);font-style:italic;';
-              thinkEl.textContent = lang === 'ja' ? '結果を分析中...' : 'Analyzing results...';
-              thinkEl.className = 'thinking-step';
+              thinkEl.className = 'thinking-step thinking-step-row';
+              thinkEl.innerHTML = '<span style="font-size:12px">💭</span><span>'
+                + (lang === 'ja' ? '次のアクションを考えています...' : 'Planning next action...') + '</span>';
               p.appendChild(thinkEl);
             } else if (evt.type === 'reasoning') {
               const p = ensureAgentProgress();
@@ -12862,6 +13455,7 @@
 
     // ---------------------------------------------------------------------------
     function showTopupModal(tab) {
+      AB.track('upgrade_modal_open', { tab: tab || 'plans' });
       const l = document.documentElement.lang || 'ja';
       document.getElementById('topup-modal-title').textContent = l === 'ja' ? 'クレジットをチャージ' : 'Top Up Credits';
       document.getElementById('topup-modal-desc').textContent = l === 'ja' ? 'お好きな方法でクレジットを追加できます' : 'Add credits using your preferred payment method';
@@ -13900,6 +14494,20 @@
       setLang(lang);
     })();
 
+    // Probe which smart home integrations are configured on the server
+    (async function checkSmartHomeEnabled() {
+      try {
+        const r = await fetch(API + '/api/v1/integrations');
+        if (!r.ok) return;
+        const d = await r.json();
+        const tools = d.tools || [];
+        const names = tools.map(t => t.function && t.function.name).filter(Boolean);
+        if (names.includes('hue'))         document.body.classList.add('hue-enabled');
+        if (names.includes('switchbot'))   document.body.classList.add('switchbot-enabled', 'smarthome-enabled');
+        if (names.includes('nature_remo')) document.body.classList.add('remo-enabled',       'smarthome-enabled');
+      } catch(e) { /* smart home tools not available */ }
+    })();
+
     let phoneState = { active: false, contactId: null, ccpInitialized: false, transcriptPoll: null };
 
     (async function checkConnectEnabled() {
@@ -13920,6 +14528,660 @@
         }
       } catch(e) { /* Connect not available */ }
     })();
+
+    // ── Smart Home Panel (SwitchBot + Nature Remo) ───────────────────────────
+    const shState = {
+      sb: { devices: null, ir: null, loading: false },
+      remo: { appliances: null, sensors: null, loading: false },
+      activePlat: null,
+      acState: {},
+    };
+
+    async function shApi(endpoint, params) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (typeof authToken !== 'undefined' && authToken) headers['Authorization'] = 'Bearer ' + authToken;
+      const r = await fetch(API + endpoint, { method: 'POST', headers, body: JSON.stringify(params) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      if (d.result && d.result.startsWith('[TOOL_ERROR]')) throw new Error(d.result.replace('[TOOL_ERROR] ', ''));
+      return d.result || '';
+    }
+
+    function toggleSmartHomePanel() {
+      const panel = document.getElementById('smarthome-panel');
+      panel.classList.toggle('open');
+      const btn = document.getElementById('app-smarthome-btn');
+      btn.classList.toggle('active', panel.classList.contains('open'));
+      if (panel.classList.contains('open')) {
+        if (!shState.activePlat) buildPlatTabs();
+        loadSmartHomeData();
+      }
+    }
+
+    function buildPlatTabs() {
+      const tabs = document.getElementById('sh-plat-tabs');
+      const hasSB   = document.body.classList.contains('switchbot-enabled');
+      const hasRemo = document.body.classList.contains('remo-enabled');
+      tabs.innerHTML = '';
+      const plats = [];
+      if (hasSB)   plats.push({ id: 'switchbot', label: '🤖 SwitchBot' });
+      if (hasRemo) plats.push({ id: 'remo',      label: '🌿 Nature Remo' });
+      plats.forEach((p, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'smarthome-plat-tab' + (i === 0 ? ' active' : '');
+        btn.textContent = p.label;
+        btn.onclick = () => switchSHPlat(p.id);
+        tabs.appendChild(btn);
+      });
+      if (plats.length > 0) switchSHPlat(plats[0].id);
+    }
+
+    function switchSHPlat(platId) {
+      shState.activePlat = platId;
+      document.querySelectorAll('.smarthome-plat-tab').forEach(t => {
+        t.classList.toggle('active', t.textContent.toLowerCase().includes(platId === 'remo' ? 'nature' : platId));
+      });
+      document.querySelectorAll('.smarthome-plat-content').forEach(c => c.classList.remove('active'));
+      const el = document.getElementById('sh-plat-' + platId);
+      if (el) el.classList.add('active');
+    }
+
+    function switchSBTab(tab) {
+      document.querySelectorAll('[id^="sh-sb-tab-"]').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('[id^="sh-sb-content-"]').forEach(c => c.classList.remove('active'));
+      document.getElementById('sh-sb-tab-' + tab).classList.add('active');
+      document.getElementById('sh-sb-content-' + tab).classList.add('active');
+    }
+
+    function switchRemoTab(tab) {
+      document.querySelectorAll('[id^="sh-remo-tab-"]').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('[id^="sh-remo-content-"]').forEach(c => c.classList.remove('active'));
+      document.getElementById('sh-remo-tab-' + tab).classList.add('active');
+      document.getElementById('sh-remo-content-' + tab).classList.add('active');
+    }
+
+    async function loadSmartHomeData() {
+      const btn = document.getElementById('sh-refresh-btn');
+      if (btn) btn.style.opacity = '0.4';
+      const hasSB   = document.body.classList.contains('switchbot-enabled');
+      const hasRemo = document.body.classList.contains('remo-enabled');
+      const tasks = [];
+      if (hasSB)   tasks.push(loadSBData());
+      if (hasRemo) tasks.push(loadRemoData());
+      await Promise.allSettled(tasks);
+      if (btn) btn.style.opacity = '';
+    }
+
+    // SwitchBot ───────────────────────────────────────────────────────────────
+    async function loadSBData() {
+      if (shState.sb.loading) return;
+      shState.sb.loading = true;
+      try {
+        const raw = await shApi('/api/v1/switchbot', { action: 'list_devices' });
+        const { devices, ir } = parseSBDevices(raw);
+        shState.sb.devices = devices;
+        shState.sb.ir = ir;
+        renderSBDevices();
+        renderSBIR();
+      } catch(e) {
+        document.getElementById('sh-sb-content-devices').innerHTML = '<div class="sh-error">⚠️ ' + e.message + '</div>';
+      } finally { shState.sb.loading = false; }
+    }
+
+    function parseSBDevices(raw) {
+      const devices = [], ir = [];
+      let section = 'devices';
+      (raw || '').split('\n').slice(1).forEach(line => {
+        if (line.startsWith('IR Remotes')) { section = 'ir'; return; }
+        const m = line.match(/\[([^\]]+)\]\s+(.+?)\s+\(([^)]+)\)\s+—\s+(.+)/);
+        if (!m) return;
+        (section === 'ir' ? ir : devices).push({ id: m[1], name: m[2], type: m[3], info: m[4] });
+      });
+      return { devices, ir };
+    }
+
+    const SB_TYPE_ICONS = {
+      'Bot':'🔘','Plug':'🔌','Plug Mini JP':'🔌','Plug Mini US':'🔌',
+      'Color Bulb':'💡','Strip Light':'💡','Ceiling Light':'💡','Ceiling Light Pro':'💡',
+      'Curtain':'🪟','Curtain3':'🪟',
+      'MeterPlus':'🌡️','Meter':'🌡️','WoIOSensor':'🌡️',
+      'Motion Sensor':'👁️','Contact Sensor':'🚪',
+      'Robot Vacuum Cleaner S1':'🤖','Robot Vacuum Cleaner S1 Plus':'🤖',
+    };
+    const SB_LIGHTS   = ['Color Bulb','Strip Light','Ceiling Light','Ceiling Light Pro'];
+    const SB_CURTAINS = ['Curtain','Curtain3'];
+    const SB_VACUUM   = ['Robot Vacuum Cleaner S1','Robot Vacuum Cleaner S1 Plus'];
+    const SB_SENSORS  = ['MeterPlus','Meter','WoIOSensor','Motion Sensor','Contact Sensor'];
+    const SB_COLORS = [
+      { hex:'#ffb347', cmd:'setColorTemperature', par:'2700' },
+      { hex:'#e0e8ff', cmd:'setColorTemperature', par:'6500' },
+      { hex:'#ff4444', cmd:'setColor', par:'255:0:0' },
+      { hex:'#ff8c00', cmd:'setColor', par:'255:140:0' },
+      { hex:'#ffd700', cmd:'setColor', par:'255:215:0' },
+      { hex:'#22c55e', cmd:'setColor', par:'0:200:100' },
+      { hex:'#3b82f6', cmd:'setColor', par:'0:100:255' },
+      { hex:'#a855f7', cmd:'setColor', par:'150:0:255' },
+    ];
+
+    function renderSBDevices() {
+      const el = document.getElementById('sh-sb-content-devices');
+      const devs    = (shState.sb.devices || []).filter(d => !SB_SENSORS.includes(d.type));
+      const sensors = (shState.sb.devices || []).filter(d =>  SB_SENSORS.includes(d.type));
+      if (!devs.length && !sensors.length) { el.innerHTML = '<div class="sh-loading">デバイスが見つかりません</div>'; return; }
+      let html = '';
+      html += devs.map(d => {
+        const icon      = SB_TYPE_ICONS[d.type] || '📱';
+        const isLight   = SB_LIGHTS.includes(d.type);
+        const isCurtain = SB_CURTAINS.includes(d.type);
+        const isVacuum  = SB_VACUUM.includes(d.type);
+        const isPlug    = d.type.startsWith('Plug') || d.type === 'Bot';
+        let ctrl = '';
+        if (isPlug || isLight) {
+          ctrl += `<div style="display:flex;gap:6px;margin-bottom:${isLight?'6':'0'}px">
+            <button class="sh-power-on"  style="padding:5px" onclick="sbCmd('${d.id}','turnOn')">ON</button>
+            <button class="sh-power-off" style="padding:5px" onclick="sbCmd('${d.id}','turnOff')">OFF</button>
+            ${d.type==='Bot'?`<button class="sh-mode-btn" style="padding:5px 10px" onclick="sbCmd('${d.id}','press')">プレス</button>`:''}
+          </div>`;
+        }
+        if (isLight) {
+          ctrl += `<div class="hue-bri-row" style="margin-bottom:5px">
+            <label style="font-size:11px;color:var(--muted);min-width:48px">明るさ</label>
+            <input type="range" min="1" max="100" value="80" style="flex:1;accent-color:var(--accent)"
+              oninput="this.nextElementSibling.textContent=this.value+'%'"
+              onchange="sbCmd('${d.id}','setBrightness',this.value)">
+            <span style="font-size:11px;color:var(--muted);min-width:28px;text-align:right">80%</span>
+          </div>
+          <div class="hue-colors">${SB_COLORS.map(c=>`<button class="hue-swatch" style="background:${c.hex}" onclick="sbCmd('${d.id}','${c.cmd}','${c.par}')"></button>`).join('')}</div>`;
+        }
+        if (isCurtain) {
+          ctrl += `<div class="hue-bri-row">
+            <label style="font-size:11px;color:var(--muted);min-width:48px">開度</label>
+            <input type="range" min="0" max="100" value="50" style="flex:1;accent-color:var(--accent)"
+              oninput="this.nextElementSibling.textContent=this.value+'%'"
+              onchange="sbCmd('${d.id}','setPosition','0,ff,'+this.value)">
+            <span style="font-size:11px;color:var(--muted);min-width:28px;text-align:right">50%</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <button class="sh-power-on"  style="padding:5px" onclick="sbCmd('${d.id}','open')">開く</button>
+            <button class="sh-power-off" style="padding:5px" onclick="sbCmd('${d.id}','close')">閉じる</button>
+          </div>`;
+        }
+        if (isVacuum) {
+          ctrl += `<div class="sh-mode-row">
+            <button class="sh-mode-btn" onclick="sbCmd('${d.id}','start')">▶ 開始</button>
+            <button class="sh-mode-btn" onclick="sbCmd('${d.id}','stop')">⏸ 停止</button>
+            <button class="sh-mode-btn" onclick="sbCmd('${d.id}','dock')">⏏ 帰還</button>
+          </div>`;
+        }
+        return `<div class="sh-card">
+          <div class="sh-card-header">
+            <div><div class="sh-card-title">${icon} ${d.name}</div><div class="sh-card-meta">${d.type}</div></div>
+          </div>${ctrl}</div>`;
+      }).join('');
+      if (sensors.length) {
+        html += `<div class="sh-section-title">センサー</div>` + sensors.map(d => {
+          const icon = SB_TYPE_ICONS[d.type] || '📡';
+          return `<div class="sh-card">
+            <div class="sh-card-header">
+              <div><div class="sh-card-title">${icon} ${d.name}</div><div class="sh-card-meta">${d.type}</div></div>
+            </div>
+            <button class="sh-mode-btn" onclick="sbLoadSensor('${d.id}',this)">状態を取得</button>
+            <div class="sh-sensor-row" id="sh-sensor-${d.id}" style="margin-top:6px"></div>
+          </div>`;
+        }).join('');
+      }
+      el.innerHTML = html;
+    }
+
+    function renderSBIR() {
+      const el = document.getElementById('sh-sb-content-ir');
+      const ir = shState.sb.ir || [];
+      if (!ir.length) { el.innerHTML = '<div class="sh-loading">IRリモコンなし</div>'; return; }
+      el.innerHTML = ir.map(d => `
+        <div class="sh-card">
+          <div class="sh-card-header">
+            <div><div class="sh-card-title">📡 ${d.name}</div><div class="sh-card-meta">${d.type} [IR]</div></div>
+          </div>
+          <div class="sh-signal-grid">
+            <button class="sh-signal-btn" onclick="sbCmd('${d.id}','turnOn')">ON</button>
+            <button class="sh-signal-btn" onclick="sbCmd('${d.id}','turnOff')">OFF</button>
+          </div>
+        </div>`).join('');
+    }
+
+    async function sbCmd(deviceId, command, parameter) {
+      const p = { action: 'command', device_id: deviceId, command };
+      if (parameter !== undefined) p.parameter = String(parameter);
+      try { await shApi('/api/v1/switchbot', p); }
+      catch(e) { showToast('SwitchBot: ' + e.message, 'error'); }
+    }
+
+    async function sbLoadSensor(deviceId, btn) {
+      btn.disabled = true; btn.textContent = '取得中...';
+      try {
+        const raw = await shApi('/api/v1/switchbot', { action: 'get_device', device_id: deviceId });
+        const el = document.getElementById('sh-sensor-' + deviceId);
+        if (!el) return;
+        const chips = [];
+        [ [/temp=([\d.]+)°C/, '温度', v => v+'°C'],
+          [/humidity=(\d+)%/,  '湿度', v => v+'%'],
+          [/position=(\d+)%/,  '位置', v => v+'%'],
+        ].forEach(([rx, label, fmt]) => {
+          const m = raw.match(rx);
+          if (m) chips.push(`<div><div class="sh-sensor-chip">${fmt(m[1])}</div><div class="sh-sensor-label">${label}</div></div>`);
+        });
+        el.innerHTML = chips.join('') || '<span style="color:var(--muted);font-size:12px">データなし</span>';
+      } catch(e) { showToast('SwitchBot: ' + e.message, 'error'); }
+      finally { btn.disabled = false; btn.textContent = '状態を取得'; }
+    }
+
+    // Nature Remo ─────────────────────────────────────────────────────────────
+    async function loadRemoData() {
+      if (shState.remo.loading) return;
+      shState.remo.loading = true;
+      try {
+        const [appsRaw, sensRaw] = await Promise.all([
+          shApi('/api/v1/nature-remo', { action: 'list_appliances' }),
+          shApi('/api/v1/nature-remo', { action: 'list_devices' }),
+        ]);
+        shState.remo.appliances = parseRemoAppliances(appsRaw);
+        shState.remo.sensors    = parseRemoSensors(sensRaw);
+        renderRemoAppliances();
+        renderRemoSensors();
+      } catch(e) {
+        document.getElementById('sh-remo-content-appliances').innerHTML = '<div class="sh-error">⚠️ ' + e.message + '</div>';
+      } finally { shState.remo.loading = false; }
+    }
+
+    function parseRemoAppliances(raw) {
+      return (raw || '').split('\n').slice(1).map(line => {
+        const m = line.match(/\[([^\]]+)\]\s+(.+?)\s+\(([^)]+)\)(.*)/);
+        if (!m) return null;
+        const obj = { id: m[1], name: m[2], type: m[3], detail: m[4].trim() };
+        const pm = obj.detail.match(/power=([^,\s]+)/);
+        const tm = obj.detail.match(/temp=([\d.]+)/);
+        const mm = obj.detail.match(/mode=([^,\s]+)/);
+        if (pm) obj.power = pm[1]; if (tm) obj.temp = parseFloat(tm[1]); if (mm) obj.mode = mm[1];
+        return obj;
+      }).filter(Boolean);
+    }
+
+    function parseRemoSensors(raw) {
+      return (raw || '').split('\n').slice(1).map(line => {
+        const m = line.match(/\[([^\]]+)\]\s+(.+?)\s+\((.+?)\)\s+—\s+(.*)/);
+        if (!m) return null;
+        return { id: m[1], name: m[2], fw: m[3], sensors: m[4] };
+      }).filter(Boolean);
+    }
+
+    function renderRemoAppliances() {
+      const el = document.getElementById('sh-remo-content-appliances');
+      const apps = shState.remo.appliances || [];
+      if (!apps.length) { el.innerHTML = '<div class="sh-loading">家電が登録されていません</div>'; return; }
+      el.innerHTML = apps.map(a => {
+        if (a.type === 'AC')    return renderRemoAC(a);
+        if (a.type === 'LIGHT') return renderRemoLight(a);
+        if (a.type === 'TV')    return renderRemoTV(a);
+        return renderRemoGeneric(a);
+      }).join('');
+    }
+
+    function renderRemoAC(a) {
+      const temp = a.temp || 26;
+      if (!shState.acState[a.id]) shState.acState[a.id] = { temp, mode: a.mode || 'cool' };
+      const st = shState.acState[a.id];
+      const modes = ['auto','cool','warm','dry','blow'];
+      const modeJa = { auto:'自動', cool:'冷房', warm:'暖房', dry:'除湿', blow:'送風' };
+      return `<div class="sh-card">
+        <div class="sh-card-header">
+          <div><div class="sh-card-title">❄️ ${a.name}</div><div class="sh-card-meta">エアコン</div></div>
+        </div>
+        <div class="sh-ac-temp">
+          <button class="sh-ac-btn" onclick="remoACTemp('${a.id}',-1)">−</button>
+          <div class="sh-ac-temp-val" id="sh-ac-temp-${a.id}">${st.temp}°C</div>
+          <button class="sh-ac-btn" onclick="remoACTemp('${a.id}',+1)">+</button>
+        </div>
+        <div class="sh-mode-row">${modes.map(m=>`<button class="sh-mode-btn${st.mode===m?' active':''}"
+          id="sh-acmode-${a.id}-${m}" onclick="remoACMode('${a.id}','${m}')">${modeJa[m]}</button>`).join('')}</div>
+        <div class="sh-power-row">
+          <button class="sh-power-on"  onclick="remoACPower('${a.id}','on')">ON</button>
+          <button class="sh-power-off" onclick="remoACPower('${a.id}','off')">OFF</button>
+        </div>
+      </div>`;
+    }
+
+    function renderRemoLight(a) {
+      return `<div class="sh-card">
+        <div class="sh-card-header">
+          <div><div class="sh-card-title">💡 ${a.name}</div><div class="sh-card-meta">ライト</div></div>
+        </div>
+        <div class="sh-mode-row">
+          <button class="sh-mode-btn" onclick="remoLight('${a.id}','on')">ON</button>
+          <button class="sh-mode-btn" onclick="remoLight('${a.id}','off')">OFF</button>
+          <button class="sh-mode-btn" onclick="remoLight('${a.id}','night')">常夜灯</button>
+        </div>
+      </div>`;
+    }
+
+    function renderRemoTV(a) {
+      return `<div class="sh-card">
+        <div class="sh-card-header">
+          <div><div class="sh-card-title">📺 ${a.name}</div><div class="sh-card-meta">テレビ</div></div>
+        </div>
+        <div class="sh-mode-row">
+          <button class="sh-mode-btn" onclick="remoSendTV('${a.id}','power')">電源</button>
+          <button class="sh-mode-btn" onclick="remoSendTV('${a.id}','vol-up')">音量+</button>
+          <button class="sh-mode-btn" onclick="remoSendTV('${a.id}','vol-down')">音量−</button>
+          <button class="sh-mode-btn" onclick="remoSendTV('${a.id}','ch-up')">CH+</button>
+          <button class="sh-mode-btn" onclick="remoSendTV('${a.id}','ch-down')">CH−</button>
+          <button class="sh-mode-btn" onclick="remoSendTV('${a.id}','mute')">ミュート</button>
+        </div>
+      </div>`;
+    }
+
+    function renderRemoGeneric(a) {
+      const n = parseInt((a.detail.match(/(\d+) signals/) || [0,0])[1]) || 0;
+      return `<div class="sh-card">
+        <div class="sh-card-header">
+          <div><div class="sh-card-title">📡 ${a.name}</div>
+          <div class="sh-card-meta">${a.type}${n>0?' · '+n+'シグナル':''}</div></div>
+        </div>
+        <div class="sh-mode-row">
+          <button class="sh-mode-btn" onclick="remoSignalPrompt('${a.id}')">シグナルを送信</button>
+        </div>
+      </div>`;
+    }
+
+    function renderRemoSensors() {
+      const el = document.getElementById('sh-remo-content-sensors');
+      const devs = shState.remo.sensors || [];
+      if (!devs.length) { el.innerHTML = '<div class="sh-loading">Remoデバイスなし</div>'; return; }
+      el.innerHTML = devs.map(d => {
+        const parts = (d.sensors || '').split(',').map(s=>s.trim()).filter(Boolean);
+        const chips = parts.map(p => {
+          const label = p.includes('°C') ? '温度' : p.includes('%') ? '湿度' : p.includes('lux') ? '照度' : 'センサー';
+          return `<div><div class="sh-sensor-chip">${p}</div><div class="sh-sensor-label">${label}</div></div>`;
+        }).join('');
+        return `<div class="sh-card">
+          <div class="sh-card-header"><div>
+            <div class="sh-card-title">🌿 ${d.name}</div>
+            <div class="sh-card-meta">fw: ${d.fw}</div>
+          </div></div>
+          <div class="sh-sensor-row">${chips || '<span style="color:var(--muted);font-size:12px">センサーデータなし</span>'}</div>
+        </div>`;
+      }).join('');
+    }
+
+    async function remoACTemp(id, delta) {
+      const st = shState.acState[id] || (shState.acState[id] = { temp: 26, mode: 'cool' });
+      st.temp = Math.max(16, Math.min(30, (st.temp || 26) + delta));
+      const el = document.getElementById('sh-ac-temp-' + id);
+      if (el) el.textContent = st.temp + '°C';
+      try { await shApi('/api/v1/nature-remo', { action: 'control_ac', appliance_id: id, temperature: st.temp }); }
+      catch(e) { showToast('Remo: ' + e.message, 'error'); }
+    }
+
+    async function remoACMode(id, mode) {
+      const st = shState.acState[id] || (shState.acState[id] = { temp: 26, mode });
+      st.mode = mode;
+      ['auto','cool','warm','dry','blow'].forEach(m => {
+        const b = document.getElementById('sh-acmode-' + id + '-' + m);
+        if (b) b.classList.toggle('active', m === mode);
+      });
+      try { await shApi('/api/v1/nature-remo', { action: 'control_ac', appliance_id: id, operation_mode: mode }); }
+      catch(e) { showToast('Remo: ' + e.message, 'error'); }
+    }
+
+    async function remoACPower(id, power) {
+      try { await shApi('/api/v1/nature-remo', { action: 'control_ac', appliance_id: id, power }); }
+      catch(e) { showToast('Remo: ' + e.message, 'error'); }
+    }
+
+    async function remoLight(id, button) {
+      try { await shApi('/api/v1/nature-remo', { action: 'control_light', appliance_id: id, button }); }
+      catch(e) { showToast('Remo: ' + e.message, 'error'); }
+    }
+
+    async function remoSendTV(id, button) {
+      try { await shApi('/api/v1/nature-remo', { action: 'send_signal', appliance_id: id, signal_id: button }); }
+      catch(e) { /* TV signals are best-effort */ }
+    }
+
+    async function remoSignalPrompt(id) {
+      const sigId = prompt('送信するシグナルIDを入力:');
+      if (!sigId) return;
+      try {
+        await shApi('/api/v1/nature-remo', { action: 'send_signal', signal_id: sigId });
+        showToast('シグナル送信しました', 'success');
+      } catch(e) { showToast('Remo: ' + e.message, 'error'); }
+    }
+    // ── End Smart Home Panel ──────────────────────────────────────────────────
+
+    // ── Philips Hue Panel ─────────────────────────────────────────────────────
+    const HUE_COLORS = [
+      { name: 'warm',   hex: '#ffb347', label: '🕯️',  params: { color_temp: 2700 } },
+      { name: 'cool',   hex: '#cce8ff', label: '☀️',  params: { color_temp: 5500 } },
+      { name: 'red',    hex: '#ff4444', label: '',    params: { color: 'red' } },
+      { name: 'orange', hex: '#ff8c00', label: '',    params: { color: 'orange' } },
+      { name: 'yellow', hex: '#ffd700', label: '',    params: { color: 'yellow' } },
+      { name: 'green',  hex: '#22c55e', label: '',    params: { color: 'green' } },
+      { name: 'blue',   hex: '#3b82f6', label: '',    params: { color: 'blue' } },
+      { name: 'purple', hex: '#a855f7', label: '',    params: { color: 'purple' } },
+    ];
+
+    const hueState = { lights: null, rooms: null, scenes: null, loading: false };
+
+    async function hueApi(params) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (typeof authToken !== 'undefined' && authToken) headers['Authorization'] = 'Bearer ' + authToken;
+      const r = await fetch(API + '/api/v1/hue', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(params),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      if (d.result && d.result.startsWith('[TOOL_ERROR]')) throw new Error(d.result.replace('[TOOL_ERROR] ', ''));
+      return d.result || '';
+    }
+
+    function toggleHuePanel() {
+      const panel = document.getElementById('hue-panel');
+      panel.classList.toggle('open');
+      const btn = document.getElementById('app-hue-btn');
+      btn.classList.toggle('active', panel.classList.contains('open'));
+      if (panel.classList.contains('open')) loadHueData();
+    }
+
+    function switchHueTab(tab) {
+      document.querySelectorAll('.hue-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.hue-tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById('hue-tab-' + tab).classList.add('active');
+      document.getElementById('hue-content-' + tab).classList.add('active');
+    }
+
+    async function loadHueData() {
+      if (hueState.loading) return;
+      hueState.loading = true;
+      const btn = document.getElementById('hue-refresh-btn');
+      if (btn) btn.style.opacity = '0.4';
+      try {
+        const [lightsRaw, roomsRaw, scenesRaw] = await Promise.all([
+          hueApi({ action: 'list_lights' }),
+          hueApi({ action: 'list_rooms' }),
+          hueApi({ action: 'list_scenes' }),
+        ]);
+        hueState.lights = parseHueLights(lightsRaw);
+        hueState.rooms = parseHueRooms(roomsRaw);
+        hueState.scenes = parseHueScenes(scenesRaw);
+        renderHueLights();
+        renderHueRooms();
+        renderHueScenes();
+      } catch (e) {
+        ['lights', 'rooms', 'scenes'].forEach(t => {
+          const el = document.getElementById('hue-content-' + t);
+          if (el) el.innerHTML = '<div class="hue-error">⚠️ ' + e.message + '</div>';
+        });
+      } finally {
+        hueState.loading = false;
+        if (btn) btn.style.opacity = '';
+      }
+    }
+
+    function parseHueLights(raw) {
+      // Parse "  [1] Living Room — on, brightness=200" lines
+      return (raw || '').split('\n').slice(1).map(line => {
+        const m = line.match(/\[(\w+)\]\s+(.+?)\s+—\s+(\w+),\s+brightness=(\d+)/);
+        if (!m) return null;
+        return { id: m[1], name: m[2], on: m[3] === 'on', bri: parseInt(m[4]), unreachable: m[3] === 'unreachable' };
+      }).filter(Boolean);
+    }
+
+    function parseHueRooms(raw) {
+      return (raw || '').split('\n').slice(1).map(line => {
+        const m = line.match(/\[(\w+)\]\s+(.+?)\s+\((.+?)\)\s+—\s+(\d+)\s+lights,\s+(.+)/);
+        if (!m) return null;
+        return { id: m[1], name: m[2], type: m[3], count: parseInt(m[4]), status: m[5].trim() };
+      }).filter(Boolean);
+    }
+
+    function parseHueScenes(raw) {
+      return (raw || '').split('\n').slice(1).map(line => {
+        const m = line.match(/\[(\S+)\]\s+(.+?)\s+\(room=(\w+),\s+type=(\w+)\)/);
+        if (!m) return null;
+        return { id: m[1], name: m[2], roomId: m[3], type: m[4] };
+      }).filter(Boolean);
+    }
+
+    function hueSwatchHtml(targetAction, targetId, prefix) {
+      return HUE_COLORS.map(c =>
+        `<button class="hue-swatch" style="background:${c.hex}" title="${c.name}"
+           onclick="hueSetColor('${targetAction}','${targetId}',${JSON.stringify(c.params)},'${prefix+c.name}')"></button>`
+      ).join('');
+    }
+
+    function renderHueLights() {
+      const el = document.getElementById('hue-content-lights');
+      if (!hueState.lights || !hueState.lights.length) {
+        el.innerHTML = '<div class="hue-loading">ライトが見つかりません</div>'; return;
+      }
+      el.innerHTML = hueState.lights.map(l => `
+        <div class="hue-light-card ${l.on ? '' : 'off'}" id="hue-lcard-${l.id}">
+          <div class="hue-light-header">
+            <div>
+              <div class="hue-light-name">${l.name}</div>
+              <div class="hue-light-meta">ID: ${l.id}${l.unreachable ? ' · 接続不可' : ''}</div>
+            </div>
+            <button class="hue-toggle ${l.on ? 'on' : ''}" id="hue-ltog-${l.id}"
+              onclick="hueToggleLight('${l.id}',this)"></button>
+          </div>
+          <div class="hue-bri-row">
+            <label>明るさ</label>
+            <input type="range" min="1" max="254" value="${l.bri}"
+              oninput="this.nextElementSibling.textContent=Math.round(this.value/2.54)+'%'"
+              onchange="hueSetBri('light','${l.id}',this.value)"
+              ${l.on ? '' : 'disabled'}>
+            <span class="hue-val">${Math.round(l.bri/2.54)}%</span>
+          </div>
+          <div class="hue-colors">${hueSwatchHtml('set_light','${l.id}','l${l.id}_')}</div>
+        </div>`).join('');
+    }
+
+    function renderHueRooms() {
+      const el = document.getElementById('hue-content-rooms');
+      if (!hueState.rooms || !hueState.rooms.length) {
+        el.innerHTML = '<div class="hue-loading">ルームが見つかりません</div>'; return;
+      }
+      el.innerHTML = hueState.rooms.map(r => {
+        const allOn = r.status === 'all on';
+        const anyOn = r.status === 'partial' || allOn;
+        return `
+        <div class="hue-light-card ${anyOn ? '' : 'off'}" id="hue-rcard-${r.id}">
+          <div class="hue-light-header">
+            <div>
+              <div class="hue-light-name">${r.name}</div>
+              <div class="hue-light-meta">${r.count}灯 · ${r.status}</div>
+            </div>
+            <button class="hue-toggle ${allOn ? 'on' : anyOn ? 'on' : ''}" id="hue-rtog-${r.id}"
+              onclick="hueToggleRoom('${r.id}',this)"></button>
+          </div>
+          <div class="hue-bri-row">
+            <label>明るさ</label>
+            <input type="range" min="1" max="254" value="200"
+              oninput="this.nextElementSibling.textContent=Math.round(this.value/2.54)+'%'"
+              onchange="hueSetBri('room','${r.id}',this.value)">
+            <span class="hue-val">78%</span>
+          </div>
+          <div class="hue-colors">${hueSwatchHtml('set_room','${r.id}','r${r.id}_')}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderHueScenes() {
+      const el = document.getElementById('hue-content-scenes');
+      if (!hueState.scenes || !hueState.scenes.length) {
+        el.innerHTML = '<div class="hue-loading">シーンが見つかりません</div>'; return;
+      }
+      // Group by room
+      const byRoom = {};
+      hueState.scenes.forEach(s => {
+        if (!byRoom[s.roomId]) byRoom[s.roomId] = [];
+        byRoom[s.roomId].push(s);
+      });
+      const roomMap = {};
+      (hueState.rooms || []).forEach(r => roomMap[r.id] = r.name);
+      el.innerHTML = Object.entries(byRoom).map(([roomId, scenes]) => {
+        const roomName = roomMap[roomId] || ('ルーム ' + roomId);
+        return `<div class="hue-section-title">${roomName}</div>` +
+          scenes.map(s => `
+            <div class="hue-scene-row" onclick="hueActivateScene('${s.roomId}','${s.id}',this)">
+              <span class="hue-scene-name">${s.name}</span>
+              <button class="hue-activate-btn">実行</button>
+            </div>`).join('');
+      }).join('');
+    }
+
+    async function hueToggleLight(id, btn) {
+      const newOn = !btn.classList.contains('on');
+      btn.classList.toggle('on', newOn);
+      document.getElementById('hue-lcard-' + id)?.classList.toggle('off', !newOn);
+      const rangeEl = document.querySelector(`#hue-lcard-${id} input[type=range]`);
+      if (rangeEl) rangeEl.disabled = !newOn;
+      try { await hueApi({ action: 'set_light', light_id: id, on: newOn }); } catch(e) { showToast('Hue: ' + e.message, 'error'); }
+    }
+
+    async function hueToggleRoom(id, btn) {
+      const newOn = !btn.classList.contains('on');
+      btn.classList.toggle('on', newOn);
+      document.getElementById('hue-rcard-' + id)?.classList.toggle('off', !newOn);
+      try { await hueApi({ action: 'set_room', room_id: id, on: newOn }); } catch(e) { showToast('Hue: ' + e.message, 'error'); }
+    }
+
+    async function hueSetBri(type, id, val) {
+      const params = { action: type === 'light' ? 'set_light' : 'set_room', brightness: parseInt(val) };
+      if (type === 'light') params.light_id = id; else params.room_id = id;
+      try { await hueApi(params); } catch(e) { showToast('Hue: ' + e.message, 'error'); }
+    }
+
+    async function hueSetColor(action, id, colorParams, swatchKey) {
+      // Update active swatch
+      document.querySelectorAll('.hue-swatch.active').forEach(s => {
+        if (s.dataset.key && s.dataset.key.startsWith(swatchKey.slice(0,3))) s.classList.remove('active');
+      });
+      const params = { action, ...colorParams };
+      if (action === 'set_light') params.light_id = id; else params.room_id = id;
+      try { await hueApi(params); } catch(e) { showToast('Hue: ' + e.message, 'error'); }
+    }
+
+    async function hueActivateScene(roomId, sceneId, rowEl) {
+      rowEl.style.opacity = '0.5';
+      try {
+        await hueApi({ action: 'activate_scene', room_id: roomId, scene_id: sceneId });
+        showToast('シーン「' + rowEl.querySelector('.hue-scene-name').textContent + '」を適用しました', 'success');
+      } catch(e) { showToast('Hue: ' + e.message, 'error'); }
+      finally { rowEl.style.opacity = ''; }
+    }
+    // ── End Hue Panel ─────────────────────────────────────────────────────────
 
     function togglePhonePanel() {
       const panel = document.getElementById('phone-panel');

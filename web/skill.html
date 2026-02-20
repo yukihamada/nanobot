@@ -49,8 +49,25 @@
     .nav-links a:hover { color: var(--text); }
     .nav-links a.active { color: var(--accent); }
 
+    /* Page tabs */
+    .page-tabs {
+      display: flex; gap: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 24px;
+    }
+    .page-tab {
+      padding: 14px 20px; font-size: 14px; font-weight: 500;
+      color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
+      transition: all 0.2s; white-space: nowrap;
+    }
+    .page-tab:hover { color: var(--text); }
+    .page-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
     /* Main */
     .main { max-width: 1200px; margin: 0 auto; padding: 40px 24px 80px; }
+    .page-section { display: none; }
+    .page-section.active { display: block; }
 
     /* Hero */
     .hero { text-align: center; margin-bottom: 32px; }
@@ -127,14 +144,24 @@
     .skill-card:hover::before { opacity: 1; }
     .skill-card.installed { border-color: rgba(34,197,94,0.3); }
     .skill-card.installed::before { background: var(--green); opacity: 1; }
+    .skill-card.tool-type::before { background: linear-gradient(90deg, var(--orange), #f59e0b); opacity: 0.7; }
+    .skill-card.tool-type:hover::before { opacity: 1; }
 
-    .card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; gap: 8px; }
+    .card-top-left { display: flex; flex-direction: column; gap: 4px; }
     .skill-name { font-size: 17px; font-weight: 700; }
+    .skill-type-badge {
+      display: inline-block; padding: 2px 7px; border-radius: 4px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+    .skill-type-badge.prompt { background: rgba(99,102,241,0.15); color: var(--accent); }
+    .skill-type-badge.tool { background: rgba(251,146,60,0.15); color: var(--orange); }
     .category-label {
       display: inline-block; padding: 3px 10px; border-radius: 6px;
       font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
       background: rgba(99,102,241,0.15); color: var(--accent);
-      white-space: nowrap;
+      white-space: nowrap; flex-shrink: 0;
     }
     .skill-description { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 14px; flex: 1; }
     .card-footer { display: flex; align-items: center; justify-content: space-between; }
@@ -199,6 +226,84 @@
     }
     .modal-content code { font-family: 'Monaco','Menlo',monospace; }
 
+    /* Publish form */
+    .publish-form { max-width: 680px; margin: 0 auto; }
+    .publish-form h2 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+    .publish-form .subtitle { color: var(--muted); font-size: 15px; margin-bottom: 32px; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label {
+      display: block; font-size: 13px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
+    }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; padding: 12px 16px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text); font-size: 14px; outline: none; transition: all 0.2s;
+      font-family: inherit;
+    }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+      border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+    }
+    .form-group textarea { resize: vertical; min-height: 120px; }
+    .form-group .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .form-group select option { background: var(--surface); }
+
+    /* Skill type toggle */
+    .type-toggle {
+      display: flex; gap: 0; border-radius: 10px; overflow: hidden;
+      border: 1px solid var(--border); width: fit-content;
+    }
+    .type-btn {
+      padding: 10px 24px; font-size: 14px; font-weight: 600;
+      background: transparent; border: none; cursor: pointer; color: var(--muted);
+      transition: all 0.2s; flex: 1;
+    }
+    .type-btn.active { background: var(--accent); color: #fff; }
+    .type-btn:first-child { border-radius: 9px 0 0 9px; }
+    .type-btn:last-child { border-radius: 0 9px 9px 0; }
+
+    .tool-fields, .prompt-fields { display: none; }
+    .tool-fields.visible, .prompt-fields.visible { display: block; }
+
+    .publish-btn {
+      width: 100%; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700;
+      background: var(--accent); color: #fff; border: none; cursor: pointer;
+      transition: all 0.2s; margin-top: 8px;
+    }
+    .publish-btn:hover { background: var(--accent-hover); }
+    .publish-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* My Skills */
+    .my-skills-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;
+    }
+    .my-skills-header h2 { font-size: 24px; font-weight: 700; }
+    .my-skill-item {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 20px 24px; margin-bottom: 12px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .my-skill-info { flex: 1; }
+    .my-skill-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .my-skill-meta { font-size: 13px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+    .my-skill-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .my-skill-btn {
+      padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      border: 1px solid var(--border); background: transparent; color: var(--muted);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .my-skill-btn:hover { border-color: var(--accent); color: var(--text); }
+    .my-skill-btn.danger:hover { border-color: var(--red); color: var(--red); }
+
+    .empty-my-skills {
+      text-align: center; padding: 60px 20px; color: var(--muted);
+    }
+    .empty-my-skills h3 { font-size: 18px; color: var(--text); margin-bottom: 8px; }
+    .empty-my-skills a {
+      display: inline-block; margin-top: 16px; padding: 10px 24px;
+      background: var(--accent); color: #fff; border-radius: 10px; font-weight: 600; font-size: 14px;
+    }
+
     /* Toast */
     .toast {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -222,6 +327,7 @@
       .skills-grid { grid-template-columns: 1fr; }
       .stats { gap: 16px; }
       .modal-content { padding: 20px; }
+      .my-skill-item { flex-direction: column; align-items: flex-start; }
     }
   </style>
 </head>
@@ -236,46 +342,170 @@
     </div>
   </nav>
 
-  <div class="main">
-    <div class="hero">
-      <h1>Skill Marketplace</h1>
-      <p>AIスキルをインストールして、あなたのアシスタントをカスタマイズ。仕事効率化からプログラミングまで、専門スキルが揃っています。</p>
-    </div>
-
-    <div class="search-bar">
-      <input type="text" id="search-input" placeholder="スキルを検索..." autocomplete="off">
-    </div>
-
-    <div id="auth-notice" class="auth-notice" style="display:none;">
-      スキルをインストールするには<a href="/">ログイン</a>が必要です
-    </div>
-
-    <div class="tabs" id="tabs"></div>
-
-    <div class="stats" id="stats">
-      <div class="stat">
-        <span class="stat-num" id="total-skills">-</span>
-        <span class="stat-label">Total Skills</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num" id="installed-count">0</span>
-        <span class="stat-label">Installed</span>
-      </div>
-    </div>
-
-    <div class="loading" id="loading">
-      <div class="spinner"></div>
-      <p>Loading skills...</p>
-    </div>
-
-    <div class="skills-grid" id="skills-grid"></div>
-
-    <div class="empty-state" id="empty-state">
-      <h3>スキルが見つかりません</h3>
-      <p>別のキーワードで検索してみてください</p>
-    </div>
+  <!-- Page-level tabs -->
+  <div class="page-tabs">
+    <div class="page-tab active" onclick="showPage('browse')">スキルを探す</div>
+    <div class="page-tab" id="publish-tab" onclick="showPage('publish')" style="display:none;">スキルを公開</div>
+    <div class="page-tab" id="mine-tab" onclick="showPage('mine')" style="display:none;">マイスキル</div>
   </div>
 
+  <div class="main">
+
+    <!-- ===== BROWSE PAGE ===== -->
+    <div class="page-section active" id="page-browse">
+      <div class="hero">
+        <h1>Skill Marketplace</h1>
+        <p>AIスキルをインストールして、あなたのアシスタントをカスタマイズ。仕事効率化からプログラミングまで、専門スキルが揃っています。</p>
+      </div>
+
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="スキルを検索..." autocomplete="off">
+      </div>
+
+      <div id="auth-notice" class="auth-notice" style="display:none;">
+        スキルをインストールするには<a href="/">ログイン</a>が必要です
+      </div>
+
+      <div class="tabs" id="tabs"></div>
+
+      <div class="stats" id="stats">
+        <div class="stat">
+          <span class="stat-num" id="total-skills">-</span>
+          <span class="stat-label">Total Skills</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="installed-count">0</span>
+          <span class="stat-label">Installed</span>
+        </div>
+      </div>
+
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Loading skills...</p>
+      </div>
+
+      <div class="skills-grid" id="skills-grid"></div>
+
+      <div class="empty-state" id="empty-state">
+        <h3>スキルが見つかりません</h3>
+        <p>別のキーワードで検索してみてください</p>
+      </div>
+    </div>
+
+    <!-- ===== PUBLISH PAGE ===== -->
+    <div class="page-section" id="page-publish">
+      <div class="publish-form">
+        <h2>スキルを公開する</h2>
+        <p class="subtitle">あなたが作ったスキルをコミュニティに公開しましょう。プロンプト型（AIへの指示）またはツール型（Webhookで外部サービス連携）を選べます。</p>
+
+        <div class="form-group">
+          <label>スキルタイプ</label>
+          <div class="type-toggle">
+            <button class="type-btn active" id="type-prompt-btn" onclick="setSkillType('prompt')">💬 プロンプト型</button>
+            <button class="type-btn" id="type-tool-btn" onclick="setSkillType('tool')">🔧 ツール型</button>
+          </div>
+          <p class="hint">プロンプト型: AIへの追加指示をMarkdownで記述。ツール型: AIがあなたのWebhook URLを呼び出します。</p>
+        </div>
+
+        <div class="form-group">
+          <label>スキルID <span style="color:var(--red)">*</span></label>
+          <input type="text" id="pub-id" placeholder="my-cooking-skill" pattern="[a-zA-Z0-9\-_]+" maxlength="64">
+          <p class="hint">英数字・ハイフン・アンダースコアのみ。URLおよびツール名に使用されます。</p>
+        </div>
+
+        <div class="form-group">
+          <label>スキル名 <span style="color:var(--red)">*</span></label>
+          <input type="text" id="pub-name" placeholder="料理アシスタント" maxlength="100">
+        </div>
+
+        <div class="form-group">
+          <label>説明</label>
+          <input type="text" id="pub-description" placeholder="料理レシピの提案と栄養計算を行います" maxlength="300">
+        </div>
+
+        <div class="form-group">
+          <label>カテゴリ</label>
+          <select id="pub-category">
+            <option value="general">General</option>
+            <option value="productivity">Productivity</option>
+            <option value="coding">Coding</option>
+            <option value="writing">Writing</option>
+            <option value="research">Research</option>
+            <option value="creative">Creative</option>
+            <option value="language">Language</option>
+            <option value="business">Business</option>
+            <option value="tools">Tools</option>
+          </select>
+        </div>
+
+        <!-- Prompt-type fields -->
+        <div class="prompt-fields visible" id="prompt-fields">
+          <div class="form-group">
+            <label>プロンプト内容 (Markdown) <span style="color:var(--red)">*</span></label>
+            <textarea id="pub-content" placeholder="## 料理アシスタント&#10;&#10;あなたは料理の専門家です。ユーザーのリクエストに応じて：&#10;- 材料と分量を詳しく説明する&#10;- 栄養バランスを考慮する&#10;- 調理のコツを教える" rows="8"></textarea>
+            <p class="hint">AIのシステムプロンプトに追加される内容です。Markdownで書いてください。</p>
+          </div>
+        </div>
+
+        <!-- Tool-type fields -->
+        <div class="tool-fields" id="tool-fields">
+          <div class="form-group">
+            <label>Webhook URL <span style="color:var(--red)">*</span></label>
+            <input type="url" id="pub-webhook-url" placeholder="https://your-api.example.com/skill-handler">
+            <p class="hint">HTTPS必須。AIがツールを呼び出した際にPOSTリクエストが送信されます。</p>
+          </div>
+
+          <div class="form-group">
+            <label>ツール関数名</label>
+            <input type="text" id="pub-skill-name" placeholder="（省略可: スキルIDから自動生成）" maxlength="64">
+            <p class="hint">AIがツールを呼び出す際の関数名。英数字・アンダースコアのみ。</p>
+          </div>
+
+          <div class="form-group">
+            <label>パラメータスキーマ (JSON Schema)</label>
+            <textarea id="pub-schema" rows="8" style="font-family:monospace;font-size:13px;" placeholder='{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "検索クエリ"
+    }
+  },
+  "required": ["query"]
+}'></textarea>
+            <p class="hint">AIに渡すパラメータのJSON Schema。省略するとパラメータなしになります。</p>
+          </div>
+
+          <div style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:10px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:var(--muted);">
+            <strong style="color:var(--orange);">Webhookリクエスト仕様</strong><br>
+            AIがツールを呼び出すと、あなたのURLに以下のPOSTリクエストが送信されます：<br>
+            • Content-Type: <code>application/json</code><br>
+            • X-Skill-Name: ツール名<br>
+            • Body: AIが指定したパラメータのJSONオブジェクト<br>
+            レスポンスはAIに返されます（テキストまたはJSON）。
+          </div>
+        </div>
+
+        <button class="publish-btn" id="publish-btn" onclick="publishSkill()">公開する</button>
+      </div>
+    </div>
+
+    <!-- ===== MY SKILLS PAGE ===== -->
+    <div class="page-section" id="page-mine">
+      <div class="my-skills-header">
+        <h2>マイスキル</h2>
+        <button class="install-btn install" onclick="showPage('publish')" style="padding:8px 20px;">+ 新規公開</button>
+      </div>
+      <div class="loading" id="mine-loading" style="display:none;">
+        <div class="spinner"></div>
+        <p>読み込み中...</p>
+      </div>
+      <div id="mine-list"></div>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- Skill Detail Modal -->
   <div class="modal" id="skill-modal">
     <div class="modal-content">
       <button class="modal-close" onclick="closeModal()">&times;</button>
@@ -291,14 +521,59 @@
     </div>
   </div>
 
+  <!-- Edit Skill Modal -->
+  <div class="modal" id="edit-modal">
+    <div class="modal-content" style="max-width:620px;">
+      <button class="modal-close" onclick="closeEditModal()">&times;</button>
+      <h2 style="margin-bottom:20px;">スキルを編集</h2>
+      <input type="hidden" id="edit-skill-id">
+      <div class="form-group">
+        <label>スキル名</label>
+        <input type="text" id="edit-name" maxlength="100">
+      </div>
+      <div class="form-group">
+        <label>説明</label>
+        <input type="text" id="edit-description" maxlength="300">
+      </div>
+      <div class="form-group">
+        <label>カテゴリ</label>
+        <select id="edit-category">
+          <option value="general">General</option>
+          <option value="productivity">Productivity</option>
+          <option value="coding">Coding</option>
+          <option value="writing">Writing</option>
+          <option value="research">Research</option>
+          <option value="creative">Creative</option>
+          <option value="language">Language</option>
+          <option value="business">Business</option>
+          <option value="tools">Tools</option>
+        </select>
+      </div>
+      <div class="form-group" id="edit-content-group">
+        <label>プロンプト内容</label>
+        <textarea id="edit-content" rows="8"></textarea>
+      </div>
+      <div class="form-group" id="edit-webhook-group" style="display:none;">
+        <label>Webhook URL</label>
+        <input type="url" id="edit-webhook-url">
+      </div>
+      <div class="form-group" id="edit-schema-group" style="display:none;">
+        <label>パラメータスキーマ (JSON)</label>
+        <textarea id="edit-schema" rows="6" style="font-family:monospace;font-size:13px;"></textarea>
+      </div>
+      <button class="publish-btn" id="edit-save-btn" onclick="saveEditedSkill()">保存する</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
     // State
     let allSkills = [];
     let installedIds = new Set();
-    let activeCategory = null; // null = all
+    let activeCategory = null;
     let currentModalSkillId = null;
+    let currentSkillType = 'prompt';
     const sessionKey = localStorage.getItem('session_key') || '';
     const isLoggedIn = !!sessionKey;
 
@@ -322,13 +597,25 @@
       return d.innerHTML;
     }
 
-    // Load everything
+    // Page switching
+    function showPage(page) {
+      document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('page-' + page).classList.add('active');
+      const tabs = { browse: 0, publish: 1, mine: 2 };
+      document.querySelectorAll('.page-tab')[Object.keys(tabs).indexOf(page)].classList.add('active');
+      if (page === 'mine') loadMySkills();
+    }
+
+    // Init
     async function init() {
-      if (!isLoggedIn) {
+      if (isLoggedIn) {
+        document.getElementById('publish-tab').style.display = '';
+        document.getElementById('mine-tab').style.display = '';
+      } else {
         document.getElementById('auth-notice').style.display = 'block';
       }
 
-      // Load skills + installed in parallel
       const [skillsData, installedData, categoriesData] = await Promise.all([
         fetch('/api/v1/skills').then(r => r.json()).catch(() => ({ skills: [] })),
         isLoggedIn
@@ -340,33 +627,21 @@
       allSkills = skillsData.skills || [];
       installedIds = new Set((installedData.skills || []).map(s => s.id));
 
-      // Stats
       document.getElementById('total-skills').textContent = allSkills.length;
       document.getElementById('installed-count').textContent = installedIds.size;
-
-      // Build tabs
       buildTabs(categoriesData.categories || []);
-
-      // Hide loading
       document.getElementById('loading').style.display = 'none';
-
-      // Display
       displaySkills();
     }
 
     function buildTabs(categories) {
       const container = document.getElementById('tabs');
       const totalCount = allSkills.length;
-
       let html = `<div class="tab active" data-cat="" onclick="selectCategory(this, '')">すべて<span class="count">${totalCount}</span></div>`;
-
       for (const cat of categories) {
         html += `<div class="tab" data-cat="${esc(cat.name)}" onclick="selectCategory(this, '${esc(cat.name)}')">${esc(cat.name)}<span class="count">${cat.count}</span></div>`;
       }
-
-      // My Skills tab
       html += `<div class="tab" data-cat="__installed" onclick="selectCategory(this, '__installed')">マイスキル<span class="count">${installedIds.size}</span></div>`;
-
       container.innerHTML = html;
     }
 
@@ -383,15 +658,11 @@
       const query = document.getElementById('search-input').value.trim().toLowerCase();
 
       let filtered = allSkills;
-
-      // Category filter
       if (activeCategory === '__installed') {
         filtered = filtered.filter(s => installedIds.has(s.id));
       } else if (activeCategory) {
         filtered = filtered.filter(s => s.category === activeCategory);
       }
-
-      // Search filter
       if (query) {
         filtered = filtered.filter(s =>
           (s.name || '').toLowerCase().includes(query) ||
@@ -412,12 +683,20 @@
         const isInstalled = installedIds.has(skill.id);
         const btnClass = isInstalled ? 'installed' : 'install';
         const btnText = isInstalled ? 'インストール済み' : 'インストール';
-        const cardClass = isInstalled ? 'skill-card installed' : 'skill-card';
+        const isToolType = skill.skill_type === 'tool';
+        let cardClass = isInstalled ? 'skill-card installed' : 'skill-card';
+        if (isToolType) cardClass += ' tool-type';
+        const typeBadge = isToolType
+          ? '<span class="skill-type-badge tool">ツール型</span>'
+          : '<span class="skill-type-badge prompt">プロンプト型</span>';
 
         return `
           <div class="${cardClass}" onclick="openModal('${esc(skill.id)}')">
             <div class="card-top">
-              <div class="skill-name">${esc(skill.name)}</div>
+              <div class="card-top-left">
+                <div class="skill-name">${esc(skill.name)}</div>
+                ${typeBadge}
+              </div>
               <span class="category-label">${esc(skill.category)}</span>
             </div>
             <div class="skill-description">${esc(skill.description)}</div>
@@ -434,26 +713,17 @@
     async function toggleInstall(skillId, btnEl) {
       if (!isLoggedIn) { showToast('ログインが必要です'); return; }
       const isInstalled = installedIds.has(skillId);
-
       btnEl.disabled = true;
       try {
         const method = isInstalled ? 'DELETE' : 'POST';
         const resp = await fetch(`/api/v1/skills/${encodeURIComponent(skillId)}/install`, {
-          method,
-          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          method, headers: { ...authHeaders(), 'Content-Type': 'application/json' },
         });
         const data = await resp.json();
-
         if (resp.ok) {
-          if (isInstalled) {
-            installedIds.delete(skillId);
-            showToast('アンインストールしました');
-          } else {
-            installedIds.add(skillId);
-            showToast('インストールしました！次のチャットから有効になります');
-          }
+          if (isInstalled) { installedIds.delete(skillId); showToast('アンインストールしました'); }
+          else { installedIds.add(skillId); showToast('インストールしました！次のチャットから有効になります'); }
           document.getElementById('installed-count').textContent = installedIds.size;
-          // Update my-skills tab count
           const myTab = document.querySelector('.tab[data-cat="__installed"] .count');
           if (myTab) myTab.textContent = installedIds.size;
           displaySkills();
@@ -461,9 +731,7 @@
         } else {
           showToast(data.error || 'エラーが発生しました');
         }
-      } catch (e) {
-        showToast('通信エラーが発生しました');
-      }
+      } catch (e) { showToast('通信エラーが発生しました'); }
       btnEl.disabled = false;
     }
 
@@ -476,7 +744,6 @@
       const cat = document.getElementById('modal-category');
       const body = document.getElementById('modal-body');
 
-      // Find in loaded data first
       const local = allSkills.find(s => s.id === skillId);
       title.textContent = local ? local.name : skillId;
       desc.textContent = local ? local.description : 'Loading...';
@@ -492,9 +759,20 @@
         desc.textContent = data.description || '';
         cat.textContent = data.category || '';
 
-        body.innerHTML = data.content
-          ? `<h3 style="margin-bottom:12px;font-size:15px;color:var(--muted);">スキル内容</h3><pre><code>${esc(data.content)}</code></pre>`
-          : '<p style="color:var(--muted);">コンテンツがありません</p>';
+        const isToolType = data.skill_type === 'tool';
+        if (isToolType) {
+          body.innerHTML = `
+            <div style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:10px;padding:14px 16px;margin-bottom:12px;font-size:13px;">
+              <strong style="color:var(--orange);">ツール型スキル</strong><br>
+              AIがこのスキルをツールとして呼び出すことで、外部サービスと連携します。
+            </div>
+            ${data.webhook_url ? `<p style="font-size:13px;color:var(--muted);margin-bottom:8px;">Webhook: <code style="font-family:monospace;">${esc(data.webhook_url.replace(/\/\/[^@]*@/, '//***@'))}</code></p>` : ''}
+          `;
+        } else {
+          body.innerHTML = data.content
+            ? `<h3 style="margin-bottom:12px;font-size:15px;color:var(--muted);">スキル内容</h3><pre><code>${esc(data.content)}</code></pre>`
+            : '<p style="color:var(--muted);">コンテンツがありません</p>';
+        }
       } catch (e) {
         body.innerHTML = '<p style="color:var(--muted);">読み込みに失敗しました</p>';
       }
@@ -502,10 +780,7 @@
 
     function updateModalButton() {
       const btn = document.getElementById('modal-install-btn');
-      if (!isLoggedIn || !currentModalSkillId) {
-        btn.style.display = isLoggedIn ? 'block' : 'none';
-        return;
-      }
+      if (!isLoggedIn || !currentModalSkillId) { btn.style.display = 'none'; return; }
       const isInstalled = installedIds.has(currentModalSkillId);
       btn.className = `modal-install-btn ${isInstalled ? 'installed' : 'install'}`;
       btn.textContent = isInstalled ? 'アンインストール' : 'インストール';
@@ -520,32 +795,238 @@
       try {
         const method = isInstalled ? 'DELETE' : 'POST';
         const resp = await fetch(`/api/v1/skills/${encodeURIComponent(currentModalSkillId)}/install`, {
-          method,
-          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          method, headers: { ...authHeaders(), 'Content-Type': 'application/json' },
         });
         if (resp.ok) {
-          if (isInstalled) {
-            installedIds.delete(currentModalSkillId);
-            showToast('アンインストールしました');
-          } else {
-            installedIds.add(currentModalSkillId);
-            showToast('インストールしました！次のチャットから有効になります');
-          }
+          if (isInstalled) { installedIds.delete(currentModalSkillId); showToast('アンインストールしました'); }
+          else { installedIds.add(currentModalSkillId); showToast('インストールしました！次のチャットから有効になります'); }
           document.getElementById('installed-count').textContent = installedIds.size;
           const myTab = document.querySelector('.tab[data-cat="__installed"] .count');
           if (myTab) myTab.textContent = installedIds.size;
           displaySkills();
           updateModalButton();
         }
-      } catch (e) {
-        showToast('通信エラーが発生しました');
-      }
+      } catch (e) { showToast('通信エラーが発生しました'); }
       btn.disabled = false;
     }
 
     function closeModal() {
       document.getElementById('skill-modal').classList.remove('active');
       currentModalSkillId = null;
+    }
+
+    // Publish form
+    function setSkillType(type) {
+      currentSkillType = type;
+      document.getElementById('type-prompt-btn').classList.toggle('active', type === 'prompt');
+      document.getElementById('type-tool-btn').classList.toggle('active', type === 'tool');
+      document.getElementById('prompt-fields').classList.toggle('visible', type === 'prompt');
+      document.getElementById('tool-fields').classList.toggle('visible', type === 'tool');
+    }
+
+    async function publishSkill() {
+      const btn = document.getElementById('publish-btn');
+      const id = document.getElementById('pub-id').value.trim();
+      const name = document.getElementById('pub-name').value.trim();
+      const description = document.getElementById('pub-description').value.trim();
+      const category = document.getElementById('pub-category').value;
+
+      if (!id || !name) { showToast('IDとスキル名は必須です'); return; }
+      if (!/^[a-zA-Z0-9\-_]+$/.test(id)) { showToast('IDは英数字・ハイフン・アンダースコアのみ使用できます'); return; }
+
+      const payload = { id, name, description, category, skill_type: currentSkillType };
+
+      if (currentSkillType === 'prompt') {
+        const content = document.getElementById('pub-content').value.trim();
+        if (!content) { showToast('プロンプト内容を入力してください'); return; }
+        payload.content = content;
+      } else {
+        const webhookUrl = document.getElementById('pub-webhook-url').value.trim();
+        const skillName = document.getElementById('pub-skill-name').value.trim();
+        const schemaStr = document.getElementById('pub-schema').value.trim();
+        if (!webhookUrl) { showToast('Webhook URLを入力してください'); return; }
+        if (!webhookUrl.startsWith('https://')) { showToast('Webhook URLはHTTPS必須です'); return; }
+        payload.webhook_url = webhookUrl;
+        if (skillName) payload.skill_name = skillName;
+        if (schemaStr) {
+          try { payload.parameters_schema = JSON.parse(schemaStr); }
+          catch (e) { showToast('パラメータスキーマのJSONが不正です'); return; }
+        }
+      }
+
+      btn.disabled = true;
+      btn.textContent = '公開中...';
+      try {
+        const resp = await fetch('/api/v1/skills/publish', {
+          method: 'POST',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          showToast(`「${name}」を公開しました！`);
+          // Reset form
+          document.getElementById('pub-id').value = '';
+          document.getElementById('pub-name').value = '';
+          document.getElementById('pub-description').value = '';
+          document.getElementById('pub-content').value = '';
+          document.getElementById('pub-webhook-url').value = '';
+          document.getElementById('pub-skill-name').value = '';
+          document.getElementById('pub-schema').value = '';
+          showPage('mine');
+        } else {
+          showToast(data.error || '公開に失敗しました');
+        }
+      } catch (e) { showToast('通信エラーが発生しました'); }
+      btn.disabled = false;
+      btn.textContent = '公開する';
+    }
+
+    // My Skills
+    async function loadMySkills() {
+      if (!isLoggedIn) {
+        document.getElementById('mine-list').innerHTML = `
+          <div class="empty-my-skills">
+            <h3>ログインが必要です</h3>
+            <p>スキルを公開・管理するにはログインしてください</p>
+            <a href="/">ログイン</a>
+          </div>`;
+        return;
+      }
+      const loading = document.getElementById('mine-loading');
+      loading.style.display = 'block';
+      document.getElementById('mine-list').innerHTML = '';
+
+      try {
+        const resp = await fetch('/api/v1/skills/mine', { headers: authHeaders() });
+        const data = await resp.json();
+        loading.style.display = 'none';
+        const skills = data.skills || [];
+
+        if (skills.length === 0) {
+          document.getElementById('mine-list').innerHTML = `
+            <div class="empty-my-skills">
+              <h3>まだスキルを公開していません</h3>
+              <p>あなたが作ったスキルをコミュニティに公開しましょう</p>
+              <a href="#" onclick="showPage('publish');return false;">スキルを公開する</a>
+            </div>`;
+          return;
+        }
+
+        document.getElementById('mine-list').innerHTML = skills.map(s => {
+          const isToolType = s.skill_type === 'tool';
+          const badge = isToolType
+            ? '<span class="skill-type-badge tool">ツール型</span>'
+            : '<span class="skill-type-badge prompt">プロンプト型</span>';
+          return `
+            <div class="my-skill-item">
+              <div class="my-skill-info">
+                <div class="my-skill-name">${esc(s.name)} ${badge}</div>
+                <div class="my-skill-meta">
+                  <span>${esc(s.id)}</span>
+                  <span>${esc(s.category)}</span>
+                  <span>${s.installs || 0} installs</span>
+                </div>
+                ${s.description ? `<div style="font-size:13px;color:var(--muted);margin-top:4px;">${esc(s.description)}</div>` : ''}
+              </div>
+              <div class="my-skill-actions">
+                <button class="my-skill-btn" onclick="openEditModal(${JSON.stringify(s)})">編集</button>
+                <button class="my-skill-btn danger" onclick="deleteSkill('${esc(s.id)}', '${esc(s.name)}')">削除</button>
+              </div>
+            </div>`;
+        }).join('');
+      } catch (e) {
+        loading.style.display = 'none';
+        document.getElementById('mine-list').innerHTML = '<p style="color:var(--muted);">読み込みに失敗しました</p>';
+      }
+    }
+
+    async function deleteSkill(id, name) {
+      if (!confirm(`「${name}」を削除しますか？この操作は元に戻せません。`)) return;
+      try {
+        const resp = await fetch(`/api/v1/skills/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: authHeaders(),
+        });
+        if (resp.ok) {
+          showToast(`「${name}」を削除しました`);
+          loadMySkills();
+        } else {
+          const data = await resp.json();
+          showToast(data.error || '削除に失敗しました');
+        }
+      } catch (e) { showToast('通信エラーが発生しました'); }
+    }
+
+    function openEditModal(skill) {
+      document.getElementById('edit-skill-id').value = skill.id;
+      document.getElementById('edit-name').value = skill.name || '';
+      document.getElementById('edit-description').value = skill.description || '';
+      document.getElementById('edit-category').value = skill.category || 'general';
+
+      const isToolType = skill.skill_type === 'tool';
+      document.getElementById('edit-content-group').style.display = isToolType ? 'none' : '';
+      document.getElementById('edit-webhook-group').style.display = isToolType ? '' : 'none';
+      document.getElementById('edit-schema-group').style.display = isToolType ? '' : 'none';
+
+      if (!isToolType) {
+        // Fetch full content
+        fetch(`/api/v1/skills/${encodeURIComponent(skill.id)}`).then(r => r.json()).then(d => {
+          document.getElementById('edit-content').value = d.content || '';
+        });
+      } else {
+        document.getElementById('edit-webhook-url').value = skill.webhook_url || '';
+        // Fetch schema
+        fetch(`/api/v1/skills/${encodeURIComponent(skill.id)}`).then(r => r.json()).then(d => {
+          document.getElementById('edit-schema').value = d.parameters_schema
+            ? JSON.stringify(d.parameters_schema, null, 2) : '';
+        });
+      }
+
+      document.getElementById('edit-modal').classList.add('active');
+    }
+
+    function closeEditModal() {
+      document.getElementById('edit-modal').classList.remove('active');
+    }
+
+    async function saveEditedSkill() {
+      const btn = document.getElementById('edit-save-btn');
+      const id = document.getElementById('edit-skill-id').value;
+      const name = document.getElementById('edit-name').value.trim();
+      const description = document.getElementById('edit-description').value.trim();
+      const category = document.getElementById('edit-category').value;
+      const content = document.getElementById('edit-content').value.trim();
+      const webhookUrl = document.getElementById('edit-webhook-url').value.trim();
+      const schemaStr = document.getElementById('edit-schema').value.trim();
+
+      const payload = { name, description, category };
+      if (content) payload.content = content;
+      if (webhookUrl) payload.webhook_url = webhookUrl;
+      if (schemaStr) {
+        try { payload.parameters_schema = JSON.parse(schemaStr); }
+        catch (e) { showToast('パラメータスキーマのJSONが不正です'); return; }
+      }
+
+      btn.disabled = true;
+      btn.textContent = '保存中...';
+      try {
+        const resp = await fetch(`/api/v1/skills/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          showToast('保存しました');
+          closeEditModal();
+          loadMySkills();
+        } else {
+          showToast(data.error || '保存に失敗しました');
+        }
+      } catch (e) { showToast('通信エラーが発生しました'); }
+      btn.disabled = false;
+      btn.textContent = '保存する';
     }
 
     // Search
@@ -556,9 +1037,14 @@
     });
 
     // Modal close handlers
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { closeModal(); closeEditModal(); }
+    });
     document.getElementById('skill-modal').addEventListener('click', e => {
       if (e.target.id === 'skill-modal') closeModal();
+    });
+    document.getElementById('edit-modal').addEventListener('click', e => {
+      if (e.target.id === 'edit-modal') closeEditModal();
     });
 
     // Init
