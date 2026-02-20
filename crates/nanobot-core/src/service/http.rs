@@ -7028,10 +7028,34 @@ async fn handle_chat_stream(
 
                     // Emit tool_start events (sent immediately — client shows progress)
                     for tc in &tool_calls_to_run {
+                        // Extract the most informative argument for display
+                        let args_preview: String = {
+                            let priority_keys = ["query", "url", "code", "expression", "prompt", "text", "location", "message", "input", "command"];
+                            let mut preview = String::new();
+                            for key in &priority_keys {
+                                if let Some(v) = tc.arguments.get(*key).and_then(|v| v.as_str()) {
+                                    preview = v.chars().take(80).collect();
+                                    break;
+                                }
+                            }
+                            if preview.is_empty() {
+                                for (k, v) in &tc.arguments {
+                                    if !k.starts_with('_') {
+                                        if let Some(s) = v.as_str() {
+                                            preview = s.chars().take(80).collect();
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            preview
+                        };
                         send_sse!(serde_json::json!({
                             "type": "tool_start",
                             "tool": tc.name,
                             "iteration": iteration,
+                            "max_iter": max_iterations,
+                            "args_preview": args_preview,
                         }));
                         event_count += 1;
                     }
@@ -7057,11 +7081,13 @@ async fn handle_chat_stream(
                             args.insert("_user_id".to_string(), serde_json::Value::String(session_key_clone.clone()));
                         }
                         async move {
+                            let t0 = std::time::Instant::now();
                             let raw_result = if let Some(url) = webhook_url {
                                 call_webhook(&url, &name, &args).await
                             } else {
                                 registry.execute(&name, &args).await
                             };
+                            let duration_ms = t0.elapsed().as_millis() as u64;
                             let result = if raw_result.starts_with("[TOOL_ERROR]") {
                                 raw_result
                             } else if raw_result.starts_with("Error") || raw_result.starts_with("error")
@@ -7075,20 +7101,25 @@ async fn handle_chat_stream(
                             } else {
                                 raw_result
                             };
-                            (id, name, result)
+                            (id, name, result, duration_ms)
                         }
                     }).collect();
                     let tool_results: Vec<_> = futures::future::join_all(futures_vec).await;
 
                     // Emit tool_result events (sent immediately)
-                    for (_, name, result) in &tool_results {
+                    for (_, name, result, duration_ms) in &tool_results {
                         all_tools_used.push(name.clone());
                         let preview_end = result.char_indices().nth(500).map(|(i, _)| i).unwrap_or(result.len());
+                        let is_error = result.starts_with("[TOOL_ERROR]");
+                        let is_no_results = result.starts_with("[NO_RESULTS]");
                         send_sse!(serde_json::json!({
                             "type": "tool_result",
                             "tool": name,
                             "result": &result[..preview_end],
                             "iteration": iteration,
+                            "duration_ms": duration_ms,
+                            "is_error": is_error,
+                            "is_no_results": is_no_results,
                         }));
                         event_count += 1;
 
@@ -7148,7 +7179,7 @@ async fn handle_chat_stream(
                         })
                     }).collect();
                     conversation.push(Message::assistant_with_tool_calls(current.content.clone(), tc_json));
-                    for (id, name, result) in &tool_results {
+                    for (id, name, result, _) in &tool_results {
                         conversation.push(Message::tool_result(id, name, result));
                     }
 
@@ -7156,6 +7187,8 @@ async fn handle_chat_stream(
                     send_sse!(serde_json::json!({
                         "type": "thinking",
                         "iteration": iteration,
+                        "max_iter": max_iterations,
+                        "tool_count": tool_results.len(),
                     }));
                     event_count += 1;
 
@@ -20995,23 +21028,82 @@ async fn load_ab_stats(state: &Arc<AppState>) -> std::collections::HashMap<&'sta
 }
 
 /// POST /api/v1/ab/event — Record an A/B test engagement event.
+/// Accepts two formats:
+///   1. Legacy personality variant: { variant_id, event, messages_sent }
+///   2. CRO conversion event: { event, uid, ts, guest_turns?, hero_cta?, auth_value_prop?, ... }
 async fn handle_ab_event(
     State(state): State<Arc<AppState>>,
     Json(req): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let variant_id = req.get("variant_id").and_then(|v| v.as_str()).unwrap_or("");
     let event = req.get("event").and_then(|v| v.as_str()).unwrap_or("");
+    if event.is_empty() {
+        return Json(serde_json::json!({ "error": "event required" }));
+    }
+
+    // CRO event path: has "uid" field (no variant_id required)
+    if req.get("uid").is_some() {
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                let uid = req.get("uid").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let ts = req.get("ts").and_then(|v| v.as_i64()).unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+                let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+                let ttl = chrono::Utc::now().timestamp() + 90 * 86400;
+
+                // Aggregate counter: AB_CRO#{event}/DAY#{date}
+                let _ = dynamo.update_item()
+                    .table_name(table)
+                    .key("pk", AttributeValue::S(format!("AB_CRO#{}", event)))
+                    .key("sk", AttributeValue::S(format!("DAY#{}", today)))
+                    .update_expression("ADD #cnt :one SET #ttl = :ttl")
+                    .expression_attribute_names("#cnt", "count")
+                    .expression_attribute_names("#ttl", "ttl")
+                    .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+                    .expression_attribute_values(":ttl", AttributeValue::N(ttl.to_string()))
+                    .send()
+                    .await;
+
+                // Store individual event for funnel analysis
+                let sk = format!("UID#{}#TS#{}", uid, ts);
+                let mut item = std::collections::HashMap::new();
+                item.insert("pk".to_string(), AttributeValue::S(format!("AB_CRO#{}", event)));
+                item.insert("sk".to_string(), AttributeValue::S(sk));
+                item.insert("ttl".to_string(), AttributeValue::N(ttl.to_string()));
+                if let Some(obj) = req.as_object() {
+                    for (k, v) in obj {
+                        if k != "pk" && k != "sk" && k != "ttl" {
+                            if let Some(s) = v.as_str() {
+                                item.insert(k.clone(), AttributeValue::S(s.to_string()));
+                            } else if let Some(n) = v.as_i64() {
+                                item.insert(k.clone(), AttributeValue::N(n.to_string()));
+                            } else if let Some(b) = v.as_bool() {
+                                item.insert(k.clone(), AttributeValue::Bool(b));
+                            }
+                        }
+                    }
+                }
+                let _ = dynamo.put_item()
+                    .table_name(table)
+                    .set_item(Some(item))
+                    .send()
+                    .await;
+            }
+        }
+        return Json(serde_json::json!({ "ok": true }));
+    }
+
+    // Legacy personality variant path
+    let variant_id = req.get("variant_id").and_then(|v| v.as_str()).unwrap_or("");
     let messages_sent = req.get("messages_sent").and_then(|v| v.as_u64()).unwrap_or(0);
 
-    if variant_id.is_empty() || event.is_empty() {
-        return Json(serde_json::json!({ "error": "variant_id and event required" }));
+    if variant_id.is_empty() {
+        return Json(serde_json::json!({ "error": "variant_id or uid required" }));
     }
 
     if !AB_VARIANTS.iter().any(|v| v.id == variant_id) {
         return Json(serde_json::json!({ "error": "unknown variant" }));
     }
 
-    // "engaged" = 3+ messages = success. "bounced" = failure.
     let _is_win = event == "engaged" || messages_sent >= 3;
 
     #[cfg(feature = "dynamodb-backend")]
