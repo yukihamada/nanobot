@@ -861,7 +861,7 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
              3. Use `github_create_or_update_file` to make changes on a feature branch named `auto-improve/{branch_suffix}`\n\
              4. Use `github_create_pr` to create a PR with label 'auto-improvement'\n\
              5. Return the PR URL\n\n\
-             Keep changes minimal and focused. Use claude-sonnet-4-5 quality thinking.\n\
+             Keep changes minimal and focused. Use claude-sonnet-4-6 quality thinking.\n\
              Branch name should be descriptive, e.g. `auto-improve/fix-timeout-messages`.",
             desc = desc_clean,
             feedback_summary = feedback_summary,
@@ -904,7 +904,7 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
         Message::user(&format!("Please improve the codebase: {}", desc)),
     ];
 
-    let model = "claude-sonnet-4-5";
+    let model = "claude-sonnet-4-6";
     let max_tokens = 4096u32;
     let temperature = 0.3f64;
     let max_iterations = 5;

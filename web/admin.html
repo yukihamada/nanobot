@@ -384,8 +384,118 @@
     }
     .ticket-filter button.active { border-color: var(--accent); background: rgba(99,102,241,0.15); color: var(--accent); }
 
+    /* Keys tab */
+    .keys-category {
+      margin-bottom: 24px;
+    }
+    .keys-category-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .keys-category-header .cat-icon {
+      font-size: 16px;
+    }
+    .keys-category-header .cat-count {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+    .key-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 6px;
+      gap: 12px;
+    }
+    .key-row .key-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+    .key-row .key-provider {
+      font-weight: 600;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .key-row .key-masked {
+      font-family: 'SF Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .key-row .key-source {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .key-source.src-dynamodb { background: rgba(99,102,241,0.15); color: var(--accent); }
+    .key-source.src-env { background: rgba(34,197,94,0.15); color: var(--green); }
+    .key-source.src-not_set { background: rgba(119,119,119,0.15); color: var(--muted); }
+    .key-row .key-actions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .key-btn {
+      padding: 4px 12px;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-weight: 500;
+    }
+    .key-btn:hover { border-color: var(--accent); }
+    .key-btn.test-btn { color: var(--cyan); border-color: rgba(6,182,212,0.3); }
+    .key-btn.test-btn:hover { border-color: var(--cyan); background: rgba(6,182,212,0.08); }
+    .key-btn.test-btn.testing { opacity: 0.6; cursor: wait; }
+    .key-test-result {
+      font-size: 11px;
+      margin-left: 6px;
+      white-space: nowrap;
+    }
+    .key-test-result.ok { color: var(--green); }
+    .key-test-result.error { color: var(--red); }
+    .test-all-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .test-all-bar .test-all-btn {
+      padding: 6px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid rgba(6,182,212,0.3);
+      background: rgba(6,182,212,0.08);
+      color: var(--cyan);
+    }
+    .test-all-bar .test-all-btn:hover { border-color: var(--cyan); }
+
     @media (max-width: 480px) {
       .cards { grid-template-columns: 1fr; }
+      .key-row { flex-wrap: wrap; }
+      .key-row .key-actions { width: 100%; justify-content: flex-end; margin-top: 6px; }
     }
   </style>
 </head>
@@ -817,10 +927,42 @@
       </div>
     </div>
 
-    <!-- ========== COSTS ========== -->
+    <!-- ========== KEYS ========== -->
     <div id="tab-keys" class="tab-content">
       <div id="keys-message" style="display:none;padding:10px 16px;margin-bottom:12px;border-radius:6px;background:rgba(34,197,94,0.1);border:1px solid var(--green);color:var(--green);font-size:13px;"></div>
-      <div id="keys-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+
+      <!-- Summary cards -->
+      <div class="cards" id="keys-summary">
+        <div class="card">
+          <div class="card-label">Total Providers</div>
+          <div class="card-value blue" id="keys-total">--</div>
+          <div class="card-sub">Registered key slots</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Configured</div>
+          <div class="card-value green" id="keys-configured">--</div>
+          <div class="card-sub">Keys set (DynamoDB/env)</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Not Set</div>
+          <div class="card-value red" id="keys-notset">--</div>
+          <div class="card-sub">Missing API keys</div>
+        </div>
+        <div class="card">
+          <div class="card-label">LLM Providers</div>
+          <div class="card-value" id="keys-llm-count">--</div>
+          <div class="card-sub">Active LLM backends</div>
+        </div>
+      </div>
+
+      <!-- Test All bar -->
+      <div class="test-all-bar">
+        <span style="font-size:12px;color:var(--muted)" id="keys-test-status"></span>
+        <button class="test-all-btn" onclick="testAllKeys()">Test All Providers</button>
+      </div>
+
+      <!-- Category sections rendered by JS -->
+      <div id="keys-categories"></div>
     </div>
 
     <div id="tab-costs" class="tab-content">
@@ -899,7 +1041,7 @@
 
   <script>
     const API = location.hostname === 'localhost' ? 'http://localhost:3000' : '';
-    const SID = new URLSearchParams(location.search).get('sid') || '';
+    const AUTH_TOKEN = localStorage.getItem('authToken') || '';
     const ENDPOINTS = [
       { name: 'AWS Lambda (chatweb.ai)', url: 'https://chatweb.ai/health' },
       { name: 'AWS Lambda (teai.io)', url: 'https://teai.io/health' },
@@ -989,7 +1131,7 @@
     // Load admin stats from API
     async function loadAdminStats() {
       try {
-        const r = await fetch(API + '/api/v1/admin/stats?sid=' + encodeURIComponent(SID));
+        const r = await fetch(API + '/api/v1/admin/stats', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
         if (!r.ok) return;
         const data = await r.json();
         if (data.total_users !== undefined) {
@@ -1020,7 +1162,7 @@
 
     async function loadUsers() {
       try {
-        const r = await fetch(API + '/api/v1/admin/users?sid=' + encodeURIComponent(SID));
+        const r = await fetch(API + '/api/v1/admin/users', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
         if (!r.ok) { document.getElementById('user-list-container').innerHTML = '<div class="empty-state" style="color:var(--red)">Forbidden (check sid)</div>'; return; }
         const data = await r.json();
         allUsers = data.users || [];
@@ -1081,7 +1223,7 @@
       document.getElementById('msg-count').textContent = '';
 
       try {
-        const r = await fetch(API + '/api/v1/admin/users/' + encodeURIComponent(userId) + '/conversations?sid=' + encodeURIComponent(SID));
+        const r = await fetch(API + '/api/v1/admin/users/' + encodeURIComponent(userId) + '/conversations', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
         const data = await r.json();
         const convs = data.conversations || [];
         document.getElementById('conv-list-count').textContent = '(' + convs.length + ')';
@@ -1112,7 +1254,7 @@
       container.innerHTML = '<div class="empty-state">Loading...</div>';
 
       try {
-        const r = await fetch(API + '/api/v1/admin/sessions/' + encodeURIComponent(sessionId) + '/messages?sid=' + encodeURIComponent(SID));
+        const r = await fetch(API + '/api/v1/admin/sessions/' + encodeURIComponent(sessionId) + '/messages', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
         const data = await r.json();
         const msgs = data.messages || [];
         document.getElementById('msg-count').textContent = '(' + msgs.length + ')';
@@ -1144,7 +1286,7 @@
 
     async function loadTickets() {
       try {
-        const r = await fetch(API + '/api/v1/admin/tickets?sid=' + encodeURIComponent(SID));
+        const r = await fetch(API + '/api/v1/admin/tickets', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
         if (!r.ok) return;
         const data = await r.json();
         allTickets = data.tickets || [];
@@ -1215,8 +1357,8 @@
       try {
         const r = await fetch(API + '/api/v1/admin/tickets/' + ticketId + '/respond', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sid: SID, response: response }),
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+          body: JSON.stringify({ response: response }),
         });
         const d = await r.json();
         if (d.status === 'resolved') {
@@ -1245,44 +1387,138 @@
       document.getElementById('cost-openai').textContent = '~$5';
     }
 
-    // Load API keys
+    // ========== KEYS TAB ==========
+    const KEY_CATEGORIES = [
+      {
+        id: 'llm', label: 'LLM Providers', icon: '\uD83E\uDDE0',
+        keys: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY'],
+      },
+      {
+        id: 'voice', label: 'Voice & Media', icon: '\uD83C\uDFA4',
+        keys: ['ELEVENLABS_API_KEY', 'REPLICATE_API_TOKEN'],
+      },
+      {
+        id: 'payments', label: 'Payments', icon: '\uD83D\uDCB3',
+        keys: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+      },
+      {
+        id: 'gpu', label: 'GPU & Compute', icon: '\u26A1',
+        keys: ['RUNPOD_API_KEY', 'MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET'],
+      },
+      {
+        id: 'channels', label: 'Channels & Cloud', icon: '\uD83D\uDD17',
+        keys: ['GITHUB_TOKEN', 'TELEGRAM_BOT_TOKEN', 'LINE_CHANNEL_ACCESS_TOKEN', 'KLING_API_KEY'],
+      },
+    ];
+
+    const KEY_DISPLAY_NAMES = {
+      'ANTHROPIC_API_KEY': 'Anthropic',
+      'OPENAI_API_KEY': 'OpenAI',
+      'GOOGLE_API_KEY': 'Google AI',
+      'GEMINI_API_KEY': 'Gemini',
+      'OPENROUTER_API_KEY': 'OpenRouter',
+      'DEEPSEEK_API_KEY': 'DeepSeek',
+      'GROQ_API_KEY': 'Groq',
+      'ELEVENLABS_API_KEY': 'ElevenLabs',
+      'REPLICATE_API_TOKEN': 'Replicate',
+      'STRIPE_SECRET_KEY': 'Stripe',
+      'STRIPE_WEBHOOK_SECRET': 'Stripe Webhook',
+      'RUNPOD_API_KEY': 'RunPod',
+      'MODAL_TOKEN_ID': 'Modal (ID)',
+      'MODAL_TOKEN_SECRET': 'Modal (Secret)',
+      'GITHUB_TOKEN': 'GitHub',
+      'TELEGRAM_BOT_TOKEN': 'Telegram Bot',
+      'LINE_CHANNEL_ACCESS_TOKEN': 'LINE',
+      'KLING_API_KEY': 'Kling',
+    };
+
+    // Providers that have a test endpoint
+    const TESTABLE_KEYS = new Set([
+      'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY',
+      'OPENROUTER_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_API_KEY',
+      'ELEVENLABS_API_KEY', 'REPLICATE_API_TOKEN', 'STRIPE_SECRET_KEY',
+      'RUNPOD_API_KEY', 'TELEGRAM_BOT_TOKEN',
+    ]);
+
+    let allKeysData = {};
+
     async function loadKeys() {
-      const list = document.getElementById('keys-list');
-      list.innerHTML = '<div style="color:var(--muted);padding:16px;text-align:center">Loading...</div>';
+      const container = document.getElementById('keys-categories');
+      container.innerHTML = '<div style="color:var(--muted);padding:16px;text-align:center">Loading...</div>';
       try {
-        const r = await fetch(API + '/api/v1/admin/keys?sid=' + encodeURIComponent(SID));
-        if (!r.ok) { list.innerHTML = '<div style="color:var(--red);padding:16px">Failed to load</div>'; return; }
+        const r = await fetch(API + '/api/v1/admin/keys', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+        if (!r.ok) { container.innerHTML = '<div style="color:var(--red);padding:16px">Failed to load</div>'; return; }
         const data = await r.json();
-        list.innerHTML = '';
-        (data.keys || []).forEach(k => {
-          const provider = k.name.replace(/_API_KEY$/, '').replace(/_/g, ' ');
-          const dot = k.is_set ? 'green' : 'red';
-          const div = document.createElement('div');
-          div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px';
-          div.innerHTML = '<div style="display:flex;align-items:center;gap:10px">'
-            + '<span class="status-dot ' + dot + '"></span>'
-            + '<span style="font-weight:600;font-size:13px">' + escHtml(provider) + '</span>'
-            + '<span id="key-val-' + k.name + '" style="font-family:monospace;font-size:12px;color:var(--muted)">' + escHtml(k.masked_key || '—') + '</span>'
-            + '</div>'
-            + '<button onclick="editKey(\'' + k.name + '\')" style="padding:4px 12px;font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;cursor:pointer">Edit</button>';
-          list.appendChild(div);
+        const keys = data.keys || [];
+
+        // Index by name
+        allKeysData = {};
+        keys.forEach(k => { allKeysData[k.name] = k; });
+
+        // Update summary cards
+        const total = keys.length;
+        const configured = keys.filter(k => k.is_set).length;
+        const notset = total - configured;
+        const llmConfigured = KEY_CATEGORIES[0].keys.filter(n => allKeysData[n] && allKeysData[n].is_set).length;
+        document.getElementById('keys-total').textContent = total;
+        document.getElementById('keys-configured').textContent = configured;
+        document.getElementById('keys-notset').textContent = notset;
+        document.getElementById('keys-llm-count').textContent = llmConfigured + '/' + KEY_CATEGORIES[0].keys.length;
+
+        // Render categories
+        container.innerHTML = '';
+        KEY_CATEGORIES.forEach(cat => {
+          const section = document.createElement('div');
+          section.className = 'keys-category';
+          const catConfigured = cat.keys.filter(n => allKeysData[n] && allKeysData[n].is_set).length;
+          section.innerHTML = '<div class="keys-category-header">'
+            + '<span class="cat-icon">' + cat.icon + '</span>'
+            + '<span>' + cat.label + '</span>'
+            + '<span class="cat-count">(' + catConfigured + '/' + cat.keys.length + ' configured)</span>'
+            + '</div>';
+
+          cat.keys.forEach(keyName => {
+            const k = allKeysData[keyName] || { name: keyName, is_set: false, masked_key: '', source: 'not_set' };
+            const displayName = KEY_DISPLAY_NAMES[keyName] || keyName;
+            const dot = k.is_set ? 'green' : 'red';
+            const sourceClass = 'src-' + (k.source || 'not_set');
+            const sourceLabel = k.source === 'dynamodb' ? 'DynamoDB' : k.source === 'env' ? 'ENV' : 'Not Set';
+            const canTest = TESTABLE_KEYS.has(keyName) && k.is_set;
+
+            const row = document.createElement('div');
+            row.className = 'key-row';
+            row.id = 'key-row-' + keyName;
+            row.innerHTML = '<div class="key-info">'
+              + '<span class="status-dot ' + dot + '"></span>'
+              + '<span class="key-provider">' + escHtml(displayName) + '</span>'
+              + '<span class="key-masked" id="key-val-' + keyName + '">' + escHtml(k.masked_key || '\u2014') + '</span>'
+              + '<span class="key-source ' + sourceClass + '">' + sourceLabel + '</span>'
+              + '<span class="key-test-result" id="key-test-' + keyName + '"></span>'
+              + '</div>'
+              + '<div class="key-actions">'
+              + (canTest ? '<button class="key-btn test-btn" id="key-test-btn-' + keyName + '" onclick="testKey(\'' + keyName + '\')">Test</button>' : '')
+              + '<button class="key-btn" onclick="editKey(\'' + keyName + '\')">Edit</button>'
+              + '</div>';
+            section.appendChild(row);
+          });
+
+          container.appendChild(section);
         });
       } catch(e) {
-        list.innerHTML = '<div style="color:var(--red);padding:16px">Error: ' + escHtml(e.message) + '</div>';
+        container.innerHTML = '<div style="color:var(--red);padding:16px">Error: ' + escHtml(e.message) + '</div>';
       }
     }
 
     function editKey(name) {
       const val = document.getElementById('key-val-' + name);
       if (!val || val.querySelector('input')) return;
-      const row = val.closest('div[style*="flex"]');
-      const btn = row.querySelector('button');
-      val.innerHTML = '<input type="password" id="key-input-' + name + '" placeholder="新しいキーを入力..." '
+      const row = document.getElementById('key-row-' + name);
+      if (!row) return;
+      const actionsDiv = row.querySelector('.key-actions');
+      val.innerHTML = '<input type="password" id="key-input-' + name + '" placeholder="Enter new key..." '
         + 'style="width:220px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:12px;font-family:monospace">';
-      btn.outerHTML = '<div style="display:flex;gap:6px">'
-        + '<button onclick="saveKey(\'' + name + '\')" style="padding:4px 12px;font-size:12px;background:var(--green);border:none;color:#000;border-radius:4px;cursor:pointer;font-weight:600">Save</button>'
-        + '<button onclick="loadKeys()" style="padding:4px 10px;font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:4px;cursor:pointer">Cancel</button>'
-        + '</div>';
+      actionsDiv.innerHTML = '<button class="key-btn" onclick="saveKey(\'' + name + '\')" style="background:var(--green);color:#000;border-color:var(--green);font-weight:600">Save</button>'
+        + '<button class="key-btn" onclick="loadKeys()">Cancel</button>';
       document.getElementById('key-input-' + name).focus();
     }
 
@@ -1292,9 +1528,9 @@
       const body = {};
       body[name] = input.value.trim();
       try {
-        const r = await fetch(API + '/api/v1/admin/keys?sid=' + encodeURIComponent(SID), {
+        const r = await fetch(API + '/api/v1/admin/keys', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
           body: JSON.stringify(body),
         });
         const data = await r.json();
@@ -1310,6 +1546,60 @@
       } catch(e) { alert(e.message); }
     }
 
+    async function testKey(name) {
+      const btn = document.getElementById('key-test-btn-' + name);
+      const result = document.getElementById('key-test-' + name);
+      if (!result) return;
+      if (btn) { btn.classList.add('testing'); btn.textContent = '...'; }
+      result.textContent = '';
+      result.className = 'key-test-result';
+      try {
+        const r = await fetch(API + '/api/v1/admin/keys/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+          body: JSON.stringify({ provider: name }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') {
+          result.textContent = '\u2713 ' + data.latency_ms + 'ms';
+          result.className = 'key-test-result ok';
+        } else {
+          result.textContent = '\u2717 ' + (data.message || 'Error');
+          result.className = 'key-test-result error';
+        }
+      } catch(e) {
+        result.textContent = '\u2717 ' + e.message;
+        result.className = 'key-test-result error';
+      }
+      if (btn) { btn.classList.remove('testing'); btn.textContent = 'Test'; }
+    }
+
+    async function testAllKeys() {
+      const statusEl = document.getElementById('keys-test-status');
+      // Find all configured & testable keys
+      const toTest = [];
+      KEY_CATEGORIES.forEach(cat => {
+        cat.keys.forEach(keyName => {
+          if (TESTABLE_KEYS.has(keyName) && allKeysData[keyName] && allKeysData[keyName].is_set) {
+            toTest.push(keyName);
+          }
+        });
+      });
+      if (toTest.length === 0) {
+        statusEl.textContent = 'No testable keys configured';
+        return;
+      }
+      statusEl.textContent = 'Testing ' + toTest.length + ' providers...';
+      const results = await Promise.allSettled(toTest.map(name => testKey(name)));
+      let ok = 0, fail = 0;
+      toTest.forEach(name => {
+        const el = document.getElementById('key-test-' + name);
+        if (el && el.classList.contains('ok')) ok++;
+        else fail++;
+      });
+      statusEl.textContent = ok + ' passed, ' + fail + ' failed (' + toTest.length + ' tested)';
+    }
+
     function refreshAll() {
       checkHealth();
       loadAdminStats();
@@ -1320,11 +1610,34 @@
       estimateCosts();
     }
 
-    // Keep sid in admin nav link
-    document.getElementById('nav-admin').href = '/admin?sid=' + encodeURIComponent(SID);
+    // Admin nav link (no sid needed, auth via Bearer token)
+    document.getElementById('nav-admin').href = '/admin';
 
-    // Init
-    refreshAll();
+    // Auth guard: verify admin status (Bearer token or session ID)
+    {
+      const checkHeaders = {};
+      if (AUTH_TOKEN) checkHeaders['Authorization'] = 'Bearer ' + AUTH_TOKEN;
+      // Fallback: use session ID from main app's localStorage
+      const sid = localStorage.getItem('sessionId') || localStorage.getItem('webSessionId') || '';
+      if (sid) checkHeaders['x-session-id'] = sid;
+
+      if (!AUTH_TOKEN && !sid) {
+        document.body.innerHTML = '<div style="text-align:center;padding:80px;color:#999"><h2>ログインが必要です</h2><p><a href="/" style="color:#4fc3f7">chatweb.ai に戻る</a></p></div>';
+      } else {
+        fetch(API + '/api/v1/admin/check', { headers: checkHeaders })
+          .then(r => r.json())
+          .then(d => {
+            if (!d.is_admin) {
+              document.body.innerHTML = '<div style="text-align:center;padding:80px;color:#999"><h2>管理者権限がありません</h2><p><a href="/" style="color:#4fc3f7">chatweb.ai に戻る</a></p></div>';
+            } else {
+              refreshAll();
+            }
+          })
+          .catch(() => {
+            document.body.innerHTML = '<div style="text-align:center;padding:80px;color:#f44"><h2>認証エラー</h2><p><a href="/" style="color:#4fc3f7">chatweb.ai に戻る</a></p></div>';
+          });
+      }
+    }
   </script>
 </body>
 </html>

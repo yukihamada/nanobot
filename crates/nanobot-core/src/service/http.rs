@@ -333,11 +333,71 @@ fn validate_session_id(session_id: &str) -> bool {
 }
 
 /// Check if a session key, user ID, or email is an admin.
-/// Reads from ADMIN_SESSION_KEYS environment variable (comma-separated).
-/// Supports both session keys (e.g. "webchat:xxx") and emails (e.g. "user@example.com").
+/// Hardcoded master admins always have access (survives env var misconfiguration).
+/// Additional admins can be added via ADMIN_SESSION_KEYS environment variable (comma-separated).
 pub fn is_admin(key: &str) -> bool {
+    // Hardcoded master admins (always have access, survive env var misconfiguration)
+    const MASTER_ADMINS: &[&str] = &["yuki@hamada.tokyo", "mail@yukihamada.jp"];
+    if MASTER_ADMINS.iter().any(|&admin| admin == key) {
+        return true;
+    }
     let keys = std::env::var("ADMIN_SESSION_KEYS").unwrap_or_default();
     keys.split(',').map(|k| k.trim()).any(|k| !k.is_empty() && k == key)
+}
+
+/// Authenticate admin from Bearer token. Returns (user_id, email) if admin, None otherwise.
+/// Uses the same auth flow as /api/v1/auth/me: Bearer token → resolve user → check is_admin.
+#[cfg(feature = "dynamodb-backend")]
+async fn authenticate_admin(state: &AppState, headers: &axum::http::HeaderMap) -> Option<(String, String)> {
+    use aws_sdk_dynamodb::types::AttributeValue;
+
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+    if token.is_empty() { return None; }
+
+    let (dynamo, table) = match (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        (Some(d), Some(t)) => (d, t),
+        _ => return None,
+    };
+
+    let (pk, sk) = if token.starts_with("cw_") {
+        (format!("APIKEY#{}", token), "LOOKUP".to_string())
+    } else {
+        (format!("AUTH#{}", token), "TOKEN".to_string())
+    };
+
+    let output = dynamo.get_item()
+        .table_name(table).key("pk", AttributeValue::S(pk)).key("sk", AttributeValue::S(sk))
+        .send().await.ok()?;
+    let item = output.item?;
+    let user_id = item.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+
+    // Get email from token item or user profile
+    let email = if token.starts_with("cw_") {
+        dynamo.get_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+            .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+            .send().await.ok()
+            .and_then(|o| o.item)
+            .and_then(|i| i.get("email").and_then(|v| v.as_s().ok()).cloned())
+            .unwrap_or_default()
+    } else {
+        item.get("email").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default()
+    };
+
+    if is_admin(&email) || is_admin(&user_id) {
+        Some((user_id, email))
+    } else {
+        None
+    }
+}
+
+#[cfg(not(feature = "dynamodb-backend"))]
+async fn authenticate_admin(_state: &AppState, _headers: &axum::http::HeaderMap) -> Option<(String, String)> {
+    None
 }
 
 /// GitHub tool names that are restricted to admin users.
@@ -390,10 +450,10 @@ pub struct AppState {
     pub config: Config,
     pub sessions: Mutex<Box<dyn SessionStore>>,
     pub provider: Option<Arc<dyn LlmProvider>>,
-    /// Load-balanced multi-provider for distributing requests
-    pub lb_provider: Option<Arc<dyn LlmProvider>>,
-    /// Raw LoadBalancedProvider for parallel mode access
-    pub lb_raw: Option<Arc<provider::LoadBalancedProvider>>,
+    /// Load-balanced multi-provider for distributing requests (RwLock for hot-reload)
+    pub lb_provider: std::sync::RwLock<Option<Arc<dyn LlmProvider>>>,
+    /// Raw LoadBalancedProvider for parallel mode access (RwLock for hot-reload)
+    pub lb_raw: std::sync::RwLock<Option<Arc<provider::LoadBalancedProvider>>>,
     /// Unified tool registry (built-in + MCP tools)
     pub tool_registry: crate::service::integrations::ToolRegistry,
     /// Per-user concurrent request tracker: session_key -> active count
@@ -429,8 +489,8 @@ impl AppState {
             config,
             sessions: Mutex::new(sessions),
             provider,
-            lb_provider,
-            lb_raw,
+            lb_provider: std::sync::RwLock::new(lb_provider),
+            lb_raw: std::sync::RwLock::new(lb_raw),
             tool_registry,
             concurrent_requests: dashmap::DashMap::new(),
             user_profile_cache: dashmap::DashMap::new(),
@@ -442,9 +502,29 @@ impl AppState {
         }
     }
 
+    /// Get the load-balanced raw provider (clones the Arc from behind the RwLock).
+    pub fn get_lb_raw(&self) -> Option<Arc<provider::LoadBalancedProvider>> {
+        self.lb_raw.read().unwrap().clone()
+    }
+
+    /// Get the load-balanced LlmProvider (clones the Arc from behind the RwLock).
+    pub fn get_lb_provider(&self) -> Option<Arc<dyn LlmProvider>> {
+        self.lb_provider.read().unwrap().clone()
+    }
+
     /// Get the best provider for a request. Prefers load-balanced if available.
-    pub fn get_provider(&self) -> Option<&Arc<dyn LlmProvider>> {
-        self.lb_provider.as_ref().or(self.provider.as_ref())
+    pub fn get_provider(&self) -> Option<Arc<dyn LlmProvider>> {
+        self.get_lb_provider().or_else(|| self.provider.clone())
+    }
+
+    /// Hot-reload LLM providers from current environment variables.
+    /// Called after admin API key updates to pick up new keys without restart.
+    pub fn reload_providers(&self) {
+        let lb_raw = provider::LoadBalancedProvider::from_env().map(Arc::new);
+        let lb_provider = lb_raw.as_ref().map(|lb| lb.clone() as Arc<dyn LlmProvider>);
+        *self.lb_raw.write().unwrap() = lb_raw;
+        *self.lb_provider.write().unwrap() = lb_provider;
+        tracing::info!("reload_providers: hot-reloaded LLM providers from environment");
     }
 }
 
@@ -904,8 +984,8 @@ async fn maybe_translate_to_japanese(
     // 3) Try Claude (Anthropic)
     let claude_key = std::env::var("ANTHROPIC_API_KEY").ok();
     if let Some(key) = claude_key {
-        let claude = crate::provider::anthropic::AnthropicProvider::new(key, None, "anthropic/claude-sonnet-4-5".to_string());
-        if let Ok(resp) = claude.chat(&msgs, None, "anthropic/claude-sonnet-4-5", 2048, 0.3).await {
+        let claude = crate::provider::anthropic::AnthropicProvider::new(key, None, "anthropic/claude-sonnet-4-6".to_string());
+        if let Ok(resp) = claude.chat(&msgs, None, "anthropic/claude-sonnet-4-6", 2048, 0.3).await {
             if let Some(translated) = resp.content {
                 let t = translated.trim().to_string();
                 if !t.is_empty() && detect_language(&t) == "ja" {
@@ -2150,7 +2230,7 @@ const AGENTS: &[AgentProfile] = &[
              - 推測と事実を明確に区別する。",
         tools_enabled: true,
         icon: "search",
-        preferred_model: None,
+        preferred_model: Some("moonshotai/kimi-k2.5"),
         estimated_seconds: 30,
         max_chars_pc: 400,
         max_chars_mobile: 120,
@@ -2178,7 +2258,7 @@ const AGENTS: &[AgentProfile] = &[
              - バグ修正時は原因と修正理由を説明。",
         tools_enabled: true,
         icon: "code",
-        preferred_model: Some("anthropic/claude-sonnet-4-5"),
+        preferred_model: Some("anthropic/claude-sonnet-4-6"),
         estimated_seconds: 15,
         max_chars_pc: 800,
         max_chars_mobile: 400,
@@ -2202,7 +2282,7 @@ const AGENTS: &[AgentProfile] = &[
              - 不確実性が高い場合はシナリオ分析（楽観/中立/悲観）を提示。",
         tools_enabled: true,
         icon: "chart",
-        preferred_model: Some("google/gemini-2.0-flash"),
+        preferred_model: Some("google/gemini-3-flash-preview"),
         estimated_seconds: 20,
         max_chars_pc: 400,
         max_chars_mobile: 200,
@@ -2227,7 +2307,7 @@ const AGENTS: &[AgentProfile] = &[
              - フィードバックには具体的な改善案を添えて応答。",
         tools_enabled: true,
         icon: "pen",
-        preferred_model: None,
+        preferred_model: Some("anthropic/claude-sonnet-4-6"),
         estimated_seconds: 10,
         max_chars_pc: 400,
         max_chars_mobile: 120,
@@ -2926,10 +3006,15 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/account/{id}", get(handle_account))
         .route("/api/v1/providers", get(handle_providers))
         .route("/api/v1/integrations", get(handle_integrations))
-        // Skills
+        // Skills marketplace
         .route("/api/v1/skills", get(handle_list_skills))
         .route("/api/v1/skills/search", post(handle_search_skills))
-        .route("/api/v1/skills/{name}", get(handle_get_skill))
+        .route("/api/v1/skills/installed", get(handle_installed_skills))
+        .route("/api/v1/skills/categories", get(handle_skill_categories))
+        .route("/api/v1/skills/popular", get(handle_popular_skills))
+        .route("/api/v1/skills/{id}", get(handle_get_skill))
+        .route("/api/v1/skills/{id}/install", post(handle_install_skill).delete(handle_uninstall_skill))
+        .route("/api/v1/skills/publish", post(handle_publish_skill))
         // Agents
         .route("/api/v1/agents", get(handle_agents))
         // Devices
@@ -3085,6 +3170,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/admin/logs", get(handle_admin_logs))
         .route("/api/v1/admin/keys", get(handle_admin_keys_get))
         .route("/api/v1/admin/keys", axum::routing::put(handle_admin_keys_put))
+        .route("/api/v1/admin/keys/test", post(handle_admin_keys_test))
         .route("/api/v1/admin/feedback", get(handle_admin_feedback))
         .route("/api/v1/admin/tickets", get(handle_admin_tickets))
         .route("/api/v1/admin/tickets/{ticket_id}/respond", post(handle_admin_ticket_respond))
@@ -3264,7 +3350,8 @@ async fn handle_chat(
     let chat_start = std::time::Instant::now();
 
     // Circuit breaker: reject early if all providers are down
-    if let Some(lb) = &state.lb_raw {
+    let lb_raw_check = state.get_lb_raw();
+    if let Some(lb) = &lb_raw_check {
         if lb.all_providers_down() {
             tracing::warn!("handle_chat: all providers down (circuit breaker), rejecting request");
             return Json(ChatResponse {
@@ -3459,13 +3546,14 @@ async fn handle_chat(
                 None::<String>
             }
         };
+        let cmd_provider = state.get_provider();
         let ctx = super::commands::CommandContext {
             channel_key: &req.session_id,
             session_key: &session_key,
             user_id: user_id_opt.as_deref(),
             conv_id: conv_id.as_deref(),
             sessions: &state.sessions,
-            provider: state.get_provider(),
+            provider: cmd_provider.as_ref(),
             tool_registry: Some(&state.tool_registry),
             #[cfg(feature = "dynamodb-backend")]
             dynamo: state.dynamo_client.as_ref(),
@@ -3516,24 +3604,25 @@ async fn handle_chat(
         }
     };
 
-    // Phase B: Parallel initialization — fetch user (cached), memory, and settings concurrently
+    // Phase B: Parallel initialization — fetch user (cached), memory, settings, and installed skills concurrently
     #[cfg(feature = "dynamodb-backend")]
-    let (cached_user, parallel_memory, parallel_settings) = {
+    let (cached_user, parallel_memory, parallel_settings, parallel_skills) = {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Fetch user with cache (separate from tokio::join! to use state)
             let user = get_or_create_user_cached(&*state, &session_key).await;
-            let (memory, settings) = tokio::join!(
+            let (memory, settings, skills) = tokio::join!(
                 read_memory_context(dynamo, table, &session_key),
-                get_user_settings(dynamo, table, &session_key)
+                get_user_settings(dynamo, table, &session_key),
+                load_user_skills_for_prompt(dynamo, table, &session_key)
             );
-            (Some(user), memory, Some(settings))
+            (Some(user), memory, Some(settings), skills)
         } else {
-            (None, String::new(), None)
+            (None, String::new(), None, String::new())
         }
     };
     #[cfg(not(feature = "dynamodb-backend"))]
-    let (cached_user, parallel_memory, parallel_settings): (Option<UserProfile>, String, Option<UserSettings>) =
-        (None, String::new(), None);
+    let (cached_user, parallel_memory, parallel_settings, parallel_skills): (Option<UserProfile>, String, Option<UserSettings>, String) =
+        (None, String::new(), None, String::new());
 
     // Check user credits (using cached user)
     #[cfg(feature = "dynamodb-backend")]
@@ -3753,7 +3842,7 @@ async fn handle_chat(
             .unwrap_or_else(|| {
                 // Web channel gets the best model when no explicit preference is set
                 if req.channel == "web" || req.channel.starts_with("webchat") {
-                    "anthropic/claude-sonnet-4-5"
+                    "anthropic/claude-sonnet-4-6"
                 } else {
                     &default_model
                 }
@@ -3831,10 +3920,13 @@ async fn handle_chat(
         format!("\n\n## ユーザーカスタム指示\n{}", custom_sys)
     };
 
+    // Installed skills block (loaded in parallel)
+    let skills_block = &parallel_skills;
+
     let system_prompt = if memory_context.is_empty() {
-        format!("{}{}\n\n今日の日付: {}{}{}{}{}{}{}", base_prompt, AGENT_COMMON, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, char_instruction)
+        format!("{}{}\n\n今日の日付: {}{}{}{}{}{}{}{}", base_prompt, AGENT_COMMON, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, skills_block, char_instruction)
     } else {
-        format!("{}{}\n\n今日の日付: {}{}{}{}{}{}\n\n---\n{}{}", base_prompt, AGENT_COMMON, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, memory_context, char_instruction)
+        format!("{}{}\n\n今日の日付: {}{}{}{}{}{}{}\n\n---\n{}{}", base_prompt, AGENT_COMMON, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, skills_block, memory_context, char_instruction)
     };
     let mut messages = vec![
         Message::system(&system_prompt),
@@ -3952,7 +4044,8 @@ async fn handle_chat(
             }
         }
 
-        if let Some(ref lb) = state.lb_raw {
+        let lb_raw_opt = state.get_lb_raw();
+        if let Some(ref lb) = lb_raw_opt {
             info!("Parallel multi-model race: starting");
             match lb.chat_parallel(&messages, tools_ref, max_tokens, temperature).await {
                 Ok((resp, winning_model, all_usage)) => {
@@ -4410,7 +4503,7 @@ async fn handle_chat(
             let sk = session_key.clone();
             let user_msg = req.message.clone();
             let bot_msg = response_text.clone();
-            let provider_for_mem = state.lb_provider.clone().or_else(|| state.provider.clone());
+            let provider_for_mem = state.get_lb_provider().or_else(|| state.provider.clone());
             tokio::spawn(async move {
                 let summary = format!("- Q: {} → A: {}",
                     if user_msg.len() > 80 { let mut i = 80; while i > 0 && !user_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &user_msg[..i]) } else { user_msg },
@@ -4430,7 +4523,7 @@ async fn handle_chat(
     // Auto-translate to Japanese if UI language is "ja" but response has no Japanese
     let mut response_text = response_text;
     if req.language.as_deref() == Some("ja") && detect_language(&response_text) != "ja" {
-        let translate_provider = state.lb_provider.clone().or_else(|| state.provider.clone());
+        let translate_provider = state.get_lb_provider().or_else(|| state.provider.clone());
         if let Some(translated) = maybe_translate_to_japanese(&response_text, translate_provider.as_ref()).await {
             response_text = translated;
         }
@@ -5197,13 +5290,14 @@ async fn handle_line_webhook(
 
                     // Handle slash commands
                     if let Some(cmd) = super::commands::parse_command(text) {
+                        let cmd_provider = state.get_provider();
                         let ctx = super::commands::CommandContext {
                             channel_key: &channel_key,
                             session_key: &session_key,
                             user_id: None,
                             conv_id: None,
                             sessions: &state.sessions,
-                            provider: state.get_provider(),
+                            provider: cmd_provider.as_ref(),
                             tool_registry: Some(&state.tool_registry),
                             #[cfg(feature = "dynamodb-backend")]
                             dynamo: state.dynamo_client.as_ref(),
@@ -5448,13 +5542,14 @@ async fn handle_telegram_webhook(
 
     // Handle slash commands
     if let Some(cmd) = super::commands::parse_command(text) {
+        let cmd_provider = state.get_provider();
         let ctx = super::commands::CommandContext {
             channel_key: &channel_key,
             session_key: &session_key,
             user_id: None,
             conv_id: None,
             sessions: &state.sessions,
-            provider: state.get_provider(),
+            provider: cmd_provider.as_ref(),
             tool_registry: Some(&state.tool_registry),
             #[cfg(feature = "dynamodb-backend")]
             dynamo: state.dynamo_client.as_ref(),
@@ -6436,7 +6531,8 @@ async fn handle_chat_stream(
     }
 
     // Circuit breaker: reject early if all providers are down
-    if let Some(lb) = &state.lb_raw {
+    let lb_raw_check = state.get_lb_raw();
+    if let Some(lb) = &lb_raw_check {
         if lb.all_providers_down() {
             tracing::warn!("handle_chat_stream: all providers down (circuit breaker), rejecting request");
             let err_stream = stream::once(async {
@@ -6479,24 +6575,25 @@ async fn handle_chat_stream(
         { req.session_id.clone() }
     };
 
-    // Parallel initialization: fetch user (cached) + settings concurrently
+    // Parallel initialization: fetch user (cached) + settings + skills concurrently
     #[cfg(feature = "dynamodb-backend")]
-    let (stream_user, stream_memory, stream_settings) = {
+    let (stream_user, stream_memory, stream_settings, stream_skills) = {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Fetch user with cache (separate from tokio::join! to use state)
             let user = get_or_create_user_cached(&*state, &session_key).await;
-            let (memory, settings) = tokio::join!(
+            let (memory, settings, skills) = tokio::join!(
                 read_memory_context(dynamo, table, &session_key),
-                get_user_settings(dynamo, table, &session_key)
+                get_user_settings(dynamo, table, &session_key),
+                load_user_skills_for_prompt(dynamo, table, &session_key)
             );
-            (Some(user), memory, Some(settings))
+            (Some(user), memory, Some(settings), skills)
         } else {
-            (None, String::new(), None)
+            (None, String::new(), None, String::new())
         }
     };
     #[cfg(not(feature = "dynamodb-backend"))]
-    let (stream_user, stream_memory, stream_settings): (Option<UserProfile>, String, Option<UserSettings>) =
-        (None, String::new(), None);
+    let (stream_user, stream_memory, stream_settings, stream_skills): (Option<UserProfile>, String, Option<UserSettings>, String) =
+        (None, String::new(), None, String::new());
 
     // Check credits (using cached user)
     #[cfg(feature = "dynamodb-backend")]
@@ -6645,7 +6742,7 @@ async fn handle_chat_stream(
         .or(agent.preferred_model)
         .unwrap_or_else(|| {
             if req.channel == "web" || req.channel.starts_with("webchat") {
-                "anthropic/claude-sonnet-4-5"
+                "anthropic/claude-sonnet-4-6"
             } else {
                 &default_model
             }
@@ -6713,9 +6810,9 @@ async fn handle_chat_stream(
     };
 
     let stream_system_prompt = if stream_memory.is_empty() {
-        format!("{}\n\n今日の日付: {}{}{}{}{}{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_wow_prompt, stream_custom_block, char_instruction)
+        format!("{}\n\n今日の日付: {}{}{}{}{}{}{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_wow_prompt, stream_custom_block, &stream_skills, char_instruction)
     } else {
-        format!("{}\n\n今日の日付: {}{}{}{}{}{}\n\n---\n{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_wow_prompt, stream_custom_block, stream_memory, char_instruction)
+        format!("{}\n\n今日の日付: {}{}{}{}{}{}{}\n\n---\n{}{}", base_prompt, today, stream_meta, stream_meta_instr, stream_adult_prompt, stream_wow_prompt, stream_custom_block, &stream_skills, stream_memory, char_instruction)
     };
     let mut messages = vec![Message::system(&stream_system_prompt)];
 
@@ -7075,7 +7172,7 @@ async fn handle_chat_stream(
 
                 // Auto-translate to Japanese if UI language is "ja" but response has no Japanese
                 if req_language.as_deref() == Some("ja") && detect_language(&response_text) != "ja" {
-                    let translate_provider = state_clone.lb_provider.clone().or_else(|| state_clone.provider.clone());
+                    let translate_provider = state_clone.get_lb_provider().or_else(|| state_clone.provider.clone());
                     if let Some(translated) = maybe_translate_to_japanese(&response_text, translate_provider.as_ref()).await {
                         response_text = translated;
                     }
@@ -7122,7 +7219,7 @@ async fn handle_chat_stream(
                         let sk = session_key_clone.clone();
                         let user_msg = req_message.clone();
                         let bot_msg = response_text.clone();
-                        let provider_for_mem = state_clone.lb_provider.clone().or_else(|| state_clone.provider.clone());
+                        let provider_for_mem = state_clone.get_lb_provider().or_else(|| state_clone.provider.clone());
                         tokio::spawn(async move {
                             let summary = format!("- Q: {} → A: {}",
                                 if user_msg.len() > 80 { let mut i = 80; while i > 0 && !user_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &user_msg[..i]) } else { user_msg },
@@ -7250,21 +7347,21 @@ async fn handle_chat_stream(
 // ============================================================================
 
 /// Select the smartest available model for synthesis.
-/// Priority: Opus 4.6 > Opus 4.5 > GPT-4o > Gemini Pro > Sonnet 4.5
+/// Priority: Opus 4.6 > Gemini 2.5 Pro > GPT-4o > Sonnet 4.6
 fn get_smartest_model() -> &'static str {
     // Check environment for available models
     if std::env::var("ANTHROPIC_API_KEY").is_ok() {
         // Opus 4.6 is the smartest
         return "claude-opus-4-6";
     }
-    if std::env::var("OPENAI_API_KEY").is_ok() {
-        return "gpt-4o";
-    }
     if std::env::var("GEMINI_API_KEY").is_ok() || std::env::var("GOOGLE_API_KEY").is_ok() {
         return "gemini-2.5-pro";
     }
+    if std::env::var("OPENAI_API_KEY").is_ok() {
+        return "gpt-4o";
+    }
     // Fallback to Sonnet (available in most cases)
-    "anthropic/claude-sonnet-4-5"
+    "anthropic/claude-sonnet-4-6"
 }
 
 /// Build synthesis prompt from multiple model results.
@@ -7381,8 +7478,8 @@ async fn handle_chat_explore(
         }
     }
 
-    let lb_raw = match &state.lb_raw {
-        Some(lb) => lb.clone(),
+    let lb_raw = match state.get_lb_raw() {
+        Some(lb) => lb,
         None => {
             let err_stream = futures::stream::once(async {
                 Ok::<_, Infallible>(Event::default()
@@ -7710,8 +7807,8 @@ async fn handle_explore_synthesize(
         }
     }
 
-    let lb_raw = match &state.lb_raw {
-        Some(lb) => lb.clone(),
+    let lb_raw = match state.get_lb_raw() {
+        Some(lb) => lb,
         None => {
             let err_stream = futures::stream::once(async {
                 Ok::<_, Infallible>(Event::default()
@@ -7841,8 +7938,8 @@ async fn handle_first_chunk(
     }
 
     // Use fast model for immediate response
-    let lb = match &state.lb_provider {
-        Some(lb) => lb.clone(),
+    let lb = match state.get_lb_provider() {
+        Some(lb) => lb,
         None => {
             return Json(serde_json::json!({
                 "error": "No providers available",
@@ -8047,8 +8144,8 @@ async fn handle_chat_race(
     let state_for_ratelimit = state.clone();
     let race_key_for_ratelimit = race_key.clone();
 
-    let lb_raw = match &state.lb_raw {
-        Some(lb) => lb.clone(),
+    let lb_raw = match state.get_lb_raw() {
+        Some(lb) => lb,
         None => {
             if let Some(e) = state.concurrent_requests.get(&race_key) { e.value().fetch_sub(1, Ordering::Relaxed); }
             let err_stream = futures::stream::once(async {
@@ -9984,7 +10081,7 @@ async fn handle_providers(
         }));
     }
 
-    let has_lb = state.lb_provider.is_some();
+    let has_lb = state.get_lb_provider().is_some();
 
     Json(serde_json::json!({
         "providers": providers,
@@ -9994,76 +10091,118 @@ async fn handle_providers(
     }))
 }
 
-/// GET /api/v1/skills — List all available skills
+/// Build JSON for a bundled skill.
+fn bundled_skill_json(skill: &crate::skills::BundledSkill, installs: u64) -> serde_json::Value {
+    serde_json::json!({
+        "id": skill.id,
+        "name": skill.name,
+        "description": skill.description,
+        "category": skill.category,
+        "source": "bundled",
+        "installs": installs,
+    })
+}
+
+/// GET /api/v1/skills — List all available skills (bundled + DynamoDB)
 async fn handle_list_skills(
     State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let workspace = state.config.workspace_path();
-    let builtin_skills = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.join("skills")));
+    let category_filter = params.get("category").cloned();
 
-    let loader = crate::skills::SkillsLoader::new(&workspace, builtin_skills);
-    let all_skills = loader.list_skills(false);
+    // Bundled skills
+    let mut skills_json: Vec<serde_json::Value> = crate::skills::BUNDLED_SKILLS.iter()
+        .filter(|s| category_filter.as_ref().map_or(true, |c| c == s.category))
+        .map(|s| bundled_skill_json(s, 0))
+        .collect();
 
-    let skills_json: Vec<_> = all_skills.iter().map(|skill| {
-        let metadata = loader.get_skill_metadata(&skill.name);
-        let description = metadata
-            .as_ref()
-            .and_then(|m| m.get("description"))
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| skill.name.clone());
+    // DynamoDB community skills
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if let Ok(output) = dynamo
+                .query()
+                .table_name(table)
+                .key_condition_expression("pk = :pk")
+                .expression_attribute_values(":pk", AttributeValue::S("SKILL_INDEX".to_string()))
+                .send()
+                .await
+            {
+                for item in output.items() {
+                    let cat = item.get("category").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()).clone();
+                    if category_filter.as_ref().map_or(true, |c| c == &cat) {
+                        skills_json.push(serde_json::json!({
+                            "id": item.get("skill_id").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                            "name": item.get("name").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                            "description": item.get("description").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                            "category": cat,
+                            "source": "community",
+                            "installs": item.get("installs").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0),
+                        }));
+                    }
+                }
+            }
+        }
+    }
+    let _ = &state; // suppress unused warning when dynamodb-backend is off
 
-        serde_json::json!({
-            "name": skill.name,
-            "description": description,
-            "source": skill.source,
-            "path": skill.path.display().to_string(),
-        })
-    }).collect();
-
+    let count = skills_json.len();
     Json(serde_json::json!({
         "skills": skills_json,
-        "count": all_skills.len(),
+        "count": count,
     }))
 }
 
-/// GET /api/v1/skills/:name — Get specific skill details
+/// GET /api/v1/skills/:id — Get specific skill details
 async fn handle_get_skill(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let workspace = state.config.workspace_path();
-    let builtin_skills = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.join("skills")));
-
-    let loader = crate::skills::SkillsLoader::new(&workspace, builtin_skills);
-
-    match loader.load_skill(&name) {
-        Some(content) => {
-            let metadata = loader.get_skill_metadata(&name);
-            let description = metadata
-                .as_ref()
-                .and_then(|m| m.get("description"))
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| name.clone());
-
-            Json(serde_json::json!({
-                "name": name,
-                "description": description,
-                "content": content,
-                "metadata": metadata,
-            })).into_response()
-        }
-        None => (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({
-                "error": "Skill not found",
-                "name": name,
-            }))
-        ).into_response()
+    // Check bundled skills first
+    if let Some(skill) = crate::skills::get_bundled_skill(&id) {
+        return Json(serde_json::json!({
+            "id": skill.id,
+            "name": skill.name,
+            "description": skill.description,
+            "category": skill.category,
+            "content": skill.content,
+            "source": "bundled",
+        })).into_response();
     }
+
+    // Check DynamoDB
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if let Ok(output) = dynamo
+                .get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("SKILL#{}", id)))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .send()
+                .await
+            {
+                if let Some(item) = output.item {
+                    return Json(serde_json::json!({
+                        "id": id,
+                        "name": item.get("name").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        "description": item.get("description").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        "category": item.get("category").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        "content": item.get("content").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        "source": "community",
+                        "author": item.get("author").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        "installs": item.get("installs").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0),
+                    })).into_response();
+                }
+            }
+        }
+    }
+    let _ = &state;
+
+    (StatusCode::NOT_FOUND, Json(serde_json::json!({
+        "error": "Skill not found",
+        "id": id,
+    }))).into_response()
 }
 
 #[derive(Deserialize)]
@@ -10076,43 +10215,335 @@ async fn handle_search_skills(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<SearchSkillsRequest>,
 ) -> impl IntoResponse {
-    let workspace = state.config.workspace_path();
-    let builtin_skills = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.join("skills")));
-
-    let loader = crate::skills::SkillsLoader::new(&workspace, builtin_skills);
-    let all_skills = loader.list_skills(false);
-
     let query_lower = payload.query.to_lowercase();
 
-    let matched_skills: Vec<_> = all_skills.iter().filter_map(|skill| {
-        let metadata = loader.get_skill_metadata(&skill.name);
-        let description = metadata
-            .as_ref()
-            .and_then(|m| m.get("description"))
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| skill.name.clone());
+    let mut results: Vec<serde_json::Value> = crate::skills::BUNDLED_SKILLS.iter()
+        .filter(|s| {
+            s.name.to_lowercase().contains(&query_lower) ||
+            s.description.to_lowercase().contains(&query_lower) ||
+            s.id.contains(&query_lower) ||
+            s.category.to_lowercase().contains(&query_lower)
+        })
+        .map(|s| bundled_skill_json(s, 0))
+        .collect();
 
-        // Simple text matching in name or description
-        if skill.name.to_lowercase().contains(&query_lower) ||
-           description.to_lowercase().contains(&query_lower) {
-            Some(serde_json::json!({
-                "name": skill.name,
-                "description": description,
-                "source": skill.source,
-                "path": skill.path.display().to_string(),
-            }))
-        } else {
-            None
-        }
-    }).collect();
-
+    let _ = &state; // suppress unused warning
+    let count = results.len();
     Json(serde_json::json!({
         "query": payload.query,
-        "results": matched_skills,
-        "count": matched_skills.len(),
+        "results": results,
+        "count": count,
     }))
+}
+
+/// GET /api/v1/skills/categories — List all skill categories
+async fn handle_skill_categories() -> impl IntoResponse {
+    let categories: Vec<serde_json::Value> = crate::skills::SKILL_CATEGORIES.iter().map(|c| {
+        let count = crate::skills::BUNDLED_SKILLS.iter().filter(|s| s.category == *c).count();
+        serde_json::json!({ "name": c, "count": count })
+    }).collect();
+
+    Json(serde_json::json!({ "categories": categories }))
+}
+
+/// GET /api/v1/skills/popular — Top 10 popular skills
+async fn handle_popular_skills(
+    State(_state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    // For now return all bundled skills sorted by category (install counts will come from DynamoDB later)
+    let skills: Vec<serde_json::Value> = crate::skills::BUNDLED_SKILLS.iter()
+        .take(10)
+        .map(|s| bundled_skill_json(s, 0))
+        .collect();
+
+    Json(serde_json::json!({ "skills": skills }))
+}
+
+/// GET /api/v1/skills/installed — List user's installed skills (Bearer auth)
+async fn handle_installed_skills(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return Json(serde_json::json!({ "error": "Not authenticated", "skills": [] })),
+        };
+
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if let Ok(output) = dynamo
+                .query()
+                .table_name(table)
+                .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+                .expression_attribute_values(":pk", AttributeValue::S(format!("USER_SKILL#{}", user_id)))
+                .expression_attribute_values(":prefix", AttributeValue::S("SK#".to_string()))
+                .send()
+                .await
+            {
+                let skills: Vec<serde_json::Value> = output.items().iter().filter_map(|item| {
+                    let skill_id = item.get("skill_id").and_then(|v| v.as_s().ok())?.clone();
+                    // Resolve skill details from bundled or stored data
+                    if let Some(bundled) = crate::skills::get_bundled_skill(&skill_id) {
+                        Some(serde_json::json!({
+                            "id": bundled.id,
+                            "name": bundled.name,
+                            "description": bundled.description,
+                            "category": bundled.category,
+                            "source": "bundled",
+                            "installed_at": item.get("installed_at").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        }))
+                    } else {
+                        Some(serde_json::json!({
+                            "id": &skill_id,
+                            "name": item.get("name").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                            "description": item.get("description").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                            "category": item.get("category").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                            "source": "community",
+                            "installed_at": item.get("installed_at").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        }))
+                    }
+                }).collect();
+                return Json(serde_json::json!({ "skills": skills, "count": skills.len() }));
+            }
+        }
+        Json(serde_json::json!({ "skills": [], "count": 0 }))
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (&state, &headers);
+        Json(serde_json::json!({ "skills": [], "count": 0 }))
+    }
+}
+
+/// POST /api/v1/skills/:id/install — Install a skill (Bearer auth)
+async fn handle_install_skill(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" }))),
+        };
+
+        // Verify skill exists (bundled or community)
+        let skill_name;
+        let skill_category;
+        if let Some(bundled) = crate::skills::get_bundled_skill(&id) {
+            skill_name = bundled.name.to_string();
+            skill_category = bundled.category.to_string();
+        } else {
+            // Check DynamoDB for community skill
+            skill_name = String::new();
+            skill_category = String::new();
+            // For now, only bundled skills are installable
+            if skill_name.is_empty() {
+                // Try DynamoDB lookup
+                let mut found = false;
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                    if let Ok(output) = dynamo
+                        .get_item()
+                        .table_name(table)
+                        .key("pk", AttributeValue::S(format!("SKILL#{}", id)))
+                        .key("sk", AttributeValue::S("INFO".to_string()))
+                        .send()
+                        .await
+                    {
+                        found = output.item.is_some();
+                    }
+                }
+                if !found {
+                    return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Skill not found" })));
+                }
+            }
+        }
+
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let now = chrono::Utc::now().to_rfc3339();
+            // Write user-skill record
+            if let Err(e) = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("USER_SKILL#{}", user_id)))
+                .item("sk", AttributeValue::S(format!("SK#{}", id)))
+                .item("skill_id", AttributeValue::S(id.clone()))
+                .item("name", AttributeValue::S(skill_name))
+                .item("category", AttributeValue::S(skill_category))
+                .item("installed_at", AttributeValue::S(now))
+                .send()
+                .await
+            {
+                error!("Failed to install skill: {:?}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Failed to install skill" })));
+            }
+            info!("User {} installed skill {}", user_id, id);
+            return (StatusCode::OK, Json(serde_json::json!({ "status": "installed", "skill_id": id })));
+        }
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (&state, &id, &headers);
+        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Not available" })))
+    }
+}
+
+/// DELETE /api/v1/skills/:id/install — Uninstall a skill (Bearer auth)
+async fn handle_uninstall_skill(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" }))),
+        };
+
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if let Err(e) = dynamo
+                .delete_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("USER_SKILL#{}", user_id)))
+                .key("sk", AttributeValue::S(format!("SK#{}", id)))
+                .send()
+                .await
+            {
+                error!("Failed to uninstall skill: {:?}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Failed to uninstall skill" })));
+            }
+            info!("User {} uninstalled skill {}", user_id, id);
+            return (StatusCode::OK, Json(serde_json::json!({ "status": "uninstalled", "skill_id": id })));
+        }
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (&state, &id, &headers);
+        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Not available" })))
+    }
+}
+
+/// POST /api/v1/skills/publish — Publish a skill (admin only, future use)
+async fn handle_publish_skill(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let admin = authenticate_admin(&state, &headers).await;
+        if admin.is_none() {
+            return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "Admin access required" })));
+        }
+
+        let skill_id = payload.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let description = payload.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let category = payload.get("category").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let content = payload.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        if skill_id.is_empty() || name.is_empty() || content.is_empty() {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "id, name, and content are required" })));
+        }
+
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let now = chrono::Utc::now().to_rfc3339();
+            if let Err(e) = dynamo
+                .put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("SKILL#{}", skill_id)))
+                .item("sk", AttributeValue::S("INFO".to_string()))
+                .item("skill_id", AttributeValue::S(skill_id.clone()))
+                .item("name", AttributeValue::S(name))
+                .item("description", AttributeValue::S(description))
+                .item("category", AttributeValue::S(category))
+                .item("content", AttributeValue::S(content))
+                .item("author", AttributeValue::S(admin.unwrap().1))
+                .item("installs", AttributeValue::N("0".to_string()))
+                .item("created_at", AttributeValue::S(now))
+                .send()
+                .await
+            {
+                error!("Failed to publish skill: {:?}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Failed to publish" })));
+            }
+            return (StatusCode::OK, Json(serde_json::json!({ "status": "published", "skill_id": skill_id })));
+        }
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (&state, &headers, &payload);
+        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Not available" })))
+    }
+}
+
+/// Load user's installed skills for system prompt injection (max 5 skills, 1500 char cap).
+#[cfg(feature = "dynamodb-backend")]
+async fn load_user_skills_for_prompt(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    user_id: &str,
+) -> String {
+    let output = match dynamo
+        .query()
+        .table_name(config_table)
+        .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+        .expression_attribute_values(":pk", AttributeValue::S(format!("USER_SKILL#{}", user_id)))
+        .expression_attribute_values(":prefix", AttributeValue::S("SK#".to_string()))
+        .limit(5)
+        .send()
+        .await
+    {
+        Ok(o) => o,
+        Err(_) => return String::new(),
+    };
+
+    let mut parts = Vec::new();
+    let mut total_len = 0usize;
+    const MAX_CHARS: usize = 1500;
+
+    for item in output.items() {
+        if total_len >= MAX_CHARS { break; }
+        let skill_id = match item.get("skill_id").and_then(|v| v.as_s().ok()) {
+            Some(id) => id.clone(),
+            None => continue,
+        };
+        // Resolve content: bundled skills from constant, community from stored name
+        let (name, content) = if let Some(bundled) = crate::skills::get_bundled_skill(&skill_id) {
+            (bundled.name.to_string(), bundled.content.to_string())
+        } else {
+            let name = item.get("name").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()).clone();
+            (name, String::new())
+        };
+        if content.is_empty() && name.is_empty() { continue; }
+        let block = if content.is_empty() {
+            format!("- {}", name)
+        } else {
+            let remaining = MAX_CHARS.saturating_sub(total_len);
+            let truncated = if content.len() > remaining {
+                // Find a valid char boundary at or before `remaining`
+                let mut end = remaining;
+                while end > 0 && !content.is_char_boundary(end) { end -= 1; }
+                &content[..end]
+            } else {
+                &content
+            };
+            format!("### {}\n{}", name, truncated)
+        };
+        total_len += block.len();
+        parts.push(block);
+    }
+
+    if parts.is_empty() {
+        return String::new();
+    }
+    format!("\n\n## インストール済みスキル\n{}", parts.join("\n\n"))
 }
 
 /// GET /api/v1/integrations — List available integrations
@@ -10283,41 +10714,54 @@ async fn handle_contact_submit(
     })))
 }
 
-/// Query params for admin page.
-#[derive(Debug, Deserialize)]
-struct AdminQuery {
-    sid: Option<String>,
+/// GET /admin — Admin dashboard HTML shell.
+/// The page itself is served to anyone, but all API calls require Bearer token auth.
+/// admin.html reads authToken from localStorage for API authentication.
+async fn handle_admin() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/admin.html")).into_response()
 }
 
-/// GET /admin — Admin dashboard (requires ?sid=<admin session key>)
-async fn handle_admin(Query(q): Query<AdminQuery>) -> impl IntoResponse {
-    match q.sid {
-        Some(ref sid) if is_admin(sid) => {
-            axum::response::Html(include_str!("../../../../web/admin.html")).into_response()
-        }
-        _ => {
-            (StatusCode::FORBIDDEN, axum::response::Html(
-                "<html><body><h1>403 Forbidden</h1><p>Admin access required.</p></body></html>"
-            )).into_response()
+/// GET /api/v1/admin/check — Check if current user is admin.
+/// Accepts Bearer token or x-session-id (for UI visibility only — admin APIs still require Bearer).
+async fn handle_admin_check(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // 1. Bearer token auth (strongest)
+    if authenticate_admin(&state, &headers).await.is_some() {
+        return Json(serde_json::json!({ "is_admin": true }));
+    }
+
+    // 2. Fallback: resolve x-session-id → check admin (UI hint only)
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let Some(sid) = headers.get("x-session-id").and_then(|v| v.to_str().ok()) {
+            if !sid.is_empty() {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                    let resolved = resolve_session_key(dynamo, table, sid).await;
+                    if is_admin(&resolved) {
+                        return Json(serde_json::json!({ "is_admin": true }));
+                    }
+                    let profile = get_or_create_user(dynamo, table, &resolved).await;
+                    if let Some(ref email) = profile.email {
+                        if is_admin(email) {
+                            return Json(serde_json::json!({ "is_admin": true }));
+                        }
+                    }
+                }
+            }
         }
     }
+
+    Json(serde_json::json!({ "is_admin": false }))
 }
 
-/// GET /api/v1/admin/check?sid=<session_key> — Check if user is admin
-async fn handle_admin_check(Query(q): Query<AdminQuery>) -> impl IntoResponse {
-    let sid = q.sid.unwrap_or_default();
-    Json(serde_json::json!({
-        "is_admin": is_admin(&sid),
-    }))
-}
-
-/// GET /api/v1/admin/stats?sid=<session_key> — Admin stats dashboard data
+/// GET /api/v1/admin/stats — Admin stats dashboard data (Bearer token auth)
 async fn handle_admin_stats(
     State(state): State<Arc<AppState>>,
-    Query(q): Query<AdminQuery>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    let sid = q.sid.unwrap_or_default();
-    if !is_admin(&sid) {
+    if authenticate_admin(&state, &headers).await.is_none() {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({
             "error": "Forbidden",
         }))).into_response();
@@ -10438,14 +10882,13 @@ async fn handle_admin_stats(
     })).into_response()
 }
 
-/// GET /api/v1/admin/users — List all registered users (admin only)
-/// Query params: ?sid=<admin_key>&limit=200
+/// GET /api/v1/admin/users — List all registered users (Bearer token auth)
 async fn handle_admin_users(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let sid = q.get("sid").cloned().unwrap_or_default();
-    if !is_admin(&sid) {
+    if authenticate_admin(&state, &headers).await.is_none() {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
 
@@ -10525,14 +10968,13 @@ async fn handle_admin_users(
 }
 
 /// GET /api/v1/admin/users/{user_id}/conversations — List conversations for a user (admin only)
-/// Query params: ?sid=<admin_key>
+/// Bearer token auth required
 async fn handle_admin_user_conversations(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<String>,
-    Query(q): Query<std::collections::HashMap<String, String>>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    let sid = q.get("sid").cloned().unwrap_or_default();
-    if !is_admin(&sid) {
+    if authenticate_admin(&state, &headers).await.is_none() {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
 
@@ -10588,10 +11030,9 @@ async fn handle_admin_user_conversations(
 async fn handle_admin_session_messages(
     State(state): State<Arc<AppState>>,
     Path(session_key): Path<String>,
-    Query(q): Query<std::collections::HashMap<String, String>>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    let sid = q.get("sid").cloned().unwrap_or_default();
-    if !is_admin(&sid) {
+    if authenticate_admin(&state, &headers).await.is_none() {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
 
@@ -10792,10 +11233,10 @@ async fn handle_support_status(
 /// Query params: ?sid=<admin_key>&status=open
 async fn handle_admin_tickets(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let sid = q.get("sid").cloned().unwrap_or_default();
-    if !is_admin(&sid) {
+    if authenticate_admin(&state, &headers).await.is_none() {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
 
@@ -10868,10 +11309,10 @@ async fn handle_admin_tickets(
 async fn handle_admin_ticket_respond(
     State(state): State<Arc<AppState>>,
     Path(ticket_id): Path<String>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let sid = body["sid"].as_str().unwrap_or("");
-    if !is_admin(sid) {
+    if authenticate_admin(&state, &headers).await.is_none() {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
     let response_text = body["response"].as_str().unwrap_or("").trim();
@@ -10963,14 +11404,13 @@ async fn handle_admin_ticket_respond(
     (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "DynamoDB not configured"}))).into_response()
 }
 
-/// GET /api/v1/admin/logs — Fetch audit logs (admin only)
-/// Query params: ?sid=<admin_key>&date=YYYY-MM-DD&limit=50
+/// GET /api/v1/admin/logs — Fetch audit logs (Bearer token auth)
 async fn handle_admin_logs(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let sid = q.get("sid").cloned().unwrap_or_default();
-    if !is_admin(&sid) {
+    if authenticate_admin(&state, &headers).await.is_none() {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
 
@@ -11018,6 +11458,7 @@ async fn handle_admin_logs(
 
 /// Known API key env var names manageable via admin panel.
 pub(crate) const ADMIN_KEY_NAMES: &[&str] = &[
+    // LLM Providers
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
     "GOOGLE_API_KEY",
@@ -11025,8 +11466,21 @@ pub(crate) const ADMIN_KEY_NAMES: &[&str] = &[
     "OPENROUTER_API_KEY",
     "DEEPSEEK_API_KEY",
     "GROQ_API_KEY",
+    // Media & Voice
     "ELEVENLABS_API_KEY",
     "REPLICATE_API_TOKEN",
+    // Payments & Billing
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    // GPU & Compute
+    "RUNPOD_API_KEY",
+    "MODAL_TOKEN_ID",
+    "MODAL_TOKEN_SECRET",
+    // Cloud & Infrastructure
+    "GITHUB_TOKEN",
+    "TELEGRAM_BOT_TOKEN",
+    "LINE_CHANNEL_ACCESS_TOKEN",
+    "KLING_API_KEY",
 ];
 
 /// Mask an API key for admin display: show first 6 and last 4 chars.
@@ -11037,13 +11491,12 @@ pub(crate) fn mask_api_key_admin(key: &str) -> String {
     format!("{}...{}", &key[..6], &key[key.len() - 4..])
 }
 
-/// GET /api/v1/admin/keys?sid=<admin_key> — List LLM provider API keys (masked)
+/// GET /api/v1/admin/keys — List LLM provider API keys (masked, Bearer token auth)
 async fn handle_admin_keys_get(
     State(state): State<Arc<AppState>>,
-    Query(q): Query<AdminQuery>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    let sid = q.sid.unwrap_or_default();
-    if !is_admin(&sid) {
+    if authenticate_admin(&state, &headers).await.is_none() {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
 
@@ -11115,16 +11568,17 @@ async fn handle_admin_keys_get(
     Json(serde_json::json!({"keys": keys})).into_response()
 }
 
-/// PUT /api/v1/admin/keys?sid=<admin_key> — Update LLM provider API keys
+/// PUT /api/v1/admin/keys — Update LLM provider API keys (Bearer token auth)
 async fn handle_admin_keys_put(
     State(state): State<Arc<AppState>>,
-    Query(q): Query<AdminQuery>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let sid = q.sid.unwrap_or_default();
-    if !is_admin(&sid) {
-        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
-    }
+    let (admin_user_id, admin_email) = match authenticate_admin(&state, &headers).await {
+        Some(admin) => admin,
+        None => return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response(),
+    };
+    let sid = if admin_email.is_empty() { admin_user_id } else { admin_email };
 
     #[cfg(feature = "dynamodb-backend")]
     {
@@ -11173,6 +11627,9 @@ async fn handle_admin_keys_put(
                         }
                     }
 
+                    // Hot-reload LLM providers to pick up new API keys
+                    state.reload_providers();
+
                     // Audit log
                     emit_audit_log(
                         dynamo.clone(),
@@ -11186,7 +11643,7 @@ async fn handle_admin_keys_put(
                     return Json(serde_json::json!({
                         "status": "ok",
                         "saved_keys": saved_keys,
-                        "message": "保存しました。環境変数に即座に反映済みです。",
+                        "message": "保存しました。環境変数とプロバイダーに即座に反映済みです。",
                     })).into_response();
                 }
                 Err(e) => {
@@ -11202,6 +11659,161 @@ async fn handle_admin_keys_put(
     (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
         "error": "DynamoDB not configured",
     }))).into_response()
+}
+
+/// POST /api/v1/admin/keys/test — Test connectivity for a specific API key provider
+async fn handle_admin_keys_test(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    if authenticate_admin(&state, &headers).await.is_none() {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+
+    let provider = body.get("provider").and_then(|v| v.as_str()).unwrap_or("");
+    if provider.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Missing 'provider' field",
+        }))).into_response();
+    }
+
+    // Resolve the API key value (DynamoDB first, then env)
+    let api_key = {
+        let mut key = String::new();
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                if let Ok(output) = dynamo
+                    .get_item()
+                    .table_name(table)
+                    .key("pk", AttributeValue::S("CONFIG#api_keys".to_string()))
+                    .key("sk", AttributeValue::S("LATEST".to_string()))
+                    .send()
+                    .await
+                {
+                    if let Some(item) = output.item() {
+                        if let Some(val) = item.get(provider).and_then(|v| v.as_s().ok()) {
+                            if !val.is_empty() {
+                                key = val.clone();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if key.is_empty() {
+            key = std::env::var(provider).unwrap_or_default();
+        }
+        key
+    };
+
+    if api_key.is_empty() {
+        return Json(serde_json::json!({
+            "status": "error",
+            "latency_ms": 0,
+            "message": "API key not configured",
+        })).into_response();
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap_or_default();
+
+    let start = std::time::Instant::now();
+    let result = match provider {
+        "OPENAI_API_KEY" => {
+            client.get("https://api.openai.com/v1/models")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send().await
+        }
+        "ANTHROPIC_API_KEY" => {
+            client.get("https://api.anthropic.com/v1/models")
+                .header("x-api-key", &api_key)
+                .header("anthropic-version", "2023-06-01")
+                .send().await
+        }
+        "GOOGLE_API_KEY" | "GEMINI_API_KEY" => {
+            client.get(format!("https://generativelanguage.googleapis.com/v1beta/models?key={}", api_key))
+                .send().await
+        }
+        "GROQ_API_KEY" => {
+            client.get("https://api.groq.com/openai/v1/models")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send().await
+        }
+        "DEEPSEEK_API_KEY" => {
+            client.get("https://api.deepseek.com/v1/models")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send().await
+        }
+        "OPENROUTER_API_KEY" => {
+            client.get("https://openrouter.ai/api/v1/models")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send().await
+        }
+        "ELEVENLABS_API_KEY" => {
+            client.get("https://api.elevenlabs.io/v1/user")
+                .header("xi-api-key", &api_key)
+                .send().await
+        }
+        "STRIPE_SECRET_KEY" => {
+            client.get("https://api.stripe.com/v1/balance")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send().await
+        }
+        "REPLICATE_API_TOKEN" => {
+            client.get("https://api.replicate.com/v1/account")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send().await
+        }
+        "RUNPOD_API_KEY" => {
+            client.get("https://api.runpod.io/v2/pods")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send().await
+        }
+        "TELEGRAM_BOT_TOKEN" => {
+            client.get(format!("https://api.telegram.org/bot{}/getMe", api_key))
+                .send().await
+        }
+        _ => {
+            return Json(serde_json::json!({
+                "status": "error",
+                "latency_ms": 0,
+                "message": format!("No test available for {}", provider),
+            })).into_response();
+        }
+    };
+    let latency_ms = start.elapsed().as_millis() as u64;
+
+    match result {
+        Ok(resp) => {
+            let status_code = resp.status().as_u16();
+            if resp.status().is_success() {
+                Json(serde_json::json!({
+                    "status": "ok",
+                    "latency_ms": latency_ms,
+                    "message": format!("Connected (HTTP {})", status_code),
+                })).into_response()
+            } else {
+                let body_text = resp.text().await.unwrap_or_default();
+                let msg = if body_text.len() > 200 { &body_text[..200] } else { &body_text };
+                Json(serde_json::json!({
+                    "status": "error",
+                    "latency_ms": latency_ms,
+                    "message": format!("HTTP {} — {}", status_code, msg),
+                })).into_response()
+            }
+        }
+        Err(e) => {
+            Json(serde_json::json!({
+                "status": "error",
+                "latency_ms": latency_ms,
+                "message": format!("Connection failed: {}", e),
+            })).into_response()
+        }
+    }
 }
 
 /// GET /api/v1/activity — User's own activity log
@@ -15221,7 +15833,7 @@ async fn handle_finalize_conversation(
             let session_key = resolve_session_key(dynamo, table, old_session_id).await;
 
             // Force memory consolidation (fire-and-forget)
-            let provider_for_mem = state.lb_provider.clone().or_else(|| state.provider.clone());
+            let provider_for_mem = state.get_lb_provider().or_else(|| state.provider.clone());
             if let Some(provider) = provider_for_mem {
                 let dynamo_c = dynamo.clone();
                 let table_c = table.clone();
@@ -18486,8 +19098,8 @@ async fn handle_openai_chat_completions(
     }
 
     // Get provider
-    let provider = match state.lb_provider.as_ref().or(state.provider.as_ref()) {
-        Some(p) => p.clone(),
+    let provider = match state.get_provider() {
+        Some(p) => p,
         None => {
             return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
                 "error": {"message": "AI service unavailable", "type": "server_error", "code": "service_unavailable"}
@@ -20211,17 +20823,16 @@ async fn handle_bug_report(
 /// Query parameters for admin feedback endpoint.
 #[derive(Debug, Deserialize)]
 struct AdminFeedbackQuery {
-    sid: Option<String>,
     days: Option<u32>,
 }
 
-/// GET /api/v1/admin/feedback?sid=<key>&days=<n> — Admin feedback dashboard
+/// GET /api/v1/admin/feedback — Admin feedback dashboard (Bearer token auth)
 async fn handle_admin_feedback(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Query(q): Query<AdminFeedbackQuery>,
 ) -> impl IntoResponse {
-    let sid = q.sid.unwrap_or_default();
-    if !is_admin(&sid) {
+    if authenticate_admin(&state, &headers).await.is_none() {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({
             "error": "Forbidden"
         }))).into_response();
@@ -20509,7 +21120,7 @@ mod agent_routing_tests {
         // Verify new fields are populated
         let coder = &AGENTS[3];
         assert_eq!(coder.id, "coder");
-        assert_eq!(coder.preferred_model, Some("anthropic/claude-sonnet-4-5"));
+        assert_eq!(coder.preferred_model, Some("anthropic/claude-sonnet-4-6"));
         assert_eq!(coder.estimated_seconds, 15);
         assert_eq!(coder.max_chars_pc, 800);
         assert_eq!(coder.max_chars_mobile, 400);
@@ -20800,8 +21411,8 @@ mod agent_routing_tests {
             tools_used: Some(vec!["web_search".to_string(), "calculator".to_string()]),
             credits_used: Some(10),
             credits_remaining: Some(90),
-            model_used: Some("anthropic/claude-sonnet-4-5".to_string()),
-            models_consulted: Some(vec!["anthropic/claude-sonnet-4-5".to_string(), "gpt-4o".to_string()]),
+            model_used: Some("anthropic/claude-sonnet-4-6".to_string()),
+            models_consulted: Some(vec!["anthropic/claude-sonnet-4-6".to_string(), "gpt-4o".to_string()]),
             action: Some("upgrade".to_string()),
             input_tokens: Some(500),
             output_tokens: Some(150),
@@ -20812,7 +21423,7 @@ mod agent_routing_tests {
         assert!(json.contains("web_search"));
         assert!(json.contains("calculator"));
         assert!(json.contains("upgrade"));
-        assert!(json.contains("anthropic/claude-sonnet-4-5"));
+        assert!(json.contains("anthropic/claude-sonnet-4-6"));
     }
 
     // -----------------------------------------------------------------------

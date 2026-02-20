@@ -210,6 +210,18 @@ pub fn credit_rate(model: &str) -> CreditRate {
             input_per_1k: 3,
             output_per_1k: 9,
         }
+    } else if model_lower.contains("minimax") || model_lower.contains("m2.5") {
+        // MiniMax M2.5: mid-range pricing, high cost-performance
+        CreditRate {
+            input_per_1k: 2,
+            output_per_1k: 6,
+        }
+    } else if model_lower.contains("glm") || model_lower.contains("z-ai") {
+        // GLM 5: similar to Kimi pricing
+        CreditRate {
+            input_per_1k: 3,
+            output_per_1k: 9,
+        }
     } else if model_lower.contains("qwen") {
         // Qwen3 via Groq
         CreditRate {

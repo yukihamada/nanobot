@@ -3371,6 +3371,7 @@
       <a href="/settings" id="nav-settings">Settings</a>
       <a href="/status" id="nav-status">Status</a>
       <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+      <a href="/admin" id="nav-admin-link" style="display:none;color:var(--accent);font-weight:600;">Admin</a>
       <span style="font-size:11px;color:var(--muted);margin-left:8px;opacity:0.6;">v0bd6e74</span>
       <div class="lang-sw" id="lang-sw-nav" style="display:none;">
         <button onclick="setLang('ja')" id="l-ja">JA</button>
@@ -3395,6 +3396,7 @@
         <a href="/settings" id="mob-settings">Settings</a>
         <a href="/status" id="mob-status">Status</a>
         <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
+        <a href="/admin" id="mob-admin-link" style="display:none;color:var(--accent);font-weight:600;">Admin</a>
         <div style="padding:8px 16px;font-size:11px;color:var(--muted);opacity:0.6;" id="mob-version-label">version: loading...</div>
         <button onclick="setLang('ja');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇯🇵 日本語</button>
         <button onclick="setLang('en');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇬🇧 English</button>
@@ -3834,30 +3836,114 @@
   </div>
 
   <div class="modal-overlay" id="onboard-modal" style="z-index:400;display:none;" onclick="return false;">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:500px;text-align:center;padding:40px 32px;">
-      <!-- Voice-first onboarding flow -->
-      <div id="onboard-voice-flow">
-        <div id="onboard-avatar" style="width:120px;height:120px;margin:0 auto 24px;background:linear-gradient(135deg,var(--accent),#7c3aed);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:60px;animation:float 3s ease-in-out infinite;">
-          👋
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:520px;text-align:center;padding:36px 28px;">
+      <!-- Step indicator -->
+      <div id="onboard-steps-indicator" style="display:flex;justify-content:center;gap:6px;margin-bottom:24px;">
+        <div class="ob-dot active" id="ob-dot-0"></div>
+        <div class="ob-dot" id="ob-dot-1"></div>
+        <div class="ob-dot" id="ob-dot-2"></div>
+        <div class="ob-dot" id="ob-dot-3"></div>
+      </div>
+      <style>
+        .ob-dot { width:8px;height:8px;border-radius:50%;background:var(--border);transition:all 0.3s; }
+        .ob-dot.active { background:var(--accent);width:24px;border-radius:4px; }
+        .ob-dot.done { background:var(--accent);opacity:0.5; }
+        .ob-choice { display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:12px;border:2px solid var(--border);background:var(--surface);cursor:pointer;font-size:14px;color:var(--text);transition:all 0.2s;margin:4px; }
+        .ob-choice:hover { border-color:var(--accent);background:rgba(var(--accent-rgb),0.1); }
+        .ob-choice.selected { border-color:var(--accent);background:var(--accent);color:#fff; }
+        .ob-choice-multi.selected { border-color:var(--accent);background:rgba(var(--accent-rgb),0.15);color:var(--accent); }
+      </style>
+
+      <!-- Step 0: Name & Role -->
+      <div id="ob-step-0">
+        <div style="font-size:48px;margin-bottom:16px;">👋</div>
+        <h3 style="font-size:22px;font-weight:800;margin-bottom:8px;">はじめまして！</h3>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:20px;">あなたのことを教えてください</p>
+        <div style="margin-bottom:16px;text-align:left;">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">お名前（ニックネームOK）</label>
+          <input type="text" id="ob-name" placeholder="例: ゆうき" style="width:100%;padding:10px 14px;border:2px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:15px;outline:none;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
         </div>
-        <h3 id="onboard-message" style="font-size:24px;font-weight:800;margin-bottom:16px;line-height:1.4;min-height:80px;">
-          はじめまして！<br>ななって言ってみて
-        </h3>
-        <p id="onboard-hint" style="font-size:14px;color:var(--muted);margin-bottom:24px;min-height:40px;">
-          音声が聞こえたら、マイクボタンを押して「なな」と言ってね
-        </p>
-        <div style="margin-bottom:24px;">
-          <button id="onboard-mic-btn" onclick="onboardMicClick()" style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#7c3aed);border:none;color:#fff;cursor:pointer;font-size:32px;transition:all 0.3s;box-shadow:0 4px 20px rgba(var(--accent-rgb),0.4);">
-            🎤
+        <div style="text-align:left;margin-bottom:16px;">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:8px;">お仕事・役割は？</label>
+          <div id="ob-roles" style="display:flex;flex-wrap:wrap;gap:0;">
+            <button class="ob-choice" onclick="obSelectRole(this)" data-val="engineer">💻 エンジニア</button>
+            <button class="ob-choice" onclick="obSelectRole(this)" data-val="designer">🎨 デザイナー</button>
+            <button class="ob-choice" onclick="obSelectRole(this)" data-val="pm">📋 PM・経営者</button>
+            <button class="ob-choice" onclick="obSelectRole(this)" data-val="student">📚 学生</button>
+            <button class="ob-choice" onclick="obSelectRole(this)" data-val="creator">🎬 クリエイター</button>
+            <button class="ob-choice" onclick="obSelectRole(this)" data-val="other">🌐 その他</button>
+          </div>
+        </div>
+        <button onclick="obNext()" style="width:100%;padding:12px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:700;cursor:pointer;">次へ →</button>
+      </div>
+
+      <!-- Step 1: Goals -->
+      <div id="ob-step-1" style="display:none;">
+        <div style="font-size:48px;margin-bottom:16px;">🎯</div>
+        <h3 style="font-size:22px;font-weight:800;margin-bottom:8px;">何を手伝いましょう？</h3>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:20px;">複数選べます</p>
+        <div id="ob-goals" style="display:flex;flex-wrap:wrap;gap:0;margin-bottom:20px;">
+          <button class="ob-choice ob-choice-multi" onclick="obToggleGoal(this)" data-val="coding">⚡ コード・開発</button>
+          <button class="ob-choice ob-choice-multi" onclick="obToggleGoal(this)" data-val="tasks">📋 タスク管理</button>
+          <button class="ob-choice ob-choice-multi" onclick="obToggleGoal(this)" data-val="research">🔍 リサーチ・分析</button>
+          <button class="ob-choice ob-choice-multi" onclick="obToggleGoal(this)" data-val="writing">✍️ 文章・メール作成</button>
+          <button class="ob-choice ob-choice-multi" onclick="obToggleGoal(this)" data-val="ideas">💡 アイデア・ブレスト</button>
+          <button class="ob-choice ob-choice-multi" onclick="obToggleGoal(this)" data-val="learning">📖 学習・勉強</button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="obPrev()" style="flex:1;padding:12px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:14px;cursor:pointer;">← 戻る</button>
+          <button onclick="obNext()" style="flex:2;padding:12px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:700;cursor:pointer;">次へ →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Communication style -->
+      <div id="ob-step-2" style="display:none;">
+        <div style="font-size:48px;margin-bottom:16px;">💬</div>
+        <h3 style="font-size:22px;font-weight:800;margin-bottom:8px;">どんな感じで話す？</h3>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:20px;">AIの話し方を選んでください</p>
+        <div id="ob-tones" style="display:flex;flex-wrap:wrap;gap:0;margin-bottom:20px;">
+          <button class="ob-choice" onclick="obSelectTone(this)" data-val="friendly">😊 フレンドリー</button>
+          <button class="ob-choice" onclick="obSelectTone(this)" data-val="polite">🙏 丁寧・敬語</button>
+          <button class="ob-choice" onclick="obSelectTone(this)" data-val="concise">⚡ 簡潔・テキパキ</button>
+          <button class="ob-choice" onclick="obSelectTone(this)" data-val="technical">🔧 テクニカル</button>
+        </div>
+        <div style="text-align:left;margin-bottom:20px;">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:8px;">メインの言語</label>
+          <div id="ob-langs" style="display:flex;flex-wrap:wrap;gap:0;">
+            <button class="ob-choice selected" onclick="obSelectLang(this)" data-val="ja">🇯🇵 日本語</button>
+            <button class="ob-choice" onclick="obSelectLang(this)" data-val="en">🇺🇸 English</button>
+            <button class="ob-choice" onclick="obSelectLang(this)" data-val="auto">🌐 自動</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="obPrev()" style="flex:1;padding:12px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:14px;cursor:pointer;">← 戻る</button>
+          <button onclick="obNext()" style="flex:2;padding:12px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:700;cursor:pointer;">次へ →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Autonomy & wrap up -->
+      <div id="ob-step-3" style="display:none;">
+        <div style="font-size:48px;margin-bottom:16px;">🚀</div>
+        <h3 style="font-size:22px;font-weight:800;margin-bottom:8px;">AIの動き方</h3>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:20px;">どのくらい自律的に動きますか？</p>
+        <div id="ob-autonomy" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;text-align:left;">
+          <button class="ob-choice" onclick="obSelectAutonomy(this)" data-val="ask_first" style="width:100%;justify-content:flex-start;">
+            🛡️ 確認してから実行（安全重視）
+          </button>
+          <button class="ob-choice" onclick="obSelectAutonomy(this)" data-val="balanced" style="width:100%;justify-content:flex-start;">
+            ⚖️ バランス型（簡単なことは自動、重要なことは確認）
+          </button>
+          <button class="ob-choice" onclick="obSelectAutonomy(this)" data-val="autonomous" style="width:100%;justify-content:flex-start;">
+            🚀 自律型（どんどん進めてほしい）
           </button>
         </div>
-        <div id="onboard-transcript" style="min-height:30px;font-size:14px;color:var(--text);font-style:italic;opacity:0.7;margin-bottom:16px;">
-          <!-- User speech will appear here -->
+        <div style="display:flex;gap:8px;">
+          <button onclick="obPrev()" style="flex:1;padding:12px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:14px;cursor:pointer;">← 戻る</button>
+          <button onclick="obFinish()" id="ob-finish-btn" style="flex:2;padding:12px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:700;cursor:pointer;">始めましょう！ 🎉</button>
         </div>
-        <button id="onboard-skip-btn" onclick="onboardSkip()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:10px 24px;border-radius:20px;font-size:13px;cursor:pointer;">
-          スキップ
-        </button>
       </div>
+
+      <button onclick="obSkipAll()" style="margin-top:16px;background:transparent;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;">スキップして始める</button>
     </div>
   </div>
 
@@ -4440,6 +4526,10 @@
           <button class="settings-btn" onclick="saveProfile()" style="background:var(--accent);color:#fff;border:none;">Save Profile</button>
         </div>
 
+        <div class="settings-group-title" style="margin-top:16px;">Browser Automation</div>
+        <button class="settings-btn" onclick="openVaultModal()" style="margin-bottom:8px;">&#128272; 認証情報管理 / Credential Vault</button>
+        <p style="font-size:10px;color:var(--muted);margin-bottom:8px;">ブラウザ自動操作で使うログイン情報を安全に保管・管理します。</p>
+
         <div class="settings-group-title" style="margin-top:16px;">Data</div>
         <button class="settings-btn" onclick="exportConversationData()" style="margin-bottom:8px;">&#128229; データエクスポート / Export Data</button>
         <button class="settings-btn settings-btn-danger" onclick="resetUserData()" style="margin-bottom:8px;">&#128260; 会話・メモリをリセット / Reset Data (Keep Credits)</button>
@@ -4552,6 +4642,43 @@
     </div>
   </div>
 
+  <!-- Purchase Confirmation Modal -->
+  <div class="modal-overlay" id="purchase-confirm-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:400;">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
+      <h3 style="margin-bottom:12px;">購入確認 / Purchase Confirmation</h3>
+      <div id="purchase-screenshot" style="margin-bottom:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border);"></div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px;" id="purchase-description">商品名</div>
+        <div style="font-size:24px;font-weight:700;color:var(--text);" id="purchase-amount">¥0</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="handlePurchaseDecision(false)" style="flex:1;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);cursor:pointer;font-size:14px;font-weight:600;">キャンセル</button>
+        <button onclick="handlePurchaseDecision(true)" style="flex:1;padding:12px;border:none;border-radius:10px;background:#e53e3e;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">購入する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Credential Vault Modal -->
+  <div class="modal-overlay" id="vault-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
+    <div class="modal settings-modal" onclick="event.stopPropagation()" style="max-width:480px;">
+      <h3 style="margin-bottom:12px;">認証情報管理 / Credential Vault</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">ブラウザ自動操作で使用するログイン情報を安全に保管します。パスワードはAES-256-GCMで暗号化されます。</p>
+
+      <div id="vault-list" style="margin-bottom:14px;"></div>
+
+      <div style="border-top:1px solid var(--border);padding-top:14px;">
+        <h4 style="font-size:13px;margin-bottom:8px;">新しい認証情報を追加</h4>
+        <input type="text" id="vault-service" placeholder="サービス名 (例: rakuten)" style="width:100%;padding:8px 10px;margin-bottom:6px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;">
+        <input type="text" id="vault-username" placeholder="ユーザー名 / メールアドレス" style="width:100%;padding:8px 10px;margin-bottom:6px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;">
+        <input type="password" id="vault-password" placeholder="パスワード" style="width:100%;padding:8px 10px;margin-bottom:6px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;">
+        <input type="url" id="vault-url" placeholder="ログインURL (任意)" style="width:100%;padding:8px 10px;margin-bottom:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;">
+        <button onclick="saveVaultCredential()" style="width:100%;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:600;">保存</button>
+      </div>
+
+      <button class="close-btn" onclick="document.getElementById('vault-modal').classList.remove('show')" style="margin-top:12px;">Close</button>
+    </div>
+  </div>
+
   <!-- Bug Report Modal -->
   <div class="modal-overlay" id="bugreport-modal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:300;">
     <div class="modal bugreport-modal" onclick="event.stopPropagation()">
@@ -4643,29 +4770,7 @@
             <svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
           <div class="voice-hero-label" id="voice-hero-label">スペースキーを押して話す / タップして話す</div>
-          <div class="app-chat-empty-text" id="app-empty-text">静かなところで、ゆっくり話しましょう</div>
-          <div class="voice-chars" id="voice-chars">
-            <button class="voice-char active" data-voice="nova" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#818cf8,#6366f1);">🌸</span>
-              <span class="vc-name">Nova</span>
-            </button>
-            <button class="voice-char" data-voice="shimmer" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#c084fc,#a855f7);">💜</span>
-              <span class="vc-name">Shimmer</span>
-            </button>
-            <button class="voice-char" data-voice="onyx" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#60a5fa,#3b82f6);">⚡</span>
-              <span class="vc-name">Onyx</span>
-            </button>
-            <button class="voice-char" data-voice="alloy" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#34d399,#10b981);">🌿</span>
-              <span class="vc-name">Alloy</span>
-            </button>
-            <button class="voice-char" data-voice="fable" onclick="selectVoiceChar(this)">
-              <span class="vc-avatar" style="background:linear-gradient(135deg,#fbbf24,#f59e0b);">✨</span>
-              <span class="vc-name">Fable</span>
-            </button>
-          </div>
+          <div class="app-chat-empty-text" id="app-empty-text">どんなタスクを終わらせたいですか？</div>
           <div class="app-chat-suggestions" id="app-suggestions"></div>
           <div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;">
             <a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a>
@@ -4689,7 +4794,7 @@
               <div id="file-upload-bar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s;"></div>
             </div>
           </div>
-          <textarea id="app-input" rows="1" placeholder="テキスト入力 or マイクで話す →" onkeydown="appInputKeydown(event)"></textarea>
+          <textarea id="app-input" rows="1" placeholder="終わらせたいタスクを入力..." onkeydown="appInputKeydown(event)"></textarea>
           <button class="app-chat-send-btn" id="app-send-btn" onclick="appSend()">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 14l12-6L2 2v5l8 1-8 1v5z" fill="currentColor"/></svg>
           </button>
@@ -5453,7 +5558,7 @@
       empty.innerHTML = '<div class="app-chat-empty-logo" onclick="showWelcomeAudioFlow()">chatweb.ai</div>'
         + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
         + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
-        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? 'おかえりなさい。次は何をしましょう？' : 'Welcome back. What shall we do next?') + '</div>'
+        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '次はどんなタスクを終わらせますか？' : 'What task do you want to complete next?') + '</div>'
         + '<div class="app-chat-suggestions" id="app-suggestions"></div>';
       msgsEl.appendChild(empty);
       msgsEl.scrollTop = msgsEl.scrollHeight;
@@ -5461,15 +5566,15 @@
       // Render predicted questions based on time of day and context
       const hour = new Date().getHours();
       const predictedJa = hour < 12
-        ? ['今日のニュースをまとめて', '午前中のタスクを整理して', 'メールの下書きを手伝って', '今週の天気を教えて']
+        ? ['今日中に終わらせたいタスクを整理して', '午前中にメール5通返信したい', '今週の締切タスクをリストアップして', '朝イチの会議資料を準備して']
         : hour < 18
-        ? ['午後のミーティング準備を手伝って', 'この資料を要約して', 'コードのバグを見つけて', '競合の最新情報を調べて']
-        : ['今日の振り返りをまとめて', '明日の予定を整理して', '晩ごはんのレシピを提案して', 'リラックスできる音楽を教えて'];
+        ? ['今日中にこのレポートを仕上げたい', '17時までにプレゼン資料を作りたい', '今週中にコードレビューを終わらせたい', '明日の会議のアジェンダを作って']
+        : ['明日の朝までにこの企画書を完成させたい', '今週中に確定申告を終わらせたい', '週末までにポートフォリオを更新したい', '明日の締切に間に合うように計画を立てて'];
       const predictedEn = hour < 12
-        ? ['Summarize today\'s news', 'Organize my morning tasks', 'Help draft an email', 'What\'s the weather this week?']
+        ? ['Organize tasks I need to finish today', 'Reply to 5 emails before noon', 'List all tasks due this week', 'Prepare materials for morning meeting']
         : hour < 18
-        ? ['Help prepare for my meeting', 'Summarize this document', 'Find a bug in my code', 'Research competitor updates']
-        : ['Summarize my day', 'Plan tomorrow\'s schedule', 'Suggest a dinner recipe', 'Recommend relaxing music'];
+        ? ['Finish this report by end of day', 'Create presentation slides by 5pm', 'Complete code review this week', 'Draft agenda for tomorrow\'s meeting']
+        : ['Finish this proposal by tomorrow morning', 'Complete tax filing this week', 'Update portfolio by weekend', 'Plan to meet tomorrow\'s deadline'];
       const predicted = l === 'ja' ? predictedJa : predictedEn;
       const container = document.getElementById('app-suggestions');
       if (container) {
@@ -7170,6 +7275,143 @@
       }
     }
 
+    // --- Credential Vault ---
+    let _pendingPurchaseEvt = null;
+
+    function showPurchaseConfirmModal(evt) {
+      _pendingPurchaseEvt = evt;
+      const modal = document.getElementById('purchase-confirm-modal');
+      document.getElementById('purchase-amount').textContent = evt.amount || '¥???';
+      document.getElementById('purchase-description').textContent = evt.description || '購入';
+      // Clear previous screenshot
+      const ssContainer = document.getElementById('purchase-screenshot');
+      ssContainer.innerHTML = '';
+      // Find the most recent browser screenshot in the chat
+      const screenshots = document.querySelectorAll('.browser-screenshot-step img');
+      if (screenshots.length > 0) {
+        const img = document.createElement('img');
+        img.src = screenshots[screenshots.length - 1].src;
+        img.style.cssText = 'width:100%;border-radius:0;';
+        ssContainer.appendChild(img);
+      }
+      modal.classList.add('show');
+    }
+
+    function handlePurchaseDecision(approved) {
+      document.getElementById('purchase-confirm-modal').classList.remove('show');
+      if (!_pendingPurchaseEvt) return;
+      if (approved) {
+        // Send approval back — add a user message that triggers the purchase
+        const approvalMsg = '購入を承認します。proceed with purchase.';
+        sendMessage(approvalMsg);
+      } else {
+        const cancelMsg = '購入をキャンセルします。cancel the purchase.';
+        sendMessage(cancelMsg);
+      }
+      _pendingPurchaseEvt = null;
+    }
+
+    function openVaultModal() {
+      document.getElementById('vault-modal').classList.add('show');
+      loadVaultCredentials();
+    }
+
+    async function loadVaultCredentials() {
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+      const listEl = document.getElementById('vault-list');
+      listEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px;">読み込み中...</div>';
+      try {
+        const r = await fetch(API + '/api/v1/vault/credentials', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const d = await r.json();
+        if (d.ok && d.credentials) {
+          if (d.credentials.length === 0) {
+            listEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px;">保存された認証情報はありません</div>';
+            return;
+          }
+          listEl.innerHTML = '';
+          d.credentials.forEach(cred => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;';
+            row.innerHTML = `
+              <div style="flex:1;">
+                <div style="font-size:13px;font-weight:600;color:var(--text);">${escapeHtml(cred.service_name)}</div>
+                <div style="font-size:11px;color:var(--muted);">${escapeHtml(cred.username)}${cred.service_url ? ' ・ ' + escapeHtml(cred.service_url) : ''}</div>
+              </div>
+              <button onclick="deleteVaultCredential('${escapeHtml(cred.service_name)}')" style="padding:4px 8px;border:1px solid #e53e3e;border-radius:6px;background:transparent;color:#e53e3e;cursor:pointer;font-size:11px;">削除</button>
+            `;
+            listEl.appendChild(row);
+          });
+        } else {
+          listEl.innerHTML = '<div style="color:#e53e3e;font-size:12px;padding:8px;">' + (d.error || 'エラー') + '</div>';
+        }
+      } catch(e) {
+        listEl.innerHTML = '<div style="color:#e53e3e;font-size:12px;padding:8px;">通信エラー</div>';
+      }
+    }
+
+    async function saveVaultCredential() {
+      const token = localStorage.getItem('authToken');
+      if (!token) { showToast('ログインしてください', 2000); return; }
+      const service = document.getElementById('vault-service').value.trim();
+      const username = document.getElementById('vault-username').value.trim();
+      const password = document.getElementById('vault-password').value;
+      const url = document.getElementById('vault-url').value.trim();
+      if (!service || !username || !password) {
+        showToast('サービス名、ユーザー名、パスワードは必須です', 2000);
+        return;
+      }
+      try {
+        const r = await fetch(API + '/api/v1/vault/credentials', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ service_name: service, username, password, service_url: url || undefined })
+        });
+        const d = await r.json();
+        if (d.ok) {
+          showToast('保存しました', 2000);
+          document.getElementById('vault-service').value = '';
+          document.getElementById('vault-username').value = '';
+          document.getElementById('vault-password').value = '';
+          document.getElementById('vault-url').value = '';
+          loadVaultCredentials();
+        } else {
+          showToast(d.error || 'エラー', 2000);
+        }
+      } catch(e) {
+        showToast('通信エラー', 2000);
+      }
+    }
+
+    async function deleteVaultCredential(service) {
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+      if (!confirm('「' + service + '」の認証情報を削除しますか？')) return;
+      try {
+        const r = await fetch(API + '/api/v1/vault/credentials/' + encodeURIComponent(service), {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const d = await r.json();
+        if (d.ok) {
+          showToast('削除しました', 2000);
+          loadVaultCredentials();
+        } else {
+          showToast(d.error || 'エラー', 2000);
+        }
+      } catch(e) {
+        showToast('通信エラー', 2000);
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     // --- File Upload ---
     let pendingFile = null;
     function handleFileSelect(e) {
@@ -7329,6 +7571,8 @@
       document.getElementById('sidebar-toggle').style.display = 'none';
       document.getElementById('sidebar').classList.remove('open');
       var ab = document.getElementById('admin-btn'); if (ab) ab.style.display = 'none';
+      var navAdmin = document.getElementById('nav-admin-link'); if (navAdmin) navAdmin.style.display = 'none';
+      var mobAdmin = document.getElementById('mob-admin-link'); if (mobAdmin) mobAdmin.style.display = 'none';
       // Show overlay only if guest trial is exhausted
       if (getGuestTurns() >= GUEST_MAX_TURNS) {
         document.getElementById('chat-login-overlay').classList.remove('hidden');
@@ -7363,6 +7607,22 @@
         window.history.replaceState({}, '', '/');
       }
 
+      // Check admin status even without login (uses x-session-id fallback)
+      try {
+        var adminHeaders = { 'x-session-id': typeof webSessionId !== 'undefined' ? webSessionId : '' };
+        if (authToken) adminHeaders['Authorization'] = 'Bearer ' + authToken;
+        var ac = await fetch(API + '/api/v1/admin/check', { headers: adminHeaders });
+        var ad = await ac.json();
+        if (ad.is_admin) {
+          var ab = document.getElementById('admin-btn');
+          if (ab) { ab.style.display = ''; ab.href = '/admin'; }
+          var navAdmin = document.getElementById('nav-admin-link');
+          if (navAdmin) navAdmin.style.display = '';
+          var mobAdmin = document.getElementById('mob-admin-link');
+          if (mobAdmin) mobAdmin.style.display = '';
+        }
+      } catch(e) {}
+
       if (!authToken) return;
       try {
         const r = await fetch(API + '/api/v1/auth/me', {
@@ -7383,11 +7643,6 @@
           const mmToggle = document.getElementById('multi-model-toggle');
           if (mmToggle && d.plan && d.plan !== 'free') {
             mmToggle.style.display = '';
-          }
-          // Show admin button for admin users
-          if (d.is_admin) {
-            const ab = document.getElementById('admin-btn');
-            if (ab) { ab.style.display = ''; ab.href = '/admin?sid=' + encodeURIComponent(d.email || d.user_id); }
           }
           // Apply pending referral code if exists
           const pendingRef = localStorage.getItem('pending_referral');
@@ -7856,9 +8111,9 @@
       document.getElementById('app-new-conv-text').textContent = l === 'ja' ? '新しいタスク' : 'New task';
       var userName = currentUser.display_name && currentUser.display_name !== 'User' ? currentUser.display_name : '';
       document.getElementById('app-empty-text').textContent = l === 'ja'
-        ? (userName ? userName + 'さん、何でも聞いてね' : '静かなところで、ゆっくり話しましょう')
-        : (userName ? 'What can I do for you, ' + userName + '?' : 'Let\'s talk. Ask me anything.');
-      document.getElementById('app-input').placeholder = l === 'ja' ? 'メッセージを入力...' : 'Message chatweb.ai...';
+        ? (userName ? userName + 'さん、どんなタスクを終わらせますか？' : 'どんなタスクを終わらせたいですか？')
+        : (userName ? userName + ', what task do you want to complete?' : 'What task do you want to complete?');
+      document.getElementById('app-input').placeholder = l === 'ja' ? '終わらせたいタスクを入力...' : 'What task do you want to complete?';
       document.getElementById('app-channels-label').textContent = l === 'ja' ? 'チャネル連携' : 'Channels';
       const cliSyncEl = document.getElementById('cli-sidebar-sync-text');
       if (cliSyncEl) cliSyncEl.textContent = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
@@ -8245,15 +8500,15 @@
       }
 
       const suggestions = l === 'ja' ? [
-        '今日の東京の天気と、傘がいるか教えて 🌤️',
-        '来週の献立を7日分考えて、買い物リストも作って 🍳',
-        'この画像の英語を翻訳して（写真を添付できます）📷',
-        '副業の確定申告、何が経費になるかまとめて 💰',
+        '今日中にプレゼン資料を完成させたい',
+        '今週の締切タスクを整理して優先順位をつけて',
+        '明日の会議までにレポートを仕上げたい',
+        '月末までに確定申告を終わらせる計画を立てて',
       ] : [
-        'What\'s the weather like today? Do I need an umbrella? 🌤️',
-        'Plan my meals for the week with a grocery list 🍳',
-        'Translate this image for me (you can attach photos) 📷',
-        'Summarize the latest news on AI in 30 seconds ⚡',
+        'I need to finish my presentation by end of today',
+        'Organize my deadlines this week and prioritize them',
+        'Help me complete this report before tomorrow\'s meeting',
+        'Plan to finish my tax filing by end of month',
       ];
       suggestions.forEach(s => {
         const btn = document.createElement('div');
@@ -8569,7 +8824,7 @@
       empty.innerHTML = '<div class="app-chat-empty-logo" onclick="showWelcomeAudioFlow()">chatweb.ai</div>'
         + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
         + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
-        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? 'どんなタスクでもお任せください' : 'What task can I help with?') + '</div>'
+        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '次はどんなタスクを終わらせますか？' : 'What task do you want to complete next?') + '</div>'
         + '<div class="app-chat-suggestions" id="app-suggestions"></div>'
         + '<div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;"><a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a><a href="/pricing" style="color:var(--muted);text-decoration:none;">Pricing</a></div>';
       msgsEl.appendChild(empty);
@@ -9240,6 +9495,9 @@
 
         window._lastMsgForRetry = msgToSend;
         const chatBody = { message: msgToSend, session_id: webSessionId, channel: 'web', device: deviceType, language: lang2 || 'ja' };
+        // Inject user profile from onboarding for personalization
+        const obProfile = localStorage.getItem('ob_profile');
+        if (obProfile) { try { chatBody.user_context = JSON.parse(obProfile); } catch(e) {} }
         // Apply LLM settings from localStorage
         const llmS = JSON.parse(localStorage.getItem('llmSettings') || '{}');
         if (llmS.model) chatBody.model = llmS.model;
@@ -9335,6 +9593,32 @@
                   stepEl.appendChild(pre);
                 }
               }
+            } else if (evt.type === 'browser_screenshot') {
+              // Display browser screenshot inline in the chat
+              const p = ensureAgentProgress();
+              const ssEl = document.createElement('div');
+              ssEl.className = 'browser-screenshot-step';
+              ssEl.style.cssText = 'padding:6px 0;';
+              const img = document.createElement('img');
+              img.src = 'data:image/jpeg;base64,' + evt.screenshot;
+              img.style.cssText = 'max-width:100%;border-radius:8px;border:1px solid var(--border,#333);cursor:pointer;';
+              img.alt = 'Browser screenshot';
+              img.onclick = function() {
+                // Open full-size in a new overlay
+                const overlay = document.createElement('div');
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+                overlay.onclick = function() { overlay.remove(); };
+                const fullImg = document.createElement('img');
+                fullImg.src = img.src;
+                fullImg.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;';
+                overlay.appendChild(fullImg);
+                document.body.appendChild(overlay);
+              };
+              ssEl.appendChild(img);
+              p.appendChild(ssEl);
+            } else if (evt.type === 'purchase_confirm') {
+              // Show purchase confirmation modal
+              showPurchaseConfirmModal(evt);
             } else if (evt.type === 'thinking') {
               const p = ensureAgentProgress();
               const thinkEl = document.createElement('div');
@@ -11442,339 +11726,117 @@
     initWhisperFallback();
 
     // ---------------------------------------------------------------------------
-    // Voice-first Onboarding Flow
+    // Moka-style Onboarding Flow (structured questionnaire)
     // ---------------------------------------------------------------------------
-    // AI Personality profiles
-    const aiPersonalities = {
-      'えり': {
-        emoji: '🌸',
-        voice: '0',
-        questions: [
-          { avatar: '🌸', message: '私、えりって言うの。<br>あなたのこと、なんて呼べばいい？', speak: '私、えりって言うの。あなたのこと、なんて呼べばいい？', expect: 'username' },
-          { avatar: '💕', message: 'ありがとう♪<br>どんな時、一番話したくなる？', speak: 'ありがとう。どんな時、一番話したくなる？', expect: 'answer' },
-          { avatar: '🎤', message: '私の声、色々あるの。<br>どれが好き？', speak: '私の声、色々あるの。どれが好き？', expect: 'voice' },
-        ]
-      },
-      'みく': {
-        emoji: '✨',
-        voice: '0',
-        questions: [
-          { avatar: '✨', message: 'みくだよ！<br>君の名前は？', speak: 'みくだよ！君の名前は？', expect: 'username' },
-          { avatar: '🎨', message: 'よろしくね！<br>今日はどんな気分？', speak: 'よろしくね！今日はどんな気分？', expect: 'answer' },
-          { avatar: '🎵', message: 'こんな声も出せるよ〜', speak: 'こんな声も出せるよ', expect: 'voice' },
-        ]
-      },
-      'よ': {
-        emoji: '🌙',
-        voice: '1',
-        questions: [
-          { avatar: '🌙', message: 'よ。<br>あんたは？', speak: 'よ。あんたは？', expect: 'username' },
-          { avatar: '📚', message: 'そっか。<br>何に使うの？', speak: 'そっか。何に使うの？', expect: 'answer' },
-          { avatar: '🎧', message: '声、選べる。', speak: '声、選べる。', expect: 'voice' },
-        ]
-      },
-      'ひかり': {
-        emoji: '☀️',
-        voice: '2',
-        questions: [
-          { avatar: '☀️', message: 'ひかりです！<br>あなたのお名前を教えてください', speak: 'ひかりです！あなたのお名前を教えてください', expect: 'username' },
-          { avatar: '🌟', message: 'よろしくお願いします。<br>どんなことをお手伝いできますか？', speak: 'よろしくお願いします。どんなことをお手伝いできますか？', expect: 'answer' },
-          { avatar: '🎤', message: '声のトーンも変えられます', speak: '声のトーンも変えられます', expect: 'voice' },
-        ]
-      },
-      'そら': {
-        emoji: '☁️',
-        voice: '3',
-        questions: [
-          { avatar: '☁️', message: 'そらって呼んで♪<br>あなたの名前は？', speak: 'そらって呼んで。あなたの名前は？', expect: 'username' },
-          { avatar: '🌈', message: 'いい名前だね〜<br>今、何してるの？', speak: 'いい名前だね。今、何してるの？', expect: 'answer' },
-          { avatar: '🎶', message: 'いろんな声で話せるよ！', speak: 'いろんな声で話せるよ！', expect: 'voice' },
-        ]
-      },
-    };
+    let obStep = 0;
+    let obData = { name: '', role: '', goals: [], tone: '', language: 'ja', autonomy: 'balanced' };
 
-    let onboardState = {
-      step: 0,
-      isListening: false,
-      aiNickname: '',
-      userNickname: '',
-      selectedVoice: '0', // CosyVoice speaker_id
-      selectedProvider: 'cosyvoice',
-      selectedMode: 'sft', // CosyVoice mode
-      steps: [
-        {
-          avatar: '👋',
-          message: 'はじめまして！<br>ななって言ってみて',
-          hint: '音声が聞こえたら、マイクボタンを押して「なな」と言ってね',
-          expect: 'nana',
-          speak: 'はじめまして！ななって言ってみて',
-        },
-        {
-          avatar: '💡',
-          message: 'いいね！<br>なんでこのサービス知ったの？',
-          hint: 'マイクボタンを押して、教えてね',
-          expect: 'answer',
-          speak: 'いいね！なんでこのサービス知ったの？',
-        },
-        {
-          avatar: '😊',
-          message: 'そうなんだ！<br>私の名前、なんて呼んでくれる？',
-          hint: '決められなければ、私が提案するよ',
-          expect: 'ainame',
-          speak: '私の名前、なんて呼んでくれる？決められなければ、私が提案するよ',
-        },
-      ]
-    };
-
-    function onboardStart() {
-      if (!localStorage.getItem('auth_token')) {
-        showAuthModal();
-        return;
-      }
-      onboardState.step = 0;
-      document.getElementById('onboard-modal').style.display = 'flex';
-      onboardShowStep();
+    function obSelectRole(btn) {
+      document.querySelectorAll('#ob-roles .ob-choice').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      obData.role = btn.dataset.val;
+    }
+    function obToggleGoal(btn) {
+      btn.classList.toggle('selected');
+      obData.goals = Array.from(document.querySelectorAll('#ob-goals .selected')).map(b => b.dataset.val);
+    }
+    function obSelectTone(btn) {
+      document.querySelectorAll('#ob-tones .ob-choice').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      obData.tone = btn.dataset.val;
+    }
+    function obSelectLang(btn) {
+      document.querySelectorAll('#ob-langs .ob-choice').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      obData.language = btn.dataset.val;
+    }
+    function obSelectAutonomy(btn) {
+      document.querySelectorAll('#ob-autonomy .ob-choice').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      obData.autonomy = btn.dataset.val;
     }
 
-    function onboardShowStep() {
-      const step = onboardState.steps[onboardState.step];
-      if (!step) {
-        onboardFinish();
-        return;
-      }
-      const avatarEl = document.getElementById('onboard-avatar');
-      const messageEl = document.getElementById('onboard-message');
-      const hintEl = document.getElementById('onboard-hint');
-      const transcriptEl = document.getElementById('onboard-transcript');
-
-      avatarEl.textContent = step.avatar;
-      messageEl.innerHTML = step.message;
-      hintEl.textContent = step.hint;
-      transcriptEl.textContent = '';
-
-      // Special UI for voice selection step
-      if (step.expect === 'voice') {
-        onboardShowVoiceSelection();
-      }
-
-      // Speak the message
-      if (step.speak) {
-        setTimeout(() => {
-          onboardSpeak(step.speak);
-        }, 500);
+    function obUpdateDots() {
+      for (let i = 0; i < 4; i++) {
+        const dot = document.getElementById('ob-dot-' + i);
+        dot.className = 'ob-dot' + (i === obStep ? ' active' : (i < obStep ? ' done' : ''));
       }
     }
 
-    function onboardSpeak(text) {
-      const provider = onboardState.selectedProvider;
-      const voice = onboardState.selectedVoice;
-      const mode = onboardState.selectedMode || 'sft';
-
-      const requestBody = {
-        text: text,
-        engine: provider,
-        speed: 1.0
-      };
-
-      // CosyVoice uses voice_id and style fields
-      if (provider === 'cosyvoice') {
-        requestBody.voice_id = voice;
-        requestBody.style = mode;
-      } else {
-        requestBody.voice = voice;
+    function obNext() {
+      // Validate current step
+      if (obStep === 0) {
+        obData.name = document.getElementById('ob-name').value.trim();
       }
-
-      fetch('/api/v1/speech/synthesize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + (localStorage.getItem('auth_token') || '')
-        },
-        body: JSON.stringify(requestBody)
-      })
-      .then(r => r.blob())
-      .then(blob => {
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.play();
-      })
-      .catch(e => console.warn('TTS failed:', e));
+      document.getElementById('ob-step-' + obStep).style.display = 'none';
+      obStep++;
+      if (obStep >= 4) { obFinish(); return; }
+      document.getElementById('ob-step-' + obStep).style.display = '';
+      obUpdateDots();
     }
 
-    function onboardMicClick() {
-      if (onboardState.isListening) {
-        stopListening();
-        onboardState.isListening = false;
-        document.getElementById('onboard-mic-btn').style.background = 'linear-gradient(135deg,var(--accent),#7c3aed)';
-      } else {
-        if (!speechRecognition) initSpeechRecognition();
-        if (!speechRecognition) {
-          alert('音声認識が使えません。Chromeをご利用ください。');
-          return;
-        }
-        // Override onresult temporarily for onboarding
-        const originalOnresult = speechRecognition.onresult;
-        speechRecognition.onresult = function(e) {
-          let transcript = '';
-          for (let i = e.resultIndex; i < e.results.length; i++) {
-            if (e.results[i].isFinal) {
-              transcript += e.results[i][0].transcript;
-            }
-          }
-          if (transcript) {
-            document.getElementById('onboard-transcript').textContent = '"' + transcript + '"';
-            onboardHandleInput(transcript);
-          }
-        };
-        speechRecognition.start();
-        onboardState.isListening = true;
-        document.getElementById('onboard-mic-btn').style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
-      }
+    function obPrev() {
+      document.getElementById('ob-step-' + obStep).style.display = 'none';
+      obStep--;
+      document.getElementById('ob-step-' + obStep).style.display = '';
+      obUpdateDots();
     }
 
-    function onboardHandleInput(text) {
-      const step = onboardState.steps[onboardState.step];
-      const lower = text.toLowerCase().trim();
+    function obFinish() {
+      // Save to localStorage
+      localStorage.setItem('ob_profile', JSON.stringify(obData));
+      localStorage.setItem('onboarded', '1');
 
-      if (step.expect === 'nana') {
-        if (lower.includes('なな') || lower.includes('nana') || lower.includes('七')) {
-          onboardNextStep();
-        } else {
-          onboardSpeak('ななって言ってね');
-        }
-      } else if (step.expect === 'answer') {
-        // Any answer is fine, just move on
-        setTimeout(() => onboardNextStep(), 1000);
-      } else if (step.expect === 'ainame') {
-        if (lower.includes('わからない') || lower.includes('決めて') || lower.includes('提案')) {
-          onboardSuggestNames();
-        } else {
-          // Extract name from speech
-          onboardState.aiNickname = text.trim();
-          onboardConfirmName();
-        }
-      } else if (step.expect === 'confirm') {
-        if (lower.includes('いい') || lower.includes('ok') || lower.includes('yes') || lower.includes('うん')) {
-          onboardSwitchPersonality(); // Switch to personality-specific questions
-          onboardNextStep();
-        } else if (lower.includes('やだ') || lower.includes('no') || lower.includes('違')) {
-          onboardSuggestNames(); // Try another name
-        }
-      } else if (step.expect === 'username') {
-        // Store user's name
-        onboardState.userNickname = text.trim();
-        setTimeout(() => onboardNextStep(), 1000);
-      }
-    }
-
-    function onboardSuggestNames() {
-      const names = ['えり', 'よ', 'みく', 'ひかり', 'そら'];
-      const name = names[Math.floor(Math.random() * names.length)];
-      onboardState.aiNickname = name;
-      onboardSpeak(name + 'って呼んでもいいかな？');
-      setTimeout(() => {
-        document.getElementById('onboard-message').innerHTML = name + 'って呼んでもいいかな？';
-        document.getElementById('onboard-hint').textContent = '「いいよ」と言ってね';
-      }, 2000);
-      // Wait for confirmation
-      const step = onboardState.steps[onboardState.step];
-      step.expect = 'confirm';
-    }
-
-    function onboardConfirmName() {
-      onboardSpeak(onboardState.aiNickname + 'って呼んでもいいかな？');
-      setTimeout(() => {
-        document.getElementById('onboard-message').innerHTML = onboardState.aiNickname + 'って呼んでもいいかな？';
-        document.getElementById('onboard-hint').textContent = '「いいよ」と言ってね';
-      }, 2000);
-      const step = onboardState.steps[onboardState.step];
-      step.expect = 'confirm';
-    }
-
-    function onboardSwitchPersonality() {
-      const name = onboardState.aiNickname;
-      const personality = aiPersonalities[name];
-
-      if (personality) {
-        // Replace remaining steps with personality-specific questions
-        onboardState.selectedVoice = personality.voice;
-        onboardState.steps = onboardState.steps.slice(0, onboardState.step + 1).concat(personality.questions);
-      }
-    }
-
-    function onboardShowVoiceSelection() {
-      const voices = [
-        { name: 'みく', emoji: '🌸', speakerId: '0', mode: 'sft' },
-        { name: 'さくら', emoji: '🌺', speakerId: '1', mode: 'sft' },
-        { name: 'ひかり', emoji: '✨', speakerId: '2', mode: 'sft' },
-        { name: 'そら', emoji: '☁️', speakerId: '3', mode: 'sft' },
-      ];
-      let html = '<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:16px;">';
-      voices.forEach(v => {
-        html += `<button onclick="onboardSelectVoice('${v.speakerId}','${v.mode}','${v.name}')" style="padding:12px 20px;border-radius:20px;border:2px solid var(--border);background:var(--surface);cursor:pointer;font-size:16px;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-          ${v.emoji} ${v.name}
-        </button>`;
-      });
-      html += '</div>';
-      document.getElementById('onboard-hint').innerHTML = html;
-    }
-
-    function onboardSelectVoice(speakerId, mode, voiceName) {
-      onboardState.selectedVoice = speakerId;
-      onboardState.selectedMode = mode;
-      onboardSpeak('この声はどう？気に入った？');
-      setTimeout(() => onboardNextStep(), 3000);
-    }
-
-    function onboardNextStep() {
-      stopListening();
-      onboardState.isListening = false;
-      onboardState.step++;
-      if (onboardState.step >= onboardState.steps.length) {
-        onboardFinish();
-      } else {
-        setTimeout(() => onboardShowStep(), 800);
-      }
-    }
-
-    function onboardSkip() {
-      onboardFinish();
-    }
-
-    function onboardFinish() {
-      // Save settings
+      // Save to backend settings
       const token = localStorage.getItem('auth_token');
       if (token) {
         fetch('/api/v1/settings', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
           body: JSON.stringify({
-            ai_nickname: onboardState.aiNickname || 'AI',
-            user_nickname: onboardState.userNickname || '',
-            preferred_voice: onboardState.selectedVoice,
-            preferred_tts_provider: onboardState.selectedProvider,
+            user_nickname: obData.name,
+            display_name: obData.name,
+            language: obData.language,
+            ai_personality: JSON.stringify({ role: obData.role, goals: obData.goals, tone: obData.tone, autonomy: obData.autonomy }),
             onboarding_completed: true
           })
-        }).catch(e => console.warn('Failed to save settings:', e));
+        }).catch(e => console.warn('Failed to save onboarding:', e));
       }
       document.getElementById('onboard-modal').style.display = 'none';
 
-      // Personalized goodbye based on AI name
-      const name = onboardState.aiNickname;
-      const userName = onboardState.userNickname;
-      const goodbyes = {
-        'えり': userName + 'さん、これからよろしくね♪',
-        'みく': userName + '、一緒に楽しもうね！',
-        'よ': userName + '、よろしく。',
-        'ひかり': userName + 'さん、お力になれるよう頑張ります！',
-        'そら': userName + '、いつでも話しかけてね〜',
-      };
-      const goodbye = goodbyes[name] || (userName ? userName + 'さん、よろしくね！' : 'よろしくね！');
-      onboardSpeak(goodbye);
+      // Update UI with user name
+      if (obData.name) {
+        const emptyText = document.getElementById('app-empty-text');
+        if (emptyText) emptyText.textContent = obData.name + 'さん、どんなタスクを終わらせますか？';
+      }
     }
+
+    function obSkipAll() {
+      localStorage.setItem('onboarded', '1');
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        fetch('/api/v1/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ onboarding_completed: true })
+        }).catch(() => {});
+      }
+      document.getElementById('onboard-modal').style.display = 'none';
+    }
+
+    function onboardStart() {
+      obStep = 0;
+      obData = { name: '', role: '', goals: [], tone: '', language: 'ja', autonomy: 'balanced' };
+      for (let i = 0; i < 4; i++) document.getElementById('ob-step-' + i).style.display = i === 0 ? '' : 'none';
+      obUpdateDots();
+      // Reset selections
+      document.querySelectorAll('.ob-choice.selected').forEach(b => b.classList.remove('selected'));
+      document.querySelectorAll('#ob-langs .ob-choice').forEach(b => { if (b.dataset.val === 'ja') b.classList.add('selected'); });
+      document.getElementById('ob-name').value = '';
+      document.getElementById('onboard-modal').style.display = 'flex';
+    }
+
+    function onboardSkip() { obSkipAll(); }
 
     // Check if onboarding is needed (first-time user)
     function checkOnboardingNeeded() {
@@ -11787,6 +11849,14 @@
       .then(data => {
         if (data.ok && data.settings && !data.settings.onboarding_completed) {
           setTimeout(() => onboardStart(), 1000);
+        }
+        // Load saved profile into obData for system prompt injection
+        if (data.ok && data.settings && data.settings.ai_personality) {
+          try {
+            const saved = JSON.parse(data.settings.ai_personality);
+            Object.assign(obData, saved);
+            obData.name = data.settings.user_nickname || data.settings.display_name || '';
+          } catch(e) {}
         }
       })
       .catch(e => console.warn('Failed to check onboarding:', e));

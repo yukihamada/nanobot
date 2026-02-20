@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Skill Marketplace - chatweb.ai</title>
-  <meta name="description" content="Discover and install skills for nanobot - extend your AI assistant with specialized capabilities">
+  <meta name="description" content="AIスキルを発見してインストール。あなたのAIアシスタントを専門スキルで強化しよう。">
   <meta property="og:title" content="Skill Marketplace - chatweb.ai">
-  <meta property="og:description" content="Discover and install skills for nanobot">
+  <meta property="og:description" content="AIスキルを発見してインストール">
   <meta property="og:image" content="https://chatweb.ai/og.svg">
   <meta property="og:url" content="https://chatweb.ai/skill">
   <meta property="og:type" content="website">
@@ -21,7 +21,9 @@
       --accent: #6366f1;
       --accent-hover: #818cf8;
       --green: #22c55e;
+      --green-dim: rgba(34,197,94,0.15);
       --orange: #fb923c;
+      --red: #ef4444;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -30,6 +32,9 @@
       color: var(--text);
       min-height: 100vh;
     }
+    a { color: inherit; text-decoration: none; }
+
+    /* Nav */
     nav {
       padding: 16px 24px;
       display: flex;
@@ -37,298 +42,186 @@
       align-items: center;
       border-bottom: 1px solid var(--border);
     }
-    .logo {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      text-decoration: none;
-      color: var(--text);
-    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
     .logo span { color: var(--accent); }
     .nav-links { display: flex; align-items: center; gap: 16px; }
-    .nav-links a {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: 500;
-    }
+    .nav-links a { color: var(--muted); font-size: 14px; font-weight: 500; }
     .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--accent); }
 
-    .main {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 40px 24px 80px;
-    }
-    .hero {
-      text-align: center;
-      margin-bottom: 48px;
-    }
+    /* Main */
+    .main { max-width: 1200px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* Hero */
+    .hero { text-align: center; margin-bottom: 32px; }
     .hero h1 {
-      font-size: 42px;
-      font-weight: 800;
-      letter-spacing: -1.5px;
-      margin-bottom: 12px;
+      font-size: 42px; font-weight: 800; letter-spacing: -1.5px; margin-bottom: 12px;
       background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     }
-    .hero p {
-      color: var(--muted);
-      font-size: 16px;
-      max-width: 640px;
-      margin: 0 auto 32px;
-    }
+    .hero p { color: var(--muted); font-size: 16px; max-width: 640px; margin: 0 auto; }
 
+    /* Search */
     .search-bar {
-      max-width: 600px;
-      margin: 0 auto 48px;
-      position: relative;
+      max-width: 600px; margin: 0 auto 32px; position: relative;
     }
     .search-bar input {
-      width: 100%;
-      padding: 16px 48px 16px 20px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      color: var(--text);
-      font-size: 15px;
-      outline: none;
-      transition: all 0.2s;
+      width: 100%; padding: 14px 48px 14px 20px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      color: var(--text); font-size: 15px; outline: none; transition: all 0.2s;
     }
-    .search-bar input:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    .search-bar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+    .search-bar::after { content: "\1F50D"; position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 18px; opacity: 0.5; }
+
+    /* Category Tabs */
+    .tabs {
+      display: flex; gap: 8px; margin-bottom: 32px;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scrollbar-width: none; padding-bottom: 4px;
     }
-    .search-bar::after {
-      content: "🔍";
-      position: absolute;
-      right: 18px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 18px;
-      opacity: 0.5;
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      padding: 8px 18px; border-radius: 20px;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); font-size: 14px; font-weight: 500;
+      cursor: pointer; white-space: nowrap; transition: all 0.2s;
+      user-select: none;
+    }
+    .tab:hover { border-color: var(--accent); color: var(--text); }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .tab .count {
+      display: inline-block; margin-left: 6px; padding: 1px 7px;
+      border-radius: 10px; font-size: 11px; font-weight: 600;
+      background: rgba(255,255,255,0.15);
     }
 
-    .stats {
-      display: flex;
-      justify-content: center;
-      gap: 32px;
-      margin-bottom: 48px;
-    }
-    .stat {
-      text-align: center;
-    }
-    .stat-num {
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--accent);
-      display: block;
-    }
-    .stat-label {
-      font-size: 13px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
+    /* Stats */
+    .stats { display: flex; justify-content: center; gap: 32px; margin-bottom: 32px; }
+    .stat { text-align: center; }
+    .stat-num { font-size: 28px; font-weight: 700; color: var(--accent); display: block; }
+    .stat-label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
+    /* Grid */
     .skills-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-      gap: 24px;
-      margin-bottom: 48px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px; margin-bottom: 48px;
     }
+
+    /* Card */
     .skill-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 24px;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      cursor: pointer;
-      position: relative;
-      overflow: hidden;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 24px; transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+      cursor: pointer; position: relative; overflow: hidden;
+      display: flex; flex-direction: column;
     }
     .skill-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 24px rgba(0,0,0,0.3);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.3);
       border-color: var(--accent);
     }
     .skill-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
       background: linear-gradient(90deg, var(--accent), var(--orange));
-      opacity: 0;
-      transition: opacity 0.3s;
+      opacity: 0; transition: opacity 0.3s;
     }
-    .skill-card:hover::before {
-      opacity: 1;
-    }
-    .skill-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-    .skill-name {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 4px;
-    }
-    .skill-badge {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .skill-badge.builtin {
-      background: rgba(99, 102, 241, 0.15);
-      color: var(--accent);
-    }
-    .skill-badge.workspace {
-      background: rgba(34, 197, 94, 0.15);
-      color: var(--green);
-    }
-    .skill-description {
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.6;
-      margin-bottom: 16px;
-    }
-    .skill-meta {
-      display: flex;
-      gap: 12px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .skill-meta span {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
+    .skill-card:hover::before { opacity: 1; }
+    .skill-card.installed { border-color: rgba(34,197,94,0.3); }
+    .skill-card.installed::before { background: var(--green); opacity: 1; }
 
-    .loading {
-      text-align: center;
-      padding: 60px 20px;
-      color: var(--muted);
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+    .skill-name { font-size: 17px; font-weight: 700; }
+    .category-label {
+      display: inline-block; padding: 3px 10px; border-radius: 6px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+      background: rgba(99,102,241,0.15); color: var(--accent);
+      white-space: nowrap;
     }
+    .skill-description { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 14px; flex: 1; }
+    .card-footer { display: flex; align-items: center; justify-content: space-between; }
+    .install-count { font-size: 12px; color: var(--muted); }
+    .install-btn {
+      padding: 6px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      border: none; cursor: pointer; transition: all 0.2s;
+    }
+    .install-btn.install { background: var(--accent); color: #fff; }
+    .install-btn.install:hover { background: var(--accent-hover); }
+    .install-btn.installed { background: var(--green-dim); color: var(--green); }
+    .install-btn.installed:hover { background: rgba(239,68,68,0.15); color: var(--red); }
+    .install-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Loading / Empty */
+    .loading { text-align: center; padding: 60px 20px; color: var(--muted); }
     .spinner {
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto 16px;
+      border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; width: 40px; height: 40px;
+      animation: spin 0.8s linear infinite; margin: 0 auto 16px;
     }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty-state { text-align: center; padding: 80px 20px; color: var(--muted); display: none; }
+    .empty-state h3 { font-size: 20px; color: var(--text); margin-bottom: 8px; }
 
-    .empty-state {
-      text-align: center;
-      padding: 80px 20px;
-      color: var(--muted);
-    }
-    .empty-state-icon {
-      font-size: 64px;
-      margin-bottom: 16px;
-      opacity: 0.3;
-    }
-    .empty-state h3 {
-      font-size: 20px;
-      color: var(--text);
-      margin-bottom: 8px;
-    }
-
+    /* Modal */
     .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(8px);
-      z-index: 1000;
-      padding: 20px;
-      overflow-y: auto;
+      display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+      z-index: 1000; padding: 20px; overflow-y: auto;
     }
-    .modal.active {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+    .modal.active { display: flex; align-items: center; justify-content: center; }
     .modal-content {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 32px;
-      max-width: 700px;
-      width: 100%;
-      max-height: 90vh;
-      overflow-y: auto;
-      position: relative;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+      padding: 32px; max-width: 700px; width: 100%; max-height: 90vh;
+      overflow-y: auto; position: relative;
     }
     .modal-close {
-      position: absolute;
-      top: 24px;
-      right: 24px;
-      background: none;
-      border: none;
-      color: var(--muted);
-      font-size: 28px;
-      cursor: pointer;
-      width: 32px;
-      height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 8px;
-      transition: all 0.2s;
+      position: absolute; top: 20px; right: 20px; background: none; border: none;
+      color: var(--muted); font-size: 28px; cursor: pointer;
+      width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+      border-radius: 8px; transition: all 0.2s;
     }
-    .modal-close:hover {
-      background: var(--border);
-      color: var(--text);
+    .modal-close:hover { background: var(--border); color: var(--text); }
+    .modal-header { margin-bottom: 20px; }
+    .modal-header h2 { font-size: 26px; margin-bottom: 8px; }
+    .modal-header .modal-cat { display: inline-block; margin-bottom: 8px; }
+    .modal-header p { color: var(--muted); font-size: 15px; line-height: 1.5; }
+    .modal-actions { margin: 20px 0; }
+    .modal-install-btn {
+      padding: 12px 32px; border-radius: 12px; font-size: 15px; font-weight: 600;
+      border: none; cursor: pointer; transition: all 0.2s; width: 100%;
     }
-    .modal-header h2 {
-      font-size: 28px;
-      margin-bottom: 8px;
-    }
+    .modal-install-btn.install { background: var(--accent); color: #fff; }
+    .modal-install-btn.install:hover { background: var(--accent-hover); }
+    .modal-install-btn.installed { background: var(--green-dim); color: var(--green); }
+    .modal-install-btn.installed:hover { background: rgba(239,68,68,0.15); color: var(--red); }
     .modal-content pre {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-      overflow-x: auto;
-      font-size: 13px;
-      line-height: 1.6;
-      color: var(--text);
-      margin: 16px 0;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; overflow-x: auto; font-size: 13px; line-height: 1.6; color: var(--text);
+      margin: 16px 0; white-space: pre-wrap;
     }
-    .modal-content code {
-      font-family: 'Monaco', 'Menlo', monospace;
+    .modal-content code { font-family: 'Monaco','Menlo',monospace; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 12px 24px; border-radius: 12px; font-size: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 2000;
+      opacity: 0; transition: opacity 0.3s; pointer-events: none;
     }
+    .toast.show { opacity: 1; }
+
+    /* Auth notice */
+    .auth-notice {
+      text-align: center; padding: 12px; margin-bottom: 24px;
+      background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 12px; font-size: 14px; color: var(--muted);
+    }
+    .auth-notice a { color: var(--accent); font-weight: 600; }
 
     @media (max-width: 768px) {
-      .hero h1 { font-size: 32px; }
-      .skills-grid {
-        grid-template-columns: 1fr;
-      }
-      .stats {
-        flex-direction: column;
-        gap: 16px;
-      }
-      .modal-content {
-        padding: 24px;
-      }
+      .hero h1 { font-size: 30px; }
+      .skills-grid { grid-template-columns: 1fr; }
+      .stats { gap: 16px; }
+      .modal-content { padding: 20px; }
     }
   </style>
 </head>
@@ -339,19 +232,25 @@
       <a href="/">Home</a>
       <a href="/pricing">Pricing</a>
       <a href="/docs">Docs</a>
-      <a href="/skill" style="color: var(--accent);">Skills</a>
+      <a href="/skill" class="active">Skills</a>
     </div>
   </nav>
 
   <div class="main">
     <div class="hero">
       <h1>Skill Marketplace</h1>
-      <p>Extend nanobot with specialized skills. From code execution to API integrations, discover tools that enhance your AI assistant.</p>
+      <p>AIスキルをインストールして、あなたのアシスタントをカスタマイズ。仕事効率化からプログラミングまで、専門スキルが揃っています。</p>
     </div>
 
     <div class="search-bar">
-      <input type="text" id="search-input" placeholder="Search skills..." autocomplete="off">
+      <input type="text" id="search-input" placeholder="スキルを検索..." autocomplete="off">
     </div>
+
+    <div id="auth-notice" class="auth-notice" style="display:none;">
+      スキルをインストールするには<a href="/">ログイン</a>が必要です
+    </div>
+
+    <div class="tabs" id="tabs"></div>
 
     <div class="stats" id="stats">
       <div class="stat">
@@ -359,12 +258,8 @@
         <span class="stat-label">Total Skills</span>
       </div>
       <div class="stat">
-        <span class="stat-num" id="builtin-skills">-</span>
-        <span class="stat-label">Built-in</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num" id="workspace-skills">-</span>
-        <span class="stat-label">Workspace</span>
+        <span class="stat-num" id="installed-count">0</span>
+        <span class="stat-label">Installed</span>
       </div>
     </div>
 
@@ -375,150 +270,299 @@
 
     <div class="skills-grid" id="skills-grid"></div>
 
-    <div class="empty-state" id="empty-state" style="display: none;">
-      <div class="empty-state-icon">📦</div>
-      <h3>No skills found</h3>
-      <p>Try a different search term</p>
+    <div class="empty-state" id="empty-state">
+      <h3>スキルが見つかりません</h3>
+      <p>別のキーワードで検索してみてください</p>
     </div>
   </div>
 
   <div class="modal" id="skill-modal">
     <div class="modal-content">
-      <button class="modal-close" onclick="closeModal()">×</button>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
       <div class="modal-header">
+        <span class="category-label modal-cat" id="modal-category"></span>
         <h2 id="modal-title"></h2>
-        <p id="modal-description" style="color: var(--muted); margin-top: 8px;"></p>
+        <p id="modal-description"></p>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-install-btn" id="modal-install-btn" onclick="toggleInstallFromModal()"></button>
       </div>
       <div id="modal-body"></div>
     </div>
   </div>
 
+  <div class="toast" id="toast"></div>
+
   <script>
+    // State
     let allSkills = [];
+    let installedIds = new Set();
+    let activeCategory = null; // null = all
+    let currentModalSkillId = null;
+    const sessionKey = localStorage.getItem('session_key') || '';
+    const isLoggedIn = !!sessionKey;
 
-    async function loadSkills() {
-      try {
-        const response = await fetch('/api/v1/skills');
-        const data = await response.json();
-        allSkills = data.skills || [];
-
-        // Update stats
-        document.getElementById('total-skills').textContent = data.count || 0;
-        const builtin = allSkills.filter(s => s.source === 'builtin').length;
-        const workspace = allSkills.filter(s => s.source === 'workspace').length;
-        document.getElementById('builtin-skills').textContent = builtin;
-        document.getElementById('workspace-skills').textContent = workspace;
-
-        // Hide loading
-        document.getElementById('loading').style.display = 'none';
-
-        // Display skills
-        displaySkills(allSkills);
-      } catch (error) {
-        console.error('Failed to load skills:', error);
-        document.getElementById('loading').innerHTML = '<p style="color: var(--muted);">Failed to load skills</p>';
-      }
+    // Auth headers
+    function authHeaders() {
+      return sessionKey ? { 'Authorization': `Bearer ${sessionKey}` } : {};
     }
 
-    function displaySkills(skills) {
-      const grid = document.getElementById('skills-grid');
-      const emptyState = document.getElementById('empty-state');
+    // Toast
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
 
-      if (skills.length === 0) {
+    // Escape HTML
+    function esc(text) {
+      const d = document.createElement('div');
+      d.textContent = text || '';
+      return d.innerHTML;
+    }
+
+    // Load everything
+    async function init() {
+      if (!isLoggedIn) {
+        document.getElementById('auth-notice').style.display = 'block';
+      }
+
+      // Load skills + installed in parallel
+      const [skillsData, installedData, categoriesData] = await Promise.all([
+        fetch('/api/v1/skills').then(r => r.json()).catch(() => ({ skills: [] })),
+        isLoggedIn
+          ? fetch('/api/v1/skills/installed', { headers: authHeaders() }).then(r => r.json()).catch(() => ({ skills: [] }))
+          : Promise.resolve({ skills: [] }),
+        fetch('/api/v1/skills/categories').then(r => r.json()).catch(() => ({ categories: [] })),
+      ]);
+
+      allSkills = skillsData.skills || [];
+      installedIds = new Set((installedData.skills || []).map(s => s.id));
+
+      // Stats
+      document.getElementById('total-skills').textContent = allSkills.length;
+      document.getElementById('installed-count').textContent = installedIds.size;
+
+      // Build tabs
+      buildTabs(categoriesData.categories || []);
+
+      // Hide loading
+      document.getElementById('loading').style.display = 'none';
+
+      // Display
+      displaySkills();
+    }
+
+    function buildTabs(categories) {
+      const container = document.getElementById('tabs');
+      const totalCount = allSkills.length;
+
+      let html = `<div class="tab active" data-cat="" onclick="selectCategory(this, '')">すべて<span class="count">${totalCount}</span></div>`;
+
+      for (const cat of categories) {
+        html += `<div class="tab" data-cat="${esc(cat.name)}" onclick="selectCategory(this, '${esc(cat.name)}')">${esc(cat.name)}<span class="count">${cat.count}</span></div>`;
+      }
+
+      // My Skills tab
+      html += `<div class="tab" data-cat="__installed" onclick="selectCategory(this, '__installed')">マイスキル<span class="count">${installedIds.size}</span></div>`;
+
+      container.innerHTML = html;
+    }
+
+    function selectCategory(el, cat) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      activeCategory = cat || null;
+      displaySkills();
+    }
+
+    function displaySkills() {
+      const grid = document.getElementById('skills-grid');
+      const empty = document.getElementById('empty-state');
+      const query = document.getElementById('search-input').value.trim().toLowerCase();
+
+      let filtered = allSkills;
+
+      // Category filter
+      if (activeCategory === '__installed') {
+        filtered = filtered.filter(s => installedIds.has(s.id));
+      } else if (activeCategory) {
+        filtered = filtered.filter(s => s.category === activeCategory);
+      }
+
+      // Search filter
+      if (query) {
+        filtered = filtered.filter(s =>
+          (s.name || '').toLowerCase().includes(query) ||
+          (s.description || '').toLowerCase().includes(query) ||
+          (s.id || '').toLowerCase().includes(query) ||
+          (s.category || '').toLowerCase().includes(query)
+        );
+      }
+
+      if (filtered.length === 0) {
         grid.innerHTML = '';
-        emptyState.style.display = 'block';
+        empty.style.display = 'block';
         return;
       }
+      empty.style.display = 'none';
 
-      emptyState.style.display = 'none';
-      grid.innerHTML = skills.map(skill => `
-        <div class="skill-card" onclick="openSkillModal('${skill.name}')">
-          <div class="skill-header">
-            <div class="skill-name">${escapeHtml(skill.name)}</div>
-            <span class="skill-badge ${skill.source}">${skill.source}</span>
+      grid.innerHTML = filtered.map(skill => {
+        const isInstalled = installedIds.has(skill.id);
+        const btnClass = isInstalled ? 'installed' : 'install';
+        const btnText = isInstalled ? 'インストール済み' : 'インストール';
+        const cardClass = isInstalled ? 'skill-card installed' : 'skill-card';
+
+        return `
+          <div class="${cardClass}" onclick="openModal('${esc(skill.id)}')">
+            <div class="card-top">
+              <div class="skill-name">${esc(skill.name)}</div>
+              <span class="category-label">${esc(skill.category)}</span>
+            </div>
+            <div class="skill-description">${esc(skill.description)}</div>
+            <div class="card-footer">
+              <span class="install-count">${skill.installs || 0} installs</span>
+              ${isLoggedIn ? `<button class="install-btn ${btnClass}" onclick="event.stopPropagation(); toggleInstall('${esc(skill.id)}', this)">${btnText}</button>` : ''}
+            </div>
           </div>
-          <div class="skill-description">${escapeHtml(skill.description)}</div>
-          <div class="skill-meta">
-            <span>📁 ${escapeHtml(skill.path.split('/').pop())}</span>
-          </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
-    async function openSkillModal(name) {
+    // Install / Uninstall
+    async function toggleInstall(skillId, btnEl) {
+      if (!isLoggedIn) { showToast('ログインが必要です'); return; }
+      const isInstalled = installedIds.has(skillId);
+
+      btnEl.disabled = true;
+      try {
+        const method = isInstalled ? 'DELETE' : 'POST';
+        const resp = await fetch(`/api/v1/skills/${encodeURIComponent(skillId)}/install`, {
+          method,
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        });
+        const data = await resp.json();
+
+        if (resp.ok) {
+          if (isInstalled) {
+            installedIds.delete(skillId);
+            showToast('アンインストールしました');
+          } else {
+            installedIds.add(skillId);
+            showToast('インストールしました！次のチャットから有効になります');
+          }
+          document.getElementById('installed-count').textContent = installedIds.size;
+          // Update my-skills tab count
+          const myTab = document.querySelector('.tab[data-cat="__installed"] .count');
+          if (myTab) myTab.textContent = installedIds.size;
+          displaySkills();
+          updateModalButton();
+        } else {
+          showToast(data.error || 'エラーが発生しました');
+        }
+      } catch (e) {
+        showToast('通信エラーが発生しました');
+      }
+      btnEl.disabled = false;
+    }
+
+    // Modal
+    async function openModal(skillId) {
+      currentModalSkillId = skillId;
       const modal = document.getElementById('skill-modal');
       const title = document.getElementById('modal-title');
-      const description = document.getElementById('modal-description');
+      const desc = document.getElementById('modal-description');
+      const cat = document.getElementById('modal-category');
       const body = document.getElementById('modal-body');
 
-      title.textContent = name;
-      description.textContent = 'Loading...';
+      // Find in loaded data first
+      const local = allSkills.find(s => s.id === skillId);
+      title.textContent = local ? local.name : skillId;
+      desc.textContent = local ? local.description : 'Loading...';
+      cat.textContent = local ? local.category : '';
       body.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+      updateModalButton();
       modal.classList.add('active');
 
       try {
-        const response = await fetch(`/api/v1/skills/${encodeURIComponent(name)}`);
-        const data = await response.json();
+        const resp = await fetch(`/api/v1/skills/${encodeURIComponent(skillId)}`);
+        const data = await resp.json();
+        title.textContent = data.name || skillId;
+        desc.textContent = data.description || '';
+        cat.textContent = data.category || '';
 
-        description.textContent = data.description;
-        body.innerHTML = `
-          <h3 style="margin-top: 24px; margin-bottom: 12px; font-size: 16px;">Content</h3>
-          <pre><code>${escapeHtml(data.content || 'No content available')}</code></pre>
-          ${data.metadata ? `
-            <h3 style="margin-top: 24px; margin-bottom: 12px; font-size: 16px;">Metadata</h3>
-            <pre><code>${escapeHtml(JSON.stringify(data.metadata, null, 2))}</code></pre>
-          ` : ''}
-        `;
-      } catch (error) {
-        body.innerHTML = '<p style="color: var(--muted);">Failed to load skill details</p>';
+        body.innerHTML = data.content
+          ? `<h3 style="margin-bottom:12px;font-size:15px;color:var(--muted);">スキル内容</h3><pre><code>${esc(data.content)}</code></pre>`
+          : '<p style="color:var(--muted);">コンテンツがありません</p>';
+      } catch (e) {
+        body.innerHTML = '<p style="color:var(--muted);">読み込みに失敗しました</p>';
       }
+    }
+
+    function updateModalButton() {
+      const btn = document.getElementById('modal-install-btn');
+      if (!isLoggedIn || !currentModalSkillId) {
+        btn.style.display = isLoggedIn ? 'block' : 'none';
+        return;
+      }
+      const isInstalled = installedIds.has(currentModalSkillId);
+      btn.className = `modal-install-btn ${isInstalled ? 'installed' : 'install'}`;
+      btn.textContent = isInstalled ? 'アンインストール' : 'インストール';
+      btn.style.display = 'block';
+    }
+
+    async function toggleInstallFromModal() {
+      if (!currentModalSkillId) return;
+      const btn = document.getElementById('modal-install-btn');
+      btn.disabled = true;
+      const isInstalled = installedIds.has(currentModalSkillId);
+      try {
+        const method = isInstalled ? 'DELETE' : 'POST';
+        const resp = await fetch(`/api/v1/skills/${encodeURIComponent(currentModalSkillId)}/install`, {
+          method,
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        });
+        if (resp.ok) {
+          if (isInstalled) {
+            installedIds.delete(currentModalSkillId);
+            showToast('アンインストールしました');
+          } else {
+            installedIds.add(currentModalSkillId);
+            showToast('インストールしました！次のチャットから有効になります');
+          }
+          document.getElementById('installed-count').textContent = installedIds.size;
+          const myTab = document.querySelector('.tab[data-cat="__installed"] .count');
+          if (myTab) myTab.textContent = installedIds.size;
+          displaySkills();
+          updateModalButton();
+        }
+      } catch (e) {
+        showToast('通信エラーが発生しました');
+      }
+      btn.disabled = false;
     }
 
     function closeModal() {
       document.getElementById('skill-modal').classList.remove('active');
+      currentModalSkillId = null;
     }
 
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    // Search functionality
-    const searchInput = document.getElementById('search-input');
+    // Search
     let searchTimeout;
-
-    searchInput.addEventListener('input', (e) => {
+    document.getElementById('search-input').addEventListener('input', () => {
       clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        const query = e.target.value.trim();
-
-        if (!query) {
-          displaySkills(allSkills);
-          return;
-        }
-
-        const filtered = allSkills.filter(skill =>
-          skill.name.toLowerCase().includes(query.toLowerCase()) ||
-          skill.description.toLowerCase().includes(query.toLowerCase())
-        );
-
-        displaySkills(filtered);
-      }, 300);
+      searchTimeout = setTimeout(displaySkills, 250);
     });
 
-    // Close modal on escape
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModal();
-    });
-
-    // Close modal on backdrop click
-    document.getElementById('skill-modal').addEventListener('click', (e) => {
+    // Modal close handlers
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+    document.getElementById('skill-modal').addEventListener('click', e => {
       if (e.target.id === 'skill-modal') closeModal();
     });
 
-    // Load skills on page load
-    loadSkills();
+    // Init
+    init();
   </script>
 </body>
 </html>

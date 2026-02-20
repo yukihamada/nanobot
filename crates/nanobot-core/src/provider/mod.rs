@@ -206,8 +206,12 @@ impl LoadBalancedProvider {
                     default.contains("llama") || default.contains("mixtral") || default.contains("groq")
                 } else if model_lower.contains("deepseek") {
                     default.contains("deepseek")
+                } else if model_lower.contains("minimax") || model_lower.contains("m2.5") {
+                    default.contains("minimax")
+                } else if model_lower.contains("glm") || model_lower.contains("z-ai") {
+                    default.contains("glm") || default.contains("z-ai")
                 } else if model_lower.contains("gpt") || model_lower.contains("openai") {
-                    default.contains("gpt") || (!default.contains("claude") && !default.contains("gemini") && !default.contains("llama") && !default.contains("deepseek") && !default.contains("openrouter"))
+                    default.contains("gpt") || (!default.contains("claude") && !default.contains("gemini") && !default.contains("llama") && !default.contains("deepseek") && !default.contains("openrouter") && !default.contains("kimi") && !default.contains("minimax") && !default.contains("glm"))
                 } else {
                     true
                 }
@@ -252,7 +256,7 @@ impl LoadBalancedProvider {
         // Anthropic keys
         for key in Self::read_keys("ANTHROPIC_API_KEY") {
             providers.push(Arc::new(anthropic::AnthropicProvider::new(
-                key, None, "claude-sonnet-4-5-20250929".to_string(),
+                key, None, "claude-sonnet-4-6".to_string(),
             )));
         }
 
@@ -287,6 +291,18 @@ impl LoadBalancedProvider {
             // Kimi K2.5 via OpenRouter (kimi family)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
                 key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "moonshotai/kimi-k2.5".to_string(),
+            )));
+            // Gemini 3 Flash via OpenRouter (tool calling strength)
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "google/gemini-3-flash-preview".to_string(),
+            )));
+            // MiniMax M2.5 via OpenRouter (Usage #1, programming #1)
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "minimax/minimax-m2.5".to_string(),
+            )));
+            // GLM 5 via OpenRouter (Intelligence #6, fast-growing)
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "z-ai/glm-5".to_string(),
             )));
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
                 key, Some("https://openrouter.ai/api/v1".to_string()), "openrouter/auto".to_string(),
@@ -340,6 +356,8 @@ impl LoadBalancedProvider {
         let req_is_deepseek = req_lower.contains("deepseek");
         let req_is_kimi = req_lower.contains("kimi") || req_lower.contains("moonshot");
         let req_is_qwen = req_lower.contains("qwen");
+        let req_is_minimax = req_lower.contains("minimax");
+        let req_is_glm = req_lower.contains("glm") || req_lower.contains("z-ai");
 
         let prov_is_claude = prov_default.contains("claude") || prov_default.contains("anthropic");
         let prov_is_gemini = prov_default.contains("gemini");
@@ -347,8 +365,10 @@ impl LoadBalancedProvider {
         let prov_is_deepseek = prov_default.contains("deepseek");
         let prov_is_kimi = prov_default.contains("kimi") || prov_default.contains("moonshot");
         let prov_is_qwen = prov_default.contains("qwen");
+        let prov_is_minimax = prov_default.contains("minimax");
+        let prov_is_glm = prov_default.contains("glm") || prov_default.contains("z-ai");
         let prov_is_openrouter = prov_default.contains("openrouter");
-        let prov_is_gpt = !prov_is_claude && !prov_is_gemini && !prov_is_groq && !prov_is_deepseek && !prov_is_kimi && !prov_is_qwen && !prov_is_openrouter;
+        let prov_is_gpt = !prov_is_claude && !prov_is_gemini && !prov_is_groq && !prov_is_deepseek && !prov_is_kimi && !prov_is_qwen && !prov_is_minimax && !prov_is_glm && !prov_is_openrouter;
 
         // Same family → use requested model as-is
         if (req_is_claude && prov_is_claude)
@@ -358,20 +378,23 @@ impl LoadBalancedProvider {
             || (req_is_deepseek && prov_is_deepseek)
             || (req_is_kimi && prov_is_kimi)
             || (req_is_qwen && prov_is_qwen)
+            || (req_is_minimax && prov_is_minimax)
+            || (req_is_glm && prov_is_glm)
         {
             return requested_model.to_string();
         }
 
         // OpenRouter can handle any model — pass through the requested model
-        if prov_is_openrouter {
+        // Also route minimax/glm models to OpenRouter (only available there)
+        if prov_is_openrouter || prov_is_minimax || prov_is_glm || prov_is_kimi {
             return requested_model.to_string();
         }
 
         // Cross-family → map to the provider's best equivalent
         if prov_is_claude {
-            "claude-sonnet-4-5-20250929".to_string()
+            "claude-sonnet-4-6".to_string()
         } else if prov_is_gemini {
-            "gemini-2.0-flash".to_string()
+            "gemini-2.5-flash".to_string()
         } else if prov_is_groq {
             "llama-3.3-70b-versatile".to_string()
         } else if prov_is_deepseek {
@@ -396,6 +419,8 @@ impl LoadBalancedProvider {
                 else if default.contains("llama") || default.contains("groq") { "groq" }
                 else if default.contains("kimi") || default.contains("moonshot") { "kimi" }
                 else if default.contains("qwen") { "qwen" }
+                else if default.contains("minimax") { "minimax" }
+                else if default.contains("glm") || default.contains("z-ai") { "glm" }
                 else if default.contains("openrouter") { continue } // skip openrouter for parallel
                 else { "openai" };
             if seen_families.insert(family) {
@@ -737,9 +762,9 @@ impl LoadBalancedProvider {
     pub fn get_tier_model(&self, tier: &str) -> Option<(Arc<dyn LlmProvider>, String)> {
         // Each tier has a fallback chain: primary → secondary → tertiary
         let candidates: &[&str] = match tier {
-            "economy"  => &["gemini-2.5-flash", "qwen/qwen3-32b", "llama-3.3-70b-versatile"],
-            "normal"   => &["moonshotai/kimi-k2.5", "llama-3.3-70b-versatile", "gemini-2.5-flash"],
-            "powerful" => &["claude-sonnet-4-5-20250929", "gpt-4o", "gemini-2.5-flash"],
+            "economy"  => &["gemini-2.5-flash", "deepseek-chat", "qwen/qwen3-32b"],
+            "normal"   => &["moonshotai/kimi-k2.5", "deepseek-chat", "gemini-2.5-flash"],
+            "powerful" => &["claude-sonnet-4-6", "gpt-4o", "gemini-2.5-pro"],
             _ => return None,
         };
         for candidate in candidates {
