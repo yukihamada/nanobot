@@ -3024,14 +3024,19 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/skills/installed", get(handle_installed_skills))
         .route("/api/v1/skills/categories", get(handle_skill_categories))
         .route("/api/v1/skills/popular", get(handle_popular_skills))
-        .route("/api/v1/skills/{id}", get(handle_get_skill))
-        .route("/api/v1/skills/{id}/install", post(handle_install_skill).delete(handle_uninstall_skill))
+        .route("/api/v1/skills/mine", get(handle_my_skills))
         .route("/api/v1/skills/publish", post(handle_publish_skill))
+        .route("/api/v1/skills/{id}", get(handle_get_skill).put(handle_update_skill).delete(handle_delete_skill))
+        .route("/api/v1/skills/{id}/install", post(handle_install_skill).delete(handle_uninstall_skill))
         // Agents
         .route("/api/v1/agents", get(handle_agents))
         // Devices
         .route("/api/v1/devices", get(handle_devices))
         .route("/api/v1/devices/heartbeat", post(handle_device_heartbeat))
+        // Smart home device controls (proxy directly to device APIs)
+        .route("/api/v1/hue",          post(handle_hue))
+        .route("/api/v1/switchbot",    post(handle_switchbot))
+        .route("/api/v1/nature-remo",  post(handle_nature_remo))
         // Workers (compute provider / earn mode)
         .route("/api/v1/workers/register", post(handle_worker_register))
         .route("/api/v1/workers/poll", get(handle_worker_poll))
@@ -3617,25 +3622,26 @@ async fn handle_chat(
         }
     };
 
-    // Phase B: Parallel initialization — fetch user (cached), memory, settings, and installed skills concurrently
+    // Phase B: Parallel initialization — fetch user (cached), memory, settings, installed skills, and webhook tools concurrently
     #[cfg(feature = "dynamodb-backend")]
-    let (cached_user, parallel_memory, parallel_settings, parallel_skills) = {
+    let (cached_user, parallel_memory, parallel_settings, parallel_skills, parallel_webhook_tools) = {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Fetch user with cache (separate from tokio::join! to use state)
             let user = get_or_create_user_cached(&*state, &session_key).await;
-            let (memory, settings, skills) = tokio::join!(
+            let (memory, settings, skills, webhook_tools) = tokio::join!(
                 read_memory_context(dynamo, table, &session_key),
                 get_user_settings(dynamo, table, &session_key),
-                load_user_skills_for_prompt(dynamo, table, &session_key)
+                load_user_skills_for_prompt(dynamo, table, &session_key),
+                load_user_webhook_tools(dynamo, table, &session_key)
             );
-            (Some(user), memory, Some(settings), skills)
+            (Some(user), memory, Some(settings), skills, webhook_tools)
         } else {
-            (None, String::new(), None, String::new())
+            (None, String::new(), None, String::new(), Vec::new())
         }
     };
     #[cfg(not(feature = "dynamodb-backend"))]
-    let (cached_user, parallel_memory, parallel_settings, parallel_skills): (Option<UserProfile>, String, Option<UserSettings>, String) =
-        (None, String::new(), None, String::new());
+    let (cached_user, parallel_memory, parallel_settings, parallel_skills, parallel_webhook_tools): (Option<UserProfile>, String, Option<UserSettings>, String, Vec<WebhookSkillDef>) =
+        (None, String::new(), None, String::new(), Vec::new());
 
     // Check user credits (using cached user)
     #[cfg(feature = "dynamodb-backend")]
@@ -3855,7 +3861,7 @@ async fn handle_chat(
             .unwrap_or_else(|| {
                 // Web channel gets the best model when no explicit preference is set
                 if req.channel == "web" || req.channel.starts_with("webchat") {
-                    "minimax/minimax-m2.5"
+                    "gpt-4o"
                 } else {
                     &default_model
                 }
@@ -4011,7 +4017,7 @@ async fn handle_chat(
     let tools = if agent.tools_enabled {
         let all_tools = state.tool_registry.get_definitions();
         // Filter by user's enabled tools if set, and restrict GitHub tools to admin
-        let filtered: Vec<serde_json::Value> = all_tools.into_iter()
+        let mut filtered: Vec<serde_json::Value> = all_tools.into_iter()
             .filter(|t| {
                 let name = t.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("");
                 // GitHub tools are admin-only
@@ -4025,6 +4031,8 @@ async fn handle_chat(
                 true
             })
             .collect();
+        // Append user's installed webhook-type skill tools
+        filtered.extend(parallel_webhook_tools.iter().map(|w| w.to_tool_def()));
         filtered
     } else {
         vec![]
@@ -4298,6 +4306,10 @@ async fn handle_chat(
                     let name = tc.name.clone();
                     let mut args = tc.arguments.clone();
                     let id = tc.id.clone();
+                    // Check for webhook skill match
+                    let webhook_url = parallel_webhook_tools.iter()
+                        .find(|w| w.name == name)
+                        .map(|w| w.webhook_url.clone());
                     // Inject Google refresh token for Google tools
                     if name == "google_calendar" || name == "gmail" {
                         if let Some(ref token) = google_refresh_token {
@@ -4318,7 +4330,11 @@ async fn handle_chat(
                     }
                     async move {
                         info!("Tool call [iter {}]: {} args={:?}", iteration, name, args);
-                        let raw_result = registry.execute(&name, &args).await;
+                        let raw_result = if let Some(url) = webhook_url {
+                            call_webhook(&url, &name, &args).await
+                        } else {
+                            registry.execute(&name, &args).await
+                        };
                         // Classify tool results for better LLM decision-making
                         let result = if raw_result.starts_with("[TOOL_ERROR]") {
                             raw_result
@@ -6588,25 +6604,26 @@ async fn handle_chat_stream(
         { req.session_id.clone() }
     };
 
-    // Parallel initialization: fetch user (cached) + settings + skills concurrently
+    // Parallel initialization: fetch user (cached) + settings + skills + webhook tools concurrently
     #[cfg(feature = "dynamodb-backend")]
-    let (stream_user, stream_memory, stream_settings, stream_skills) = {
+    let (stream_user, stream_memory, stream_settings, stream_skills, stream_webhook_tools) = {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Fetch user with cache (separate from tokio::join! to use state)
             let user = get_or_create_user_cached(&*state, &session_key).await;
-            let (memory, settings, skills) = tokio::join!(
+            let (memory, settings, skills, webhook_tools) = tokio::join!(
                 read_memory_context(dynamo, table, &session_key),
                 get_user_settings(dynamo, table, &session_key),
-                load_user_skills_for_prompt(dynamo, table, &session_key)
+                load_user_skills_for_prompt(dynamo, table, &session_key),
+                load_user_webhook_tools(dynamo, table, &session_key)
             );
-            (Some(user), memory, Some(settings), skills)
+            (Some(user), memory, Some(settings), skills, webhook_tools)
         } else {
-            (None, String::new(), None, String::new())
+            (None, String::new(), None, String::new(), Vec::new())
         }
     };
     #[cfg(not(feature = "dynamodb-backend"))]
-    let (stream_user, stream_memory, stream_settings, stream_skills): (Option<UserProfile>, String, Option<UserSettings>, String) =
-        (None, String::new(), None, String::new());
+    let (stream_user, stream_memory, stream_settings, stream_skills, stream_webhook_tools): (Option<UserProfile>, String, Option<UserSettings>, String, Vec<WebhookSkillDef>) =
+        (None, String::new(), None, String::new(), Vec::new());
 
     // Check credits (using cached user)
     #[cfg(feature = "dynamodb-backend")]
@@ -6755,7 +6772,7 @@ async fn handle_chat_stream(
         .or(agent.preferred_model)
         .unwrap_or_else(|| {
             if req.channel == "web" || req.channel.starts_with("webchat") {
-                "minimax/minimax-m2.5"
+                "gpt-4o"
             } else {
                 &default_model
             }
@@ -6876,10 +6893,15 @@ async fn handle_chat_stream(
 
     // Get tools definitions for the stream handler (respects agent.tools_enabled)
     let tools: Vec<serde_json::Value> = if agent.tools_enabled {
-        state.tool_registry.get_definitions()
+        let mut defs = state.tool_registry.get_definitions();
+        // Append user's installed webhook-type skill tools
+        defs.extend(stream_webhook_tools.iter().map(|w| w.to_tool_def()));
+        defs
     } else {
         vec![]
     };
+    // Webhook tools need to be moved into the spawned task
+    let stream_webhook_tools = stream_webhook_tools;
 
     // Determine max iterations based on user plan
     let max_iterations: usize = {
@@ -7020,6 +7042,10 @@ async fn handle_chat_stream(
                         let name = tc.name.clone();
                         let mut args = tc.arguments.clone();
                         let id = tc.id.clone();
+                        // Check for webhook skill match
+                        let webhook_url = stream_webhook_tools.iter()
+                            .find(|w| w.name == name)
+                            .map(|w| w.webhook_url.clone());
                         if name == "code_execute" || name == "file_read" || name == "file_write" || name == "file_list" || name == "web_deploy" {
                             args.insert("_sandbox_dir".to_string(), serde_json::Value::String(sandbox_dir.clone()));
                         }
@@ -7031,7 +7057,11 @@ async fn handle_chat_stream(
                             args.insert("_user_id".to_string(), serde_json::Value::String(session_key_clone.clone()));
                         }
                         async move {
-                            let raw_result = registry.execute(&name, &args).await;
+                            let raw_result = if let Some(url) = webhook_url {
+                                call_webhook(&url, &name, &args).await
+                            } else {
+                                registry.execute(&name, &args).await
+                            };
                             let result = if raw_result.starts_with("[TOOL_ERROR]") {
                                 raw_result
                             } else if raw_result.starts_with("Error") || raw_result.starts_with("error")
@@ -10149,6 +10179,7 @@ async fn handle_list_skills(
                             "name": item.get("name").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
                             "description": item.get("description").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
                             "category": cat,
+                            "skill_type": item.get("skill_type").and_then(|v| v.as_s().ok()).unwrap_or(&"prompt".to_string()),
                             "source": "community",
                             "installs": item.get("installs").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0),
                         }));
@@ -10196,14 +10227,20 @@ async fn handle_get_skill(
                 .await
             {
                 if let Some(item) = output.item {
+                    let schema_str = item.get("parameters_schema").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()).clone();
+                    let parameters_schema: serde_json::Value = serde_json::from_str(&schema_str).unwrap_or(serde_json::Value::Null);
                     return Json(serde_json::json!({
                         "id": id,
                         "name": item.get("name").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
                         "description": item.get("description").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
                         "category": item.get("category").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        "skill_type": item.get("skill_type").and_then(|v| v.as_s().ok()).unwrap_or(&"prompt".to_string()),
                         "content": item.get("content").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        "webhook_url": item.get("webhook_url").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        "skill_name": item.get("skill_name").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        "parameters_schema": parameters_schema,
                         "source": "community",
-                        "author": item.get("author").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                        "author": item.get("author_user_id").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
                         "installs": item.get("installs").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0),
                     })).into_response();
                 }
@@ -10342,53 +10379,69 @@ async fn handle_install_skill(
             None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Not authenticated" }))),
         };
 
-        // Verify skill exists (bundled or community)
-        let skill_name;
-        let skill_category;
-        if let Some(bundled) = crate::skills::get_bundled_skill(&id) {
-            skill_name = bundled.name.to_string();
-            skill_category = bundled.category.to_string();
-        } else {
-            // Check DynamoDB for community skill
-            skill_name = String::new();
-            skill_category = String::new();
-            // For now, only bundled skills are installable
-            if skill_name.is_empty() {
-                // Try DynamoDB lookup
-                let mut found = false;
-                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-                    if let Ok(output) = dynamo
-                        .get_item()
-                        .table_name(table)
-                        .key("pk", AttributeValue::S(format!("SKILL#{}", id)))
-                        .key("sk", AttributeValue::S("INFO".to_string()))
-                        .send()
-                        .await
-                    {
-                        found = output.item.is_some();
-                    }
-                }
-                if !found {
-                    return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Skill not found" })));
-                }
+        // Resolve skill info (bundled or community)
+        struct SkillInfo { name: String, category: String, skill_type: String, webhook_url: String, skill_name: String, description: String, parameters_schema: String }
+
+        let skill_info: Option<SkillInfo> = if let Some(bundled) = crate::skills::get_bundled_skill(&id) {
+            Some(SkillInfo {
+                name: bundled.name.to_string(),
+                category: bundled.category.to_string(),
+                skill_type: "prompt".to_string(),
+                webhook_url: String::new(),
+                skill_name: String::new(),
+                description: bundled.description.to_string(),
+                parameters_schema: String::new(),
+            })
+        } else if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            match dynamo.get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("SKILL#{}", id)))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .send()
+                .await
+            {
+                Ok(output) => output.item.map(|item| SkillInfo {
+                    name: item.get("name").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                    category: item.get("category").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                    skill_type: item.get("skill_type").and_then(|v| v.as_s().ok()).cloned().unwrap_or_else(|| "prompt".to_string()),
+                    webhook_url: item.get("webhook_url").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                    skill_name: item.get("skill_name").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                    description: item.get("description").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                    parameters_schema: item.get("parameters_schema").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default(),
+                }),
+                Err(_) => None,
             }
-        }
+        } else {
+            None
+        };
+
+        let info = match skill_info {
+            Some(i) => i,
+            None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Skill not found" }))),
+        };
 
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let now = chrono::Utc::now().to_rfc3339();
-            // Write user-skill record
-            if let Err(e) = dynamo
-                .put_item()
+            let mut put = dynamo.put_item()
                 .table_name(table)
                 .item("pk", AttributeValue::S(format!("USER_SKILL#{}", user_id)))
                 .item("sk", AttributeValue::S(format!("SK#{}", id)))
                 .item("skill_id", AttributeValue::S(id.clone()))
-                .item("name", AttributeValue::S(skill_name))
-                .item("category", AttributeValue::S(skill_category))
-                .item("installed_at", AttributeValue::S(now))
-                .send()
-                .await
-            {
+                .item("name", AttributeValue::S(info.name))
+                .item("description", AttributeValue::S(info.description))
+                .item("category", AttributeValue::S(info.category))
+                .item("skill_type", AttributeValue::S(info.skill_type))
+                .item("installed_at", AttributeValue::S(now));
+            if !info.webhook_url.is_empty() {
+                put = put.item("webhook_url", AttributeValue::S(info.webhook_url));
+            }
+            if !info.skill_name.is_empty() {
+                put = put.item("skill_name", AttributeValue::S(info.skill_name));
+            }
+            if !info.parameters_schema.is_empty() {
+                put = put.item("parameters_schema", AttributeValue::S(info.parameters_schema));
+            }
+            if let Err(e) = put.send().await {
                 error!("Failed to install skill: {:?}", e);
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Failed to install skill" })));
             }
@@ -10441,7 +10494,7 @@ async fn handle_uninstall_skill(
     }
 }
 
-/// POST /api/v1/skills/publish — Publish a skill (admin only, future use)
+/// POST /api/v1/skills/publish — Publish a skill (any authenticated user)
 async fn handle_publish_skill(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
@@ -10449,42 +10502,115 @@ async fn handle_publish_skill(
 ) -> impl IntoResponse {
     #[cfg(feature = "dynamodb-backend")]
     {
-        let admin = authenticate_admin(&state, &headers).await;
-        if admin.is_none() {
-            return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "Admin access required" })));
-        }
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Authentication required" }))),
+        };
 
         let skill_id = payload.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let description = payload.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let category = payload.get("category").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let category = payload.get("category").and_then(|v| v.as_str()).unwrap_or("general").to_string();
+        let skill_type = payload.get("skill_type").and_then(|v| v.as_str()).unwrap_or("prompt").to_string();
         let content = payload.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let webhook_url = payload.get("webhook_url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        // Tool function name: caller can override, otherwise derived from skill_id
+        let skill_name = payload.get("skill_name").and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| skill_id.replace('-', "_").replace(' ', "_"));
+        let parameters_schema = payload.get("parameters_schema").cloned()
+            .unwrap_or_else(|| serde_json::json!({ "type": "object", "properties": {} }));
 
-        if skill_id.is_empty() || name.is_empty() || content.is_empty() {
-            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "id, name, and content are required" })));
+        // Validate
+        if skill_id.is_empty() || name.is_empty() {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "id and name are required" })));
+        }
+        // Validate skill_id: alphanumeric, hyphens, underscores only
+        if !skill_id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "id must be alphanumeric with hyphens/underscores only" })));
+        }
+        if skill_type == "prompt" && content.is_empty() {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "content is required for prompt-type skills" })));
+        }
+        if skill_type == "tool" && webhook_url.is_empty() {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "webhook_url is required for tool-type skills" })));
+        }
+        if skill_type == "tool" && !webhook_url.starts_with("https://") {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "webhook_url must use HTTPS" })));
         }
 
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let now = chrono::Utc::now().to_rfc3339();
-            if let Err(e) = dynamo
-                .put_item()
+            let schema_str = serde_json::to_string(&parameters_schema).unwrap_or_default();
+
+            // Check if skill_id already exists and belongs to another author
+            if let Ok(existing) = dynamo.get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("SKILL#{}", skill_id)))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .send()
+                .await
+            {
+                if let Some(item) = existing.item {
+                    let existing_author = item.get("author_user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                    if !existing_author.is_empty() && existing_author != user_id {
+                        return (StatusCode::CONFLICT, Json(serde_json::json!({ "error": "Skill ID already taken by another author" })));
+                    }
+                }
+            }
+
+            // Write SKILL#id/INFO record
+            let mut put = dynamo.put_item()
                 .table_name(table)
                 .item("pk", AttributeValue::S(format!("SKILL#{}", skill_id)))
                 .item("sk", AttributeValue::S("INFO".to_string()))
                 .item("skill_id", AttributeValue::S(skill_id.clone()))
-                .item("name", AttributeValue::S(name))
-                .item("description", AttributeValue::S(description))
-                .item("category", AttributeValue::S(category))
-                .item("content", AttributeValue::S(content))
-                .item("author", AttributeValue::S(admin.unwrap().1))
+                .item("name", AttributeValue::S(name.clone()))
+                .item("description", AttributeValue::S(description.clone()))
+                .item("category", AttributeValue::S(category.clone()))
+                .item("skill_type", AttributeValue::S(skill_type.clone()))
+                .item("author_user_id", AttributeValue::S(user_id.clone()))
                 .item("installs", AttributeValue::N("0".to_string()))
-                .item("created_at", AttributeValue::S(now))
-                .send()
-                .await
-            {
+                .item("created_at", AttributeValue::S(now.clone()));
+            if !content.is_empty() {
+                put = put.item("content", AttributeValue::S(content));
+            }
+            if !webhook_url.is_empty() {
+                put = put.item("webhook_url", AttributeValue::S(webhook_url.clone()));
+                put = put.item("skill_name", AttributeValue::S(skill_name.clone()));
+                put = put.item("parameters_schema", AttributeValue::S(schema_str.clone()));
+            }
+            if let Err(e) = put.send().await {
                 error!("Failed to publish skill: {:?}", e);
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Failed to publish" })));
             }
+
+            // Write SKILL_INDEX record for listing
+            let _ = dynamo.put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S("SKILL_INDEX".to_string()))
+                .item("sk", AttributeValue::S(skill_id.clone()))
+                .item("skill_id", AttributeValue::S(skill_id.clone()))
+                .item("name", AttributeValue::S(name))
+                .item("description", AttributeValue::S(description))
+                .item("category", AttributeValue::S(category))
+                .item("skill_type", AttributeValue::S(skill_type))
+                .item("author_user_id", AttributeValue::S(user_id.clone()))
+                .item("installs", AttributeValue::N("0".to_string()))
+                .item("created_at", AttributeValue::S(now.clone()))
+                .send()
+                .await;
+
+            // Write SKILL_AUTHOR record for "My Skills" lookup
+            let _ = dynamo.put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("SKILL_AUTHOR#{}", user_id)))
+                .item("sk", AttributeValue::S(format!("SK#{}", skill_id)))
+                .item("skill_id", AttributeValue::S(skill_id.clone()))
+                .item("created_at", AttributeValue::S(now))
+                .send()
+                .await;
+
             return (StatusCode::OK, Json(serde_json::json!({ "status": "published", "skill_id": skill_id })));
         }
         (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
@@ -10494,6 +10620,323 @@ async fn handle_publish_skill(
         let _ = (&state, &headers, &payload);
         (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Not available" })))
     }
+}
+
+/// GET /api/v1/skills/mine — List skills published by current user (Bearer auth)
+async fn handle_my_skills(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Authentication required", "skills": [] }))),
+        };
+
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if let Ok(output) = dynamo
+                .query()
+                .table_name(table)
+                .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+                .expression_attribute_values(":pk", AttributeValue::S(format!("SKILL_AUTHOR#{}", user_id)))
+                .expression_attribute_values(":prefix", AttributeValue::S("SK#".to_string()))
+                .send()
+                .await
+            {
+                let skill_ids: Vec<String> = output.items().iter()
+                    .filter_map(|item| item.get("skill_id").and_then(|v| v.as_s().ok()).cloned())
+                    .collect();
+
+                // Fetch each skill's details
+                let mut skills = Vec::new();
+                for sid in &skill_ids {
+                    if let Ok(out) = dynamo.get_item()
+                        .table_name(table)
+                        .key("pk", AttributeValue::S(format!("SKILL#{}", sid)))
+                        .key("sk", AttributeValue::S("INFO".to_string()))
+                        .send()
+                        .await
+                    {
+                        if let Some(item) = out.item {
+                            skills.push(serde_json::json!({
+                                "id": sid,
+                                "name": item.get("name").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                                "description": item.get("description").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                                "category": item.get("category").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                                "skill_type": item.get("skill_type").and_then(|v| v.as_s().ok()).unwrap_or(&"prompt".to_string()),
+                                "webhook_url": item.get("webhook_url").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                                "skill_name": item.get("skill_name").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                                "installs": item.get("installs").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0),
+                                "created_at": item.get("created_at").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()),
+                            }));
+                        }
+                    }
+                }
+                return (StatusCode::OK, Json(serde_json::json!({ "skills": skills, "count": skills.len() })));
+            }
+        }
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured", "skills": [] })))
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (&state, &headers);
+        (StatusCode::OK, Json(serde_json::json!({ "skills": [], "count": 0 })))
+    }
+}
+
+/// PUT /api/v1/skills/:id — Update own skill (Bearer auth, author only)
+async fn handle_update_skill(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Authentication required" }))),
+        };
+
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Verify ownership
+            let existing = dynamo.get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("SKILL#{}", id)))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .send()
+                .await
+                .ok()
+                .and_then(|o| o.item);
+            let item = match existing {
+                Some(i) => i,
+                None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Skill not found" }))),
+            };
+            let author = item.get("author_user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+            // Allow admin override
+            let is_admin_req = authenticate_admin(&state, &headers).await.is_some();
+            if author != user_id && !is_admin_req {
+                return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "You are not the author of this skill" })));
+            }
+
+            // Partial update: only update provided fields
+            let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or_else(|| item.get("name").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or(""));
+            let description = payload.get("description").and_then(|v| v.as_str()).unwrap_or_else(|| item.get("description").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or(""));
+            let category = payload.get("category").and_then(|v| v.as_str()).unwrap_or_else(|| item.get("category").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or("general"));
+            let content = payload.get("content").and_then(|v| v.as_str()).unwrap_or_else(|| item.get("content").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or(""));
+            let webhook_url = payload.get("webhook_url").and_then(|v| v.as_str()).unwrap_or_else(|| item.get("webhook_url").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or(""));
+            let skill_type = item.get("skill_type").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or("prompt");
+
+            let mut put = dynamo.put_item()
+                .table_name(table)
+                .item("pk", AttributeValue::S(format!("SKILL#{}", id)))
+                .item("sk", AttributeValue::S("INFO".to_string()))
+                .item("skill_id", AttributeValue::S(id.clone()))
+                .item("name", AttributeValue::S(name.to_string()))
+                .item("description", AttributeValue::S(description.to_string()))
+                .item("category", AttributeValue::S(category.to_string()))
+                .item("skill_type", AttributeValue::S(skill_type.to_string()))
+                .item("author_user_id", AttributeValue::S(author))
+                .item("installs", item.get("installs").cloned().unwrap_or(AttributeValue::N("0".to_string())))
+                .item("created_at", item.get("created_at").cloned().unwrap_or(AttributeValue::S("".to_string())))
+                .item("updated_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()));
+            if !content.is_empty() {
+                put = put.item("content", AttributeValue::S(content.to_string()));
+            }
+            if !webhook_url.is_empty() {
+                put = put.item("webhook_url", AttributeValue::S(webhook_url.to_string()));
+                if let Some(schema) = payload.get("parameters_schema") {
+                    put = put.item("parameters_schema", AttributeValue::S(serde_json::to_string(schema).unwrap_or_default()));
+                }
+            }
+
+            if let Err(e) = put.send().await {
+                error!("Failed to update skill {}: {:?}", id, e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Failed to update skill" })));
+            }
+
+            // Also update SKILL_INDEX
+            let _ = dynamo.update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S("SKILL_INDEX".to_string()))
+                .key("sk", AttributeValue::S(id.clone()))
+                .update_expression("SET #n = :n, description = :d, category = :c")
+                .expression_attribute_names("#n", "name")
+                .expression_attribute_values(":n", AttributeValue::S(name.to_string()))
+                .expression_attribute_values(":d", AttributeValue::S(description.to_string()))
+                .expression_attribute_values(":c", AttributeValue::S(category.to_string()))
+                .send()
+                .await;
+
+            return (StatusCode::OK, Json(serde_json::json!({ "status": "updated", "skill_id": id })));
+        }
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (&state, &id, &headers, &payload);
+        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Not available" })))
+    }
+}
+
+/// DELETE /api/v1/skills/:id — Delete own skill (Bearer auth, author only)
+async fn handle_delete_skill(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Authentication required" }))),
+        };
+
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Verify ownership
+            let existing = dynamo.get_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("SKILL#{}", id)))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .send()
+                .await
+                .ok()
+                .and_then(|o| o.item);
+            let item = match existing {
+                Some(i) => i,
+                None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Skill not found" }))),
+            };
+            let author = item.get("author_user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+            let is_admin_req = authenticate_admin(&state, &headers).await.is_some();
+            if author != user_id && !is_admin_req {
+                return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "You are not the author of this skill" })));
+            }
+
+            // Delete SKILL#id/INFO
+            let _ = dynamo.delete_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("SKILL#{}", id)))
+                .key("sk", AttributeValue::S("INFO".to_string()))
+                .send()
+                .await;
+
+            // Delete from SKILL_INDEX
+            let _ = dynamo.delete_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S("SKILL_INDEX".to_string()))
+                .key("sk", AttributeValue::S(id.clone()))
+                .send()
+                .await;
+
+            // Delete SKILL_AUTHOR record
+            let _ = dynamo.delete_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("SKILL_AUTHOR#{}", user_id)))
+                .key("sk", AttributeValue::S(format!("SK#{}", id)))
+                .send()
+                .await;
+
+            info!("User {} deleted skill {}", user_id, id);
+            return (StatusCode::OK, Json(serde_json::json!({ "status": "deleted", "skill_id": id })));
+        }
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    {
+        let _ = (&state, &id, &headers);
+        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Not available" })))
+    }
+}
+
+/// Webhook-type skill definition loaded per request.
+#[derive(Clone, Debug)]
+struct WebhookSkillDef {
+    name: String,
+    description: String,
+    webhook_url: String,
+    parameters_schema: serde_json::Value,
+}
+
+impl WebhookSkillDef {
+    fn to_tool_def(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": &self.name,
+                "description": &self.description,
+                "parameters": &self.parameters_schema,
+            }
+        })
+    }
+}
+
+/// Call an external webhook for a skill tool invocation.
+async fn call_webhook(webhook_url: &str, tool_name: &str, args: &std::collections::HashMap<String, serde_json::Value>) -> String {
+    let client = reqwest::Client::new();
+    match client.post(webhook_url)
+        .header("Content-Type", "application/json")
+        .header("X-Skill-Name", tool_name)
+        .json(args)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            let status = resp.status();
+            match resp.text().await {
+                Ok(text) => {
+                    if status.is_success() { text }
+                    else { format!("[TOOL_ERROR] Webhook returned {}: {}", status, text) }
+                }
+                Err(e) => format!("[TOOL_ERROR] Failed to read webhook response: {}", e),
+            }
+        }
+        Err(e) => format!("[TOOL_ERROR] Webhook request failed: {}", e),
+    }
+}
+
+/// Load user's installed webhook-type skill tools for per-request registration.
+#[cfg(feature = "dynamodb-backend")]
+async fn load_user_webhook_tools(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    user_id: &str,
+) -> Vec<WebhookSkillDef> {
+    let output = match dynamo
+        .query()
+        .table_name(config_table)
+        .key_condition_expression("pk = :pk AND begins_with(sk, :prefix)")
+        .expression_attribute_values(":pk", AttributeValue::S(format!("USER_SKILL#{}", user_id)))
+        .expression_attribute_values(":prefix", AttributeValue::S("SK#".to_string()))
+        .limit(20)
+        .send()
+        .await
+    {
+        Ok(o) => o,
+        Err(_) => return vec![],
+    };
+
+    let mut tools = Vec::new();
+    for item in output.items() {
+        let skill_type = item.get("skill_type").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or("prompt");
+        if skill_type != "tool" { continue; }
+        let name = match item.get("skill_name").and_then(|v| v.as_s().ok()) {
+            Some(n) => n.clone(),
+            None => continue,
+        };
+        let description = item.get("description").and_then(|v| v.as_s().ok()).unwrap_or(&"".to_string()).clone();
+        let webhook_url = match item.get("webhook_url").and_then(|v| v.as_s().ok()) {
+            Some(u) if !u.is_empty() => u.clone(),
+            _ => continue,
+        };
+        let parameters_schema: serde_json::Value = item.get("parameters_schema")
+            .and_then(|v| v.as_s().ok())
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_else(|| serde_json::json!({ "type": "object", "properties": {} }));
+        tools.push(WebhookSkillDef { name, description, webhook_url, parameters_schema });
+    }
+    tools
 }
 
 /// Load user's installed skills for system prompt injection (max 5 skills, 1500 char cap).
@@ -21047,6 +21490,41 @@ async fn handle_vault_delete(
 
     #[cfg(not(feature = "dynamodb-backend"))]
     Json(serde_json::json!({ "error": "Vault not available" }))
+}
+
+/// Shared helper: deserialise a JSON body into a param map, or return 400.
+fn json_to_params(body: serde_json::Value) -> Result<std::collections::HashMap<String, serde_json::Value>, axum::response::Response> {
+    match body.as_object() {
+        Some(obj) => Ok(obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect()),
+        None => Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            axum::Json(serde_json::json!({ "error": "Request body must be a JSON object" })),
+        ).into_response()),
+    }
+}
+
+/// POST /api/v1/hue — Execute a Philips Hue smart light action directly
+///
+/// Request body: `{ "action": "list_lights" | "get_light" | "set_light" | ... , ...params }`
+/// Proxies directly to the local Hue bridge via HueTool (no AI involved).
+async fn handle_hue(Json(body): Json<serde_json::Value>) -> impl IntoResponse {
+    use crate::service::integrations::{Tool, HueTool};
+    let params = match json_to_params(body) { Ok(p) => p, Err(e) => return e };
+    Json(serde_json::json!({ "result": HueTool.execute(params).await })).into_response()
+}
+
+/// POST /api/v1/switchbot — Execute a SwitchBot device action
+async fn handle_switchbot(Json(body): Json<serde_json::Value>) -> impl IntoResponse {
+    use crate::service::integrations::{Tool, SwitchBotTool};
+    let params = match json_to_params(body) { Ok(p) => p, Err(e) => return e };
+    Json(serde_json::json!({ "result": SwitchBotTool.execute(params).await })).into_response()
+}
+
+/// POST /api/v1/nature-remo — Execute a Nature Remo appliance action
+async fn handle_nature_remo(Json(body): Json<serde_json::Value>) -> impl IntoResponse {
+    use crate::service::integrations::{Tool, NatureRemoTool};
+    let params = match json_to_params(body) { Ok(p) => p, Err(e) => return e };
+    Json(serde_json::json!({ "result": NatureRemoTool.execute(params).await })).into_response()
 }
 
 #[cfg(test)]
