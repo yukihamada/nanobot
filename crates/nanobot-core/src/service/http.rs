@@ -3855,7 +3855,7 @@ async fn handle_chat(
             .unwrap_or_else(|| {
                 // Web channel gets the best model when no explicit preference is set
                 if req.channel == "web" || req.channel.starts_with("webchat") {
-                    "anthropic/claude-sonnet-4-6"
+                    "minimax/minimax-m2.5"
                 } else {
                     &default_model
                 }
@@ -6755,7 +6755,7 @@ async fn handle_chat_stream(
         .or(agent.preferred_model)
         .unwrap_or_else(|| {
             if req.channel == "web" || req.channel.starts_with("webchat") {
-                "anthropic/claude-sonnet-4-6"
+                "minimax/minimax-m2.5"
             } else {
                 &default_model
             }
