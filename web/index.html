@@ -9943,8 +9943,8 @@
         const agentSel = document.getElementById('app-agent-select').value;
         const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
 
-        // Race mode: tier-specific (not custom, not normal — normal uses direct stream)
-        if (_selectedTier && _selectedTier !== '__skip_race__' && _selectedTier !== 'custom' && _selectedTier !== 'normal') {
+        // Race mode: all tiers except custom use race API
+        if (_selectedTier && _selectedTier !== '__skip_race__' && _selectedTier !== 'custom') {
           clearTimeout(frontendTimeout);
           clearInterval(statusInterval);
           stopThinkingAmbient();
