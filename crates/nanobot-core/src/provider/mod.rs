@@ -765,7 +765,7 @@ impl LoadBalancedProvider {
         let candidates: &[&str] = match tier {
             "economy"  => &["gemini-2.5-flash", "deepseek-chat", "llama-3.3-70b-specdec"],
             "normal"   => &["minimax/minimax-m2.5", "google/gemini-2.5-flash-preview"],
-            "powerful" => &["claude-sonnet-4-6", "gpt-4o", "gemini-2.5-pro"],
+            "powerful" => &["claude-opus-4-6", "gpt-4o", "gemini-2.5-pro", "claude-sonnet-4-6"],
             _ => return None,
         };
         for candidate in candidates {

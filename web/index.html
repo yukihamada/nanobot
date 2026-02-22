@@ -4544,17 +4544,12 @@
           <div class="settings-item-label" style="margin-bottom:6px;">&#127937; AI Tier</div>
           <div class="settings-item-desc" style="margin-bottom:8px;">モデルの選択方法を設定</div>
           <div class="tier-selector" id="tier-selector">
-            <div class="tier-option selected" data-tier="auto" onclick="selectTier('auto')">
-              <span class="tier-option-icon">&#9889;</span>
-              <span class="tier-option-label">Auto Race</span>
-              <span class="tier-option-model">全モデル並列</span>
-            </div>
             <div class="tier-option" data-tier="economy" onclick="selectTier('economy')">
               <span class="tier-option-icon">&#128176;</span>
               <span class="tier-option-label">Economy</span>
               <span class="tier-option-model">Gemini Flash / DeepSeek</span>
             </div>
-            <div class="tier-option" data-tier="normal" onclick="selectTier('normal')">
+            <div class="tier-option selected" data-tier="normal" onclick="selectTier('normal')">
               <span class="tier-option-icon">&#127775;</span>
               <span class="tier-option-label">Normal</span>
               <span class="tier-option-model">MiniMax M2.5</span>
@@ -4562,8 +4557,18 @@
             <div class="tier-option" data-tier="powerful" onclick="selectTier('powerful')">
               <span class="tier-option-icon">&#128293;</span>
               <span class="tier-option-label">Powerful</span>
-              <span class="tier-option-model">Claude Sonnet / GPT-4o</span>
+              <span class="tier-option-model">Claude Opus / GPT-4o</span>
             </div>
+            <div class="tier-option" data-tier="custom" onclick="selectTier('custom')">
+              <span class="tier-option-icon">&#9881;</span>
+              <span class="tier-option-label">Custom</span>
+              <span class="tier-option-model">モデル直接指定</span>
+            </div>
+          </div>
+          <div id="custom-model-picker" style="display:none;margin-top:8px;">
+            <select id="custom-model-select" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;" onchange="saveCustomModel()">
+              <option value="">読み込み中...</option>
+            </select>
           </div>
         </div>
         <div class="settings-item" style="flex-direction:column;align-items:stretch;">
@@ -9938,14 +9943,23 @@
         const agentSel = document.getElementById('app-agent-select').value;
         const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
 
-        // Race mode: auto race or tier-specific
-        if (_selectedTier && _selectedTier !== '__skip_race__') {
+        // Race mode: tier-specific (not custom, not normal — normal uses direct stream)
+        if (_selectedTier && _selectedTier !== '__skip_race__' && _selectedTier !== 'custom' && _selectedTier !== 'normal') {
           clearTimeout(frontendTimeout);
           clearInterval(statusInterval);
           stopThinkingAmbient();
           thinking.remove();
           await appRace(msgToSend, text);
           return;
+        }
+        // Custom tier: inject selected model into llmSettings for stream API
+        if (_selectedTier === 'custom') {
+          const customModel = localStorage.getItem('customModel');
+          if (customModel) {
+            const llmS = JSON.parse(localStorage.getItem('llmSettings') || '{}');
+            llmS.model = customModel;
+            localStorage.setItem('llmSettings', JSON.stringify(llmS));
+          }
         }
         // Reset skip flag
         if (_selectedTier === '__skip_race__') {
@@ -10554,7 +10568,7 @@
     // ---------------------------------------------------------------------------
     // Race mode
     // ---------------------------------------------------------------------------
-    let _selectedTier = localStorage.getItem('selectedTier') || 'auto';
+    let _selectedTier = localStorage.getItem('selectedTier') || 'normal';
 
     function selectTier(tier) {
       _selectedTier = tier;
@@ -10562,14 +10576,70 @@
       document.querySelectorAll('.tier-option').forEach(el => {
         el.classList.toggle('selected', el.dataset.tier === tier);
       });
+      // Show/hide custom model picker
+      const picker = document.getElementById('custom-model-picker');
+      if (picker) {
+        picker.style.display = tier === 'custom' ? 'block' : 'none';
+        if (tier === 'custom') loadCustomModelOptions();
+      }
       // Also update explore-check for backwards compat
       const chk = document.getElementById('explore-check');
       if (chk) chk.checked = (tier === 'auto');
     }
 
+    let _customModelsLoaded = false;
+    async function loadCustomModelOptions() {
+      if (_customModelsLoaded) return;
+      const sel = document.getElementById('custom-model-select');
+      if (!sel) return;
+      try {
+        const r = await fetch(API + '/api/v1/models');
+        const d = await r.json();
+        sel.innerHTML = '';
+        const groups = {};
+        (d.models || []).forEach(m => {
+          const prov = m.provider || 'other';
+          if (!groups[prov]) groups[prov] = [];
+          groups[prov].push(m);
+        });
+        Object.entries(groups).forEach(([prov, models]) => {
+          const og = document.createElement('optgroup');
+          og.label = prov.charAt(0).toUpperCase() + prov.slice(1);
+          models.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.id + ' ($' + m.input_per_1m + '/$' + m.output_per_1m + ')';
+            og.appendChild(opt);
+          });
+          sel.appendChild(og);
+        });
+        const saved = localStorage.getItem('customModel');
+        if (saved) sel.value = saved;
+        _customModelsLoaded = true;
+      } catch(e) {
+        sel.innerHTML = '<option value="">取得失敗</option>';
+      }
+    }
+
+    function saveCustomModel() {
+      const sel = document.getElementById('custom-model-select');
+      if (sel && sel.value) {
+        localStorage.setItem('customModel', sel.value);
+        // Also save to llmSettings so stream API uses it
+        const llmS = JSON.parse(localStorage.getItem('llmSettings') || '{}');
+        llmS.model = sel.value;
+        localStorage.setItem('llmSettings', JSON.stringify(llmS));
+      }
+    }
+
     function initTierSelector() {
-      const saved = localStorage.getItem('selectedTier') || 'auto';
-      selectTier(saved);
+      const saved = localStorage.getItem('selectedTier');
+      // Migrate old 'auto' default to 'normal'
+      if (!saved || saved === 'auto') {
+        selectTier('normal');
+      } else {
+        selectTier(saved);
+      }
     }
 
     async function appRace(msgToSend, text) {
@@ -11517,7 +11587,7 @@
 
     function toggleExploreSetting() {
       // Legacy: now handled by tier selector
-      selectTier(_selectedTier === 'auto' ? 'powerful' : 'auto');
+      selectTier(_selectedTier === 'normal' ? 'powerful' : 'normal');
     }
 
     let adultModeEnabled = localStorage.getItem('adultMode') === 'true';
