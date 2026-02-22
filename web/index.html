@@ -9881,11 +9881,17 @@
 
       if (appCurrentConvId && appConversations) {
         const conv = appConversations.find(c => c.id === appCurrentConvId);
-        if (conv && (!conv.title || conv.title === 'New task')) {
+        if (conv && (!conv.title || conv.title === 'New task' || conv.title === 'New conversation')) {
           const trimmed = text.trim();
           conv.title = trimmed.length > 50 ? trimmed.substring(0, 50) + '...' : trimmed;
           const activeItem = document.querySelector('.app-conv-item.active span');
           if (activeItem) activeItem.textContent = conv.title;
+          // Persist title to backend
+          fetch(API + '/api/v1/conversations/' + encodeURIComponent(appCurrentConvId), {
+            method: 'PATCH',
+            headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: conv.title })
+          }).catch(() => {});
         }
       }
 
