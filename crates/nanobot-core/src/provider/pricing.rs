@@ -33,12 +33,10 @@ pub const PRICING_TABLE: &[ModelPricing] = &[
     ModelPricing { model: "gemini-2.0-flash",       provider: "google", input_per_1m: 0.10, output_per_1m: 0.40, context_window: 1_048_576 },
     ModelPricing { model: "google/gemini-3-flash-preview", provider: "google", input_per_1m: 0.15, output_per_1m: 0.60, context_window: 1_048_576 },
     // Groq (fast inference)
-    ModelPricing { model: "llama-3.3-70b-versatile", provider: "groq",  input_per_1m: 0.59, output_per_1m: 0.79, context_window: 128_000 },
+    ModelPricing { model: "llama-3.3-70b-specdec", provider: "groq",  input_per_1m: 0.59, output_per_1m: 0.79, context_window: 128_000 },
     // Kimi / Moonshot
     ModelPricing { model: "kimi-k2-0711",     provider: "moonshot",  input_per_1m: 0.60, output_per_1m: 2.40, context_window: 131_072 },
     ModelPricing { model: "moonshotai/kimi-k2.5", provider: "openrouter", input_per_1m: 1.00, output_per_1m: 3.00, context_window: 131_072 },
-    // Qwen (via Groq)
-    ModelPricing { model: "qwen/qwen3-32b",   provider: "groq",     input_per_1m: 0.50, output_per_1m: 1.50, context_window: 131_072 },
     // DeepSeek
     ModelPricing { model: "deepseek-chat",      provider: "deepseek",    input_per_1m: 0.28, output_per_1m: 0.42, context_window: 128_000 },
     ModelPricing { model: "deepseek-reasoner",  provider: "deepseek",    input_per_1m: 0.55, output_per_1m: 2.19, context_window: 128_000 },

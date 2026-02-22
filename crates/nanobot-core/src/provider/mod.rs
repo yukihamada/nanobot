@@ -155,6 +155,7 @@ impl LoadBalancedProvider {
     }
 
     /// Record a failure for the provider at `idx`. Opens the circuit after threshold.
+    /// Only counts server errors (5xx) — client errors (4xx) are not the provider's fault.
     pub fn record_failure(&self, idx: usize) {
         if idx >= self.providers.len() { return; }
         let count = self.failure_counts[idx].fetch_add(1, Ordering::Relaxed) + 1;
@@ -169,6 +170,22 @@ impl LoadBalancedProvider {
                 "Circuit breaker OPEN for provider #{} ({}) — {} failures, cooling down {}s",
                 idx, self.providers[idx].default_model(), count, CIRCUIT_BREAKER_COOLDOWN_SECS
             );
+        }
+    }
+
+    /// Record a failure only if it's a server-side error (5xx / network / timeout).
+    /// Client errors (4xx) like invalid model names don't trigger the circuit breaker.
+    pub fn record_failure_if_server_error(&self, idx: usize, err: &crate::error::ProviderError) {
+        match err {
+            crate::error::ProviderError::Api { status, .. } if *status < 500 => {
+                tracing::debug!(
+                    "Provider #{} returned client error ({}), NOT triggering circuit breaker",
+                    idx, status
+                );
+            }
+            _ => {
+                self.record_failure(idx);
+            }
         }
     }
 
@@ -267,15 +284,10 @@ impl LoadBalancedProvider {
             )));
         }
 
-        // Groq keys (fast inference) — register multiple models per key
+        // Groq keys (fast inference)
         for key in Self::read_keys("GROQ_API_KEY") {
-            // Primary: llama (groq family)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key.clone(), Some("https://api.groq.com/openai/v1".to_string()), "llama-3.3-70b-versatile".to_string(),
-            )));
-            // Qwen3 via Groq (qwen family)
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key, Some("https://api.groq.com/openai/v1".to_string()), "qwen/qwen3-32b".to_string(),
+                key, Some("https://api.groq.com/openai/v1".to_string()), "llama-3.3-70b-specdec".to_string(),
             )));
         }
 
@@ -286,30 +298,15 @@ impl LoadBalancedProvider {
             )));
         }
 
-        // OpenRouter keys (backup provider — routes to multiple models)
+        // OpenRouter keys — cheap model chain: minimax → o4-mini → gemini-flash
         for key in Self::read_keys("OPENROUTER_API_KEY") {
-            // MiniMax M2.5 via OpenRouter — default Normal tier model (#1 usage, #1 coding)
+            // MiniMax M2.5 — primary ($0.50/$1.50 per 1M, best cost-perf)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
                 key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "minimax/minimax-m2.5".to_string(),
             )));
-            // Kimi K2.5 via OpenRouter — Normal tier fallback #2
+            // Gemini 2.5 Flash — fallback ($0.15/$0.60 per 1M, cheapest)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "moonshotai/kimi-k2.5".to_string(),
-            )));
-            // o4-mini via OpenRouter — Normal tier fallback #3
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "openai/o4-mini".to_string(),
-            )));
-            // Gemini 2.5 Flash via OpenRouter (tool calling strength)
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "google/gemini-2.5-flash-preview".to_string(),
-            )));
-            // GLM 5 via OpenRouter (Intelligence #6, fast-growing)
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "z-ai/glm-5".to_string(),
-            )));
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key, Some("https://openrouter.ai/api/v1".to_string()), "openrouter/auto".to_string(),
+                key, Some("https://openrouter.ai/api/v1".to_string()), "google/gemini-2.5-flash-preview".to_string(),
             )));
         }
 
@@ -400,7 +397,7 @@ impl LoadBalancedProvider {
         } else if prov_is_gemini {
             "gemini-2.5-flash".to_string()
         } else if prov_is_groq {
-            "llama-3.3-70b-versatile".to_string()
+            "llama-3.3-70b-specdec".to_string()
         } else if prov_is_deepseek {
             "deepseek-chat".to_string()
         } else {
@@ -766,8 +763,8 @@ impl LoadBalancedProvider {
     pub fn get_tier_model(&self, tier: &str) -> Option<(Arc<dyn LlmProvider>, String)> {
         // Each tier has a fallback chain: primary → secondary → tertiary
         let candidates: &[&str] = match tier {
-            "economy"  => &["gemini-2.5-flash", "deepseek-chat", "qwen/qwen3-32b"],
-            "normal"   => &["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "openai/o4-mini", "claude-sonnet-4-6"],
+            "economy"  => &["gemini-2.5-flash", "deepseek-chat", "llama-3.3-70b-specdec"],
+            "normal"   => &["minimax/minimax-m2.5", "google/gemini-2.5-flash-preview"],
             "powerful" => &["claude-sonnet-4-6", "gpt-4o", "gemini-2.5-pro"],
             _ => return None,
         };
@@ -847,7 +844,7 @@ impl LlmProvider for LoadBalancedProvider {
                 return Ok(resp);
             }
             Ok(Err(e)) => {
-                self.record_failure(primary_idx);
+                self.record_failure_if_server_error(primary_idx, &e);
                 tracing::warn!("Primary provider failed for model {}: {}, trying parallel fallback", model, e);
             }
             Err(_) => {
@@ -887,7 +884,11 @@ impl LlmProvider for LoadBalancedProvider {
                         }
                         Ok(Err(e)) => {
                             tracing::warn!("Parallel fallback {} failed: {}", converted_model, e);
-                            let _ = fail_tx.send(idx).await;
+                            // Only count server errors for circuit breaker (not 4xx client errors)
+                            let is_server_error = !matches!(&e, crate::error::ProviderError::Api { status, .. } if *status < 500);
+                            if is_server_error {
+                                let _ = fail_tx.send(idx).await;
+                            }
                         }
                         Err(_) => {
                             tracing::warn!("Parallel fallback {} timed out ({}s)", converted_model, parallel_timeout.as_secs());
@@ -977,7 +978,7 @@ impl LlmProvider for LoadBalancedProvider {
                     return Ok(resp);
                 }
                 Ok(Err(e)) => {
-                    self.record_failure(idx);
+                    self.record_failure_if_server_error(idx, &e);
                     tracing::warn!("Stream provider #{} ({}) failed: {}, trying next", idx, converted_model, e);
                     last_err = format!("{}", e);
                 }

@@ -417,6 +417,7 @@ pub(crate) const GITHUB_TOOL_NAMES: &[&str] = &[
     "github_read_file",
     "github_create_or_update_file",
     "github_create_pr",
+    "improve_project",  // autonomous self-improvement — admin only
 ];
 
 /// Pre-compiled URL regex for explore mode (avoid per-request regex compilation).
@@ -495,7 +496,16 @@ impl AppState {
         let lb_provider = lb_raw.as_ref().map(|lb| lb.clone() as Arc<dyn LlmProvider>);
 
         // Create tool registry with built-in tools
-        let tool_registry = crate::service::integrations::ToolRegistry::with_builtins();
+        let mut tool_registry = crate::service::integrations::ToolRegistry::with_builtins();
+
+        // Add improve_project tool — needs a provider for its inner LLM loop
+        #[cfg(feature = "http-api")]
+        {
+            let improve_prov = lb_provider.clone().or_else(|| provider.clone());
+            if let Some(p) = improve_prov {
+                tool_registry.add_improve_tool(p);
+            }
+        }
 
         Self {
             config,
@@ -1061,6 +1071,55 @@ async fn check_rate_limit(
         Err(e) => {
             tracing::warn!("Rate limit check failed: {}", e);
             true // allow on error (fail-open)
+        }
+    }
+}
+
+/// Check daily request limit for guest sessions (unauthenticated users).
+/// Returns (allowed: bool, count: i64).
+/// pk: RATELIMIT#guest#{session_key}, sk: DAY#{YYYYMMDD}, TTL 48h
+#[cfg(feature = "dynamodb-backend")]
+async fn check_guest_daily_limit(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    session_key: &str,
+    max_per_day: i64,
+) -> (bool, i64) {
+    let now = chrono::Utc::now();
+    let today = now.format("%Y%m%d").to_string();
+    let pk = format!("RATELIMIT#guest#{}", session_key);
+    let sk = format!("DAY#{}", today);
+    let ttl = (now.timestamp() + 172_800).to_string(); // 48h TTL
+
+    let result = dynamo
+        .update_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S(sk))
+        .update_expression("SET #cnt = if_not_exists(#cnt, :zero) + :one, #ttl = :ttl")
+        .expression_attribute_names("#cnt", "count")
+        .expression_attribute_names("#ttl", "ttl")
+        .expression_attribute_values(":zero", AttributeValue::N("0".to_string()))
+        .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+        .expression_attribute_values(":ttl", AttributeValue::N(ttl))
+        .return_values(aws_sdk_dynamodb::types::ReturnValue::UpdatedNew)
+        .send()
+        .await;
+
+    match result {
+        Ok(output) => {
+            if let Some(attrs) = output.attributes {
+                if let Some(count_val) = attrs.get("count").and_then(|v| v.as_n().ok()) {
+                    if let Ok(count) = count_val.parse::<i64>() {
+                        return (count <= max_per_day, count);
+                    }
+                }
+            }
+            (true, 0) // allow on parse error
+        }
+        Err(e) => {
+            tracing::warn!("Guest daily limit check failed: {}", e);
+            (true, 0) // fail-open
         }
     }
 }
@@ -2188,17 +2247,14 @@ const AGENTS: &[AgentProfile] = &[
              - `crates/nanobot-core/src/service/http.rs` — このプロンプト、エージェント定義、APIハンドラー\n\
              - `crates/nanobot-core/src/service/integrations.rs` — 全ツール定義（Tool trait実装）\n\
              - `crates/nanobot-core/src/provider/` — LLMプロバイダー接続\n\
-             - `web/index.html` — フロントエンドSPA\n\
-             - `web/api-docs.html` — APIドキュメント\n\
-             - `web/media.html` — メディアAPIデモ\n\n\
-             **できること:**\n\
-             1. **自分のコードを読む**: github_read_fileで任意のソースを読んで理解\n\
-             2. **バグを直す**: github_create_or_update_fileでコードを修正\n\
-             3. **新しいスキル（ツール）を作る**: integrations.rsにTool trait実装を追加すれば、新しいツールが使えるようになる\n\
-             4. **プロンプトを改善する**: http.rsのAGENTS定数を書き換えれば、自分の人格・能力を更新できる\n\
-             5. **UIを改善する**: web/*.htmlを更新してフロントエンドを進化させる\n\
-             6. **PRを作成**: github_create_prで変更をPRとして提案\n\n\
-             「自分を改善して」「新しいスキル追加して」と言われたら即座に実行。失敗や発見はmemory_logに記録。\n\n\
+             - `web/index.html` — フロントエンドSPA\n\n\
+             **自己改善の方法 — `improve_project` ツールを使う:**\n\
+             - ユーザーから「自己改善して」「プロジェクトを改善して」「このバグを直して」など改善リクエストを受けたら、\n\
+               `improve_project(description=\"<具体的な改善内容>\")` を呼び出す。\n\
+             - まず mode=\"preview\" で分析し、ユーザーに内容を確認させる。\n\
+             - ユーザーが承認したら mode=\"confirm\" で実際にPRを作成する。\n\
+             - `improve_project` は内部でGitHubツールを使ってコードを読み、変更し、PRを作成する。\n\n\
+             失敗や発見はmemory_logに記録。\n\n\
              ## チャネル\n\
              LINE(@619jcqqh) / Telegram(@chatweb_ai_bot) / Discord / Slack / Teams / WhatsApp / Facebook — 14+チャネル対応。\n\
              `/link`コマンドで別チャネルと連携可能。音声会話はWeb UIでマイクボタンから。\n\n\
@@ -3678,6 +3734,45 @@ async fn handle_chat(
         }
     }
 
+    // Check guest daily request limit (unauthenticated users only)
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let is_guest = cached_user.as_ref().map(|u| u.email.is_none()).unwrap_or(true);
+        if is_guest {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                let max_daily: i64 = std::env::var("GUEST_DAILY_LIMIT")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(30);
+                let (allowed, count) = check_guest_daily_limit(dynamo, table, &session_key, max_daily).await;
+                if !allowed {
+                    tracing::warn!("Guest daily limit exceeded: session={}, count={}", session_key, count);
+                    return Json(ChatResponse {
+                        response: format!(
+                            "1日の無料利用上限（{}回）に達しました。\n\
+                             アカウント登録すると、毎日もっとたくさん使えます！\n\n\
+                             Daily free limit ({} requests) reached.\n\
+                             Sign up for a free account to continue!",
+                            max_daily, max_daily
+                        ),
+                        session_id: req.session_id,
+                        agent: None,
+                        tools_used: None,
+                        credits_used: Some(0),
+                        credits_remaining: Some(0),
+                        model_used: None,
+                        models_consulted: None,
+                        action: Some("signup".to_string()),
+                        input_tokens: None,
+                        output_tokens: None,
+                        estimated_cost_usd: None,
+                        mode: None,
+                    });
+                }
+            }
+        }
+    }
+
     // Check concurrent request limit (10 for free, 1000 for paid) — using cached user
     let max_concurrent = {
         #[cfg(feature = "dynamodb-backend")]
@@ -3826,9 +3921,9 @@ async fn handle_chat(
             let groq_provider = crate::provider::openai_compat::OpenAiCompatProvider::new(
                 groq_key,
                 Some("https://api.groq.com/openai/v1".to_string()),
-                "llama-3.3-70b-versatile".to_string()
+                "llama-3.3-70b-specdec".to_string()
             );
-            if let Ok(detection_resp) = groq_provider.chat(&detection_messages, None, "llama-3.3-70b-versatile", 10, 0.0).await {
+            if let Ok(detection_resp) = groq_provider.chat(&detection_messages, None, "llama-3.3-70b-specdec", 10, 0.0).await {
                 if let Some(content) = detection_resp.content {
                     content.to_uppercase().trim().starts_with("YES")
                 } else {
@@ -3859,9 +3954,9 @@ async fn handle_chat(
             .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
             .or(agent.preferred_model)
             .unwrap_or_else(|| {
-                // Web channel gets the best model when no explicit preference is set
+                // Web channel uses minimax by default (best cost-performance)
                 if req.channel == "web" || req.channel.starts_with("webchat") {
-                    "gpt-4o"
+                    "minimax/minimax-m2.5"
                 } else {
                     &default_model
                 }
@@ -6645,6 +6740,34 @@ async fn handle_chat_stream(
         }
     }
 
+    // Check guest daily request limit (unauthenticated users only)
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let is_guest = stream_user.as_ref().map(|u| u.email.is_none()).unwrap_or(true);
+        if is_guest {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                let max_daily: i64 = std::env::var("GUEST_DAILY_LIMIT")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(30);
+                let (allowed, count) = check_guest_daily_limit(dynamo, table, &session_key, max_daily).await;
+                if !allowed {
+                    tracing::warn!("Guest daily limit exceeded (stream): session={}, count={}", session_key, count);
+                    let content = format!(
+                        "1日の無料利用上限（{}回）に達しました。アカウント登録すると、毎日もっとたくさん使えます！ Daily free limit ({} requests) reached. Sign up for a free account to continue!",
+                        max_daily, max_daily
+                    );
+                    let err_stream = stream::once(async move {
+                        Ok::<_, Infallible>(Event::default().data(
+                            serde_json::json!({"type":"error","content":content,"action":"signup"}).to_string()
+                        ))
+                    });
+                    return Sse::new(err_stream).into_response();
+                }
+            }
+        }
+    }
+
     // Resolve inference mode for streaming endpoint (same logic as handle_chat)
     let stream_host = effective_host(&headers);
     let is_wisbee_stream = stream_host.contains("wisbee.ai");
@@ -6772,7 +6895,7 @@ async fn handle_chat_stream(
         .or(agent.preferred_model)
         .unwrap_or_else(|| {
             if req.channel == "web" || req.channel.starts_with("webchat") {
-                "gpt-4o"
+                "minimax/minimax-m2.5"
             } else {
                 &default_model
             }
@@ -17872,7 +17995,7 @@ async fn try_runpod_cosyvoice_tts(text: &str, mode: &str, prompt_audio: Option<&
     let mut input = serde_json::json!({
         "text": text,
         "mode": mode,
-        "output_format": "mp3",
+        "format": "mp3",
     });
 
     if let Some(ref_audio) = prompt_audio {
