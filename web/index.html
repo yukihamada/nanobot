@@ -1742,7 +1742,7 @@
       align-items: center;
       justify-content: center;
       color: var(--muted);
-      gap: 24px;
+      gap: 14px;
       padding-bottom: 60px;
     }
     .app-chat-empty-logo {
@@ -5119,7 +5119,6 @@
     <div class="app-chat">
       <div class="app-chat-messages" id="app-messages">
         <div class="app-chat-empty" id="app-empty">
-          <div class="app-chat-empty-logo" onclick="showWelcomeAudioFlow()">chatweb.ai</div>
           <div class="ai-avatar-container" id="ai-avatar-container" onclick="toggleVoiceHero()">
             <canvas id="ai-avatar-canvas" width="200" height="200"></canvas>
           </div>
@@ -5129,10 +5128,6 @@
           <div class="voice-hero-label" id="voice-hero-label">スペースキーを押して話す / タップして話す</div>
           <div class="app-chat-empty-text" id="app-empty-text">どんなタスクを終わらせたいですか？</div>
           <div class="app-chat-suggestions" id="app-suggestions"></div>
-          <div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;">
-            <a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a>
-            <a href="/pricing" style="color:var(--muted);text-decoration:none;">Pricing</a>
-          </div>
         </div>
       </div>
       <div class="app-chat-input-area">
@@ -6043,38 +6038,14 @@
       const empty = document.createElement('div');
       empty.className = 'app-chat-empty';
       empty.id = 'app-empty';
-      empty.innerHTML = '<div class="app-chat-empty-logo" onclick="showWelcomeAudioFlow()">chatweb.ai</div>'
-        + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
+      empty.innerHTML = '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
         + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
-        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '次はどんなタスクを終わらせますか？' : 'What task do you want to complete next?') + '</div>'
+        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '何でも聞いてください' : 'Ask me anything') + '</div>'
         + '<div class="app-chat-suggestions" id="app-suggestions"></div>';
       msgsEl.appendChild(empty);
       msgsEl.scrollTop = msgsEl.scrollHeight;
 
-      // Render predicted questions based on time of day and context
-      const hour = new Date().getHours();
-      const predictedJa = hour < 12
-        ? ['今日中に終わらせたいタスクを整理して', '午前中にメール5通返信したい', '今週の締切タスクをリストアップして', '朝イチの会議資料を準備して']
-        : hour < 18
-        ? ['今日中にこのレポートを仕上げたい', '17時までにプレゼン資料を作りたい', '今週中にコードレビューを終わらせたい', '明日の会議のアジェンダを作って']
-        : ['明日の朝までにこの企画書を完成させたい', '今週中に確定申告を終わらせたい', '週末までにポートフォリオを更新したい', '明日の締切に間に合うように計画を立てて'];
-      const predictedEn = hour < 12
-        ? ['Organize tasks I need to finish today', 'Reply to 5 emails before noon', 'List all tasks due this week', 'Prepare materials for morning meeting']
-        : hour < 18
-        ? ['Finish this report by end of day', 'Create presentation slides by 5pm', 'Complete code review this week', 'Draft agenda for tomorrow\'s meeting']
-        : ['Finish this proposal by tomorrow morning', 'Complete tax filing this week', 'Update portfolio by weekend', 'Plan to meet tomorrow\'s deadline'];
-      const predicted = l === 'ja' ? predictedJa : predictedEn;
-      const container = document.getElementById('app-suggestions');
-      if (container) {
-        container.innerHTML = '';
-        predicted.forEach(s => {
-          const btn = document.createElement('div');
-          btn.className = 'app-chat-suggestion';
-          btn.textContent = s;
-          btn.onclick = () => { document.getElementById('app-input').value = s; appSend(); };
-          container.appendChild(btn);
-        });
-      }
+      // No default suggestions — clean empty state
 
       // Start a new session silently
       if (authToken) {
@@ -8991,24 +8962,7 @@
         return;
       }
 
-      const suggestions = l === 'ja' ? [
-        '今日中にプレゼン資料を完成させたい',
-        '今週の締切タスクを整理して優先順位をつけて',
-        '明日の会議までにレポートを仕上げたい',
-        '月末までに確定申告を終わらせる計画を立てて',
-      ] : [
-        'I need to finish my presentation by end of today',
-        'Organize my deadlines this week and prioritize them',
-        'Help me complete this report before tomorrow\'s meeting',
-        'Plan to finish my tax filing by end of month',
-      ];
-      suggestions.forEach(s => {
-        const btn = document.createElement('div');
-        btn.className = 'app-chat-suggestion';
-        btn.textContent = s;
-        btn.onclick = () => { document.getElementById('app-input').value = s; appSend(); };
-        container.appendChild(btn);
-      });
+      // No default suggestions — start with a clean empty state
     }
 
     async function generateContextualSuggestions(summary, container) {
@@ -9313,12 +9267,10 @@
       const empty = document.createElement('div');
       empty.className = 'app-chat-empty';
       empty.id = 'app-empty';
-      empty.innerHTML = '<div class="app-chat-empty-logo" onclick="showWelcomeAudioFlow()">chatweb.ai</div>'
-        + '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
+      empty.innerHTML = '<button class="voice-hero-btn" id="voice-hero-btn" onclick="toggleVoiceHero()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" fill="currentColor"/><path d="M6 10v1a6 6 0 0012 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>'
         + '<div class="voice-hero-label" id="voice-hero-label">' + (l === 'ja' ? 'タップして話す' : 'Tap to talk') + '</div>'
-        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '次はどんなタスクを終わらせますか？' : 'What task do you want to complete next?') + '</div>'
-        + '<div class="app-chat-suggestions" id="app-suggestions"></div>'
-        + '<div style="margin-top:16px;display:flex;gap:12px;justify-content:center;font-size:12px;"><a href="/docs" style="color:var(--muted);text-decoration:none;">API Docs</a><a href="/pricing" style="color:var(--muted);text-decoration:none;">Pricing</a></div>';
+        + '<div class="app-chat-empty-text" id="app-empty-text">' + (l === 'ja' ? '何でも聞いてください' : 'Ask me anything') + '</div>'
+        + '<div class="app-chat-suggestions" id="app-suggestions"></div>';
       msgsEl.appendChild(empty);
       appRenderSuggestions(prevSummary);
       document.getElementById('app-sidebar').classList.remove('open');
@@ -9389,18 +9341,27 @@
       }
 
       // Markdown formatting
-      // Headings: ## h2, ### h3, #### h4
+      // Horizontal rules: --- or *** or ___
+      html = html.replace(/^(-{3,}|\*{3,}|_{3,})$/gm, function() {
+        hasMarkdown = true;
+        return '<hr style="border:none;border-top:1px solid var(--border);margin:6px 0">';
+      });
+      // Headings: # h1, ## h2, ### h3, #### h4
       html = html.replace(/^####\s+(.+)$/gm, function(match, content) {
         hasMarkdown = true;
-        return '<h4 style="margin:12px 0 6px;font-size:15px;font-weight:600">' + content + '</h4>';
+        return '<h4 style="margin:6px 0 2px;font-size:14px;font-weight:600">' + content + '</h4>';
       });
       html = html.replace(/^###\s+(.+)$/gm, function(match, content) {
         hasMarkdown = true;
-        return '<h3 style="margin:14px 0 8px;font-size:16px;font-weight:700">' + content + '</h3>';
+        return '<h3 style="margin:6px 0 2px;font-size:15px;font-weight:700">' + content + '</h3>';
       });
       html = html.replace(/^##\s+(.+)$/gm, function(match, content) {
         hasMarkdown = true;
-        return '<h2 style="margin:16px 0 10px;font-size:18px;font-weight:700">' + content + '</h2>';
+        return '<h2 style="margin:8px 0 2px;font-size:16px;font-weight:700">' + content + '</h2>';
+      });
+      html = html.replace(/^#\s+(.+)$/gm, function(match, content) {
+        hasMarkdown = true;
+        return '<h2 style="margin:8px 0 2px;font-size:16px;font-weight:700">' + content + '</h2>';
       });
 
       // Bold: **text** or __text__
@@ -9425,9 +9386,9 @@
         hasMarkdown = true;
         return '<li>' + content + '</li>';
       });
-      // Wrap consecutive <li> in <ul>
-      html = html.replace(/(<li>.*<\/li>\n?)+/g, function(match) {
-        return '<ul style="margin:8px 0;padding-left:24px">' + match + '</ul>';
+      // Wrap consecutive <li> in <ul> (allow multiple blank lines between items)
+      html = html.replace(/(<li>.*<\/li>\n*)+/g, function(match) {
+        return '<ul style="margin:4px 0;padding-left:20px">' + match.replace(/\n+/g, '') + '</ul>';
       });
 
       // Numbered lists: convert "1. item" to <li> in <ol>
@@ -9435,9 +9396,9 @@
         hasMarkdown = true;
         return '<li>' + content + '</li>';
       });
-      html = html.replace(/(<li>.*<\/li>\n?)+/g, function(match) {
+      html = html.replace(/(<li>.*<\/li>\n*)+/g, function(match) {
         if (match.includes('<ul')) return match; // already wrapped
-        return '<ol style="margin:8px 0;padding-left:24px">' + match + '</ol>';
+        return '<ol style="margin:4px 0;padding-left:20px">' + match.replace(/\n+/g, '') + '</ol>';
       });
 
       // Code blocks: ```code```
@@ -9452,9 +9413,12 @@
         return '<code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:0.9em">' + code + '</code>';
       });
 
-      // Convert newlines to <br>
+      // Convert newlines to <br>: collapse 2+ consecutive newlines to 1 to avoid large gaps
       if (hasMarkdown || hasMedia) {
-        html = html.replace(/\n/g, '<br>');
+        html = html.replace(/\n+/g, '<br>');
+        // Remove <br> immediately after/before block-level elements to avoid double spacing
+        html = html.replace(/(<\/(?:h[1-6]|ul|ol|pre|hr)>|<hr[^>]*>)<br>/g, '$1');
+        html = html.replace(/<br>(<(?:h[1-6]|ul|ol|pre)[^>]*>)/g, '$1');
       }
 
       // Replace think tag placeholders with collapsible elements (collapsed by default)
@@ -10752,9 +10716,20 @@
 
         // If single-tier mode, just show the response normally
         if (raceData.tier || results.length === 1) {
-          let botMsg = winner.response;
-          botMsg += '\n\n<small style="color:var(--muted);">' + modelIcon(winner.model) + ' ' + winner.model + ' \u00B7 ' + (winner.time_ms / 1000).toFixed(1) + 's</small>';
-          appAddMsg(botMsg, 'bot');
+          appAddMsg(winner.response, 'bot');
+          // Append model/time footer via DOM (avoid HTML escaping issues)
+          var lastRaceMsg = document.querySelector('#app-messages .app-msg-bot:last-child .app-msg-content');
+          if (lastRaceMsg) {
+            var raceFooter = document.createElement('div');
+            raceFooter.style.cssText = 'font-size:9px;color:var(--muted);margin-top:4px;opacity:0.5;text-align:right;letter-spacing:0.3px;display:flex;gap:8px;justify-content:flex-end;align-items:center;';
+            var raceModelSpan = document.createElement('span');
+            var raceShortModel = simplifyModelName(winner.model);
+            raceModelSpan.textContent = modelIcon(winner.model) + ' ' + raceShortModel + ' \u00B7 ' + (winner.time_ms / 1000).toFixed(1) + 's';
+            raceModelSpan.title = winner.model;
+            raceModelSpan.style.cssText = 'cursor:help;border-bottom:1px dotted var(--muted);';
+            raceFooter.appendChild(raceModelSpan);
+            lastRaceMsg.appendChild(raceFooter);
+          }
           if (raceData.credits_remaining !== undefined && raceData.credits_remaining !== null) updateCredits(raceData.credits_remaining);
           autoPlayTTS(winner.response, true);
           knownMsgCount += 2; syncVersion++;
