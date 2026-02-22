@@ -10608,7 +10608,9 @@
           models.forEach(m => {
             const opt = document.createElement('option');
             opt.value = m.id;
-            opt.textContent = m.id + ' ($' + m.input_per_1m + '/$' + m.output_per_1m + ')';
+            const ci = m.credits_in_1k || '?';
+            const co = m.credits_out_1k || '?';
+            opt.textContent = m.id + ' (' + ci + '/' + co + ' cr/1K tokens)';
             og.appendChild(opt);
           });
           sel.appendChild(og);
@@ -11792,7 +11794,9 @@
             const opt = document.createElement('option');
             opt.value = m.id;
             const ctx = m.context_window >= 1000000 ? (m.context_window/1000000)+'M' : (m.context_window/1000)+'K';
-            opt.textContent = m.id + ' ($' + m.input_per_1m.toFixed(2) + '/' + m.output_per_1m.toFixed(2) + ', ' + ctx + ')';
+            const ci = m.credits_in_1k || '?';
+            const co = m.credits_out_1k || '?';
+            opt.textContent = m.id + ' (' + ci + '/' + co + ' cr/1K, ' + ctx + ')';
             og.appendChild(opt);
           });
           sel.appendChild(og);

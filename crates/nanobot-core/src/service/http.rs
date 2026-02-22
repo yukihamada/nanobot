@@ -19645,6 +19645,8 @@ async fn handle_list_models() -> impl IntoResponse {
             "input_per_1m": p.input_per_1m,
             "output_per_1m": p.output_per_1m,
             "context_window": p.context_window,
+            "credits_in_1k": p.credits_in_1k,
+            "credits_out_1k": p.credits_out_1k,
         })
     }).collect();
 

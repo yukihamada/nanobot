@@ -486,8 +486,8 @@
             <tr style="background:rgba(99,102,241,0.1);text-align:left">
               <th style="padding:12px 16px;font-size:13px;font-weight:600">Model</th>
               <th style="padding:12px 16px;font-size:13px;font-weight:600">Provider</th>
-              <th style="padding:12px 16px;font-size:13px;font-weight:600;text-align:right" id="t-input-cost">入力 $/1M</th>
-              <th style="padding:12px 16px;font-size:13px;font-weight:600;text-align:right" id="t-output-cost">出力 $/1M</th>
+              <th style="padding:12px 16px;font-size:13px;font-weight:600;text-align:right" id="t-input-cost">入力 cr/1K</th>
+              <th style="padding:12px 16px;font-size:13px;font-weight:600;text-align:right" id="t-output-cost">出力 cr/1K</th>
               <th style="padding:12px 16px;font-size:13px;font-weight:600;text-align:right" id="t-ctx-window">コンテキスト</th>
             </tr>
           </thead>
@@ -983,29 +983,40 @@
       });
     });
 
-    // Model pricing data (kept in sync with pricing.rs)
-    const MODEL_PRICING = [
-      { model: 'gpt-4o',          provider: 'OpenAI',    input: 2.50,  output: 10.00, ctx: 128000 },
-      { model: 'gpt-4o-mini',     provider: 'OpenAI',    input: 0.15,  output: 0.60,  ctx: 128000 },
-      { model: 'gpt-4.1',         provider: 'OpenAI',    input: 2.00,  output: 8.00,  ctx: 1048576 },
-      { model: 'gpt-4.1-mini',    provider: 'OpenAI',    input: 0.40,  output: 1.60,  ctx: 1048576 },
-      { model: 'gpt-4.1-nano',    provider: 'OpenAI',    input: 0.10,  output: 0.40,  ctx: 1048576 },
-      { model: 'claude-sonnet-4-5', provider: 'Anthropic', input: 3.00,  output: 15.00, ctx: 200000 },
-      { model: 'claude-haiku-3-5',  provider: 'Anthropic', input: 1.00,  output: 5.00,  ctx: 200000 },
-      { model: 'claude-opus-4-5',   provider: 'Anthropic', input: 5.00,  output: 25.00, ctx: 200000 },
-      { model: 'gemini-2.5-flash',  provider: 'Google',   input: 0.15,  output: 0.60,  ctx: 1048576 },
-      { model: 'gemini-2.0-flash',  provider: 'Google',   input: 0.10,  output: 0.40,  ctx: 1048576 },
-      { model: 'llama-3.3-70b',     provider: 'Groq',     input: 0.59,  output: 0.79,  ctx: 128000 },
-    ];
+    // Model pricing fetched from API (single source of truth: pricing.rs)
+    let MODEL_PRICING = [];
+
+    async function loadModelPricing() {
+      try {
+        const r = await fetch('/api/v1/models');
+        const d = await r.json();
+        MODEL_PRICING = (d.models || []).map(m => ({
+          model: m.id, provider: m.provider,
+          input: m.input_per_1m, output: m.output_per_1m,
+          ctx: m.context_window,
+          cr_in: m.credits_in_1k || 0, cr_out: m.credits_out_1k || 0,
+        }));
+      } catch(e) {
+        // Fallback: minimal set
+        MODEL_PRICING = [
+          { model: 'minimax/minimax-m2.5', provider: 'openrouter', input: 0.50, output: 1.50, ctx: 131072, cr_in: 2, cr_out: 6 },
+          { model: 'gpt-4o', provider: 'openai', input: 2.50, output: 10.00, ctx: 128000, cr_in: 5, cr_out: 15 },
+        ];
+      }
+      renderModelTable();
+      renderCalcModelSelect();
+      updateCalcResult();
+    }
 
     function renderModelTable() {
       const tbody = document.getElementById('model-table-body');
+      if (!tbody) return;
       tbody.innerHTML = MODEL_PRICING.map(m =>
         '<tr style="border-top:1px solid var(--border)">' +
         '<td style="padding:10px 16px;font-size:13px;font-weight:600">' + m.model + '</td>' +
         '<td style="padding:10px 16px;font-size:13px;color:var(--muted)">' + m.provider + '</td>' +
-        '<td style="padding:10px 16px;font-size:13px;text-align:right;color:var(--green)">$' + m.input.toFixed(2) + '</td>' +
-        '<td style="padding:10px 16px;font-size:13px;text-align:right;color:var(--green)">$' + m.output.toFixed(2) + '</td>' +
+        '<td style="padding:10px 16px;font-size:13px;text-align:right;color:var(--green)">' + m.cr_in + '</td>' +
+        '<td style="padding:10px 16px;font-size:13px;text-align:right;color:var(--green)">' + m.cr_out + '</td>' +
         '<td style="padding:10px 16px;font-size:13px;text-align:right">' + (m.ctx >= 1000000 ? (m.ctx/1000000).toFixed(0)+'M' : (m.ctx/1000)+'K') + '</td>' +
         '</tr>'
       ).join('');
@@ -1013,8 +1024,9 @@
 
     function renderCalcModelSelect() {
       const sel = document.getElementById('calc-model');
+      if (!sel) return;
       sel.innerHTML = MODEL_PRICING.map(m =>
-        '<option value="' + m.model + '">' + m.model + ' (' + m.provider + ') — $' + m.input + '/$' + m.output + '</option>'
+        '<option value="' + m.model + '">' + m.model + ' (' + m.provider + ') — ' + m.cr_in + '/' + m.cr_out + ' cr/1K</option>'
       ).join('');
     }
 
@@ -1023,21 +1035,20 @@
       const tokensPerConvo = parseInt(document.getElementById('calc-tokens').value) || 500;
       const modelName = document.getElementById('calc-model').value;
       const m = MODEL_PRICING.find(p => p.model === modelName) || MODEL_PRICING[0];
+      if (!m) return;
       const totalTokens = convos * tokensPerConvo;
       // Assume 60% input, 40% output
       const inputTokens = totalTokens * 0.6;
       const outputTokens = totalTokens * 0.4;
-      const cost = (inputTokens / 1000000) * m.input + (outputTokens / 1000000) * m.output;
-      document.getElementById('calc-result').textContent = '$' + cost.toFixed(2);
+      const credits = Math.ceil((inputTokens / 1000) * m.cr_in + (outputTokens / 1000) * m.cr_out);
+      document.getElementById('calc-result').textContent = credits.toLocaleString() + ' cr';
       const l = document.documentElement.lang || 'ja';
       document.getElementById('calc-detail').textContent = l === 'ja'
         ? (totalTokens.toLocaleString() + ' tokens/月 × ' + m.model)
         : (totalTokens.toLocaleString() + ' tokens/mo × ' + m.model);
     }
 
-    renderModelTable();
-    renderCalcModelSelect();
-    updateCalcResult();
+    loadModelPricing();
     document.getElementById('calc-convos').addEventListener('input', updateCalcResult);
     document.getElementById('calc-tokens').addEventListener('input', updateCalcResult);
     document.getElementById('calc-model').addEventListener('change', updateCalcResult);

@@ -137,104 +137,21 @@ pub struct CreditRate {
 }
 
 /// Get credit rate for a model.
+/// Looks up from PRICING_TABLE (single source of truth) in pricing.rs.
 pub fn credit_rate(model: &str) -> CreditRate {
-    let model_lower = model.to_lowercase();
     // Local fallback models are free (0 credits)
-    if model_lower.starts_with("local-") {
+    if model.to_lowercase().starts_with("local-") {
+        return CreditRate { input_per_1k: 0, output_per_1k: 0 };
+    }
+    // Look up from PRICING_TABLE
+    if let Some(p) = crate::provider::pricing::lookup_model(model) {
         return CreditRate {
-            input_per_1k: 0,
-            output_per_1k: 0,
+            input_per_1k: p.credits_in_1k,
+            output_per_1k: p.credits_out_1k,
         };
     }
-    if model_lower.contains("gpt-4.1-nano") || model_lower.contains("gpt-4o-mini") || model_lower.contains("gemini-flash") {
-        CreditRate {
-            input_per_1k: 1,
-            output_per_1k: 3,
-        }
-    } else if model_lower.contains("gpt-4.1-mini") {
-        // GPT-4.1-mini: $0.40/$1.60 per 1M
-        CreditRate {
-            input_per_1k: 1,
-            output_per_1k: 4,
-        }
-    } else if model_lower.contains("o3-mini") || model_lower.contains("o4-mini") {
-        // o3-mini / o4-mini: $1.10/$4.40 per 1M
-        CreditRate {
-            input_per_1k: 2,
-            output_per_1k: 8,
-        }
-    } else if model_lower.contains("gpt-4.1") || model_lower.contains("gpt-4o") {
-        // GPT-4.1: $2/$8, GPT-4o: $2.50/$10 per 1M
-        CreditRate {
-            input_per_1k: 5,
-            output_per_1k: 15,
-        }
-    } else if model_lower.contains("gemini") && model_lower.contains("pro") {
-        // Gemini 2.5 Pro: $1.25/$10 per 1M
-        CreditRate {
-            input_per_1k: 3,
-            output_per_1k: 15,
-        }
-    } else if model_lower.contains("claude") && model_lower.contains("haiku") {
-        // Claude Haiku 4.5: $1/$5 per 1M
-        CreditRate {
-            input_per_1k: 2,
-            output_per_1k: 8,
-        }
-    } else if model_lower.contains("claude") && model_lower.contains("sonnet") {
-        // Claude Sonnet 4.5: $3/$15 per 1M
-        CreditRate {
-            input_per_1k: 6,
-            output_per_1k: 18,
-        }
-    } else if model_lower.contains("claude") && model_lower.contains("opus") {
-        // Claude Opus 4.5/4.6: $5/$25 per 1M
-        CreditRate {
-            input_per_1k: 10,
-            output_per_1k: 38,
-        }
-    } else if model_lower.contains("deepseek") {
-        // DeepSeek V3: $0.28/$0.42 per 1M
-        CreditRate {
-            input_per_1k: 1,
-            output_per_1k: 1,
-        }
-    } else if model_lower.contains("llama") || model_lower.contains("mixtral") || model_lower.contains("groq") {
-        // Groq: fast inference, low cost
-        CreditRate {
-            input_per_1k: 1,
-            output_per_1k: 2,
-        }
-    } else if model_lower.contains("kimi") || model_lower.contains("moonshot") {
-        CreditRate {
-            input_per_1k: 3,
-            output_per_1k: 9,
-        }
-    } else if model_lower.contains("minimax") || model_lower.contains("m2.5") {
-        // MiniMax M2.5: mid-range pricing, high cost-performance
-        CreditRate {
-            input_per_1k: 2,
-            output_per_1k: 6,
-        }
-    } else if model_lower.contains("glm") || model_lower.contains("z-ai") {
-        // GLM 5: similar to Kimi pricing
-        CreditRate {
-            input_per_1k: 3,
-            output_per_1k: 9,
-        }
-    } else if model_lower.contains("qwen") {
-        // Qwen3 via Groq
-        CreditRate {
-            input_per_1k: 2,
-            output_per_1k: 6,
-        }
-    } else {
-        // Default rate
-        CreditRate {
-            input_per_1k: 5,
-            output_per_1k: 15,
-        }
-    }
+    // Default rate for unknown models
+    CreditRate { input_per_1k: 5, output_per_1k: 15 }
 }
 
 /// Calculate credits consumed for a given model and token usage.
