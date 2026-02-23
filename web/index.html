@@ -5423,6 +5423,9 @@
       imgEl.src = url;
     }
 
+    const CW_VERSION = 'v22';
+    console.log('[CW] version:', CW_VERSION);
+
     const msgs = document.getElementById('messages');
     const input = document.getElementById('input');
 
@@ -8790,6 +8793,48 @@
       }
     }
 
+    function _pollVoiceCloneStatus(jobId) {
+      return new Promise(function(resolve, reject) {
+        var attempts = 0;
+        var maxAttempts = 60; // 2 min (2s intervals)
+        var timer = setInterval(function() {
+          fetch(API + '/api/v1/voice/clone/status/' + jobId).then(function(r) {
+            if (r.status === 200) {
+              var ct = r.headers.get('content-type') || '';
+              if (ct.indexOf('audio/') >= 0) {
+                clearInterval(timer);
+                r.blob().then(resolve).catch(reject);
+                return;
+              }
+              // JSON error response
+              return r.json().then(function(d) {
+                clearInterval(timer);
+                reject(new Error(d.error || 'Voice clone failed'));
+              });
+            }
+            if (r.status === 202) {
+              // Still processing
+              attempts++;
+              r.json().then(function(d) {
+                var s = d.status || 'processing';
+                document.getElementById('onboard-rec-status').textContent = '声を生成中...（' + s + ' ' + attempts + '/' + maxAttempts + '）';
+              }).catch(function(){});
+              if (attempts >= maxAttempts) {
+                clearInterval(timer);
+                reject(new Error('Voice clone timed out'));
+              }
+              return;
+            }
+            clearInterval(timer);
+            r.text().then(function(t) { reject(new Error('Status error: ' + r.status + ' ' + t)); });
+          }).catch(function(err) {
+            clearInterval(timer);
+            reject(err);
+          });
+        }, 2000);
+      });
+    }
+
     function _onboardProcessRecording() {
       var blob = new Blob(_onboardRecordedChunks, { type: 'audio/webm' });
       if (blob.size < 1000) {
@@ -8813,6 +8858,13 @@
             mode: 'zero_shot',
           }),
         }).then(function(r) {
+          if (r.status === 202) {
+            // Async mode — poll for result
+            return r.json().then(function(data) {
+              document.getElementById('onboard-rec-status').textContent = '声を生成中...（' + (data.status || 'queued') + '）';
+              return _pollVoiceCloneStatus(data.job_id);
+            });
+          }
           if (!r.ok) throw new Error('Clone failed: ' + r.status);
           return r.blob();
         }).then(function(audioBlob) {
@@ -9943,16 +9995,18 @@
         const agentSel = document.getElementById('app-agent-select').value;
         const msgToSend = (agentSel !== 'auto') ? ('@' + agentSel + ' ' + text) : text;
 
-        // Race mode: all tiers except custom use race API
-        if (_selectedTier && _selectedTier !== '__skip_race__' && _selectedTier !== 'custom') {
-          clearTimeout(frontendTimeout);
-          clearInterval(statusInterval);
-          stopThinkingAmbient();
-          thinking.remove();
-          await appRace(msgToSend, text);
-          return;
+        // Map tier to model — all tiers use stream API directly
+        const TIER_MODELS = {
+          'economy': 'gemini-2.5-flash',
+          'normal': 'minimax/minimax-m2.5',
+          'powerful': 'claude-opus-4-6',
+        };
+        if (_selectedTier && TIER_MODELS[_selectedTier]) {
+          const llmS = JSON.parse(localStorage.getItem('llmSettings') || '{}');
+          llmS.model = TIER_MODELS[_selectedTier];
+          localStorage.setItem('llmSettings', JSON.stringify(llmS));
         }
-        // Custom tier: inject selected model into llmSettings for stream API
+        // Custom tier: inject selected model
         if (_selectedTier === 'custom') {
           const customModel = localStorage.getItem('customModel');
           if (customModel) {
@@ -9960,10 +10014,6 @@
             llmS.model = customModel;
             localStorage.setItem('llmSettings', JSON.stringify(llmS));
           }
-        }
-        // Reset skip flag
-        if (_selectedTier === '__skip_race__') {
-          // pass through to normal stream (used by raceSummarize)
         }
 
         const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
@@ -10656,7 +10706,7 @@
       thinking.innerHTML = '<div class="app-msg-avatar">cw</div>'
         + '<div class="app-msg-content" style="color:var(--muted);">'
         + '<span class="thinking-icon">\u{1F3C1}</span> '
-        + '<span class="thinking-text">' + (lang === 'ja' ? '全モデルでレース中...' : 'Racing all models...') + '</span> '
+        + '<span class="thinking-text">' + (lang === 'ja' ? '\u5FDC\u7B54\u3092\u751F\u6210\u4E2D...' : 'Generating response...') + '</span> '
         + '<span class="thinking-elapsed">(0.0s)</span>'
         + '<div class="shimmer-bar" style="margin-top:8px;"></div></div>';
       msgsEl.appendChild(thinking);
@@ -10669,8 +10719,15 @@
         if (el) el.textContent = '(' + elapsed + 's)';
       }, 100);
 
+      function raceCleanup() {
+        clearInterval(statusInterval);
+        stopThinkingAmbient();
+        if (thinking.parentNode) thinking.remove();
+      }
+
       try {
         const tier = _selectedTier === 'auto' ? null : _selectedTier;
+        console.log('[CW] appRace: tier=' + tier + ', session=' + webSessionId);
         const raceAbort = new AbortController();
         const raceTimeout = setTimeout(() => { raceAbort.abort(); }, 30000);
         const r = await fetch(API + '/api/v1/chat/race', {
@@ -10687,15 +10744,9 @@
         clearTimeout(raceTimeout);
 
         if (!r.ok || !r.body) {
-          clearInterval(statusInterval);
-          stopThinkingAmbient();
-          if (thinking.parentNode) thinking.remove();
-          // Fall back to normal stream
-          console.log('Race fetch failed (status=' + r.status + '), falling back to normal stream');
-          _selectedTier = '__skip_race__';
-          window._raceRetrying = true;
-          document.getElementById('app-input').value = text;
-          await appSend();
+          raceCleanup();
+          console.warn('[CW] Race fetch failed: status=' + r.status);
+          appAddMsg(friendlyError('Service temporarily unavailable'), 'bot');
           return;
         }
 
@@ -10722,22 +10773,16 @@
             if (!dataStr) continue;
             try {
               const data = JSON.parse(dataStr);
+              console.log('[CW] Race SSE data:', data.type || 'error', data.error ? '(error)' : '');
               if (data.error) {
-                clearInterval(statusInterval);
-                stopThinkingAmbient();
-                if (thinking.parentNode) thinking.remove();
+                raceCleanup();
                 if (data.action === 'upgrade') {
                   appAddMsg(friendlyError(data.error), 'bot');
                   appendUpgradeButton();
                   setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800);
                   return;
                 }
-                // Fall back to normal stream on race error
-                console.log('Race error, falling back to normal stream:', data.error);
-                _selectedTier = '__skip_race__';
-                window._raceRetrying = true;
-                document.getElementById('app-input').value = text;
-                await appSend();
+                appAddMsg(friendlyError(data.error), 'bot');
                 return;
               }
 
@@ -10749,7 +10794,7 @@
                 // Show first result immediately
                 if (!firstResultShown) {
                   clearInterval(statusInterval);
-                  thinking.remove();
+                  if (thinking.parentNode) thinking.remove();
 
                   container = document.createElement('div');
                   container.className = 'race-container';
@@ -10772,18 +10817,16 @@
                 // Backend sends all results in one batch — populate results array
                 if (data.results && data.results.length > 0 && results.length === 0) {
                   data.results.sort((a, b) => (a.rank || 0) - (b.rank || 0));
-                  data.results.forEach(r => results.push(r));
+                  data.results.forEach(function(r) { results.push(r); });
                   firstResultShown = true;
                 }
               }
-            } catch (parseErr) { console.warn('Race SSE parse error:', dataStr, parseErr); }
+            } catch (parseErr) { console.warn('[CW] Race SSE parse error:', dataStr, parseErr); }
           }
         }
 
         // Clean up thinking indicator
-        clearInterval(statusInterval);
-        stopThinkingAmbient();
-        if (thinking.parentNode) thinking.remove();
+        raceCleanup();
 
         if (!firstResultShown || results.length === 0) {
           appAddMsg(lang === 'ja' ? '\u5168\u30E2\u30C7\u30EB\u304C\u5931\u6557\u3057\u307E\u3057\u305F' : 'All models failed', 'bot');
@@ -10793,7 +10836,7 @@
         const winner = results[0];
 
         // If single-tier mode, just show the response normally
-        if (raceData.tier || results.length === 1) {
+        if ((raceData && raceData.tier) || results.length === 1) {
           appAddMsg(winner.response, 'bot');
           // Append model/time footer via DOM (avoid HTML escaping issues)
           var lastRaceMsg = document.querySelector('#app-messages .app-msg-bot:last-child .app-msg-content');
@@ -10808,7 +10851,7 @@
             raceFooter.appendChild(raceModelSpan);
             lastRaceMsg.appendChild(raceFooter);
           }
-          if (raceData.credits_remaining !== undefined && raceData.credits_remaining !== null) updateCredits(raceData.credits_remaining);
+          if (raceData && raceData.credits_remaining !== undefined && raceData.credits_remaining !== null) updateCredits(raceData.credits_remaining);
           autoPlayTTS(winner.response, true);
           knownMsgCount += 2; syncVersion++;
           setTimeout(() => appLoadConversations(), 1500);
@@ -10873,9 +10916,11 @@
         // Info badge
         const info = document.createElement('span');
         info.className = 'race-info-badge';
+        var raceTimeMs = raceData ? raceData.total_time_ms : (Date.now() - startTime);
+        var raceTotalCredits = raceData ? raceData.total_credits : 0;
         info.textContent = results.length + ' models / '
-          + (raceData.total_time_ms / 1000).toFixed(1) + 's'
-          + (raceData.total_credits > 0 ? ' / ' + raceData.total_credits + ' credits' : '');
+          + (raceTimeMs / 1000).toFixed(1) + 's'
+          + (raceTotalCredits > 0 ? ' / ' + raceTotalCredits + ' credits' : '');
         actions.appendChild(info);
 
         container.appendChild(actions);
@@ -10899,26 +10944,19 @@
         msgsEl.appendChild(wrapper);
         msgsEl.scrollTop = msgsEl.scrollHeight;
 
-        if (raceData.credits_remaining !== undefined && raceData.credits_remaining !== null) updateCredits(raceData.credits_remaining);
+        if (raceData && raceData.credits_remaining !== undefined && raceData.credits_remaining !== null) updateCredits(raceData.credits_remaining);
         autoPlayTTS(winner.response, true);
         knownMsgCount += 2; syncVersion++;
         setTimeout(() => appLoadConversations(), 1500);
 
       } catch (e) {
-        clearInterval(statusInterval);
-        stopThinkingAmbient();
-        thinking.remove();
-        console.error('Race error:', e);
+        raceCleanup();
+        console.error('[CW] Race error:', e);
         if (e.name === 'AbortError') {
-          // Race timed out — fall back to normal stream
-          console.log('Race timed out, falling back to normal stream');
-          _selectedTier = '__skip_race__';
-          window._raceRetrying = true;
-          document.getElementById('app-input').value = text;
-          await appSend();
-          return;
+          appAddMsg(lang === 'ja' ? '\u30BF\u30A4\u30E0\u30A2\u30A6\u30C8\u3057\u307E\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002' : 'Request timed out. Please try again.', 'bot');
+        } else {
+          appAddMsg(lang === 'ja' ? '\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F\u3002\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002' : 'An error occurred. Please try again.', 'bot');
         }
-        appAddMsg(lang === 'ja' ? '\u30A8\u30E9\u30FC\u304C\u767A\u751F\u3057\u307E\u3057\u305F' : 'Error occurred', 'bot');
       }
     }
 
