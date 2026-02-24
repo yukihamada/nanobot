@@ -3,9 +3,11 @@ use reqwest::Client;
 use std::time::Duration;
 
 /// Global HTTP client with connection pooling and keep-alive.
+/// Timeout set to 120s to accommodate LLM code generation (30s was too short,
+/// causing "error decoding response body" when responses took >30s).
 static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
     Client::builder()
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(120))
         .connect_timeout(Duration::from_secs(5))
         .pool_max_idle_per_host(50)
         .pool_idle_timeout(Duration::from_secs(90))

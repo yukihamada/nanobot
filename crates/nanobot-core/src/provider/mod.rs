@@ -173,15 +173,30 @@ impl LoadBalancedProvider {
         }
     }
 
-    /// Record a failure only if it's a server-side error (5xx / network / timeout).
-    /// Client errors (4xx) like invalid model names don't trigger the circuit breaker.
+    /// Record a failure for server errors (5xx) and persistent client errors (401/402/429).
+    /// Transient client errors (400, 404, etc.) don't trigger the circuit breaker.
     pub fn record_failure_if_server_error(&self, idx: usize, err: &crate::error::ProviderError) {
         match err {
-            crate::error::ProviderError::Api { status, .. } if *status < 500 => {
-                tracing::debug!(
-                    "Provider #{} returned client error ({}), NOT triggering circuit breaker",
-                    idx, status
-                );
+            crate::error::ProviderError::Api { status, .. } => {
+                match *status {
+                    // Persistent auth/billing failures — won't resolve without human intervention
+                    401 | 402 | 429 => {
+                        tracing::warn!(
+                            "Provider #{} persistent error ({}), triggering circuit breaker",
+                            idx, status
+                        );
+                        self.record_failure(idx);
+                    }
+                    s if s >= 500 => {
+                        self.record_failure(idx);
+                    }
+                    _ => {
+                        tracing::debug!(
+                            "Provider #{} client error ({}), NOT triggering circuit breaker",
+                            idx, status
+                        );
+                    }
+                }
             }
             _ => {
                 self.record_failure(idx);
@@ -304,9 +319,9 @@ impl LoadBalancedProvider {
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
                 key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "minimax/minimax-m2.5".to_string(),
             )));
-            // Gemini 2.5 Flash — fallback ($0.15/$0.60 per 1M, cheapest)
+            // Gemini 2.5 Flash — fallback ($0.30/$2.50 per 1M, fast+cheap)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key, Some("https://openrouter.ai/api/v1".to_string()), "google/gemini-2.5-flash-preview".to_string(),
+                key, Some("https://openrouter.ai/api/v1".to_string()), "google/gemini-2.5-flash".to_string(),
             )));
         }
 
@@ -391,19 +406,9 @@ impl LoadBalancedProvider {
             return requested_model.to_string();
         }
 
-        // Cross-family → map to the provider's best equivalent
-        if prov_is_claude {
-            "claude-sonnet-4-6".to_string()
-        } else if prov_is_gemini {
-            "gemini-2.5-flash".to_string()
-        } else if prov_is_groq {
-            "llama-3.3-70b-specdec".to_string()
-        } else if prov_is_deepseek {
-            "deepseek-chat".to_string()
-        } else {
-            // OpenAI-compatible
-            "gpt-4o".to_string()
-        }
+        // Cross-family → use the provider's own default model
+        // (avoids hardcoded model names that may not match OpenRouter's full-path format)
+        provider.default_model().to_string()
     }
 
     /// Get list of available models for parallel racing.
@@ -764,7 +769,7 @@ impl LoadBalancedProvider {
         // Each tier has a fallback chain: primary → secondary → tertiary
         let candidates: &[&str] = match tier {
             "economy"  => &["gemini-2.5-flash", "deepseek-chat", "llama-3.3-70b-specdec"],
-            "normal"   => &["minimax/minimax-m2.5", "google/gemini-2.5-flash-preview"],
+            "normal"   => &["minimax/minimax-m2.5", "google/gemini-2.5-flash", "gpt-4o", "deepseek-chat"],
             "powerful" => &["claude-opus-4-6", "gpt-4o", "gemini-2.5-pro", "claude-sonnet-4-6"],
             _ => return None,
         };
@@ -826,9 +831,11 @@ impl LlmProvider for LoadBalancedProvider {
             return Err(ProviderError::Other("No providers configured".to_string()));
         }
 
-        // Fast failover: primary gets a head start (3s), then all providers race in parallel
-        let primary_head_start = std::time::Duration::from_secs(3);
-        let parallel_timeout = std::time::Duration::from_secs(7);
+        // Failover: primary gets a head start, then all providers race in parallel.
+        // 20s is generous enough for the primary to complete most responses.
+        // If it truly errors (401/500), the error returns immediately, not after 20s.
+        let primary_head_start = std::time::Duration::from_secs(20);
+        let parallel_timeout = std::time::Duration::from_secs(45);
 
         // Phase 1: Try primary provider with short timeout
         let primary_idx = self.select_provider_idx(model);
@@ -954,7 +961,8 @@ impl LlmProvider for LoadBalancedProvider {
         }
 
         // Sequential failover for streaming (can't race — each provider writes to the same chunk_tx)
-        let start = self.counter.load(Ordering::Relaxed);
+        // Start from the best matching provider for the requested model
+        let start = self.select_provider_idx(model);
         let mut last_err = String::new();
 
         for i in 0..total {
