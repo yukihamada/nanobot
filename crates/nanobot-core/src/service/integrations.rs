@@ -6,6 +6,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Safely truncate a string to at most `max_bytes`, respecting UTF-8 char boundaries.
 fn truncate_str(s: &str, max_bytes: usize) -> &str {
@@ -197,6 +198,14 @@ impl ToolRegistry {
         self.tools.push(tool);
     }
 
+    /// Add the `improve_project` tool, which needs an LLM provider for its inner agent loop.
+    /// Call this after `with_builtins()` once a provider is available.
+    #[cfg(feature = "http-api")]
+    pub fn add_improve_tool(&mut self, provider: Arc<dyn crate::provider::LlmProvider>) {
+        tracing::info!("Registering improve_project tool");
+        self.tools.push(Box::new(ImproveProjectTool { provider }));
+    }
+
     /// Register multiple tools at once.
     pub fn register_all(&mut self, tools: Vec<Box<dyn Tool>>) {
         self.tools.extend(tools);
@@ -207,16 +216,18 @@ impl ToolRegistry {
         self.tools.iter().map(|t| t.to_openai_definition()).collect()
     }
 
-    /// Execute a tool by name with a 25-second timeout.
+    /// Execute a tool by name with a timeout.
+    /// Most tools get 25 s; `improve_project` gets 300 s (inner LLM loop).
     pub async fn execute(&self, name: &str, arguments: &HashMap<String, serde_json::Value>) -> String {
+        let timeout_secs = if name == "improve_project" { 300 } else { 25 };
         for tool in &self.tools {
             if tool.name() == name {
                 match tokio::time::timeout(
-                    std::time::Duration::from_secs(25),
+                    std::time::Duration::from_secs(timeout_secs),
                     tool.execute(arguments.clone()),
                 ).await {
                     Ok(result) => return result,
-                    Err(_) => return format!("[TOOL_ERROR] Tool '{name}' timed out after 25s"),
+                    Err(_) => return format!("[TOOL_ERROR] Tool '{name}' timed out after {timeout_secs}s"),
                 }
             }
         }
@@ -322,13 +333,13 @@ pub struct WeatherTool;
 impl Tool for WeatherTool {
     fn name(&self) -> &str { "weather" }
     fn description(&self) -> &str {
-        "Get current weather information for a location."
+        "Get current weather information for a location. Always use English/romaji city names."
     }
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {
-                "location": { "type": "string", "description": "City name or location (e.g., 'Tokyo', 'New York')" }
+                "location": { "type": "string", "description": "City name in English/romaji (e.g., 'Tokyo', 'Osaka', 'Sapporo')" }
             },
             "required": ["location"]
         })
@@ -967,6 +978,291 @@ impl Tool for GitHubCreatePrTool {
     }
 }
 
+// ---------------------------------------------------------------------------
+// improve_project — admin-only autonomous self-improvement tool
+// ---------------------------------------------------------------------------
+
+/// Autonomous self-improvement tool.
+/// The LLM calls this when it decides (via the system prompt) that the user
+/// wants to improve the project. Runs an inner mini-agent loop using the
+/// stored provider and GitHub tools directly.
+#[cfg(feature = "http-api")]
+pub struct ImproveProjectTool {
+    pub provider: Arc<dyn crate::provider::LlmProvider>,
+}
+
+#[cfg(feature = "http-api")]
+#[async_trait]
+impl Tool for ImproveProjectTool {
+    fn name(&self) -> &str { "improve_project" }
+
+    fn description(&self) -> &str {
+        "Autonomously improve the chatweb.ai/nanobot codebase. \
+         Reads source files, identifies the best change, and creates a GitHub Pull Request. \
+         Use mode='preview' (default) to plan without making changes, \
+         or mode='confirm' to actually create the PR."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "description": "What to improve. Be specific, e.g. 'improve error messages in auth flow', 'add dark mode to index.html'."
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["preview", "confirm"],
+                    "description": "'preview' — analyze and plan without touching files (default). 'confirm' — implement and create the PR."
+                }
+            },
+            "required": ["description"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let desc = params.get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("analyze and improve code quality based on recent issues");
+        let confirmed = params.get("mode")
+            .and_then(|v| v.as_str())
+            .map(|m| m == "confirm")
+            .unwrap_or(false);
+        run_improve_agent(&self.provider, desc, confirmed).await
+    }
+}
+
+/// Autonomous self-improvement: preview reads key files (fast), confirm runs inner agent loop.
+#[cfg(feature = "http-api")]
+async fn run_improve_agent(
+    provider: &Arc<dyn crate::provider::LlmProvider>,
+    desc: &str,
+    confirmed: bool,
+) -> String {
+    use crate::types::Message;
+
+    // ── Preview mode: fast path (no inner LLM loop) ──
+    // Reads key files from GitHub and returns them as context for the outer LLM.
+    // Must complete within ~10 seconds to fit in API Gateway's 30s timeout budget.
+    if !confirmed {
+        let key_files = vec![
+            "CLAUDE.md",
+            "crates/nanobot-core/src/service/http.rs",
+            "crates/nanobot-core/src/service/integrations.rs",
+            "crates/nanobot-core/src/service/commands.rs",
+            "web/index.html",
+        ];
+        let mut file_summaries = Vec::new();
+        for path in &key_files {
+            let mut args = HashMap::new();
+            args.insert("owner".to_string(), serde_json::json!("yukihamada"));
+            args.insert("repo".to_string(), serde_json::json!("nanobot"));
+            args.insert("path".to_string(), serde_json::json!(path));
+            let result = GitHubReadFileTool.execute(args).await;
+            let lines = result.lines().count();
+            let preview: String = result.chars().take(500).collect();
+            file_summaries.push(format!("### {}\n- {} lines\n```\n{}...\n```", path, lines, preview));
+        }
+        return format!(
+            "📋 **改善プレビュー** — リクエスト: 「{}」\n\n\
+             ## コードベース概要\n{}\n\n\
+             ---\n\
+             上記のファイルを読み取りました。改善提案を行うか、\n\
+             実行するには `improve_project` を mode=\"confirm\" で呼び出してください。",
+            desc,
+            file_summaries.join("\n\n"),
+        );
+    }
+
+    // ── Confirm mode: full inner agent loop ──
+    // This runs synchronously and may exceed API Gateway's 30s timeout.
+    // Lambda continues processing (up to 300s timeout), and the PR will be created.
+    // The client may see a timeout but can check GitHub for results.
+
+    let branch_suffix = {
+        let s: String = desc.chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ' ')
+            .take(40)
+            .collect::<String>();
+        let s = s.trim().replace(' ', "-").to_lowercase();
+        if s.is_empty() {
+            chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string()
+        } else {
+            s.chars().take(30).collect()
+        }
+    };
+
+    let system_prompt = format!(
+        "You are an AI software engineer improving the chatweb.ai codebase.\n\
+         Repository: github.com/yukihamada/nanobot (owner: yukihamada, repo: nanobot)\n\n\
+         ## Task\n{desc}\n\n\
+         ## STRICT Workflow (follow this EXACT order)\n\
+         Step 1: Read the target file with `github_read_file` (max 2 reads total)\n\
+         Step 2: IMMEDIATELY call `github_create_or_update_file` to write your improved version\n\
+         - branch: `auto-improve/{branch_suffix}`\n\
+         - message: describe the change\n\
+         - content: the FULL improved file content\n\
+         Step 3: Call `github_create_pr` to open a Pull Request\n\
+         - head: `auto-improve/{branch_suffix}`\n\
+         - base: `main`\n\
+         Step 4: Reply with the PR URL in Japanese\n\n\
+         CRITICAL RULES:\n\
+         - Do NOT read the same file twice\n\
+         - Do NOT read more than 2 files total\n\
+         - After reading, you MUST write changes — never just analyze\n\
+         - Keep changes minimal and focused"
+    );
+
+    let github_tools: Vec<serde_json::Value> = {
+        let mut t = vec![GitHubReadFileTool.to_openai_definition()];
+        if std::env::var("GITHUB_TOKEN").map(|v| !v.is_empty()).unwrap_or(false) {
+            t.push(GitHubCreateOrUpdateFileTool.to_openai_definition());
+            t.push(GitHubCreatePrTool.to_openai_definition());
+        }
+        t
+    };
+
+    let mut conversation = vec![
+        Message::system(&system_prompt),
+        Message::user(&format!(
+            "Improve this: {}\n\nStart by reading the target file, then create/update it with improvements, then open a PR.",
+            desc
+        )),
+    ];
+
+    let model = "minimax/minimax-m2.5";
+    let max_tokens = 4096u32;
+    let temperature = 0.3f64;
+    let max_iterations = 8usize;
+    let mut pr_url: Option<String> = None;
+    let mut read_count: usize = 0;
+
+    for iteration in 0..max_iterations {
+        // After 3 reads without writes, inject a nudge to force writing
+        let tools_slice = if iteration < max_iterations - 1 {
+            if read_count >= 3 {
+                // Remove github_read_file to force the LLM to write
+                let write_tools: Vec<serde_json::Value> = github_tools.iter()
+                    .filter(|t| {
+                        t.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()) != Some("github_read_file")
+                    })
+                    .cloned()
+                    .collect();
+                if !write_tools.is_empty() {
+                    // Inject a system nudge
+                    conversation.push(Message::user(
+                        "[SYSTEM] You have read enough files. NOW you MUST call `github_create_or_update_file` to write your changes. Do NOT read any more files."
+                    ));
+                }
+                Some(github_tools.as_slice()) // still pass all tools but with the nudge
+            } else {
+                Some(github_tools.as_slice())
+            }
+        } else {
+            None
+        };
+
+        // Use non-streaming chat() — more reliable for large conversations
+        // (streaming fails with "Stream read error" when context contains file contents)
+        match provider.chat(&conversation, tools_slice, model, max_tokens, temperature).await {
+            Ok(resp) => {
+                if resp.has_tool_calls() {
+                    let tc_json: Vec<serde_json::Value> = resp.tool_calls.iter().map(|tc| {
+                        serde_json::json!({
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": serde_json::to_string(&tc.arguments).unwrap_or_default(),
+                            }
+                        })
+                    }).collect();
+                    conversation.push(Message::assistant_with_tool_calls(resp.content.clone(), tc_json));
+
+                    for tc in &resp.tool_calls {
+                        tracing::info!("improve_project[confirm]: tool '{}' iter={}", tc.name, iteration + 1);
+                        if tc.name == "github_read_file" { read_count += 1; }
+                        let args_val = serde_json::to_value(&tc.arguments).unwrap_or_default();
+                        let args = improve_args_to_map(&args_val);
+                        let raw_result = match tc.name.as_str() {
+                            "github_read_file" => GitHubReadFileTool.execute(args).await,
+                            "github_create_or_update_file" => GitHubCreateOrUpdateFileTool.execute(args).await,
+                            "github_create_pr" => {
+                                let r = GitHubCreatePrTool.execute(args).await;
+                                if let Some(url) = improve_extract_pr_url(&r) {
+                                    pr_url = Some(url);
+                                }
+                                r
+                            },
+                            other => format!("[improve_project] unknown inner tool: {}", other),
+                        };
+                        // Truncate large tool results to keep conversation context small
+                        // (large source files can be 50K+ chars, causing API failures)
+                        let result = if raw_result.len() > 4000 {
+                            let truncated: String = raw_result.chars().take(4000).collect();
+                            format!("{}...\n\n[Truncated: {} total chars, showing first 4000]", truncated, raw_result.len())
+                        } else {
+                            raw_result
+                        };
+                        conversation.push(Message::tool_result(&tc.id, &tc.name, &result));
+                    }
+                } else {
+                    if let Some(content) = &resp.content {
+                        if let Some(url) = improve_extract_pr_url(content) {
+                            pr_url = Some(url);
+                        }
+                    }
+                    break;
+                }
+            }
+            Err(e) => {
+                return format!("⚠️ LLMエラー: {}", e);
+            }
+        }
+    }
+
+    match pr_url {
+        Some(url) => format!(
+            "✅ 改善PRを作成しました！\n{}\n\n内容: 「{}」\n\n※ マージは手動で行ってください。",
+            url, desc
+        ),
+        None => format!(
+            "🔧 改善処理を実行しましたが、PRは作成されませんでした。\nリクエスト: 「{}」",
+            desc
+        ),
+    }
+}
+
+/// Convert a serde_json::Value (object) into a HashMap for tool execution.
+#[cfg(feature = "http-api")]
+fn improve_args_to_map(args: &serde_json::Value) -> HashMap<String, serde_json::Value> {
+    args.as_object()
+        .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+        .unwrap_or_default()
+}
+
+/// Extract a GitHub PR URL from text returned by github_create_pr.
+#[cfg(feature = "http-api")]
+fn improve_extract_pr_url(text: &str) -> Option<String> {
+    for word in text.split_whitespace() {
+        let clean = word.trim_matches(|c: char| {
+            !c.is_ascii_alphanumeric() && c != ':' && c != '/' && c != '.' && c != '-' && c != '_'
+        });
+        if clean.contains("github.com") && clean.contains("/pull/") {
+            return Some(clean.to_string());
+        }
+    }
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(text) {
+        if let Some(url) = parsed.get("html_url").and_then(|v| v.as_str()) {
+            if url.contains("/pull/") {
+                return Some(url.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Available integration types.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1062,13 +1358,13 @@ pub fn get_tool_definitions() -> Vec<serde_json::Value> {
             "type": "function",
             "function": {
                 "name": "weather",
-                "description": "Get current weather information for a location.",
+                "description": "Get current weather information for a location. IMPORTANT: Always use English/romaji city names (e.g., 'Tokyo' not '東京', 'Osaka' not '大阪', 'Sapporo' not '札幌').",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "location": {
                             "type": "string",
-                            "description": "City name or location (e.g., 'Tokyo', 'New York')"
+                            "description": "City name in English/romaji (e.g., 'Tokyo', 'Osaka', 'New York', 'London')"
                         }
                     },
                     "required": ["location"]
@@ -1141,33 +1437,65 @@ pub async fn execute_tool(name: &str, arguments: &HashMap<String, serde_json::Va
 pub(crate) async fn execute_web_search(query: &str) -> String {
     tracing::info!("execute_web_search: query={}", query);
 
-    // Try Brave Search API first (if key is available)
-    if let Ok(brave_key) = std::env::var("BRAVE_API_KEY") {
-        tracing::info!("web_search: trying Brave API");
-        match brave_search(query, &brave_key).await {
-            Some(result) => return result,
-            None => tracing::warn!("web_search: Brave API returned no results"),
+    // Race all search backends in parallel — first successful result wins.
+    // This avoids sequential fallback chains that can exceed API Gateway's 30s timeout.
+    let brave_key = std::env::var("BRAVE_API_KEY").ok();
+    let q = query.to_string();
+
+    let brave_fut = {
+        let q = q.clone();
+        let key = brave_key.clone();
+        async move {
+            if let Some(k) = key {
+                brave_search(&q, &k).await
+            } else {
+                None
+            }
         }
-    } else {
-        tracing::info!("web_search: BRAVE_API_KEY not set, skipping");
+    };
+    let bing_fut = {
+        let q = q.clone();
+        async move { bing_search(&q).await }
+    };
+    let jina_fut = {
+        let q = q.clone();
+        async move {
+            let r = jina_search(&q).await;
+            if r.starts_with("Search results") { Some(r) } else { None }
+        }
+    };
+
+    // Race: Brave (priority) vs Bing vs Jina in parallel
+    tokio::select! {
+        biased;  // prefer earlier branches when multiple ready simultaneously
+        res = brave_fut, if brave_key.is_some() => {
+            if let Some(r) = res {
+                tracing::info!("web_search: Brave won the race");
+                return r;
+            }
+        }
+        res = bing_fut => {
+            if let Some(r) = res {
+                tracing::info!("web_search: Bing won the race");
+                return r;
+            }
+        }
+        res = jina_fut => {
+            if let Some(r) = res {
+                tracing::info!("web_search: Jina won the race");
+                return r;
+            }
+        }
     }
 
-    // Try Bing HTML search (works from most cloud IPs, server-rendered)
-    tracing::info!("web_search: trying Bing HTML");
-    match bing_search(query).await {
-        Some(result) => return result,
-        None => tracing::warn!("web_search: Bing returned no results"),
+    // All parallel searches failed — try sequential fallbacks
+    tracing::warn!("web_search: all parallel searches failed, trying fallbacks");
+    if let Some(key) = &brave_key {
+        if let Some(r) = brave_search(query, key).await { return r; }
     }
-
-    // Try Jina search as general-purpose fallback
-    tracing::info!("web_search: trying Jina search fallback");
-    let result = jina_search(query).await;
-    if result.starts_with("Search results") {
-        return result;
-    }
+    if let Some(r) = bing_search(query).await { return r; }
 
     // Last resort: kakaku.com specific search
-    tracing::info!("web_search: trying kakaku.com fallback");
     direct_site_search(query).await
 }
 
@@ -1593,26 +1921,39 @@ fn execute_calculator(expression: &str) -> String {
 /// Weather using Open-Meteo free API (no key required).
 async fn execute_weather(location: &str) -> String {
     let client = reqwest::Client::new();
+    let encoded = urlencoding::encode(location);
 
-    // Geocode first
-    let geo_url = format!(
-        "https://geocoding-api.open-meteo.com/v1/search?name={}&count=1&language=en",
-        urlencoding::encode(location)
-    );
+    // Geocode with multiple language attempts for broad coverage:
+    // 1. Japanese locale (handles 東京, 大阪, 札幌 etc.)
+    // 2. English locale (handles "Tokyo", "Osaka" etc.)
+    // 3. No locale (API default, catches remaining cases)
+    // Use count=5 to increase hit rate for ambiguous names.
+    let mut geo_results: Option<Vec<serde_json::Value>> = None;
+    let geo_urls = [
+        format!("https://geocoding-api.open-meteo.com/v1/search?name={encoded}&count=5&language=ja"),
+        format!("https://geocoding-api.open-meteo.com/v1/search?name={encoded}&count=5&language=en"),
+        format!("https://geocoding-api.open-meteo.com/v1/search?name={encoded}&count=5"),
+    ];
+    for geo_url in &geo_urls {
+        let geo_resp = match client.get(geo_url).send().await {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let geo_data: serde_json::Value = match geo_resp.json().await {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        if let Some(r) = geo_data.get("results").and_then(|v| v.as_array()).cloned() {
+            if !r.is_empty() {
+                geo_results = Some(r);
+                break;
+            }
+        }
+    }
 
-    let geo_resp = match client.get(&geo_url).send().await {
-        Ok(r) => r,
-        Err(e) => return format!("Geocoding failed: {e}"),
-    };
-
-    let geo_data: serde_json::Value = match geo_resp.json().await {
-        Ok(d) => d,
-        Err(e) => return format!("Failed to parse geocoding: {e}"),
-    };
-
-    let results = match geo_data.get("results").and_then(|v| v.as_array()) {
-        Some(r) if !r.is_empty() => r,
-        _ => return format!("Location not found: {location}"),
+    let results = match geo_results {
+        Some(r) => r,
+        None => return format!("Location not found: {location}"),
     };
 
     let lat = results[0].get("latitude").and_then(|v| v.as_f64()).unwrap_or(0.0);
