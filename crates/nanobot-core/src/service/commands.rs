@@ -828,6 +828,21 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
     // Collect recent negative feedback
     let feedback_summary = query_recent_feedback(ctx).await;
 
+    // Pre-compute branch suffix — fall back to timestamp for non-ASCII (e.g. Japanese) descriptions
+    let branch_suffix = {
+        let s: String = desc_clean
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ' ')
+            .take(40)
+            .collect();
+        let s = s.trim().replace(' ', "-").to_lowercase();
+        if s.is_empty() {
+            chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string()
+        } else {
+            s.chars().take(30).collect()
+        }
+    };
+
     // Build improvement prompt (different for preview vs confirmed mode)
     let system_prompt = if !confirmed {
         // Preview mode: analysis only
@@ -865,8 +880,7 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
              Branch name should be descriptive, e.g. `auto-improve/fix-timeout-messages`.",
             desc = desc_clean,
             feedback_summary = feedback_summary,
-            branch_suffix = desc_clean.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ' ')
-                .take(30).collect::<String>().trim().replace(' ', "-").to_lowercase(),
+            branch_suffix = branch_suffix,
         )
     };
 
@@ -904,7 +918,8 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
         Message::user(&format!("Please improve the codebase: {}", desc)),
     ];
 
-    let model = "claude-sonnet-4-6";
+    // Use OpenRouter model directly (native Anthropic key may be invalid)
+    let model = "minimax/minimax-m2.5";
     let max_tokens = 4096u32;
     let temperature = 0.3f64;
     let max_iterations = 5;
@@ -917,7 +932,11 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
             None // Force text on last iteration
         };
 
-        let completion = provider.chat(&conversation, tools, model, max_tokens, temperature).await;
+        // Use chat_stream (600s timeout) instead of chat (10s timeout) — tool-augmented
+        // LLM calls often need 15-60s which exceeds LoadBalancedProvider::chat()'s race timeout.
+        let extra = crate::provider::ChatExtra::default();
+        let (chunk_tx, _chunk_rx) = tokio::sync::mpsc::unbounded_channel();
+        let completion = provider.chat_stream(&conversation, tools, model, max_tokens, temperature, &extra, chunk_tx).await;
 
         match completion {
             Ok(resp) => {

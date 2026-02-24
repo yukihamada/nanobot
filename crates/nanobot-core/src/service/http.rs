@@ -4344,8 +4344,10 @@ async fn handle_chat(
             let sandbox_dir = format!("/tmp/sandbox/{}", session_key.replace(':', "_"));
             std::fs::create_dir_all(&sandbox_dir).ok();
 
-            // Multi-iteration tool loop
-            while current.has_tool_calls() && iteration < max_iterations {
+            // Multi-iteration tool loop (deadline-aware to avoid API Gateway 30s timeout)
+            let chat_deadline = std::time::Instant::now() + std::time::Duration::from_secs(25);
+            while current.has_tool_calls() && iteration < max_iterations
+                  && std::time::Instant::now() < chat_deadline {
                 iteration += 1;
                 info!("Tool iteration {}/{}: {} tool calls", iteration, max_iterations, current.tool_calls.len());
 
