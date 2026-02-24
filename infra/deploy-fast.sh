@@ -119,7 +119,7 @@ else
     if command -v sccache &>/dev/null; then
         echo ""
         echo "--- sccache stats ---"
-        sccache --show-stats | grep -E "(Hits|Misses|Cache size)"
+        sccache --show-stats | grep -iE "(hits|misses|cache size)" || true
     fi
 fi
 
