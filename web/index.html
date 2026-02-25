@@ -2968,120 +2968,328 @@
     }
 
     /* Explore mode cards */
+    @keyframes exploreCardIn {
+      from { opacity: 0; transform: translateY(16px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes explorePulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+    @keyframes exploreShimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    @keyframes exploreDotBounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-6px); }
+    }
     .explore-container {
       width: 100%;
       display: flex;
       flex-direction: column;
+      gap: 10px;
+    }
+    .explore-header {
+      display: flex;
+      align-items: center;
       gap: 8px;
+      padding: 6px 0 2px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .explore-header-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: #fff;
+      font-size: 11px;
     }
     .explore-card {
-      background: var(--card);
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px 14px;
-      transition: border-color 0.2s;
+      border-radius: 12px;
+      padding: 14px 16px;
+      transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
+      opacity: 0;
+      transform: translateY(16px) scale(0.97);
+      animation: exploreCardIn 0.4s ease-out forwards;
+      position: relative;
+      overflow: hidden;
     }
+    .explore-card:nth-child(2) { animation-delay: 0.05s; }
+    .explore-card:nth-child(3) { animation-delay: 0.10s; }
+    .explore-card:nth-child(4) { animation-delay: 0.15s; }
+    .explore-card:nth-child(5) { animation-delay: 0.20s; }
+    .explore-card:nth-child(6) { animation-delay: 0.25s; }
+    .explore-card:nth-child(7) { animation-delay: 0.30s; }
     .explore-card:hover {
       border-color: var(--accent);
+      box-shadow: 0 2px 12px rgba(99, 102, 241, 0.1);
+      transform: translateY(-1px);
     }
+    .explore-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: 12px 12px 0 0;
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+    .explore-card:hover::before {
+      opacity: 1;
+    }
+    .explore-card[data-provider="anthropic"]::before { background: linear-gradient(90deg, #d97706, #f59e0b); }
+    .explore-card[data-provider="openai"]::before { background: linear-gradient(90deg, #10b981, #34d399); }
+    .explore-card[data-provider="google"]::before { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+    .explore-card[data-provider="meta"]::before { background: linear-gradient(90deg, #6366f1, #818cf8); }
+    .explore-card[data-provider="other"]::before { background: linear-gradient(90deg, var(--accent), #a78bfa); }
     .explore-card-header {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
       font-size: 12px;
+      flex-wrap: wrap;
     }
+    .explore-model-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .explore-model-icon[data-provider="anthropic"] { background: #d9770622; }
+    .explore-model-icon[data-provider="openai"] { background: #10b98122; }
+    .explore-model-icon[data-provider="google"] { background: #3b82f622; }
+    .explore-model-icon[data-provider="meta"] { background: #6366f122; }
+    .explore-model-icon[data-provider="other"] { background: var(--surface2); }
     .explore-model-name {
       font-weight: 600;
       color: var(--text);
+      font-size: 13px;
+    }
+    .explore-badges {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
     }
     .explore-time-badge {
-      background: var(--bg);
-      padding: 2px 8px;
+      background: var(--surface2);
+      padding: 3px 9px;
       border-radius: 12px;
       font-size: 11px;
       color: var(--muted);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
     }
+    .explore-time-badge.fast { color: #22c55e; background: #22c55e18; }
+    .explore-time-badge.medium { color: #f59e0b; background: #f59e0b18; }
+    .explore-time-badge.slow { color: #ef4444; background: #ef444418; }
     .explore-fallback-badge {
-      background: #f59e0b22;
+      background: #f59e0b1a;
       color: #f59e0b;
-      padding: 2px 8px;
+      padding: 3px 9px;
       border-radius: 12px;
       font-size: 10px;
       font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .explore-credits-badge {
+      font-size: 10px;
+      color: var(--muted);
+      padding: 3px 9px;
+      border-radius: 12px;
+      background: var(--surface2);
     }
     .explore-card-body {
       font-size: 13px;
-      line-height: 1.65;
+      line-height: 1.7;
       color: var(--text);
       white-space: pre-wrap;
       word-break: break-word;
-      max-height: 200px;
+      max-height: 180px;
       overflow-y: auto;
+      position: relative;
+      padding-right: 2px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
     }
-    .explore-card-actions {
-      margin-top: 8px;
+    .explore-card-body::-webkit-scrollbar { width: 4px; }
+    .explore-card-body::-webkit-scrollbar-track { background: transparent; }
+    .explore-card-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .explore-card-body.expanded {
+      max-height: none;
+    }
+    .explore-card-body-fade {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 32px;
+      background: linear-gradient(to bottom, transparent, var(--surface));
+      pointer-events: none;
+      border-radius: 0 0 12px 12px;
+    }
+    .explore-card-footer {
+      margin-top: 10px;
       display: flex;
+      align-items: center;
       gap: 6px;
+      flex-wrap: wrap;
     }
     .explore-adopt-btn {
       font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 6px;
+      font-weight: 600;
+      padding: 5px 14px;
+      border-radius: 8px;
       border: 1px solid var(--accent);
       background: transparent;
       color: var(--accent);
       cursor: pointer;
-      transition: background 0.2s, color 0.2s;
+      transition: background 0.2s, color 0.2s, transform 0.15s, box-shadow 0.2s;
     }
     .explore-adopt-btn:hover {
       background: var(--accent);
       color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px var(--accent-glow);
+    }
+    .explore-adopt-btn:active {
+      transform: translateY(0);
+    }
+    .explore-expand-btn {
+      font-size: 11px;
+      padding: 5px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .explore-expand-btn:hover {
+      border-color: var(--accent);
+      color: var(--text);
     }
     .explore-actions-bar {
       display: flex;
       gap: 8px;
-      margin-top: 10px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
       flex-wrap: wrap;
+      align-items: center;
     }
     .explore-action-btn {
       font-size: 12px;
-      padding: 6px 14px;
-      border-radius: 8px;
+      font-weight: 600;
+      padding: 8px 18px;
+      border-radius: 10px;
       border: 1px solid var(--border);
-      background: var(--card);
+      background: var(--surface);
       color: var(--text);
       cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
+      transition: border-color 0.2s, background 0.2s, transform 0.15s, box-shadow 0.2s;
     }
     .explore-action-btn:hover {
       border-color: var(--accent);
       background: var(--accent);
       color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px var(--accent-glow);
+    }
+    .explore-action-btn:active {
+      transform: translateY(0);
+    }
+    .explore-action-btn.primary {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      border-color: transparent;
+      color: #fff;
+    }
+    .explore-action-btn.primary:hover {
+      box-shadow: 0 4px 16px var(--accent-glow);
     }
     .explore-level-badge {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 8px;
-      background: var(--accent);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
       color: #fff;
       margin-left: auto;
+      letter-spacing: 0.2px;
+      font-variant-numeric: tabular-nums;
+    }
+    .explore-level-badge svg {
+      width: 12px;
+      height: 12px;
     }
     .explore-pending {
       display: flex;
       align-items: center;
-      gap: 6px;
-      font-size: 12px;
+      gap: 10px;
+      font-size: 13px;
       color: var(--muted);
-      padding: 6px 0;
+      padding: 16px 0;
     }
-    .explore-pending .dot-pulse {
+    .explore-pending-dots {
+      display: inline-flex;
+      gap: 4px;
+    }
+    .explore-pending-dots span {
       display: inline-block;
-      width: 6px;
-      height: 6px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
-      background: var(--muted);
-      animation: pulse-glow 1s infinite;
+      background: var(--accent);
+      animation: exploreDotBounce 1.2s ease-in-out infinite;
+    }
+    .explore-pending-dots span:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+    .explore-pending-dots span:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+    .explore-pending-shimmer {
+      flex: 1;
+      height: 4px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--surface2) 25%, var(--accent) 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      animation: exploreShimmer 1.8s ease-in-out infinite;
+      max-width: 120px;
+    }
+    /* Responsive: side-by-side on wider screens */
+    @media (min-width: 640px) {
+      .explore-container.grid-layout {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+      .explore-container.grid-layout > .explore-header,
+      .explore-container.grid-layout > .explore-actions-bar,
+      .explore-container.grid-layout > .explore-pending {
+        grid-column: 1 / -1;
+      }
     }
 
     /* Race mode */
@@ -10417,37 +10625,80 @@
     }
 
     // ---------------------------------------------------------------------------
+    // Explore Mode — model comparison UI
     // ---------------------------------------------------------------------------
+    function modelIcon(model) {
+      var m = model.toLowerCase();
+      if (m.includes('claude')) return '\ud83d\udfe3';
+      if (m.includes('gpt') || m.includes('o4') || m.includes('o3') || m.includes('o1')) return '\u26a1';
+      if (m.includes('gemini')) return '\ud83d\udd35';
+      if (m.includes('llama') || m.includes('groq')) return '\ud83e\uddac';
+      if (m.includes('kimi') || m.includes('moonshot')) return '\ud83c\udf19';
+      if (m.includes('qwen')) return '\ud83d\udcab';
+      if (m.includes('minimax')) return '\ud83d\udd36';
+      if (m.includes('deepseek')) return '\ud83e\udea8';
+      if (m.includes('local')) return '\ud83d\udfe2';
+      return '\ud83e\udd16';
+    }
+
+    function modelProvider(model) {
+      var m = model.toLowerCase();
+      if (m.includes('claude')) return 'anthropic';
+      if (m.includes('gpt') || m.includes('o4') || m.includes('o3') || m.includes('o1')) return 'openai';
+      if (m.includes('gemini')) return 'google';
+      if (m.includes('llama')) return 'meta';
+      return 'other';
+    }
+
+    function exploreTimeBadgeClass(ms) {
+      if (ms < 3000) return 'fast';
+      if (ms < 8000) return 'medium';
+      return 'slow';
+    }
+
+    function simplifyExploreModelName(model) {
+      // Strip provider prefix for display: "openai/gpt-4o" -> "gpt-4o"
+      var parts = model.split('/');
+      return parts.length > 1 ? parts[parts.length - 1] : model;
+    }
+
     async function appExplore(msgToSend, originalText, level) {
-      const msgsEl = document.getElementById('app-messages');
-      const lang = document.documentElement.lang || 'ja';
+      var msgsEl = document.getElementById('app-messages');
+      var lang = document.documentElement.lang || 'ja';
 
-      const container = document.createElement('div');
+      var container = document.createElement('div');
       container.className = 'explore-container';
-      const levelLabels = ['Direct', 'Step-by-Step', 'Expert Deep'];
-      if (level > 0) {
-        const levelHeader = document.createElement('div');
-        levelHeader.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:4px;';
-        levelHeader.textContent = (lang === 'ja' ? '再調査 Lv.' : 'Re-query Lv.') + level + ' — ' + levelLabels[level];
-        container.appendChild(levelHeader);
-      }
 
-      const pending = document.createElement('div');
+      // Header with level info
+      var headerDiv = document.createElement('div');
+      headerDiv.className = 'explore-header';
+      var levelLabels = [
+        lang === 'ja' ? 'マルチモデル比較' : 'Multi-Model Comparison',
+        lang === 'ja' ? '段階的分析' : 'Step-by-Step Analysis',
+        lang === 'ja' ? 'エキスパート深堀' : 'Expert Deep Dive'
+      ];
+      headerDiv.innerHTML = '<span class="explore-header-icon">' + (level > 0 ? level : '\u2728') + '</span>'
+        + '<span>' + levelLabels[level || 0] + '</span>';
+      container.appendChild(headerDiv);
+
+      // Pending state with animated dots
+      var pending = document.createElement('div');
       pending.className = 'explore-pending';
-      pending.innerHTML = '<span class="dot-pulse"></span> ' +
-        (lang === 'ja' ? '全モデルに問い合わせ中...' : 'Querying all models...');
+      pending.innerHTML = '<span class="explore-pending-dots"><span></span><span></span><span></span></span>'
+        + '<span>' + (lang === 'ja' ? '\u5168\u30e2\u30c7\u30eb\u306b\u554f\u3044\u5408\u308f\u305b\u4e2d...' : 'Querying all models...') + '</span>'
+        + '<span class="explore-pending-shimmer"></span>';
       container.appendChild(pending);
 
-      const wrapper = document.createElement('div');
+      var wrapper = document.createElement('div');
       wrapper.className = 'app-msg app-msg-bot';
-      const avatar = document.createElement('div');
+      var avatar = document.createElement('div');
       avatar.className = 'app-msg-avatar';
       avatar.textContent = 'cw';
       wrapper.appendChild(avatar);
-      const contentDiv = document.createElement('div');
+      var contentDiv = document.createElement('div');
       contentDiv.className = 'app-msg-content';
       contentDiv.style.width = '100%';
-      const nameLabel = document.createElement('div');
+      var nameLabel = document.createElement('div');
       nameLabel.className = 'app-msg-name';
       nameLabel.textContent = 'chatweb.ai';
       contentDiv.appendChild(nameLabel);
@@ -10457,7 +10708,7 @@
       msgsEl.scrollTop = msgsEl.scrollHeight;
 
       try {
-        const r = await fetch(API + '/api/v1/chat/explore', {
+        var r = await fetch(API + '/api/v1/chat/explore', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -10468,46 +10719,92 @@
         });
 
         if (!r.ok || !r.body) {
-          pending.textContent = lang === 'ja' ? 'エラーが発生しました' : 'Error occurred';
+          pending.innerHTML = '<span style="color:#ef4444;">\u26a0</span> '
+            + (lang === 'ja' ? '\u30a8\u30e9\u30fc\u304c\u767a\u751f\u3057\u307e\u3057\u305f' : 'Error occurred');
           return;
         }
 
-        const reader = r.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = '';
-        let exploreData = null;
+        var reader = r.body.getReader();
+        var decoder = new TextDecoder();
+        var buf = '';
+        var exploreData = null;
 
         while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
+          var chunk = await reader.read();
+          if (chunk.done) break;
+          buf += decoder.decode(chunk.value, { stream: true });
         }
 
-        for (const line of buf.split('\n')) {
+        for (var _li = 0, _lines = buf.split('\n'); _li < _lines.length; _li++) {
+          var line = _lines[_li];
           if (!line.startsWith('data:')) continue;
-          const dataStr = line.slice(5).trim();
+          var dataStr = line.slice(5).trim();
           if (!dataStr) continue;
           try {
-            const data = JSON.parse(dataStr);
+            var data = JSON.parse(dataStr);
 
             if (data.type === 'explore_results' && data.results) {
               pending.remove();
               exploreData = data;
 
-              for (const result of data.results) {
-                const card = document.createElement('div');
+              // Enable grid layout if 3+ results
+              if (data.results.length >= 3) {
+                container.classList.add('grid-layout');
+              }
+
+              for (var ri = 0; ri < data.results.length; ri++) {
+                var result = data.results[ri];
+                var provider = modelProvider(result.model);
+                var shortName = simplifyExploreModelName(result.model);
+                var timeSec = (result.time_ms / 1000).toFixed(1);
+                var timeClass = exploreTimeBadgeClass(result.time_ms);
+
+                var card = document.createElement('div');
                 card.className = 'explore-card';
-                card.innerHTML = '<div class="explore-card-header">'
-                  + '<span class="explore-model-name">' + modelIcon(result.model) + ' ' + result.model + '</span>'
-                  + '<span class="explore-time-badge">' + (result.time_ms / 1000).toFixed(1) + 's</span>'
+                card.setAttribute('data-provider', provider);
+
+                // Build card header
+                var headerHtml = '<div class="explore-card-header">'
+                  + '<span class="explore-model-icon" data-provider="' + provider + '">' + modelIcon(result.model) + '</span>'
+                  + '<span class="explore-model-name" title="' + escapeAttr(result.model) + '">' + escapeHtml(shortName) + '</span>'
+                  + '<span class="explore-badges">'
+                  + '<span class="explore-time-badge ' + timeClass + '">' + timeSec + 's</span>'
                   + (result.is_fallback ? '<span class="explore-fallback-badge">fallback</span>' : '')
-                  + (result.credits_used > 0 ? '<span style="font-size:10px;color:var(--muted);">' + result.credits_used + ' credits</span>' : '')
-                  + '</div>'
-                  + '<div class="explore-card-body">' + escapeHtml(result.response) + '</div>'
-                  + '<div class="explore-card-actions">'
-                  + '<button class="explore-adopt-btn" onclick="exploreAdopt(this)" data-response="' + escapeAttr(result.response) + '">'
-                  + (lang === 'ja' ? 'この回答を採用' : 'Use this answer') + '</button>'
+                  + (result.credits_used > 0 ? '<span class="explore-credits-badge">' + result.credits_used + ' cr</span>' : '')
+                  + '</span>'
                   + '</div>';
+
+                // Build card body with overflow detection
+                var bodyHtml = '<div class="explore-card-body">' + escapeHtml(result.response) + '</div>';
+
+                // Build card footer
+                var footerHtml = '<div class="explore-card-footer">'
+                  + '<button class="explore-adopt-btn" onclick="exploreAdopt(this)" data-response="' + escapeAttr(result.response) + '">'
+                  + (lang === 'ja' ? '\u2714 \u3053\u306e\u56de\u7b54\u3092\u63a1\u7528' : '\u2714 Use this answer') + '</button>'
+                  + '</div>';
+
+                card.innerHTML = headerHtml + bodyHtml + footerHtml;
+
+                // Add expand button if content overflows
+                (function(cardEl) {
+                  requestAnimationFrame(function() {
+                    var bodyEl = cardEl.querySelector('.explore-card-body');
+                    if (bodyEl && bodyEl.scrollHeight > bodyEl.clientHeight + 10) {
+                      var expandBtn = document.createElement('button');
+                      expandBtn.className = 'explore-expand-btn';
+                      expandBtn.textContent = lang === 'ja' ? '\u5168\u6587\u8868\u793a' : 'Show full';
+                      expandBtn.onclick = function() {
+                        var isExpanded = bodyEl.classList.toggle('expanded');
+                        this.textContent = isExpanded
+                          ? (lang === 'ja' ? '\u6298\u308a\u305f\u305f\u3080' : 'Collapse')
+                          : (lang === 'ja' ? '\u5168\u6587\u8868\u793a' : 'Show full');
+                      };
+                      var footer = cardEl.querySelector('.explore-card-footer');
+                      if (footer) footer.appendChild(expandBtn);
+                    }
+                  });
+                })(card);
+
                 container.appendChild(card);
               }
 
@@ -10515,28 +10812,30 @@
             }
 
             if (data.error) {
-              pending.textContent = friendlyError(data.error);
+              pending.innerHTML = '<span style="color:#ef4444;">\u26a0</span> ' + friendlyError(data.error);
             }
-          } catch {}
+          } catch (parseErr) {}
         }
         msgsEl.scrollTop = msgsEl.scrollHeight;
 
         if (exploreData) {
-          const actions = document.createElement('div');
+          var actions = document.createElement('div');
           actions.className = 'explore-actions-bar';
 
-          const summaryBtn = document.createElement('button');
-          summaryBtn.className = 'explore-action-btn';
-          summaryBtn.textContent = lang === 'ja' ? 'まとめる (Claude Sonnet 4.5)' : 'Summarize (Claude Sonnet 4.5)';
+          var summaryBtn = document.createElement('button');
+          summaryBtn.className = 'explore-action-btn primary';
+          summaryBtn.innerHTML = (lang === 'ja' ? '\u2728 \u307e\u3068\u3081\u308b' : '\u2728 Summarize');
+          summaryBtn.title = 'Claude Sonnet 4.5';
           summaryBtn.onclick = function() {
-            const allResponses = container.querySelectorAll('.explore-card-body');
-            let combined = '';
-            allResponses.forEach((el, i) => {
-              const modelName = container.querySelectorAll('.explore-model-name')[i]?.textContent || ('Model ' + (i+1));
-              combined += (lang === 'ja' ? '回答' : 'Answer') + (i + 1) + ' (' + modelName + '):\n' + el.textContent + '\n\n';
+            var allResponses = container.querySelectorAll('.explore-card-body');
+            var combined = '';
+            allResponses.forEach(function(el, i) {
+              var mn = container.querySelectorAll('.explore-model-name')[i];
+              var modelName = mn ? mn.textContent : ('Model ' + (i+1));
+              combined += (lang === 'ja' ? '\u56de\u7b54' : 'Answer') + (i + 1) + ' (' + modelName + '):\n' + el.textContent + '\n\n';
             });
-            const summaryPrompt = lang === 'ja'
-              ? '以下の複数のAIモデルからの回答を統合し、最も正確で包括的な日本語の回答を作成してください。各回答の良い点を取り入れ、矛盾があれば最も信頼性の高い情報を優先してください:\n\n' + combined
+            var summaryPrompt = lang === 'ja'
+              ? '\u4ee5\u4e0b\u306e\u8907\u6570\u306eAI\u30e2\u30c7\u30eb\u304b\u3089\u306e\u56de\u7b54\u3092\u7d71\u5408\u3057\u3001\u6700\u3082\u6b63\u78ba\u3067\u5305\u62ec\u7684\u306a\u65e5\u672c\u8a9e\u306e\u56de\u7b54\u3092\u4f5c\u6210\u3057\u3066\u304f\u3060\u3055\u3044\u3002\u5404\u56de\u7b54\u306e\u826f\u3044\u70b9\u3092\u53d6\u308a\u5165\u308c\u3001\u77db\u76fe\u304c\u3042\u308c\u3070\u6700\u3082\u4fe1\u983c\u6027\u306e\u9ad8\u3044\u60c5\u5831\u3092\u512a\u5148\u3057\u3066\u304f\u3060\u3055\u3044:\n\n' + combined
               : 'Synthesize the following AI model responses into one accurate, comprehensive answer. Incorporate the best points from each and prioritize the most reliable information where answers conflict:\n\n' + combined;
             document.getElementById('app-input').value = summaryPrompt;
             document.getElementById('explore-check').checked = false;
@@ -10546,21 +10845,25 @@
           actions.appendChild(summaryBtn);
 
           if (exploreData.can_escalate) {
-            const reQueryBtn = document.createElement('button');
+            var reQueryBtn = document.createElement('button');
             reQueryBtn.className = 'explore-action-btn';
-            const nextLevel = (exploreData.level || 0) + 1;
-            reQueryBtn.textContent = lang === 'ja' ? '再調査 (Lv.' + nextLevel + ')' : 'Re-query (Lv.' + nextLevel + ')';
+            var nextLevel = (exploreData.level || 0) + 1;
+            reQueryBtn.innerHTML = (lang === 'ja' ? '\ud83d\udd0d \u518d\u8abf\u67fb (Lv.' + nextLevel + ')' : '\ud83d\udd0d Re-query (Lv.' + nextLevel + ')');
             reQueryBtn.onclick = function() {
               appExplore(msgToSend, originalText, nextLevel);
             };
             actions.appendChild(reQueryBtn);
           }
 
-          const totalInfo = document.createElement('span');
+          var totalInfo = document.createElement('span');
           totalInfo.className = 'explore-level-badge';
-          totalInfo.textContent = exploreData.total_models + ' models / '
-            + (exploreData.total_time_ms / 1000).toFixed(1) + 's'
-            + (exploreData.total_credits_used > 0 ? ' / ' + exploreData.total_credits_used + ' credits' : '');
+          var statsText = exploreData.total_models + ' models \u00b7 '
+            + (exploreData.total_time_ms / 1000).toFixed(1) + 's';
+          if (exploreData.total_credits_used > 0) {
+            statsText += ' \u00b7 ' + exploreData.total_credits_used + ' cr';
+          }
+          totalInfo.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 12.5a5.5 5.5 0 110-11 5.5 5.5 0 010 11zM8 4a.75.75 0 01.75.75v2.5h2.5a.75.75 0 010 1.5h-2.5v2.5a.75.75 0 01-1.5 0v-2.5h-2.5a.75.75 0 010-1.5h2.5v-2.5A.75.75 0 018 4z"/></svg>'
+            + '<span>' + statsText + '</span>';
           actions.appendChild(totalInfo);
 
           container.appendChild(actions);
@@ -10568,23 +10871,13 @@
         }
 
         knownMsgCount += 2; syncVersion++;
-        setTimeout(() => appLoadConversations(), 1500);
+        setTimeout(function() { appLoadConversations(); }, 1500);
 
       } catch (e) {
-        pending.textContent = lang === 'ja' ? 'エラーが発生しました' : 'Error occurred';
+        pending.innerHTML = '<span style="color:#ef4444;">\u26a0</span> '
+          + (lang === 'ja' ? '\u30a8\u30e9\u30fc\u304c\u767a\u751f\u3057\u307e\u3057\u305f' : 'Error occurred');
         console.error('Explore error:', e);
       }
-    }
-
-    function modelIcon(model) {
-      if (model.includes('claude')) return '\ud83d\udfe3';
-      if (model.includes('gpt')) return '\u26a1';
-      if (model.includes('gemini')) return '\ud83d\udd35';
-      if (model.includes('llama') || model.includes('groq')) return '\ud83e\uddac';
-      if (model.includes('kimi') || model.includes('moonshot')) return '\ud83c\udf19';
-      if (model.includes('qwen')) return '\ud83d\udcab';
-      if (model.includes('local')) return '\ud83d\udfe2';
-      return '\ud83e\udd16';
     }
 
     function escapeHtml(str) {
