@@ -11644,6 +11644,13 @@ async fn handle_admin_stats(
         }))).into_response();
     }
 
+    // Provider status (always available, no DynamoDB needed)
+    let providers = if let Some(lb) = state.lb_raw.read().ok().and_then(|g| g.clone()) {
+        lb.provider_status()
+    } else {
+        vec![]
+    };
+
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(dynamo), Some(config_table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
@@ -11653,8 +11660,14 @@ async fn handle_admin_stats(
 
             type DynKey = std::collections::HashMap<String, AttributeValue>;
 
-            // 1. Count registered users (USER# + PROFILE)
+            // 1. Count registered users + subscription breakdown (USER# + PROFILE)
             let mut total_users: u64 = 0;
+            let mut plan_free: u64 = 0;
+            let mut plan_starter: u64 = 0;
+            let mut plan_pro: u64 = 0;
+            let mut plan_enterprise: u64 = 0;
+            let mut total_credits_remaining: i64 = 0;
+            let mut total_credits_used: i64 = 0;
             let mut start_key: Option<DynKey> = None;
             loop {
                 let mut scan = dynamo
@@ -11663,13 +11676,26 @@ async fn handle_admin_stats(
                     .filter_expression("begins_with(pk, :prefix) AND sk = :sk")
                     .expression_attribute_values(":prefix", AttributeValue::S("USER#".to_string()))
                     .expression_attribute_values(":sk", AttributeValue::S(SK_PROFILE.to_string()))
-                    .select(aws_sdk_dynamodb::types::Select::Count);
+                    .projection_expression("pk, plan, credits_remaining, credits_used");
                 if let Some(ref key) = start_key {
                     scan = scan.set_exclusive_start_key(Some(key.clone()));
                 }
                 match scan.send().await {
                     Ok(output) => {
-                        total_users += output.count() as u64;
+                        for item in output.items() {
+                            total_users += 1;
+                            let plan = item.get("plan").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or("free");
+                            match plan {
+                                "starter" => plan_starter += 1,
+                                "pro" => plan_pro += 1,
+                                "enterprise" => plan_enterprise += 1,
+                                _ => plan_free += 1,
+                            }
+                            let cr = item.get("credits_remaining").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
+                            let cu = item.get("credits_used").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
+                            total_credits_remaining += cr;
+                            total_credits_used += cu;
+                        }
                         match output.last_evaluated_key() {
                             Some(k) => start_key = Some(k.to_owned()),
                             None => break,
@@ -11741,6 +11767,17 @@ async fn handle_admin_stats(
 
             return Json(serde_json::json!({
                 "total_users": total_users,
+                "subscriptions": {
+                    "free": plan_free,
+                    "starter": plan_starter,
+                    "pro": plan_pro,
+                    "enterprise": plan_enterprise,
+                    "paid_total": plan_starter + plan_pro + plan_enterprise,
+                },
+                "credits": {
+                    "total_remaining": total_credits_remaining,
+                    "total_used": total_credits_used,
+                },
                 "sessions": {
                     "webchat": web,
                     "line": line,
@@ -11750,12 +11787,14 @@ async fn handle_admin_stats(
                 },
                 "today_usage": today_usage,
                 "date": today,
+                "providers": providers,
             })).into_response();
         }
     }
 
     Json(serde_json::json!({
         "error": "DynamoDB not configured",
+        "providers": providers,
     })).into_response()
 }
 

@@ -492,6 +492,14 @@
     }
     .test-all-bar .test-all-btn:hover { border-color: var(--cyan); }
 
+    /* Feedback table */
+    #feedback-container table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #feedback-container th { text-align: left; padding: 10px 16px; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    #feedback-container td { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+
+    /* Log highlighting */
+    #logs-table tr:hover { background: var(--surface2); }
+
     @media (max-width: 480px) {
       .cards { grid-template-columns: 1fr; }
       .key-row { flex-wrap: wrap; }
@@ -520,8 +528,10 @@
       <button class="tab active" onclick="showTab('overview')">Overview</button>
       <button class="tab" onclick="showTab('users')">Users</button>
       <button class="tab" onclick="showTab('tickets')">Tickets</button>
+      <button class="tab" onclick="showTab('feedback')">Feedback</button>
       <button class="tab" onclick="showTab('infra')">Infrastructure</button>
       <button class="tab" onclick="showTab('sessions')">Sessions</button>
+      <button class="tab" onclick="showTab('logs')">Logs</button>
       <button class="tab" onclick="showTab('keys')">Keys</button>
       <button class="tab" onclick="showTab('costs')">Costs</button>
     </div>
@@ -535,8 +545,13 @@
           <div class="card-sub">USER# records in DynamoDB</div>
         </div>
         <div class="card">
+          <div class="card-label">Paid Subscribers</div>
+          <div class="card-value green" id="stat-paid">--</div>
+          <div class="card-sub" id="stat-paid-detail">Starter / Pro / Enterprise</div>
+        </div>
+        <div class="card">
           <div class="card-label">Total Sessions</div>
-          <div class="card-value green" id="stat-sessions">--</div>
+          <div class="card-value" style="color:var(--cyan)" id="stat-sessions">--</div>
           <div class="card-sub">Web / LINE / Telegram</div>
         </div>
         <div class="card">
@@ -545,10 +560,74 @@
           <div class="card-sub" id="stat-date">Tool calls today</div>
         </div>
         <div class="card">
+          <div class="card-label">Credits Used (Total)</div>
+          <div class="card-value" id="stat-credits-used">--</div>
+          <div class="card-sub" id="stat-credits-remaining">-- credits remaining</div>
+        </div>
+        <div class="card">
           <div class="card-label">Monthly Cost (est.)</div>
           <div class="card-value" id="stat-cost">--</div>
           <div class="card-sub">AWS + Fly.io + CF Workers</div>
         </div>
+      </div>
+
+      <!-- Subscription breakdown -->
+      <div class="table-wrap">
+        <div class="table-title">Subscription Breakdown</div>
+        <table>
+          <tr>
+            <th>Plan</th>
+            <th>Users</th>
+            <th>%</th>
+            <th>MRR (est.)</th>
+          </tr>
+          <tr>
+            <td><span class="badge badge-muted">Free</span></td>
+            <td id="sub-free">--</td>
+            <td id="sub-free-pct">--</td>
+            <td>$0</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-blue">Starter ($9/mo)</span></td>
+            <td id="sub-starter">--</td>
+            <td id="sub-starter-pct">--</td>
+            <td id="sub-starter-mrr">--</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-green">Pro ($29/mo)</span></td>
+            <td id="sub-pro">--</td>
+            <td id="sub-pro-pct">--</td>
+            <td id="sub-pro-mrr">--</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-orange">Enterprise</span></td>
+            <td id="sub-enterprise">--</td>
+            <td id="sub-enterprise-pct">--</td>
+            <td id="sub-enterprise-mrr">--</td>
+          </tr>
+          <tr style="border-top: 2px solid var(--accent);">
+            <td><strong>Total MRR</strong></td>
+            <td id="sub-total-paid">--</td>
+            <td></td>
+            <td id="sub-total-mrr" style="font-weight:700;color:var(--accent)">--</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- LLM Provider Health -->
+      <div class="table-wrap">
+        <div class="table-title">LLM Provider Health (Circuit Breaker)</div>
+        <table>
+          <tr>
+            <th>#</th>
+            <th>Model</th>
+            <th>Status</th>
+            <th>Failures</th>
+          </tr>
+          <tbody id="provider-health-table">
+            <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:16px">Loading...</td></tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Latency by endpoint -->
@@ -565,33 +644,33 @@
         </table>
       </div>
 
-      <!-- Recent activity -->
+      <!-- Service Channels -->
       <div class="table-wrap">
         <div class="table-title">Service Channels</div>
         <table>
           <tr>
             <th>Channel</th>
             <th>Status</th>
-            <th>Users</th>
-            <th>AI Model</th>
+            <th>Sessions</th>
+            <th>AI Model (Default)</th>
           </tr>
           <tr>
             <td>Web Chat (chatweb.ai)</td>
             <td><span class="status-dot green"></span>Active</td>
             <td id="ch-web">--</td>
-            <td><span class="badge badge-green">GPT-4o</span></td>
+            <td><span class="badge badge-green">Normal tier (MiniMax M2.5)</span></td>
           </tr>
           <tr>
             <td>LINE Bot (@619jcqqh)</td>
             <td><span class="status-dot green"></span>Active</td>
             <td id="ch-line">--</td>
-            <td><span class="badge badge-green">GPT-4o</span></td>
+            <td><span class="badge badge-blue">Economy tier (fast)</span></td>
           </tr>
           <tr>
             <td>Telegram (@chatweb_ai_bot)</td>
             <td><span class="status-dot green"></span>Active</td>
             <td id="ch-tg">--</td>
-            <td><span class="badge badge-green">GPT-4o</span></td>
+            <td><span class="badge badge-blue">Economy tier (fast)</span></td>
           </tr>
         </table>
       </div>
@@ -672,6 +751,46 @@
 
       <div id="tickets-container">
         <div style="padding:32px;text-align:center;color:var(--muted);">Loading...</div>
+      </div>
+    </div>
+
+    <!-- ========== FEEDBACK ========== -->
+    <div id="tab-feedback" class="tab-content">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Total Feedback</div>
+          <div class="card-value blue" id="fb-total">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Positive</div>
+          <div class="card-value green" id="fb-up">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Negative</div>
+          <div class="card-value red" id="fb-down">--</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Positive Rate</div>
+          <div class="card-value" id="fb-rate">--</div>
+          <div class="card-sub">Overall satisfaction</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <span style="font-size:13px;color:var(--muted)">Time range:</span>
+        <select id="fb-days" onchange="loadFeedback()" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px;">
+          <option value="7" selected>Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-title">Recent Feedback</div>
+        <div id="feedback-container" style="max-height:500px;overflow-y:auto;">
+          <div style="padding:32px;text-align:center;color:var(--muted);">Loading...</div>
+        </div>
       </div>
     </div>
 
@@ -927,6 +1046,37 @@
       </div>
     </div>
 
+    <!-- ========== LOGS ========== -->
+    <div id="tab-logs" class="tab-content">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <span style="font-size:13px;color:var(--muted)">Date:</span>
+        <input type="date" id="log-date" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px;" onchange="loadLogs()">
+        <span style="font-size:13px;color:var(--muted)">Limit:</span>
+        <select id="log-limit" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px;" onchange="loadLogs()">
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+        <button class="refresh-btn" onclick="loadLogs()">Reload</button>
+        <span style="font-size:11px;color:var(--muted)" id="logs-count"></span>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-title">Audit Logs</div>
+        <table>
+          <tr>
+            <th>Time</th>
+            <th>Action</th>
+            <th>User</th>
+            <th>Details</th>
+          </tr>
+          <tbody id="logs-table">
+            <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:16px">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ========== KEYS ========== -->
     <div id="tab-keys" class="tab-content">
       <div id="keys-message" style="display:none;padding:10px 16px;margin-bottom:12px;border-radius:6px;background:rgba(34,197,94,0.1);border:1px solid var(--green);color:var(--green);font-size:13px;"></div>
@@ -1135,11 +1285,42 @@
         if (!r.ok) return;
         const data = await r.json();
         if (data.total_users !== undefined) {
-          document.getElementById('stat-users').textContent = data.total_users;
+          document.getElementById('stat-users').textContent = data.total_users.toLocaleString();
         }
+        // Subscription breakdown
+        if (data.subscriptions) {
+          const sub = data.subscriptions;
+          const total = data.total_users || 1;
+          document.getElementById('stat-paid').textContent = sub.paid_total || 0;
+          document.getElementById('stat-paid-detail').textContent =
+            (sub.starter || 0) + ' Starter / ' + (sub.pro || 0) + ' Pro / ' + (sub.enterprise || 0) + ' Enterprise';
+          document.getElementById('sub-free').textContent = sub.free || 0;
+          document.getElementById('sub-starter').textContent = sub.starter || 0;
+          document.getElementById('sub-pro').textContent = sub.pro || 0;
+          document.getElementById('sub-enterprise').textContent = sub.enterprise || 0;
+          document.getElementById('sub-total-paid').textContent = sub.paid_total || 0;
+          const pct = (v) => total > 0 ? ((v / total) * 100).toFixed(1) + '%' : '0%';
+          document.getElementById('sub-free-pct').textContent = pct(sub.free || 0);
+          document.getElementById('sub-starter-pct').textContent = pct(sub.starter || 0);
+          document.getElementById('sub-pro-pct').textContent = pct(sub.pro || 0);
+          document.getElementById('sub-enterprise-pct').textContent = pct(sub.enterprise || 0);
+          const starterMrr = (sub.starter || 0) * 9;
+          const proMrr = (sub.pro || 0) * 29;
+          const entMrr = (sub.enterprise || 0) * 99;
+          document.getElementById('sub-starter-mrr').textContent = '$' + starterMrr;
+          document.getElementById('sub-pro-mrr').textContent = '$' + proMrr;
+          document.getElementById('sub-enterprise-mrr').textContent = '$' + entMrr;
+          document.getElementById('sub-total-mrr').textContent = '$' + (starterMrr + proMrr + entMrr);
+        }
+        // Credits
+        if (data.credits) {
+          document.getElementById('stat-credits-used').textContent = (data.credits.total_used || 0).toLocaleString();
+          document.getElementById('stat-credits-remaining').textContent = (data.credits.total_remaining || 0).toLocaleString() + ' credits remaining';
+        }
+        // Sessions
         if (data.sessions) {
           const s = data.sessions;
-          document.getElementById('stat-sessions').textContent = s.total || 0;
+          document.getElementById('stat-sessions').textContent = (s.total || 0).toLocaleString();
           document.getElementById('sess-web').textContent = s.webchat || 0;
           document.getElementById('sess-line').textContent = s.line || 0;
           document.getElementById('sess-tg').textContent = s.telegram || 0;
@@ -1149,12 +1330,37 @@
           document.getElementById('ch-tg').textContent = s.telegram || 0;
         }
         if (data.today_usage !== undefined) {
-          document.getElementById('stat-requests').textContent = data.today_usage;
-          document.getElementById('stat-date').textContent = 'Tool calls on ' + (data.date || 'today');
+          document.getElementById('stat-requests').textContent = data.today_usage.toLocaleString();
+          document.getElementById('stat-date').textContent = 'USAGE# records on ' + (data.date || 'today');
+        }
+        // Provider health
+        if (data.providers && data.providers.length > 0) {
+          renderProviderHealth(data.providers);
         }
       } catch(e) {
         console.warn('Failed to load admin stats:', e);
       }
+    }
+
+    function renderProviderHealth(providers) {
+      const tbody = document.getElementById('provider-health-table');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      if (providers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:16px">No providers configured</td></tr>';
+        return;
+      }
+      providers.forEach(p => {
+        const row = document.createElement('tr');
+        const statusDot = p.available ? 'green' : 'red';
+        const statusText = p.circuit_open ? 'Circuit Open' : p.available ? 'Available' : 'Down';
+        const failColor = p.failures > 0 ? 'var(--yellow)' : 'var(--muted)';
+        row.innerHTML = '<td>' + p.index + '</td>'
+          + '<td><strong>' + escHtml(p.model) + '</strong></td>'
+          + '<td><span class="status-dot ' + statusDot + '"></span>' + statusText + '</td>'
+          + '<td style="color:' + failColor + '">' + p.failures + '</td>';
+        tbody.appendChild(row);
+      });
     }
 
     // ========== USERS TAB ==========
@@ -1600,14 +1806,107 @@
       statusEl.textContent = ok + ' passed, ' + fail + ' failed (' + toTest.length + ' tested)';
     }
 
+    // ========== FEEDBACK TAB ==========
+    async function loadFeedback() {
+      const days = document.getElementById('fb-days') ? document.getElementById('fb-days').value : 7;
+      try {
+        const r = await fetch(API + '/api/v1/admin/feedback?days=' + days, { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+        if (!r.ok) { document.getElementById('feedback-container').innerHTML = '<div style="padding:32px;text-align:center;color:var(--red);">Forbidden</div>'; return; }
+        const data = await r.json();
+        const stats = data.stats || {};
+        document.getElementById('fb-total').textContent = stats.total || 0;
+        document.getElementById('fb-up').textContent = stats.total_up || 0;
+        document.getElementById('fb-down').textContent = stats.total_down || 0;
+        document.getElementById('fb-rate').textContent = (stats.positive_rate || 0) + '%';
+        const rateEl = document.getElementById('fb-rate');
+        if (stats.positive_rate >= 80) rateEl.style.color = 'var(--green)';
+        else if (stats.positive_rate >= 50) rateEl.style.color = 'var(--yellow)';
+        else rateEl.style.color = 'var(--red)';
+
+        const container = document.getElementById('feedback-container');
+        const feedbacks = data.feedbacks || [];
+        if (feedbacks.length === 0) {
+          container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);">No feedback in the last ' + days + ' days</div>';
+          return;
+        }
+        let html = '<table style="width:100%;"><tr><th>Time</th><th>Rating</th><th>Snippet</th><th>Channel</th><th>User</th></tr>';
+        feedbacks.forEach(fb => {
+          const ratingIcon = fb.rating === 'up' ? '<span style="color:var(--green)">&#9650; Good</span>' : '<span style="color:var(--red)">&#9660; Bad</span>';
+          html += '<tr>'
+            + '<td style="white-space:nowrap">' + escHtml(fb.timestamp || '') + '</td>'
+            + '<td>' + ratingIcon + '</td>'
+            + '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(fb.snippet || '') + '</td>'
+            + '<td>' + escHtml(fb.channel || 'web') + '</td>'
+            + '<td style="font-size:11px;color:var(--muted)">' + escHtml((fb.user_id || '').slice(0, 12)) + '</td>'
+            + '</tr>';
+        });
+        html += '</table>';
+        container.innerHTML = html;
+      } catch(e) {
+        document.getElementById('feedback-container').innerHTML = '<div style="padding:32px;text-align:center;color:var(--red);">Error: ' + e.message + '</div>';
+      }
+    }
+
+    // ========== LOGS TAB ==========
+    async function loadLogs() {
+      const dateInput = document.getElementById('log-date');
+      const limitSelect = document.getElementById('log-limit');
+      const date = dateInput ? dateInput.value : '';
+      const limit = limitSelect ? limitSelect.value : '50';
+
+      let url = API + '/api/v1/admin/logs?limit=' + limit;
+      if (date) url += '&date=' + date;
+
+      try {
+        const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+        if (!r.ok) {
+          document.getElementById('logs-table').innerHTML = '<tr><td colspan="4" style="color:var(--red);text-align:center;padding:16px">Forbidden</td></tr>';
+          return;
+        }
+        const data = await r.json();
+        const logs = data.logs || [];
+        const countEl = document.getElementById('logs-count');
+        if (countEl) countEl.textContent = logs.length + ' entries';
+
+        const tbody = document.getElementById('logs-table');
+        if (logs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:16px">No audit logs found</td></tr>';
+          return;
+        }
+        tbody.innerHTML = '';
+        logs.forEach(log => {
+          const row = document.createElement('tr');
+          const action = log.event_type || log.action || '';
+          const actionColor = action.includes('error') || action.includes('fail') ? 'var(--red)' :
+            action.includes('admin') || action.includes('key_update') ? 'var(--yellow)' :
+            action.includes('login') || action.includes('register') ? 'var(--green)' : 'var(--text)';
+          const userDisplay = log.email || log.user_id || '';
+          row.innerHTML = '<td style="white-space:nowrap;font-size:11px;color:var(--muted)">' + escHtml(log.timestamp || '') + '</td>'
+            + '<td style="color:' + actionColor + ';font-weight:600;font-size:12px">' + escHtml(action) + '</td>'
+            + '<td style="font-size:12px">' + escHtml(userDisplay) + '</td>'
+            + '<td style="font-size:11px;color:var(--muted);max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(log.details || '') + '</td>';
+          tbody.appendChild(row);
+        });
+      } catch(e) {
+        document.getElementById('logs-table').innerHTML = '<tr><td colspan="4" style="color:var(--red);text-align:center;padding:16px">Error: ' + e.message + '</td></tr>';
+      }
+    }
+
     function refreshAll() {
       checkHealth();
       loadAdminStats();
       loadSessions();
       loadUsers();
       loadTickets();
+      loadFeedback();
       loadKeys();
       estimateCosts();
+      // Set default date for logs to today
+      const dateInput = document.getElementById('log-date');
+      if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+      }
+      loadLogs();
     }
 
     // Admin nav link (no sid needed, auth via Bearer token)

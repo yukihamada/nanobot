@@ -274,6 +274,23 @@ impl LoadBalancedProvider {
         &self.providers
     }
 
+    /// Return status info for each provider (name, model, available, failure count).
+    /// Used by admin dashboard to display provider health.
+    pub fn provider_status(&self) -> Vec<serde_json::Value> {
+        self.providers.iter().enumerate().map(|(i, p)| {
+            let available = self.is_provider_available(i);
+            let failures = self.failure_counts[i].load(std::sync::atomic::Ordering::Relaxed);
+            let open_until = self.circuit_open_until[i].load(std::sync::atomic::Ordering::Relaxed);
+            serde_json::json!({
+                "index": i,
+                "model": p.default_model(),
+                "available": available,
+                "failures": failures,
+                "circuit_open": open_until > 0 && !available,
+            })
+        }).collect()
+    }
+
     /// Create from environment variables. Reads comma-separated API keys.
     pub fn from_env() -> Option<Self> {
         let mut providers: Vec<Arc<dyn LlmProvider>> = Vec::new();
