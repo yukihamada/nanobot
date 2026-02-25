@@ -3636,6 +3636,42 @@
     }
     .app-sidebar-link:hover { color: var(--text); border-color: var(--accent); }
 
+    /* App sidebar language menu */
+    .app-lang-menu {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+      z-index: 300;
+      min-width: 80px;
+    }
+    .app-lang-menu.show { display: flex; flex-direction: column; }
+    .app-lang-menu button {
+      display: block;
+      width: 100%;
+      padding: 6px 12px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 6px;
+      text-align: left;
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
+    }
+    .app-lang-menu button:hover {
+      background: var(--surface2);
+      color: var(--text);
+    }
+
     /* App sidebar backdrop (mobile) */
     .app-sidebar-backdrop {
       display: none;
@@ -3768,6 +3804,15 @@
     .nav-mobile-menu a:hover, .nav-mobile-menu button:hover {
       background: var(--surface2);
       color: var(--text);
+    }
+    .lang-switch-mob {
+      font-size: 13px !important;
+      padding: 8px 14px !important;
+    }
+    .lang-switch-mob-sep {
+      height: 1px;
+      background: var(--border);
+      margin: 6px 8px;
     }
 
     @media (max-width: 600px) {
@@ -3953,7 +3998,7 @@
       <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
       <a href="/admin" id="nav-admin-link" style="display:none;color:var(--accent);font-weight:600;">Admin</a>
       <span style="font-size:11px;color:var(--muted);margin-left:8px;opacity:0.6;">v0bd6e74</span>
-      <div class="lang-sw" id="lang-sw-nav" style="display:none;">
+      <div class="lang-sw" id="lang-sw-nav">
         <button onclick="setLang('ja')" id="l-ja">JA</button>
         <button onclick="setLang('en')" id="l-en">EN</button>
         <button onclick="setLang('zh')" id="l-zh">ZH</button>
@@ -3978,13 +4023,14 @@
         <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
         <a href="/admin" id="mob-admin-link" style="display:none;color:var(--accent);font-weight:600;">Admin</a>
         <div style="padding:8px 16px;font-size:11px;color:var(--muted);opacity:0.6;" id="mob-version-label">version: loading...</div>
-        <button onclick="setLang('ja');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇯🇵 日本語</button>
-        <button onclick="setLang('en');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇬🇧 English</button>
-        <button onclick="setLang('zh');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇨🇳 中文</button>
-        <button onclick="setLang('ko');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇰🇷 한국어</button>
-        <button onclick="setLang('es');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇪🇸 Español</button>
-        <button onclick="setLang('fr');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇫🇷 Français</button>
-        <button onclick="setLang('de');closeMobileMenu()" class="lang-switch-mob" style="display:none;">🇩🇪 Deutsch</button>
+        <div class="lang-switch-mob-sep"></div>
+        <button onclick="setLang('ja');closeMobileMenu()" class="lang-switch-mob">🇯🇵 日本語</button>
+        <button onclick="setLang('en');closeMobileMenu()" class="lang-switch-mob">🇬🇧 English</button>
+        <button onclick="setLang('zh');closeMobileMenu()" class="lang-switch-mob">🇨🇳 中文</button>
+        <button onclick="setLang('ko');closeMobileMenu()" class="lang-switch-mob">🇰🇷 한국어</button>
+        <button onclick="setLang('es');closeMobileMenu()" class="lang-switch-mob">🇪🇸 Español</button>
+        <button onclick="setLang('fr');closeMobileMenu()" class="lang-switch-mob">🇫🇷 Français</button>
+        <button onclick="setLang('de');closeMobileMenu()" class="lang-switch-mob">🇩🇪 Deutsch</button>
       </div>
     </div>
   </nav>
@@ -5302,6 +5348,20 @@
         <button class="app-sidebar-link" onclick="openApiKeysModal()" id="app-link-apikeys" title="API Keys" style="font-size:18px;padding:6px 10px;">🔑</button>
         <a class="app-sidebar-link" href="/docs" id="app-link-docs" title="API Docs" style="font-size:18px;padding:6px 10px;">📄</a>
         <button class="app-sidebar-link" onclick="openSettingsModal()" id="app-link-settings" title="Settings" style="font-size:18px;padding:6px 10px;">⚙️</button>
+        <div style="position:relative;">
+          <button class="app-sidebar-link app-lang-toggle" onclick="toggleAppLangMenu()" id="app-lang-btn" title="Language" style="font-size:14px;padding:6px 10px;">
+            <span id="app-lang-flag">🌐</span>
+          </button>
+          <div class="app-lang-menu" id="app-lang-menu">
+            <button onclick="setLang('ja');closeAppLangMenu()">🇯🇵 JA</button>
+            <button onclick="setLang('en');closeAppLangMenu()">🇬🇧 EN</button>
+            <button onclick="setLang('zh');closeAppLangMenu()">🇨🇳 ZH</button>
+            <button onclick="setLang('ko');closeAppLangMenu()">🇰🇷 KO</button>
+            <button onclick="setLang('es');closeAppLangMenu()">🇪🇸 ES</button>
+            <button onclick="setLang('fr');closeAppLangMenu()">🇫🇷 FR</button>
+            <button onclick="setLang('de');closeAppLangMenu()">🇩🇪 DE</button>
+          </div>
+        </div>
       </div>
       <div class="app-sidebar-footer">
         <div class="points-display" id="points-display" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;background:linear-gradient(135deg,rgba(34,197,94,0.1),rgba(16,185,129,0.1));border:1px solid rgba(34,197,94,0.2);border-radius:8px;margin-bottom:8px;">
@@ -7181,7 +7241,28 @@
       renderVoiceDemo(translationLang);
       // Update voice character display names for current language
       if (typeof updateVoiceDisplayNames === 'function') updateVoiceDisplayNames();
+      // Update app-mode language flag
+      var langFlags = { ja: '🇯🇵', en: '🇬🇧', zh: '🇨🇳', ko: '🇰🇷', es: '🇪🇸', fr: '🇫🇷', de: '🇩🇪' };
+      var appLangFlag = document.getElementById('app-lang-flag');
+      if (appLangFlag) appLangFlag.textContent = langFlags[translationLang] || '🌐';
     }
+
+    function toggleAppLangMenu() {
+      var menu = document.getElementById('app-lang-menu');
+      if (menu) menu.classList.toggle('show');
+    }
+    function closeAppLangMenu() {
+      var menu = document.getElementById('app-lang-menu');
+      if (menu) menu.classList.remove('show');
+    }
+    // Close app lang menu when clicking outside
+    document.addEventListener('click', function(e) {
+      var btn = document.getElementById('app-lang-btn');
+      var menu = document.getElementById('app-lang-menu');
+      if (menu && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+        menu.classList.remove('show');
+      }
+    });
 
     function copyCliSync(el) {
       const cmd = 'chatweb chat --sync ' + webSessionId + ' "Hello"';
@@ -14864,27 +14945,35 @@
     })();
 
     applyABVariant(getABVariant());
-    // Language: manual setting (generalSettings.uiLanguage) > saved 'nl' > browser auto-detect
+    // Language priority: ?lang= URL param > manual setting (generalSettings.uiLanguage) > saved 'nl' > browser auto-detect
     (function() {
-      var gs = JSON.parse(localStorage.getItem('generalSettings') || '{}');
-      var uiPref = gs.uiLanguage || 'auto';
+      var urlParams = new URLSearchParams(window.location.search);
+      var urlLang = urlParams.get('lang');
+      var supportedLangs = ['ja', 'en', 'zh', 'ko', 'es', 'fr', 'de'];
       var lang;
-      if (uiPref !== 'auto') {
-        lang = uiPref;
+      if (urlLang && supportedLangs.includes(urlLang)) {
+        lang = urlLang;
+        localStorage.setItem('nl', lang);
       } else {
-        var saved = localStorage.getItem('nl');
-        if (saved) {
-          lang = saved;
+        var gs = JSON.parse(localStorage.getItem('generalSettings') || '{}');
+        var uiPref = gs.uiLanguage || 'auto';
+        if (uiPref !== 'auto') {
+          lang = uiPref;
         } else {
-          var browserLang = (navigator.language || 'en').toLowerCase();
-          // Auto-detect browser language
-          if (browserLang.startsWith('ja')) lang = 'ja';
-          else if (browserLang.startsWith('zh')) lang = 'zh';
-          else if (browserLang.startsWith('ko')) lang = 'ko';
-          else if (browserLang.startsWith('es')) lang = 'es';
-          else if (browserLang.startsWith('fr')) lang = 'fr';
-          else if (browserLang.startsWith('de')) lang = 'de';
-          else lang = 'en';
+          var saved = localStorage.getItem('nl');
+          if (saved) {
+            lang = saved;
+          } else {
+            var browserLang = (navigator.language || 'en').toLowerCase();
+            // Auto-detect browser language
+            if (browserLang.startsWith('ja')) lang = 'ja';
+            else if (browserLang.startsWith('zh')) lang = 'zh';
+            else if (browserLang.startsWith('ko')) lang = 'ko';
+            else if (browserLang.startsWith('es')) lang = 'es';
+            else if (browserLang.startsWith('fr')) lang = 'fr';
+            else if (browserLang.startsWith('de')) lang = 'de';
+            else lang = 'en';
+          }
         }
       }
       setLang(lang);

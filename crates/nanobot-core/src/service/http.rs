@@ -3021,7 +3021,9 @@ pub struct BugReportRequest {
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub status: String,
+    pub service: String,
     pub version: String,
+    pub timestamp: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub providers: Option<u32>,
 }
@@ -3269,6 +3271,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/local/status", get(handle_local_status))
         // Health
         .route("/health", get(handle_health))
+        .route("/api/v1/health", get(handle_health))
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1MB max body
         .layer(CompressionLayer::new())
         .layer(SetResponseHeaderLayer::overriding(
@@ -13129,11 +13132,14 @@ static PROVIDER_COUNT: Lazy<u32> = Lazy::new(|| {
 });
 
 async fn handle_health(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
+    use chrono::Utc;
     let provider_count = *PROVIDER_COUNT;
     let status = if provider_count == 0 { "degraded" } else { "ok" };
     Json(HealthResponse {
         status: status.to_string(),
+        service: "chatweb.ai".to_string(),
         version: crate::VERSION.to_string(),
+        timestamp: Utc::now().to_rfc3339(),
         providers: Some(provider_count),
     })
 }
