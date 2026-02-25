@@ -4,7 +4,7 @@
 //! A decision-making cycle for autonomous agents.
 
 use std::collections::HashMap;
-use tracing::{info, warn};
+use tracing::info;
 
 /// OODA Loop state for autonomous task execution
 #[derive(Debug, Clone)]

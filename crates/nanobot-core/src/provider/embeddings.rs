@@ -1,6 +1,5 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 /// OpenAI text-embedding-3-small API client
 #[derive(Clone)]

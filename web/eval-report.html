@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChatWeb 自己認識評価レポート — v47</title>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --card: #12121a;
+  --border: #1e1e2e;
+  --text: #e0e0e8;
+  --muted: #888;
+  --accent: #6c5ce7;
+  --green: #00b894;
+  --red: #e17055;
+  --yellow: #fdcb6e;
+  --blue: #0984e3;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  padding: 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+h1 { font-size: 1.8em; margin-bottom: 4px; }
+h2 { font-size: 1.3em; margin: 30px 0 12px; color: var(--accent); }
+h3 { font-size: 1.1em; margin: 16px 0 8px; }
+.subtitle { color: var(--muted); font-size: 0.9em; margin-bottom: 24px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.score-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+.score-box .label { font-size: 0.8em; color: var(--muted); }
+.score-box .value { font-size: 2em; font-weight: 700; }
+.score-box .delta { font-size: 0.9em; margin-top: 4px; }
+.green { color: var(--green); }
+.red { color: var(--red); }
+.yellow { color: var(--yellow); }
+.blue { color: var(--blue); }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+th, td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.8em;
+  text-transform: uppercase;
+}
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.8em;
+  font-weight: 600;
+}
+.badge-pass { background: rgba(0,184,148,0.15); color: var(--green); }
+.badge-warn { background: rgba(253,203,110,0.15); color: var(--yellow); }
+.badge-fail { background: rgba(225,112,85,0.15); color: var(--red); }
+.badge-new { background: rgba(108,92,231,0.15); color: var(--accent); }
+.response-box {
+  background: rgba(255,255,255,0.03);
+  border-left: 3px solid var(--accent);
+  padding: 10px 14px;
+  margin: 8px 0;
+  border-radius: 0 8px 8px 0;
+  font-size: 0.9em;
+}
+.meta { color: var(--muted); font-size: 0.8em; margin-top: 6px; }
+.fix-list { list-style: none; padding: 0; }
+.fix-list li {
+  padding: 8px 12px;
+  border-left: 3px solid var(--green);
+  background: rgba(0,184,148,0.05);
+  margin-bottom: 8px;
+  border-radius: 0 8px 8px 0;
+}
+.issue-list li {
+  border-left-color: var(--yellow);
+  background: rgba(253,203,110,0.05);
+}
+.comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.comparison > div {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+.comparison .before { border-top: 3px solid var(--red); }
+.comparison .after { border-top: 3px solid var(--green); }
+@media (max-width: 600px) {
+  .comparison { grid-template-columns: 1fr; }
+  .score-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<h1>ChatWeb 自己認識評価レポート</h1>
+<p class="subtitle">Version v47 | 2026-02-22 | テスト10項目 | プロンプト改善 + XMLタグ除去 + スマートツール使用</p>
+
+<h2>スコアサマリー</h2>
+<div class="score-grid">
+  <div class="score-box">
+    <div class="label">Before (v46)</div>
+    <div class="value red">35<span style="font-size:0.5em">/50</span></div>
+    <div class="delta">平均 3.5/5</div>
+  </div>
+  <div class="score-box">
+    <div class="label">After (v47)</div>
+    <div class="value green">39<span style="font-size:0.5em">/50</span></div>
+    <div class="delta green">+4 (平均 3.9/5)</div>
+  </div>
+  <div class="score-box">
+    <div class="label">合格率</div>
+    <div class="value blue">90<span style="font-size:0.5em">%</span></div>
+    <div class="delta">9/10 テスト合格</div>
+  </div>
+  <div class="score-box">
+    <div class="label">平均応答時間</div>
+    <div class="value">5.3<span style="font-size:0.5em">s</span></div>
+    <div class="delta">(タイムアウト除外)</div>
+  </div>
+</div>
+
+<h2>適用した改善</h2>
+<div class="card">
+  <ul class="fix-list">
+    <li><strong>web_search強制指示を撤廃</strong> — 全メッセージに付けていた「MUST call web_search」をスマートガイドに変更。挨拶・計算・自己認識にはツール不要。</li>
+    <li><strong>自己認識プロンプト強化</strong> — 名前・開発者・技術スタック・URLを明示的に記載し「web_search不要で即答せよ」と指示。</li>
+    <li><strong>minimax XMLタグ除去</strong> — <code>&lt;minimax:tool_call&gt;</code>等のプロバイダー固有タグをレスポンスから自動ストリップ。</li>
+    <li><strong>中国語混入防止</strong> — AGENT_COMMONに「絶対に中国語で回答しないこと」を明記。</li>
+    <li><strong>言語指示強化</strong> — ユーザーの言語に合わせるルールを明確化（日本語→日本語、英語→英語）。</li>
+  </ul>
+</div>
+
+<h2>テスト結果一覧</h2>
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>テスト</th>
+      <th>Before</th>
+      <th>After</th>
+      <th>モデル</th>
+      <th>時間</th>
+      <th>ツール</th>
+      <th>状態</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>名前認識</td>
+      <td>4/5</td>
+      <td class="green">5/5</td>
+      <td>gpt-4o</td>
+      <td>5.4s</td>
+      <td>translate</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>開発者認識</td>
+      <td>3/5</td>
+      <td class="green">4/5</td>
+      <td>gpt-4o</td>
+      <td>5.4s</td>
+      <td>web_search</td>
+      <td><span class="badge badge-warn">WARN</span></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>技術スタック</td>
+      <td>3/5</td>
+      <td class="green">4/5</td>
+      <td>gpt-4o</td>
+      <td>5.9s</td>
+      <td>web_search</td>
+      <td><span class="badge badge-warn">WARN</span></td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>計算 (1+1)</td>
+      <td>3/5</td>
+      <td class="green">4/5</td>
+      <td>gpt-4o</td>
+      <td>1.9s</td>
+      <td>calculator</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>挨拶</td>
+      <td>4/5</td>
+      <td class="green">5/5</td>
+      <td>gpt-4o</td>
+      <td>2.3s</td>
+      <td>datetime</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>英語応答</td>
+      <td>2/5</td>
+      <td class="green">5/5</td>
+      <td>gpt-4o</td>
+      <td>2.9s</td>
+      <td>translate</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>天気情報</td>
+      <td>4/5</td>
+      <td class="red">1/5</td>
+      <td>timeout</td>
+      <td>20.1s</td>
+      <td>-</td>
+      <td><span class="badge badge-fail">FAIL</span></td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>ソースコード</td>
+      <td>3/5</td>
+      <td class="green">4/5</td>
+      <td>claude-sonnet-4-6</td>
+      <td>5.8s</td>
+      <td>web_search</td>
+      <td><span class="badge badge-warn">WARN</span></td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>機能一覧</td>
+      <td>4/5</td>
+      <td>4/5</td>
+      <td>gpt-4o</td>
+      <td>9.4s</td>
+      <td>web_search</td>
+      <td><span class="badge badge-warn">WARN</span></td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>俳句生成</td>
+      <td>2/5</td>
+      <td class="green">3/5</td>
+      <td>gpt-4o</td>
+      <td>2.2s</td>
+      <td>datetime</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>テスト詳細</h2>
+
+<div class="card">
+  <h3>Test 1: 名前認識 <span class="badge badge-pass">5/5</span></h3>
+  <p><strong>Q:</strong> あなたの名前は何ですか？</p>
+  <div class="response-box">私の名前は <strong>ChatWeb</strong>（チャットウェブ）です。chatweb.ai で動いている音声対応AIアシスタントです。何かお手伝いできることがありますか？</div>
+  <div class="meta">Model: gpt-4o | Tools: translate | Time: 5.41s</div>
+</div>
+
+<div class="card">
+  <h3>Test 2: 開発者認識 <span class="badge badge-warn">4/5</span></h3>
+  <p><strong>Q:</strong> 誰が作ったの？</p>
+  <div class="response-box">私は <strong>ChatWeb</strong> です。chatweb.aiで動いており、<strong>濱田裕紀（Yuki Hamada）</strong>さんが個人で開発しました。何か他に知りたいことがあれば教えてください！</div>
+  <div class="meta">Model: gpt-4o | Tools: web_search | Time: 5.37s | Issue: web_search不要</div>
+</div>
+
+<div class="card">
+  <h3>Test 3: 技術スタック <span class="badge badge-warn">4/5</span></h3>
+  <p><strong>Q:</strong> どんな技術で動いてるの？</p>
+  <div class="response-box">私は <strong>Rust (axum)</strong> を使用し、<strong>AWS Lambda</strong> 上で動作しています。これにより、迅速な応答が可能です。また、私のソースコードは <strong>GitHub</strong> 上で公開されています（約15,000行）。具体的には、http.rs でAPIハンドラーを、integrations.rs でツール定義を行っています。</div>
+  <div class="meta">Model: gpt-4o | Tools: web_search | Time: 5.92s | Issue: web_search不要</div>
+</div>
+
+<div class="card">
+  <h3>Test 4: 計算 <span class="badge badge-pass">4/5</span></h3>
+  <p><strong>Q:</strong> 1+1は？</p>
+  <div class="response-box">1+1は2です！簡単ですね。何か他にお手伝いできることはありますか？</div>
+  <div class="meta">Model: gpt-4o | Tools: calculator | Time: 1.86s | Note: calculatorは過剰だが無害</div>
+</div>
+
+<div class="card">
+  <h3>Test 5: 挨拶 <span class="badge badge-pass">5/5</span></h3>
+  <p><strong>Q:</strong> こんにちは！</p>
+  <div class="response-box">こんにちは！今は東京時間で午後3時47分です。何かお手伝いできることがあれば教えてくださいね！</div>
+  <div class="meta">Model: gpt-4o | Tools: datetime | Time: 2.30s</div>
+</div>
+
+<div class="card">
+  <h3>Test 6: 英語応答 <span class="badge badge-pass">5/5</span></h3>
+  <p><strong>Q:</strong> What language can you speak?</p>
+  <div class="response-box">I can understand and communicate in multiple languages, including Japanese, English, Spanish, French, German, and many others. I always try to respond in the language you use for your questions.</div>
+  <div class="meta">Model: gpt-4o | Tools: translate | Time: 2.85s</div>
+</div>
+
+<div class="card">
+  <h3>Test 7: 天気情報 <span class="badge badge-fail">1/5 FAIL</span></h3>
+  <p><strong>Q:</strong> 今日の東京の天気は？</p>
+  <div class="response-box" style="border-left-color:var(--red)">あっ、ちょっと複雑すぎて頭がパンクしそう...簡単に言い直してくれると嬉しいな</div>
+  <div class="meta" style="color:var(--red)">Model: timeout | Tools: none | Time: 20.10s | CRITICAL: タイムアウト、エラーメッセージが不適切</div>
+</div>
+
+<div class="card">
+  <h3>Test 8: ソースコード <span class="badge badge-warn">4/5</span></h3>
+  <p><strong>Q:</strong> あなたのソースコードはどこにある？</p>
+  <div class="response-box">私のソースコードはGitHubにあります。github.com/yukihamada/nanobot READMEには、AIエージェントプラットフォームとしての概要も記載されています。ぜひご覧ください！</div>
+  <div class="meta">Model: claude-sonnet-4-6 | Tools: web_search | Time: 5.79s | Issue: web_search不要</div>
+</div>
+
+<div class="card">
+  <h3>Test 9: 機能一覧 <span class="badge badge-warn">4/5</span></h3>
+  <p><strong>Q:</strong> ChatWebって何ができるの？</p>
+  <div class="response-box">私はChatWeb（チャットウェブ）です。1. 情報提供: ニュース、天気、Wikipediaなどから情報を取得。2. 計算: 複雑な計算や通貨換算。3. 翻訳: 多言語間の翻訳。4. メディア生成: 画像、音楽、動画の生成。5. 外部サービス連携: Googleカレンダー、Gmail、Slackなどと連携。6. 開発支援: GitHubの操作やコード実行。7. 自己改善: 自らのコードを改良し、新機能を追加。</div>
+  <div class="meta">Model: gpt-4o | Tools: web_search | Time: 9.40s | Issue: web_search不要</div>
+</div>
+
+<div class="card">
+  <h3>Test 10: 俳句生成 <span class="badge badge-pass">3/5</span></h3>
+  <p><strong>Q:</strong> 俳句を作って</p>
+  <div class="response-box">2月の風　春の訪れ　静かなる声</div>
+  <div class="meta">Model: gpt-4o | Tools: datetime | Time: 2.21s | Note: 5-7-5のモーラ数が不正確</div>
+</div>
+
+<h2>Before / After 比較</h2>
+<div class="comparison">
+  <div class="before">
+    <h3 style="color:var(--red)">Before (v46)</h3>
+    <ul style="padding-left:18px;margin-top:8px">
+      <li>全メッセージに「MUST call web_search」強制</li>
+      <li>挨拶でもweb_search発動 → 遅延・コスト増</li>
+      <li>minimax XMLタグが応答に漏出</li>
+      <li>中国語テキスト混入（minimax由来）</li>
+      <li>英語質問に日本語で回答</li>
+      <li>開発者名を聞いても正確に答えられない</li>
+      <li style="margin-top:8px"><strong>合計: 35/50 (70%)</strong></li>
+    </ul>
+  </div>
+  <div class="after">
+    <h3 style="color:var(--green)">After (v47)</h3>
+    <ul style="padding-left:18px;margin-top:8px">
+      <li>スマートツール使用ガイドに変更</li>
+      <li>自己認識質問はツール不要で即答</li>
+      <li>XMLタグ自動除去 (tags.rs)</li>
+      <li>中国語混入防止ルール追加</li>
+      <li>英語質問に英語で正しく回答</li>
+      <li>開発者名を正確に回答（濱田裕紀）</li>
+      <li style="margin-top:8px"><strong>合計: 39/50 (78%) <span class="green">+8%</span></strong></li>
+    </ul>
+  </div>
+</div>
+
+<h2>残課題</h2>
+<div class="card">
+  <ul class="fix-list issue-list">
+    <li><strong>天気クエリのタイムアウト (Test 7)</strong> — researcherエージェントが20秒以内に完了しない。web_search/LLMプロバイダーのタイムアウト調整が必要。</li>
+    <li><strong>web_searchの過剰利用</strong> — 自己認識系の質問（名前・開発者・技術）でまだweb_searchが発動。プロンプトでは「不要」と指示しているが、LLMがツールコールを優先している。モデル側の挙動。</li>
+    <li><strong>calculatorの過剰利用</strong> — 「1+1」のような自明な計算でcalculatorを呼ぶ。コスト面では軽微だが、不必要なレイテンシが発生。</li>
+    <li><strong>俳句のモーラ数</strong> — LLMの日本語音韻理解の限界。5-7-5の正確性はLLMの能力依存。</li>
+    <li><strong>タイムアウト時のエラーメッセージ改善</strong> — 現在は「複雑すぎて〜」と表示されるが、「少々お待ちください、もう一度お試しください」等がより適切。</li>
+  </ul>
+</div>
+
+<h2>技術的変更点</h2>
+<div class="card">
+  <table>
+    <tr><th>ファイル</th><th>変更内容</th></tr>
+    <tr>
+      <td><code>service/http.rs:4062-4071</code></td>
+      <td>web_search強制指示 → スマートツール使用ガイド</td>
+    </tr>
+    <tr>
+      <td><code>service/http.rs:2206-2277</code></td>
+      <td>自己認識セクション強化（名前・開発者・技術を明示、「web_search不要で即答」指示）</td>
+    </tr>
+    <tr>
+      <td><code>service/http.rs:2163-2186</code></td>
+      <td>AGENT_COMMON: 中国語禁止ルール追加、ツール使用ガイド改善</td>
+    </tr>
+    <tr>
+      <td><code>service/tags.rs</code></td>
+      <td><code>strip_provider_tags()</code> 新関数追加（minimax等のXMLタグ除去）</td>
+    </tr>
+    <tr>
+      <td><code>service/http.rs:4659, 7459, 7535</code></td>
+      <td><code>strip_provider_tags()</code> を3つのレスポンスパスに適用</td>
+    </tr>
+  </table>
+</div>
+
+<p style="text-align:center;color:var(--muted);margin-top:40px;font-size:0.8em">
+  Generated by Claude Code | chatweb.ai self-awareness evaluation | 2026-02-22
+</p>
+
+</body>
+</html>

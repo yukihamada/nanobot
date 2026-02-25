@@ -68,6 +68,7 @@ impl OpenAiCompatProvider {
             "z-ai/",
             "google/",
             "anthropic/",
+            "nvidia/",
         ] {
             if let Some(rest) = model.strip_prefix(prefix) {
                 return rest.to_string();

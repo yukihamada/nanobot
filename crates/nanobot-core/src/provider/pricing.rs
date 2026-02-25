@@ -54,6 +54,8 @@ pub const PRICING_TABLE: &[ModelPricing] = &[
     // OpenRouter
     ModelPricing { model: "minimax/minimax-m2.5", provider: "openrouter", input_per_1m: 0.50, output_per_1m: 1.50, context_window: 131_072, credits_in_1k: 2, credits_out_1k: 6 },
     ModelPricing { model: "z-ai/glm-5",          provider: "openrouter", input_per_1m: 0.60, output_per_1m: 2.40, context_window: 204_800, credits_in_1k: 3, credits_out_1k: 9 },
+    // DeepInfra
+    ModelPricing { model: "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese", provider: "deepinfra", input_per_1m: 0.04, output_per_1m: 0.16, context_window: 128_000, credits_in_1k: 1, credits_out_1k: 1 },
 ];
 
 /// Media generation pricing (per unit).

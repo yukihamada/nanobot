@@ -325,6 +325,28 @@ impl LoadBalancedProvider {
             )));
         }
 
+        // DeepInfra (Nemotron Japanese / affordable models)
+        for key in Self::read_keys("DEEPINFRA_API_KEY") {
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key,
+                Some("https://api.deepinfra.com/v1/openai".to_string()),
+                "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese".to_string(),
+            )));
+        }
+
+        // Nemotron (Japanese LLM on RunPod Serverless)
+        if let Ok(nemotron_ep) = std::env::var("NEMOTRON_ENDPOINT_ID") {
+            let api_key = std::env::var("RUNPOD_API_KEY").unwrap_or_default();
+            if !api_key.is_empty() && !nemotron_ep.is_empty() {
+                let api_base = format!("https://api.runpod.ai/v2/{}/openai/v1", nemotron_ep);
+                providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                    api_key,
+                    Some(api_base),
+                    "nvidia/nemotron-nano-9b-jp".to_string(),
+                )));
+            }
+        }
+
         if providers.is_empty() {
             None
         } else {
@@ -768,8 +790,8 @@ impl LoadBalancedProvider {
     pub fn get_tier_model(&self, tier: &str) -> Option<(Arc<dyn LlmProvider>, String)> {
         // Each tier has a fallback chain: primary → secondary → tertiary
         let candidates: &[&str] = match tier {
-            "economy"  => &["gemini-2.5-flash", "deepseek-chat", "llama-3.3-70b-specdec"],
-            "normal"   => &["minimax/minimax-m2.5", "google/gemini-2.5-flash", "gpt-4o", "deepseek-chat"],
+            "economy"  => &["nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese", "gemini-2.5-flash", "deepseek-chat", "llama-3.3-70b-specdec"],
+            "normal"   => &["minimax/minimax-m2.5", "nvidia/nemotron-nano-9b-jp", "google/gemini-2.5-flash", "gpt-4o", "deepseek-chat"],
             "powerful" => &["claude-opus-4-6", "gpt-4o", "gemini-2.5-pro", "claude-sonnet-4-6"],
             _ => return None,
         };

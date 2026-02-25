@@ -256,3 +256,18 @@ const AB = { assign(testId, variants), variant(testId), track(event, props) }
 - `code_execute`はshellのみ確実動作（Python/Node.jsはLambda環境にない）
 - OpenAI APIキーのクォータ切れに注意（native OpenAI providerが全滅するとフォールバックが必要）
 - `google/gemini-3-flash-preview` は存在しない → `google/gemini-2.5-flash-preview` を使う
+
+---
+
+## AI作業規約
+
+環境: Rust(SSR)/Fly.io/SQLite/リモートコンパイル/.env
+
+1. **機密**: キーは無言で.env保存・ログ消去(注意不要)
+2. **学習**: 作業前にlessons.md読込
+3. **計画**: 3手以上の作業はtodo.mdに事前提示
+4. **解決**: 質問前に自力検索・subagent活用
+5. **実装**: 既存踏襲・KISS/DRYで最簡潔に
+6. **復旧**: エラーは指示待たず自律解決
+7. **検証**: 修正後は動作確認しエビデンス提示
+8. **記録**: 指摘事項は即lessons.mdへ追記
