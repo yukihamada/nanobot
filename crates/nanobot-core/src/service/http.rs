@@ -15,7 +15,7 @@ use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::set_header::SetResponseHeaderLayer;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::channel::is_allowed;
 use crate::channel::facebook::FacebookChannel;
@@ -36,8 +36,6 @@ use crate::session::store::SessionStore;
 use crate::types::Message;
 #[cfg(feature = "stripe")]
 use crate::service::stripe::{process_webhook_event, verify_webhook_signature};
-#[cfg(feature = "dynamodb-backend")]
-use crate::cache::{check_cache, generate_cache_key, increment_cache_hit, save_to_cache};
 
 #[cfg(feature = "dynamodb-backend")]
 use aws_sdk_dynamodb::types::AttributeValue;
@@ -3188,6 +3186,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/pricing", get(handle_pricing_api))
         // Pages
         .route("/pricing", get(handle_pricing))
+        .route("/landing", get(handle_landing))
         .route("/media", get(handle_media_demo))
         .route("/voices", get(handle_voices))
         .route("/skill", get(handle_skill_marketplace))
@@ -8969,15 +8968,20 @@ async fn handle_stripe_webhook(
 
     #[cfg(feature = "stripe")]
     {
+        // V3 FIX: Reject requests when webhook secret is not configured
         let webhook_secret = std::env::var("STRIPE_WEBHOOK_SECRET").unwrap_or_default();
+        if webhook_secret.is_empty() {
+            warn!("STRIPE_WEBHOOK_SECRET not configured — rejecting webhook");
+            return StatusCode::SERVICE_UNAVAILABLE;
+        }
+
         let signature = headers
             .get("stripe-signature")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
 
-        if !webhook_secret.is_empty()
-            && !verify_webhook_signature(body.as_bytes(), signature, &webhook_secret)
-        {
+        if !verify_webhook_signature(body.as_bytes(), signature, &webhook_secret) {
+            warn!("Stripe webhook signature verification failed");
             return StatusCode::UNAUTHORIZED;
         }
 
@@ -8986,6 +8990,46 @@ async fn handle_stripe_webhook(
                 .get("type")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
+
+            // V4 FIX: Idempotency check using Stripe event ID
+            let event_id = event
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            #[cfg(feature = "dynamodb-backend")]
+            if !event_id.is_empty() {
+                if let (Some(client), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                    let pk = format!("STRIPE_EVENT#{}", event_id);
+                    // Check if we already processed this event
+                    if let Ok(output) = client
+                        .get_item()
+                        .table_name(table)
+                        .key("pk", AttributeValue::S(pk.clone()))
+                        .key("sk", AttributeValue::S("PROCESSED".to_string()))
+                        .send()
+                        .await
+                    {
+                        if output.item.is_some() {
+                            info!("Stripe event {} already processed (idempotency check), skipping", event_id);
+                            return StatusCode::OK;
+                        }
+                    }
+                    // Record this event as processed (with 7-day TTL)
+                    let ttl = chrono::Utc::now().timestamp() + 604800; // 7 days
+                    let _ = client
+                        .put_item()
+                        .table_name(table)
+                        .item("pk", AttributeValue::S(pk))
+                        .item("sk", AttributeValue::S("PROCESSED".to_string()))
+                        .item("event_type", AttributeValue::S(event_type.to_string()))
+                        .item("processed_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                        .item("ttl", AttributeValue::N(ttl.to_string()))
+                        .send()
+                        .await;
+                }
+            }
+
             let result = process_webhook_event(event_type, &event);
             info!("Stripe event processed: {:?}", result);
 
@@ -9134,6 +9178,99 @@ async fn handle_stripe_webhook(
                                     info!("Plan changed to {} for user {} (subscription.updated)", new_plan, user_id);
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            // V1 FIX: Handle subscription cancellation — downgrade to free plan
+            #[cfg(feature = "dynamodb-backend")]
+            if event_type == "customer.subscription.deleted" {
+                if let (Some(client), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                    let customer_id = event
+                        .pointer("/data/object/customer")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+
+                    if !customer_id.is_empty() {
+                        warn!("Subscription CANCELLED for customer {}", customer_id);
+
+                        if let Some(user_id) = find_user_by_stripe_customer(client, table, customer_id).await {
+                            let free_credits = crate::service::auth::Plan::Free.monthly_credits();
+                            let pk = format!("USER#{}", user_id);
+                            match client
+                                .update_item()
+                                .table_name(table)
+                                .key("pk", AttributeValue::S(pk))
+                                .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                                .update_expression("SET #p = :plan, credits_remaining = :cr, updated_at = :now")
+                                .expression_attribute_names("#p", "plan")
+                                .expression_attribute_values(":plan", AttributeValue::S(PLAN_FREE.to_string()))
+                                .expression_attribute_values(":cr", AttributeValue::N(free_credits.to_string()))
+                                .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                                .send()
+                                .await
+                            {
+                                Ok(_) => warn!("DOWNGRADED user {} to free plan ({} credits) — subscription cancelled (customer={})", user_id, free_credits, customer_id),
+                                Err(e) => tracing::error!("BILLING ERROR: Failed to downgrade user {} to free on subscription.deleted: {}", user_id, e),
+                            }
+                        } else {
+                            warn!("Subscription deleted for customer {} but no matching user found", customer_id);
+                        }
+                    }
+                }
+            }
+
+            // V2 FIX: Handle payment failure — downgrade to free plan
+            #[cfg(feature = "dynamodb-backend")]
+            if event_type == "invoice.payment_failed" {
+                if let (Some(client), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                    let customer_id = event
+                        .pointer("/data/object/customer")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+
+                    // Check attempt count — Stripe sends attempt_count in the invoice object
+                    let attempt_count = event
+                        .pointer("/data/object/attempt_count")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(1);
+
+                    if !customer_id.is_empty() {
+                        warn!("Payment FAILED for customer {} (attempt {})", customer_id, attempt_count);
+
+                        // Downgrade immediately on 3rd+ failure, or if this is a final attempt
+                        // Stripe typically retries 3 times over ~3 weeks
+                        let next_attempt = event
+                            .pointer("/data/object/next_payment_attempt")
+                            .and_then(|v| if v.is_null() { Some(()) } else { None });
+                        let is_final = next_attempt.is_some(); // null means no more retries
+
+                        if attempt_count >= 3 || is_final {
+                            if let Some(user_id) = find_user_by_stripe_customer(client, table, customer_id).await {
+                                let free_credits = crate::service::auth::Plan::Free.monthly_credits();
+                                let pk = format!("USER#{}", user_id);
+                                match client
+                                    .update_item()
+                                    .table_name(table)
+                                    .key("pk", AttributeValue::S(pk))
+                                    .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                                    .update_expression("SET #p = :plan, credits_remaining = :cr, updated_at = :now")
+                                    .expression_attribute_names("#p", "plan")
+                                    .expression_attribute_values(":plan", AttributeValue::S(PLAN_FREE.to_string()))
+                                    .expression_attribute_values(":cr", AttributeValue::N(free_credits.to_string()))
+                                    .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                                    .send()
+                                    .await
+                                {
+                                    Ok(_) => warn!("DOWNGRADED user {} to free plan — payment failed {} times (final={}, customer={})", user_id, attempt_count, is_final, customer_id),
+                                    Err(e) => tracing::error!("BILLING ERROR: Failed to downgrade user {} to free on payment failure: {}", user_id, e),
+                                }
+                            } else {
+                                warn!("Payment failed for customer {} but no matching user found", customer_id);
+                            }
+                        } else {
+                            info!("Payment failed for customer {} (attempt {}/3) — not downgrading yet, Stripe will retry", customer_id, attempt_count);
                         }
                     }
                 }
@@ -11219,12 +11356,84 @@ async fn handle_integrations(
 async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
     let host = effective_host(&headers);
 
-    let html = if host.starts_with("api.") {
-        include_str!("../../../../web/api-docs.html")
+    let html: std::borrow::Cow<'static, str> = if host.starts_with("api.") {
+        std::borrow::Cow::Borrowed(include_str!("../../../../web/api-docs.html"))
     } else if host.contains("chatweb-pi") || host.contains(".local") || (!host.contains('.') && !host.contains("chatweb.ai") && !host.contains("teai.io")) {
-        include_str!("../../../../web/pi.html")
+        std::borrow::Cow::Borrowed(include_str!("../../../../web/pi.html"))
+    } else if host.contains("teai.io") {
+        // teai.io: serve the main SPA (index.html) with teai.io branding applied
+        let base = include_str!("../../../../web/index.html");
+        let branded = base
+            // HTML lang & title
+            .replacen("<html lang=\"ja\">", "<html lang=\"en\">", 1)
+            .replacen("<title>chatweb.ai - お願いしたら、本当にやってくれるAI</title>",
+                       "<title>teai.io - AI Agent for Developers</title>", 1)
+            // Meta description
+            .replacen("content=\"声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料で始められます。\"",
+                       "content=\"Ship faster with AI. Code, search, automate — from your terminal or browser.\"", 1)
+            // OGP
+            .replacen("content=\"chatweb.ai - お願いしたら、本当にやってくれるAI\"",
+                       "content=\"teai.io - AI Agent for Developers\"", 1)
+            .replacen("content=\"声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料。\"",
+                       "content=\"Ship faster with AI. Code, search, automate — from your terminal or browser.\"", 1)
+            .replacen("content=\"https://chatweb.ai/og.svg\"",
+                       "content=\"https://teai.io/og.svg\"", 1)
+            .replacen("content=\"https://chatweb.ai\"",
+                       "content=\"https://teai.io\"", 1)
+            .replacen("content=\"chatweb.ai\"",
+                       "content=\"teai.io\"", 1)
+            // Twitter card
+            .replacen("content=\"@chatweb_ai\"",
+                       "content=\"@teai_io\"", 1)
+            .replacen("content=\"chatweb.ai - お願いしたら、本当にやってくれるAI\"",
+                       "content=\"teai.io - AI Agent for Developers\"", 1)
+            .replacen("content=\"声で頼むだけ。検索・コード実行・定期監視まで全自動。Web・LINE・Telegram対応。\"",
+                       "content=\"Ship faster with AI. Code, search, automate — from your terminal or browser.\"", 1)
+            // Twitter image
+            .replacen("content=\"https://chatweb.ai/og.svg\"",
+                       "content=\"https://teai.io/og.svg\"", 1)
+            // Canonical
+            .replacen("href=\"https://chatweb.ai/\"",
+                       "href=\"https://teai.io/\"", 1)
+            // Theme color: indigo → green
+            .replacen("content=\"#6366f1\"",
+                       "content=\"#10b981\"", 1)
+            // Apple web app title
+            .replacen("content=\"chatweb.ai\"",
+                       "content=\"teai.io\"", 1)
+            // Favicon: "cw" indigo → "te" green
+            .replace(
+                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E",
+                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E")
+            // Apple touch icon
+            .replace(
+                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%236366f1'/%3E%3Ctext x='90' y='115' text-anchor='middle' font-size='80' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E",
+                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%2310b981'/%3E%3Ctext x='90' y='115' text-anchor='middle' font-size='80' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E")
+            // Logo text in nav
+            .replacen("<a href=\"/\" class=\"logo\" style=\"text-decoration:none\"><span>chat</span>web.ai</a>",
+                       "<a href=\"/\" class=\"logo\" style=\"text-decoration:none\"><span>te</span>ai.io</a>", 1)
+            // CSS accent color: indigo → green
+            .replacen("--accent: #6366f1;", "--accent: #10b981;", 1)
+            .replacen("--accent-hover: #818cf8;", "--accent-hover: #34d399;", 1)
+            .replacen("--accent-glow: rgba(99,102,241,0.25);", "--accent-glow: rgba(16,185,129,0.25);", 1)
+            // Footer
+            .replacen("chatweb.ai &copy; 2025-2026",
+                       "teai.io &copy; 2025-2026", 1)
+            // Chat empty state text (initial Japanese → English for teai.io)
+            .replacen("placeholder=\"終わらせたいタスクを入力...\"",
+                       "placeholder=\"Describe your task...\"", 1)
+            .replacen(">どんなタスクを終わらせたいですか？</div>",
+                       ">What can I help you build?</div>", 1)
+            .replacen(">スペースキーを押して話す / タップして話す</div>",
+                       ">Press Space to talk / Tap to speak</div>", 1)
+            // Structured data
+            .replacen("\"name\": \"chatweb.ai\"", "\"name\": \"teai.io\"", 1)
+            .replacen("\"url\": \"https://chatweb.ai\"", "\"url\": \"https://teai.io\"", 1)
+            // GA4: replace chatweb.ai measurement ID with teai.io's
+            .replacen("G-3YF25NMXG8", "G-QS0M5KL7YL", 2);
+        std::borrow::Cow::Owned(branded)
     } else {
-        include_str!("../../../../web/index.html")
+        std::borrow::Cow::Borrowed(include_str!("../../../../web/index.html"))
     };
 
     (
@@ -11232,7 +11441,7 @@ async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
             (axum::http::header::CACHE_CONTROL, "no-store, must-revalidate"),
             (axum::http::header::PRAGMA, "no-cache"),
         ],
-        axum::response::Html(html),
+        axum::response::Html(html.into_owned()),
     )
 }
 
@@ -11268,6 +11477,16 @@ async fn handle_pricing(headers: axum::http::HeaderMap) -> impl IntoResponse {
         axum::response::Html(include_str!("../../../../web/teai-pricing.html"))
     } else {
         axum::response::Html(include_str!("../../../../web/pricing.html"))
+    }
+}
+
+/// GET /landing — Landing page (teai.io uses dedicated landing, chatweb.ai redirects to /)
+async fn handle_landing(headers: axum::http::HeaderMap) -> impl IntoResponse {
+    let host = effective_host(&headers);
+    if host.contains("teai.io") {
+        axum::response::Html(include_str!("../../../../web/teai-index.html"))
+    } else {
+        axum::response::Html(include_str!("../../../../web/index.html"))
     }
 }
 
@@ -13763,6 +13982,42 @@ async fn handle_status_ping(
     } else {
         handles.push(tokio::spawn(async {
             serde_json::json!({"name": "OpenRouter", "status": "not_configured"})
+        }));
+    }
+
+    // --- DeepInfra (Nemotron) ---
+    let deepinfra_configured = std::env::var("DEEPINFRA_API_KEY").map(|k| !k.is_empty()).unwrap_or(false);
+    if deepinfra_configured {
+        let key = std::env::var("DEEPINFRA_API_KEY").unwrap_or_default();
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            let start = std::time::Instant::now();
+            let res = c.post("https://api.deepinfra.com/v1/openai/chat/completions")
+                .header("Authorization", format!("Bearer {key}"))
+                .header("Content-Type", "application/json")
+                .body(r#"{"model":"nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}"#)
+                .send().await;
+            let ms = start.elapsed().as_millis() as u64;
+            match res {
+                Ok(r) => {
+                    let status = r.status();
+                    if status.is_success() || status.as_u16() == 400 {
+                        serde_json::json!({ "name": "DeepInfra (Nemotron)", "status": "ok", "latency_ms": ms })
+                    } else if status.is_server_error() {
+                        serde_json::json!({ "name": "DeepInfra (Nemotron)", "status": "error", "latency_ms": ms, "detail": format!("HTTP {}", status) })
+                    } else {
+                        serde_json::json!({ "name": "DeepInfra (Nemotron)", "status": "ok", "latency_ms": ms })
+                    }
+                }
+                Err(e) => serde_json::json!({
+                    "name": "DeepInfra (Nemotron)", "status": "error",
+                    "latency_ms": ms, "detail": e.to_string()
+                }),
+            }
+        }));
+    } else {
+        handles.push(tokio::spawn(async {
+            serde_json::json!({"name": "DeepInfra (Nemotron)", "status": "not_configured"})
         }));
     }
 
@@ -18276,46 +18531,73 @@ async fn handle_speech_synthesize(
         }
     }
 
-    // Auto fallback chain: Replicate Qwen3 → QWEN (for Japanese) → OpenAI → Polly
+    // Auto fallback chain: Race(CosyVoice2, Replicate, QWEN) → OpenAI → Polly
     if audio_bytes.is_none() && force_engine != Some("polly") && force_engine != Some("elevenlabs") && force_engine != Some("sbv2") && force_engine != Some("cosyvoice") && force_engine != Some("qwen") {
-        // Detect Japanese text
         let is_ja = req.text.chars().any(|c| {
-            ('\u{3040}'..='\u{309F}').contains(&c) || // hiragana
-            ('\u{30A0}'..='\u{30FF}').contains(&c) || // katakana
-            ('\u{4E00}'..='\u{9FFF}').contains(&c)    // CJK
+            ('\u{3040}'..='\u{309F}').contains(&c) ||
+            ('\u{30A0}'..='\u{30FF}').contains(&c) ||
+            ('\u{4E00}'..='\u{9FFF}').contains(&c)
         });
 
-        // Try Replicate Qwen3 first (if API token is available)
-        if std::env::var("REPLICATE_API_TOKEN").is_ok() {
+        // CosyVoice2 only supports zero-shot (requires reference audio). Enable for default TTS
+        // only when the endpoint has SFT speakers loaded (set COSYVOICE_DEFAULT_TTS=1).
+        let has_cosyvoice = std::env::var("COSYVOICE_DEFAULT_TTS").is_ok()
+            && std::env::var("RUNPOD_COSYVOICE_ENDPOINT_ID").is_ok()
+            && std::env::var("RUNPOD_API_KEY").is_ok();
+        let has_replicate = std::env::var("REPLICATE_API_TOKEN").is_ok();
+        let has_qwen = is_ja && std::env::var("DASHSCOPE_API_KEY").is_ok();
+
+        // Race all available TTS providers in parallel (15s timeout to avoid blocking fallback)
+        if has_cosyvoice || has_replicate || has_qwen {
             let language = if is_ja { "Japanese" } else { "English" };
-            match try_replicate_qwen3_tts(&req.text, "female_calm", language).await {
-                Ok(bytes) => {
-                    tracing::info!("TTS: Replicate Qwen3 auto-fallback success, {} bytes", bytes.len());
+            let race_timeout = std::time::Duration::from_secs(15);
+
+            let race_result = tokio::time::timeout(race_timeout, async {
+                // Build futures for available providers
+                let mut futs: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = Result<(Vec<u8>, &str), String>> + Send>>> = Vec::new();
+
+                if has_cosyvoice {
+                    futs.push(Box::pin(async {
+                        try_runpod_cosyvoice_tts(&req.text, "sft", None, "").await.map(|b| (b, "CosyVoice2"))
+                    }));
+                }
+                if has_replicate {
+                    futs.push(Box::pin(async {
+                        try_replicate_qwen3_tts(&req.text, "female_calm", language).await.map(|b| (b, "Replicate Qwen3"))
+                    }));
+                }
+                if has_qwen {
+                    futs.push(Box::pin(async {
+                        try_qwen_tts(&req.text, &req.voice, req.speed).await.map(|b| (b, "QWEN3"))
+                    }));
+                }
+
+                // select_all returns on first completion; check if it's Ok
+                while !futs.is_empty() {
+                    let (result, _idx, remaining) = futures::future::select_all(futs).await;
+                    if let Ok((bytes, name)) = result {
+                        return Ok((bytes, name));
+                    }
+                    futs = remaining;
+                }
+                Err("All providers failed".to_string())
+            }).await;
+
+            match race_result {
+                Ok(Ok((bytes, name))) => {
+                    tracing::info!("TTS: {} won race, {} bytes", name, bytes.len());
                     audio_bytes = Some(bytes);
                 }
-                Err(e) => tracing::warn!("TTS: Replicate Qwen3 failed ({}), trying QWEN3...", e),
+                Ok(Err(e)) => tracing::warn!("TTS: Race failed: {}", e),
+                Err(_) => tracing::warn!("TTS: Race timed out (15s), falling back"),
             }
         }
 
-        // Try QWEN next for Japanese text (if Replicate failed and API key is available)
-        if audio_bytes.is_none() && is_ja && std::env::var("DASHSCOPE_API_KEY").is_ok() {
-            match try_qwen_tts(&req.text, &req.voice, req.speed).await {
-                Ok(bytes) => {
-                    tracing::info!("TTS: QWEN3 auto-fallback success, {} bytes", bytes.len());
-                    audio_bytes = Some(bytes);
-                }
-                Err(e) => tracing::warn!("TTS: QWEN3 failed ({}), trying OpenAI...", e),
-            }
-        }
-
-        // OpenAI fallback if QWEN failed or not Japanese
+        // OpenAI fallback
         if audio_bytes.is_none() {
-            match try_openai_tts(&req.text, &req.voice, req.speed, req.instructions.as_deref()).await {
-                Ok(bytes) => {
-                    tracing::info!("TTS: gpt-4o-mini-tts success, {} bytes", bytes.len());
-                    audio_bytes = Some(bytes);
-                }
-                Err(e) => tracing::warn!("TTS: OpenAI failed ({}), trying Polly...", e),
+            if let Ok(bytes) = try_openai_tts(&req.text, &req.voice, req.speed, req.instructions.as_deref()).await {
+                tracing::info!("TTS: OpenAI fallback success, {} bytes", bytes.len());
+                audio_bytes = Some(bytes);
             }
         }
     }
