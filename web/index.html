@@ -10222,6 +10222,12 @@
         }
         return;
       }
+      // Guard: prevent concurrent sends (e.g. double-click or rapid retry)
+      if (window._chatInFlight) return;
+      window._chatInFlight = true;
+      const sendBtn = document.getElementById('app-send-btn');
+      if (sendBtn) sendBtn.disabled = true;
+
       console.log('[DEBUG] Not an easter egg, proceeding with normal send');
       textarea.value = '';
       textarea.style.height = 'auto';
@@ -10702,6 +10708,9 @@
           // teai.io failover: count network errors and redirect to chatweb.ai
           if (IS_TEAI && window._teaiFailover) window._teaiFailover();
         }
+      } finally {
+        window._chatInFlight = false;
+        if (sendBtn) sendBtn.disabled = false;
       }
     }
 
@@ -13448,6 +13457,8 @@
         + '<span style="font-size:13px;font-weight:700;color:#fca5a5;">'
         + (l === 'ja' ? '⚠️ 残り <b style="color:#ef4444;font-size:16px;">' + remaining + '</b> クレジットのみ！今すぐアップグレードで会話継続' : '⚠️ Only <b style="color:#ef4444;font-size:16px;">' + remaining + '</b> credits left!')
         + '</span>'
+        + '<a href="/pricing" style="padding:8px 16px;background:rgba(99,102,241,0.9);color:#fff;font-weight:700;font-size:12px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;text-decoration:none;">'
+        + (l === 'ja' ? '14日間無料トライアル' : '14-day free trial') + '</a>'
         + '<button onclick="document.getElementById(\'low-credit-urgent\').remove();document.getElementById(\'topup-modal\').classList.add(\'show\');" style="padding:8px 20px;background:#ef4444;color:#fff;font-weight:700;font-size:13px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;">'
         + (l === 'ja' ? '今すぐ Starter $9/月' : 'Upgrade $9/mo') + '</button>'
         + '<button onclick="this.parentElement.parentElement.remove();" style="padding:8px 12px;background:transparent;color:#9ca3af;border:none;cursor:pointer;font-size:12px;">✕</button>'
@@ -13472,11 +13483,14 @@
         + '<span style="font-size:15px;font-weight:700;color:#fbbf24;">'
         + (l === 'ja' ? 'クレジット残り ' + remaining : remaining + ' credits left') + '</span>'
         + '</div>'
-        + '<div style="font-size:13px;color:#e2e8f0;margin-bottom:12px;line-height:1.5;">'
+        + '<div style="font-size:13px;color:#e2e8f0;margin-bottom:8px;line-height:1.5;">'
         + (l === 'ja'
           ? 'Starterプラン: <b style="color:#fbbf24;">月額 $9</b> で25,000クレジット+全ツール解放。'
           : 'Starter plan: <b style="color:#fbbf24;">25,000 credits + all tools</b> for just $9/mo.')
         + '</div>'
+        + '<a href="/pricing" style="display:block;background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.15));border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:8px 12px;margin-bottom:10px;text-decoration:none;text-align:center;font-size:12px;font-weight:700;color:#a5b4fc;">'
+        + (l === 'ja' ? 'Starterプラン 14日間無料トライアル実施中 →' : 'Starter plan — 14-day free trial available →')
+        + '</a>'
         + '<div style="display:flex;gap:8px;align-items:center;">'
         + '<button onclick="document.getElementById(\'low-credit-banner\').remove();document.getElementById(\'topup-modal\').classList.add(\'show\');" style="flex:1;padding:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:700;font-size:14px;border:none;border-radius:10px;cursor:pointer;">'
         + (l === 'ja' ? '今すぐアップグレード' : 'Upgrade now') + '</button>'
@@ -13507,7 +13521,7 @@
       var l = document.documentElement.lang || 'ja';
       var btn = document.createElement('button');
       btn.style.cssText = 'margin-top:12px;padding:10px 24px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;display:block;';
-      btn.textContent = l === 'ja' ? 'プランをアップグレード' : 'Upgrade Plan';
+      btn.textContent = l === 'ja' ? '🎉 Starterプランで続ける（月額¥980）' : '🎉 Continue with Starter ($9/mo)';
       btn.onclick = function() { showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); };
       last.appendChild(btn);
     }

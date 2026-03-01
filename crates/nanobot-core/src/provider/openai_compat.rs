@@ -18,6 +18,87 @@ pub struct OpenAiCompatProvider {
 }
 
 impl OpenAiCompatProvider {
+    fn is_runpod(&self) -> bool {
+        self.api_base.contains("runpod.net") || self.api_base.contains("proxy.runpod")
+    }
+
+    /// Strip Nemotron thinking content that appears before `</think>`.
+    /// Nemotron-H outputs English reasoning before `</think>`, then the actual Japanese answer.
+    fn strip_think(content: String) -> String {
+        if let Some(pos) = content.find("</think>") {
+            content[pos + 8..].trim_start().to_string()
+        } else {
+            content
+        }
+    }
+
+    /// Parse Nemotron's `<TOOLCALL>[{"name":...,"arguments":{...}}]</TOOLCALL>` format.
+    /// Returns (tool_calls, remaining_content) — remaining content is empty if all content was tool calls.
+    fn parse_toolcall_format(content: &str) -> (Vec<ToolCall>, Option<String>) {
+        let start = match content.find("<TOOLCALL>") {
+            Some(i) => i,
+            None => return (vec![], Some(content.trim().to_string()).filter(|s| !s.is_empty())),
+        };
+        let end = match content.find("</TOOLCALL>") {
+            Some(i) => i,
+            None => return (vec![], Some(content.trim().to_string()).filter(|s| !s.is_empty())),
+        };
+
+        let json_str = &content[start + 10..end]; // "<TOOLCALL>" = 10 chars
+        let before = content[..start].trim();
+        let after = content[end + 11..].trim(); // "</TOOLCALL>" = 11 chars
+        let remaining = format!("{} {}", before, after).trim().to_string();
+
+        let tool_calls: Vec<ToolCall> = match serde_json::from_str::<serde_json::Value>(json_str) {
+            Ok(arr) if arr.is_array() => arr.as_array().unwrap().iter().filter_map(|tc| {
+                let name = tc.get("name")?.as_str()?.to_string();
+                let args = tc.get("arguments").cloned().unwrap_or(serde_json::json!({}));
+                let arguments: HashMap<String, serde_json::Value> = if let Some(obj) = args.as_object() {
+                    obj.clone().into_iter().collect()
+                } else {
+                    let mut m = HashMap::new();
+                    m.insert("raw".to_string(), args);
+                    m
+                };
+                Some(ToolCall { id: format!("call_{}", &name), name, arguments })
+            }).collect(),
+            _ => return (vec![], Some(remaining).filter(|s| !s.is_empty())),
+        };
+
+        if tool_calls.is_empty() {
+            (vec![], Some(remaining).filter(|s| !s.is_empty()))
+        } else {
+            (tool_calls, Some(remaining).filter(|s| !s.is_empty()))
+        }
+    }
+
+    /// For vLLM pods, extract available output tokens from a max_tokens error.
+    /// Error format: "... (8192 > 8192 - 3001) ..." → returns 8192 - 3001 - 10 = 5181
+    fn extract_available_tokens_from_error(error_msg: &str) -> Option<u32> {
+        let gt_pos = error_msg.rfind(" > ")?;
+        let right = &error_msg[gt_pos + 3..];
+        let minus_pos = right.find(" - ")?;
+        let max_model_len: u32 = right[..minus_pos].trim().parse().ok()?;
+        let end = right[minus_pos + 3..]
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(right.len().saturating_sub(minus_pos + 3));
+        let input_tokens: u32 = right[minus_pos + 3..minus_pos + 3 + end].trim().parse().ok()?;
+        let available = max_model_len.saturating_sub(input_tokens);
+        if available > 50 { Some(available.saturating_sub(10)) } else { None }
+    }
+
+    /// Cap max_tokens to a safe value for RunPod vLLM pods (max_model_len=8192).
+    /// Reserve ~5120 tokens for input, leaving 3072 for output.
+    fn safe_max_tokens(&self, max_tokens: u32) -> u32 {
+        if self.is_runpod() {
+            // Active pod: max_model_len=8192. Reserve 4096 tokens for input (system+history).
+            // Output cap: 8192 - 4096 = 4096 tokens max.
+            max_tokens.min(4096)
+        } else {
+            max_tokens
+        }
+    }
+
     pub fn new(api_key: String, api_base: Option<String>, default_model: String) -> Self {
         let base = api_base.unwrap_or_else(|| {
             let model = default_model.to_lowercase();
@@ -51,6 +132,14 @@ impl OpenAiCompatProvider {
     fn normalize_model(&self, model: &str) -> String {
         // OpenRouter needs the full "provider/model" format — do not strip
         if self.api_base.contains("openrouter.ai") {
+            return model.to_string();
+        }
+        // vLLM on RunPod GPU Pod — model ID must match exactly (e.g. nvidia/NVIDIA-Nemotron-...)
+        if self.api_base.contains("runpod.net") || self.api_base.contains("proxy.runpod") {
+            return model.to_string();
+        }
+        // DeepInfra uses full HuggingFace-style paths (e.g. "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese")
+        if self.api_base.contains("deepinfra.com") {
             return model.to_string();
         }
         // Strip provider prefixes for native APIs
@@ -91,7 +180,6 @@ impl LlmProvider for OpenAiCompatProvider {
         let url = format!("{}/chat/completions", self.api_base);
         let model_name = self.normalize_model(model);
 
-        // Build messages array
         let msgs: Vec<serde_json::Value> = messages
             .iter()
             .map(|m| {
@@ -115,17 +203,23 @@ impl LlmProvider for OpenAiCompatProvider {
         let mut body = json!({
             "model": model_name,
             "messages": msgs,
-            "max_tokens": max_tokens,
+            "max_tokens": self.safe_max_tokens(max_tokens),
             "temperature": temperature,
         });
+
+        // RunPod/Nemotron: disable thinking mode — saves 200-800 tokens (~6-20s latency)
+        // vLLM supports chat_template_kwargs to toggle thinking per-request.
+        if self.is_runpod() {
+            body["chat_template_kwargs"] = json!({"enable_thinking": false});
+        }
 
         if let Some(tools) = tools {
             if !tools.is_empty() {
                 body["tools"] = json!(tools);
-                // If this is a follow-up call (has tool results), use "auto".
-                // Otherwise force tool usage with "required" so the model actually searches.
+                // RunPod: vLLM launched with --enable-auto-tool-choice --tool-call-parser hermes.
+                // Use "auto" (never "required") — Nemotron-9B may not always produce valid tool calls.
                 let has_tool_results = messages.iter().any(|m| m.role == crate::types::Role::Tool);
-                body["tool_choice"] = if has_tool_results {
+                body["tool_choice"] = if self.is_runpod() || has_tool_results {
                     json!("auto")
                 } else {
                     json!("required")
@@ -151,6 +245,43 @@ impl LlmProvider for OpenAiCompatProvider {
         let status = response.status();
         if !status.is_success() {
             let text = response.text().await.unwrap_or_default();
+            // RunPod/vLLM: retry with exact available tokens if max_tokens exceeded
+            if self.is_runpod() && status.as_u16() == 400
+                && (text.contains("max_tokens") || text.contains("max_completion_tokens"))
+            {
+                if let Some(reduced) = Self::extract_available_tokens_from_error(&text) {
+                    tracing::warn!("RunPod max_tokens too large, retrying with {}", reduced);
+                    body["max_tokens"] = json!(reduced);
+                    let retry = http::client()
+                        .post(&url)
+                        .header("Authorization", format!("Bearer {}", self.api_key))
+                        .header("Content-Type", "application/json")
+                        .json(&body)
+                        .send()
+                        .await?;
+                    let rs = retry.status();
+                    if !rs.is_success() {
+                        let rt = retry.text().await.unwrap_or_default();
+                        return Err(ProviderError::Api { status: rs.as_u16(), message: rt });
+                    }
+                    let rt = retry.text().await?;
+                    let data: serde_json::Value = serde_json::from_str(&rt)
+                        .map_err(|e| ProviderError::Api { status: 200, message: format!("JSON: {}", e) })?;
+                    let mut resp = parse_openai_response(&data)?;
+                    if let Some(c) = resp.content.take() {
+                        let stripped = Self::strip_think(c);
+                        if stripped.contains("<TOOLCALL>") {
+                            let (tc, rem) = Self::parse_toolcall_format(&stripped);
+                            if !tc.is_empty() {
+                                resp.tool_calls = tc; resp.finish_reason = FinishReason::ToolCalls; resp.content = rem;
+                                return Ok(resp);
+                            }
+                        }
+                        resp.content = Some(stripped).filter(|s| !s.is_empty());
+                    }
+                    return Ok(resp);
+                }
+            }
             return Err(ProviderError::Api {
                 status: status.as_u16(),
                 message: text,
@@ -166,7 +297,24 @@ impl LlmProvider for OpenAiCompatProvider {
                 message: format!("JSON parse error: {}. Body preview: {}", e, &response_text.chars().take(200).collect::<String>()),
             }
         })?;
-        parse_openai_response(&data)
+        let mut resp = parse_openai_response(&data)?;
+        if self.is_runpod() {
+            if let Some(c) = resp.content.take() {
+                let stripped = Self::strip_think(c);
+                // Parse Nemotron's <TOOLCALL> format if present
+                if stripped.contains("<TOOLCALL>") {
+                    let (tool_calls, remaining) = Self::parse_toolcall_format(&stripped);
+                    if !tool_calls.is_empty() {
+                        resp.tool_calls = tool_calls;
+                        resp.finish_reason = FinishReason::ToolCalls;
+                        resp.content = remaining;
+                        return Ok(resp);
+                    }
+                }
+                resp.content = Some(stripped).filter(|s| !s.is_empty());
+            }
+        }
+        Ok(resp)
     }
 
     async fn chat_with_extra(
@@ -204,9 +352,14 @@ impl LlmProvider for OpenAiCompatProvider {
         let mut body = json!({
             "model": model_name,
             "messages": msgs,
-            "max_tokens": max_tokens,
+            "max_tokens": self.safe_max_tokens(max_tokens),
             "temperature": temperature,
         });
+
+        // RunPod/Nemotron: disable thinking mode — saves 200-800 tokens (~6-20s latency)
+        if self.is_runpod() {
+            body["chat_template_kwargs"] = json!({"enable_thinking": false});
+        }
 
         // Apply extra parameters
         if let Some(top_p) = extra.top_p {
@@ -219,15 +372,17 @@ impl LlmProvider for OpenAiCompatProvider {
             body["presence_penalty"] = json!(pp);
         }
 
-        if let Some(tools) = tools {
-            if !tools.is_empty() {
-                body["tools"] = json!(tools);
-                let has_tool_results = messages.iter().any(|m| m.role == crate::types::Role::Tool);
-                body["tool_choice"] = if has_tool_results {
-                    json!("auto")
-                } else {
-                    json!("required")
-                };
+        if !self.is_runpod() {
+            if let Some(tools) = tools {
+                if !tools.is_empty() {
+                    body["tools"] = json!(tools);
+                    let has_tool_results = messages.iter().any(|m| m.role == crate::types::Role::Tool);
+                    body["tool_choice"] = if self.is_runpod() || has_tool_results {
+                        json!("auto")
+                    } else {
+                        json!("required")
+                    };
+                }
             }
         }
 
@@ -244,6 +399,45 @@ impl LlmProvider for OpenAiCompatProvider {
         let status = response.status();
         if !status.is_success() {
             let text = response.text().await.unwrap_or_default();
+            // RunPod/vLLM: retry with exact available tokens if max_tokens exceeded
+            if self.is_runpod() && status.as_u16() == 400
+                && (text.contains("max_tokens") || text.contains("max_completion_tokens"))
+            {
+                if let Some(reduced) = Self::extract_available_tokens_from_error(&text) {
+                    tracing::warn!("RunPod max_tokens too large (extra), retrying with {}", reduced);
+                    body["max_tokens"] = json!(reduced);
+                    let retry = http::client()
+                        .post(&url)
+                        .header("Authorization", format!("Bearer {}", self.api_key))
+                        .header("Content-Type", "application/json")
+                        .json(&body)
+                        .send()
+                        .await?;
+                    let rs = retry.status();
+                    if !rs.is_success() {
+                        let rt = retry.text().await.unwrap_or_default();
+                        return Err(ProviderError::Api { status: rs.as_u16(), message: rt });
+                    }
+                    let rt = retry.text().await?;
+                    let data: serde_json::Value = serde_json::from_str(&rt)
+                        .map_err(|e| ProviderError::Api { status: 200, message: format!("JSON: {}", e) })?;
+                    let mut resp = parse_openai_response(&data)?;
+                    if self.is_runpod() {
+                        if let Some(c) = resp.content.take() {
+                            let stripped = Self::strip_think(c);
+                            if stripped.contains("<TOOLCALL>") {
+                                let (tc, rem) = Self::parse_toolcall_format(&stripped);
+                                if !tc.is_empty() {
+                                    resp.tool_calls = tc; resp.finish_reason = FinishReason::ToolCalls; resp.content = rem;
+                                    return Ok(resp);
+                                }
+                            }
+                            resp.content = Some(stripped).filter(|s| !s.is_empty());
+                        }
+                    }
+                    return Ok(resp);
+                }
+            }
             return Err(ProviderError::Api {
                 status: status.as_u16(),
                 message: text,
@@ -259,7 +453,23 @@ impl LlmProvider for OpenAiCompatProvider {
                 message: format!("JSON parse error: {}. Body preview: {}", e, &response_text.chars().take(200).collect::<String>()),
             }
         })?;
-        parse_openai_response(&data)
+        let mut resp = parse_openai_response(&data)?;
+        if self.is_runpod() {
+            if let Some(c) = resp.content.take() {
+                let stripped = Self::strip_think(c);
+                if stripped.contains("<TOOLCALL>") {
+                    let (tool_calls, remaining) = Self::parse_toolcall_format(&stripped);
+                    if !tool_calls.is_empty() {
+                        resp.tool_calls = tool_calls;
+                        resp.finish_reason = FinishReason::ToolCalls;
+                        resp.content = remaining;
+                        return Ok(resp);
+                    }
+                }
+                resp.content = Some(stripped).filter(|s| !s.is_empty());
+            }
+        }
+        Ok(resp)
     }
 
     async fn chat_stream(
@@ -290,17 +500,23 @@ impl LlmProvider for OpenAiCompatProvider {
 
         let mut body = json!({
             "model": model_name, "messages": msgs,
-            "max_tokens": max_tokens, "temperature": temperature,
+            "max_tokens": self.safe_max_tokens(max_tokens), "temperature": temperature,
             "stream": true, "stream_options": {"include_usage": true},
         });
+        // RunPod/Nemotron: disable thinking mode — saves 200-800 tokens (~6-20s latency)
+        if self.is_runpod() {
+            body["chat_template_kwargs"] = json!({"enable_thinking": false});
+        }
         if let Some(top_p) = extra.top_p { body["top_p"] = json!(top_p); }
         if let Some(fp) = extra.frequency_penalty { body["frequency_penalty"] = json!(fp); }
         if let Some(pp) = extra.presence_penalty { body["presence_penalty"] = json!(pp); }
-        if let Some(tools) = tools {
-            if !tools.is_empty() {
-                body["tools"] = json!(tools);
-                let has_tool_results = messages.iter().any(|m| m.role == crate::types::Role::Tool);
-                body["tool_choice"] = if has_tool_results { json!("auto") } else { json!("required") };
+        if !self.is_runpod() {
+            if let Some(tools) = tools {
+                if !tools.is_empty() {
+                    body["tools"] = json!(tools);
+                    let has_tool_results = messages.iter().any(|m| m.role == crate::types::Role::Tool);
+                    body["tool_choice"] = if self.is_runpod() || has_tool_results { json!("auto") } else { json!("required") };
+                }
             }
         }
 
@@ -323,6 +539,11 @@ impl LlmProvider for OpenAiCompatProvider {
         let mut finish_reason = FinishReason::Stop;
         let mut tool_calls_map: std::collections::BTreeMap<usize, (String, String, String)> = std::collections::BTreeMap::new(); // index -> (id, name, args)
         let mut usage = TokenUsage::default();
+
+        // enable_thinking: false is sent to RunPod, so no </think> tag appears.
+        // Always forward content directly (think_done = true).
+        let mut think_done = true;
+        let mut think_buf = String::new();
 
         let mut stream = response.bytes_stream();
         let mut buf = String::new();
@@ -362,8 +583,22 @@ impl LlmProvider for OpenAiCompatProvider {
                         if let Some(delta) = choice.get("delta") {
                             // Content delta
                             if let Some(text) = delta.get("content").and_then(|v| v.as_str()) {
-                                content.push_str(text);
-                                let _ = chunk_tx.send(text.to_string());
+                                if think_done {
+                                    content.push_str(text);
+                                    let _ = chunk_tx.send(text.to_string());
+                                } else {
+                                    // Buffer until we find </think>
+                                    think_buf.push_str(text);
+                                    if let Some(pos) = think_buf.find("</think>") {
+                                        think_done = true;
+                                        let after = think_buf[pos + 8..].trim_start().to_string();
+                                        think_buf.clear();
+                                        if !after.is_empty() {
+                                            content.push_str(&after);
+                                            let _ = chunk_tx.send(after);
+                                        }
+                                    }
+                                }
                             }
 
                             // Tool call deltas

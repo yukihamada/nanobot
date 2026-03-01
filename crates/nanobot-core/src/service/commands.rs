@@ -919,7 +919,7 @@ async fn execute_improve(desc: &str, ctx: &CommandContext<'_>) -> CommandResult 
     ];
 
     // Use OpenRouter model directly (native Anthropic key may be invalid)
-    let model = "minimax/minimax-m2.5";
+    let model = "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese";
     let max_tokens = 4096u32;
     let temperature = 0.3f64;
     let max_iterations = 5;

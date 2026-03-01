@@ -505,7 +505,37 @@
       .key-row { flex-wrap: wrap; }
       .key-row .key-actions { width: 100%; justify-content: flex-end; margin-top: 6px; }
     }
+  .chart-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .chart-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .chart-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .chart-controls { display: flex; gap: 6px; }
+  .chart-controls button {
+    padding: 4px 10px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .chart-controls button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <nav>
@@ -568,6 +598,71 @@
           <div class="card-label">Monthly Cost (est.)</div>
           <div class="card-value" id="stat-cost">--</div>
           <div class="card-sub">AWS + Fly.io + CF Workers</div>
+        </div>
+      </div>
+
+      <!-- Today Channel Breakdown -->
+      <div class="cards" style="grid-template-columns:repeat(5,1fr);margin-bottom:24px" id="channel-breakdown">
+        <div class="card">
+          <div class="card-label">今日 Web</div>
+          <div class="card-value" style="color:var(--accent)" id="today-web">--</div>
+          <div class="card-sub">chatweb.ai</div>
+        </div>
+        <div class="card">
+          <div class="card-label">今日 LINE</div>
+          <div class="card-value" style="color:var(--green)" id="today-line">--</div>
+          <div class="card-sub">LINE Bot</div>
+        </div>
+        <div class="card">
+          <div class="card-label">今日 Telegram</div>
+          <div class="card-value" style="color:var(--cyan)" id="today-tg">--</div>
+          <div class="card-sub">Telegram Bot</div>
+        </div>
+        <div class="card">
+          <div class="card-label">今日 API</div>
+          <div class="card-value" style="color:var(--orange)" id="today-api">--</div>
+          <div class="card-sub">Direct API calls</div>
+        </div>
+        <div class="card">
+          <div class="card-label">週間合計</div>
+          <div class="card-value" style="color:var(--yellow)" id="week-total">--</div>
+          <div class="card-sub" id="week-total-sub">7日間</div>
+        </div>
+      </div>
+
+      <!-- Request Timeseries Charts -->
+      <div class="chart-section">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">リクエスト数 / 時間</div>
+            <div class="chart-sub">チャンネル別・積み上げ</div>
+          </div>
+          <div class="chart-controls">
+            <button class="active" onclick="loadTimeseries(7, this)">7日</button>
+            <button onclick="loadTimeseries(14, this)">14日</button>
+            <button onclick="loadTimeseries(30, this)">30日</button>
+          </div>
+        </div>
+        <canvas id="hourly-chart" height="80"></canvas>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-section">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">日次リクエスト数</div>
+              <div class="chart-sub">チャンネル別・日次合計</div>
+            </div>
+          </div>
+          <canvas id="daily-chart" height="120"></canvas>
+        </div>
+        <div class="chart-section">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">ユニークユーザー（日次）</div>
+              <div class="chart-sub" id="total-requests-sub">-- total requests</div>
+            </div>
+          </div>
+          <canvas id="uu-chart" height="120"></canvas>
         </div>
       </div>
 
@@ -1363,6 +1458,137 @@
       });
     }
 
+    // ========== TIMESERIES CHARTS ==========
+    let hourlyChartInst = null, uuChartInst = null, dailyChartInst = null;
+
+    async function loadTimeseries(days, btn) {
+      // Update active button
+      if (btn) {
+        document.querySelectorAll('.chart-controls button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      }
+      try {
+        const r = await fetch(API + '/api/v1/admin/stats/timeseries?days=' + days, {
+          headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN }
+        });
+        if (!r.ok) return;
+        const data = await r.json();
+
+        const hourly = (data.hourly || []).sort((a, b) => a.hour < b.hour ? -1 : 1);
+        const dailyUU = (data.daily_uu || []).sort((a, b) => a.date < b.date ? -1 : 1);
+
+        // Update total badge
+        const total = data.total_requests || 0;
+        const el = document.getElementById('total-requests-sub');
+        if (el) el.textContent = total.toLocaleString() + ' total (past ' + days + 'd)';
+
+        // Hourly requests chart (stacked bar)
+        const hourlyLabels = hourly.map(h => h.hour.slice(-5)); // "MM-DDThh" → "T14" etc, show last 5 chars
+        const fullLabels = hourly.map(h => h.hour);
+        const webData   = hourly.map(h => h.ch_web || 0);
+        const lineData  = hourly.map(h => h.ch_line || 0);
+        const tgData    = hourly.map(h => h.ch_tg || 0);
+        const apiData   = hourly.map(h => (h.ch_api || 0) + (h.ch_fb || 0));
+
+        const hourlyCtx = document.getElementById('hourly-chart').getContext('2d');
+        if (hourlyChartInst) hourlyChartInst.destroy();
+        hourlyChartInst = new Chart(hourlyCtx, {
+          type: 'bar',
+          data: {
+            labels: fullLabels,
+            datasets: [
+              { label: 'Web', data: webData, backgroundColor: '#6366f1', stack: 'ch' },
+              { label: 'LINE', data: lineData, backgroundColor: '#22c55e', stack: 'ch' },
+              { label: 'Telegram', data: tgData, backgroundColor: '#06b6d4', stack: 'ch' },
+              { label: 'API', data: apiData, backgroundColor: '#777', stack: 'ch' },
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { labels: { color: '#aaa', boxWidth: 12, font: { size: 11 } } },
+              tooltip: { mode: 'index' }
+            },
+            scales: {
+              x: { stacked: true, ticks: { color: '#666', maxTicksLimit: 20, maxRotation: 45 }, grid: { color: '#1e1e1e' } },
+              y: { stacked: true, ticks: { color: '#666' }, grid: { color: '#1e1e1e' }, beginAtZero: true }
+            }
+          }
+        });
+
+        // ---- Channel breakdown cards (today) ----
+        const today = new Date().toISOString().slice(0, 10);
+        const todayH = hourly.filter(h => h.hour.startsWith(today));
+        const todayWeb  = todayH.reduce((s, h) => s + (h.ch_web  || 0), 0);
+        const todayLine = todayH.reduce((s, h) => s + (h.ch_line || 0), 0);
+        const todayTg   = todayH.reduce((s, h) => s + (h.ch_tg   || 0), 0);
+        const todayApi  = todayH.reduce((s, h) => s + (h.ch_api  || 0) + (h.ch_fb || 0), 0);
+        const weekTotal = hourly.reduce((s, h) => s + (h.requests || 0), 0);
+        document.getElementById('today-web').textContent  = todayWeb.toLocaleString();
+        document.getElementById('today-line').textContent = todayLine.toLocaleString();
+        document.getElementById('today-tg').textContent   = todayTg.toLocaleString();
+        document.getElementById('today-api').textContent  = todayApi.toLocaleString();
+        document.getElementById('week-total').textContent = weekTotal.toLocaleString();
+        const weekSub = document.getElementById('week-total-sub');
+        if (weekSub) weekSub.textContent = days + '日間';
+
+        // ---- Daily requests chart (stacked bar by channel) ----
+        const dailyMap = {};
+        hourly.forEach(h => {
+          const date = h.hour.slice(0, 10);
+          if (!dailyMap[date]) dailyMap[date] = { web: 0, line: 0, tg: 0, api: 0 };
+          dailyMap[date].web  += h.ch_web  || 0;
+          dailyMap[date].line += h.ch_line || 0;
+          dailyMap[date].tg   += h.ch_tg   || 0;
+          dailyMap[date].api  += (h.ch_api || 0) + (h.ch_fb || 0);
+        });
+        const dailyDates = Object.keys(dailyMap).sort();
+        const dailyCtx = document.getElementById('daily-chart').getContext('2d');
+        if (dailyChartInst) dailyChartInst.destroy();
+        dailyChartInst = new Chart(dailyCtx, {
+          type: 'bar',
+          data: {
+            labels: dailyDates,
+            datasets: [
+              { label: 'Web',      data: dailyDates.map(d => dailyMap[d].web),  backgroundColor: '#6366f1', stack: 'day' },
+              { label: 'LINE',     data: dailyDates.map(d => dailyMap[d].line), backgroundColor: '#22c55e', stack: 'day' },
+              { label: 'Telegram', data: dailyDates.map(d => dailyMap[d].tg),   backgroundColor: '#06b6d4', stack: 'day' },
+              { label: 'API',      data: dailyDates.map(d => dailyMap[d].api),  backgroundColor: '#f97316', stack: 'day' },
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { labels: { color: '#aaa', boxWidth: 12, font: { size: 11 } } }, tooltip: { mode: 'index' } },
+            scales: {
+              x: { stacked: true, ticks: { color: '#666' }, grid: { color: '#1e1e1e' } },
+              y: { stacked: true, ticks: { color: '#666' }, grid: { color: '#1e1e1e' }, beginAtZero: true }
+            }
+          }
+        });
+
+        // Daily UU chart (bar)
+        const uuCtx = document.getElementById('uu-chart').getContext('2d');
+        if (uuChartInst) uuChartInst.destroy();
+        uuChartInst = new Chart(uuCtx, {
+          type: 'bar',
+          data: {
+            labels: dailyUU.map(d => d.date),
+            datasets: [{ label: 'UU', data: dailyUU.map(d => d.uu || 0), backgroundColor: '#6366f1aa', borderColor: '#6366f1', borderWidth: 1 }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: '#666' }, grid: { color: '#1e1e1e' } },
+              y: { ticks: { color: '#666' }, grid: { color: '#1e1e1e' }, beginAtZero: true }
+            }
+          }
+        });
+      } catch(e) {
+        console.warn('Failed to load timeseries:', e);
+      }
+    }
+
     // ========== USERS TAB ==========
     let allUsers = [];
 
@@ -1895,6 +2121,7 @@
     function refreshAll() {
       checkHealth();
       loadAdminStats();
+      loadTimeseries(7);
       loadSessions();
       loadUsers();
       loadTickets();

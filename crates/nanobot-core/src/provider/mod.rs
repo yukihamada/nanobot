@@ -238,6 +238,8 @@ impl LoadBalancedProvider {
                     default.contains("llama") || default.contains("mixtral") || default.contains("groq")
                 } else if model_lower.contains("deepseek") {
                     default.contains("deepseek")
+                } else if model_lower.contains("nemotron") || model_lower.contains("nvidia") {
+                    default.contains("nemotron") || default.contains("nvidia")
                 } else if model_lower.contains("minimax") || model_lower.contains("m2.5") {
                     default.contains("minimax")
                 } else if model_lower.contains("glm") || model_lower.contains("z-ai") {
@@ -295,42 +297,8 @@ impl LoadBalancedProvider {
     pub fn from_env() -> Option<Self> {
         let mut providers: Vec<Arc<dyn LlmProvider>> = Vec::new();
 
-        // OpenAI keys (OPENAI_API_KEY, OPENAI_API_KEY_2, etc.)
-        for key in Self::read_keys("OPENAI_API_KEY") {
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key, None, "gpt-4o".to_string(),
-            )));
-        }
-
-        // Anthropic keys
-        for key in Self::read_keys("ANTHROPIC_API_KEY") {
-            providers.push(Arc::new(anthropic::AnthropicProvider::new(
-                key, None, "claude-sonnet-4-6".to_string(),
-            )));
-        }
-
-        // Gemini keys (check both GEMINI_API_KEY and GOOGLE_API_KEY)
-        for key in Self::read_keys_multi(&["GEMINI_API_KEY", "GOOGLE_API_KEY"]) {
-            providers.push(Arc::new(gemini::GeminiProvider::new(
-                key, None, "gemini-2.5-flash".to_string(),
-            )));
-        }
-
-        // Groq keys (fast inference)
-        for key in Self::read_keys("GROQ_API_KEY") {
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key, Some("https://api.groq.com/openai/v1".to_string()), "llama-3.3-70b-specdec".to_string(),
-            )));
-        }
-
-        // DeepSeek keys
-        for key in Self::read_keys("DEEPSEEK_API_KEY") {
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key, Some("https://api.deepseek.com".to_string()), "deepseek-chat".to_string(),
-            )));
-        }
-
-        // OpenRouter keys — cheap model chain: minimax → o4-mini → gemini-flash
+        // OpenRouter keys (PRIMARY — most reliable, access to all major models)
+        // Chain: minimax-m2.5 (cost-perf) → gemini-2.5-flash (fast+cheap)
         for key in Self::read_keys("OPENROUTER_API_KEY") {
             // MiniMax M2.5 — primary ($0.50/$1.50 per 1M, best cost-perf)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
@@ -339,6 +307,41 @@ impl LoadBalancedProvider {
             // Gemini 2.5 Flash — fallback ($0.30/$2.50 per 1M, fast+cheap)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
                 key, Some("https://openrouter.ai/api/v1".to_string()), "google/gemini-2.5-flash".to_string(),
+            )));
+        }
+
+        // Anthropic keys (native — claude models)
+        for key in Self::read_keys("ANTHROPIC_API_KEY") {
+            providers.push(Arc::new(anthropic::AnthropicProvider::new(
+                key, None, "claude-sonnet-4-6".to_string(),
+            )));
+        }
+
+        // Gemini keys (GEMINI_API_KEY only; GOOGLE_API_KEY is reserved for Google Search/Maps etc.)
+        for key in Self::read_keys("GEMINI_API_KEY") {
+            providers.push(Arc::new(gemini::GeminiProvider::new(
+                key, None, "gemini-2.5-flash".to_string(),
+            )));
+        }
+
+        // OpenAI keys (OPENAI_API_KEY, OPENAI_API_KEY_2, etc.)
+        for key in Self::read_keys("OPENAI_API_KEY") {
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key, None, "gpt-4o".to_string(),
+            )));
+        }
+
+        // Groq keys (fast inference, secondary)
+        for key in Self::read_keys("GROQ_API_KEY") {
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key, Some("https://api.groq.com/openai/v1".to_string()), "llama-3.3-70b-versatile".to_string(),
+            )));
+        }
+
+        // DeepSeek keys
+        for key in Self::read_keys("DEEPSEEK_API_KEY") {
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key, Some("https://api.deepseek.com".to_string()), "deepseek-chat".to_string(),
             )));
         }
 
@@ -351,7 +354,18 @@ impl LoadBalancedProvider {
             )));
         }
 
-        // Nemotron (Japanese LLM on RunPod Serverless)
+        // Nemotron (Japanese LLM on RunPod GPU Pod — direct vLLM endpoint, priority)
+        // Supports multiple pods: NEMOTRON_POD_URL, NEMOTRON_POD_URL_2, NEMOTRON_POD_URL_3, etc.
+        for pod_url in Self::read_keys("NEMOTRON_POD_URL") {
+            let api_base = format!("{}/v1", pod_url.trim_end_matches('/'));
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                String::new(), // no auth required for direct GPU Pod
+                Some(api_base),
+                "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese".to_string(),
+            )));
+        }
+
+        // Nemotron (Japanese LLM on RunPod Serverless — fallback)
         if let Ok(nemotron_ep) = std::env::var("NEMOTRON_ENDPOINT_ID") {
             let api_key = std::env::var("RUNPOD_API_KEY").unwrap_or_default();
             if !api_key.is_empty() && !nemotron_ep.is_empty() {
@@ -359,7 +373,7 @@ impl LoadBalancedProvider {
                 providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
                     api_key,
                     Some(api_base),
-                    "nvidia/nemotron-nano-9b-jp".to_string(),
+                    "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese".to_string(),
                 )));
             }
         }
@@ -422,8 +436,19 @@ impl LoadBalancedProvider {
         let prov_is_qwen = prov_default.contains("qwen");
         let prov_is_minimax = prov_default.contains("minimax");
         let prov_is_glm = prov_default.contains("glm") || prov_default.contains("z-ai");
+        let req_is_runpod = req_lower.contains("nemotron") || req_lower.contains("nvidia/nvidia");
+        let prov_is_runpod = prov_default.contains("nemotron") || prov_default.contains("nvidia/nvidia") || prov_default.contains("runpod");
         let prov_is_openrouter = prov_default.contains("openrouter");
-        let prov_is_gpt = !prov_is_claude && !prov_is_gemini && !prov_is_groq && !prov_is_deepseek && !prov_is_kimi && !prov_is_qwen && !prov_is_minimax && !prov_is_glm && !prov_is_openrouter;
+        let prov_is_gpt = !prov_is_claude && !prov_is_gemini && !prov_is_groq && !prov_is_deepseek && !prov_is_kimi && !prov_is_qwen && !prov_is_minimax && !prov_is_glm && !prov_is_openrouter && !prov_is_runpod;
+
+        // RunPod-specific models (Nemotron) must not be sent to non-RunPod providers
+        if req_is_runpod && prov_is_runpod {
+            return requested_model.to_string();
+        }
+        if req_is_runpod && !prov_is_runpod {
+            // Fallback to provider's default model (avoids 404 on OpenRouter etc.)
+            return provider.default_model().to_string();
+        }
 
         // Same family → use requested model as-is
         if (req_is_claude && prov_is_claude)
@@ -440,13 +465,11 @@ impl LoadBalancedProvider {
         }
 
         // OpenRouter can handle any model — pass through the requested model
-        // Also route minimax/glm models to OpenRouter (only available there)
-        if prov_is_openrouter || prov_is_minimax || prov_is_glm || prov_is_kimi {
+        if prov_is_openrouter {
             return requested_model.to_string();
         }
 
         // Cross-family → use the provider's own default model
-        // (avoids hardcoded model names that may not match OpenRouter's full-path format)
         provider.default_model().to_string()
     }
 
@@ -808,7 +831,7 @@ impl LoadBalancedProvider {
         // Each tier has a fallback chain: primary → secondary → tertiary
         let candidates: &[&str] = match tier {
             "economy"  => &["nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese", "gemini-2.5-flash", "deepseek-chat", "llama-3.3-70b-specdec"],
-            "normal"   => &["minimax/minimax-m2.5", "nvidia/nemotron-nano-9b-jp", "google/gemini-2.5-flash", "gpt-4o", "deepseek-chat"],
+            "normal"   => &["nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese", "minimax/minimax-m2.5", "google/gemini-2.5-flash", "gpt-4o", "deepseek-chat"],
             "powerful" => &["claude-opus-4-6", "gpt-4o", "gemini-2.5-pro", "claude-sonnet-4-6"],
             _ => return None,
         };

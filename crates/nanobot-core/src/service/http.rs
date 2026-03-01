@@ -1022,24 +1022,51 @@ async fn maybe_translate_to_japanese(
 }
 
 // ---------------------------------------------------------------------------
+// Session blocklist (DynamoDB-based, permanent ban)
+// ---------------------------------------------------------------------------
+
+/// Check if a session is permanently blocked.
+/// pk: BLOCKLIST#{session_id}, sk: INFO
+#[cfg(feature = "dynamodb-backend")]
+async fn is_session_blocked(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    session_id: &str,
+) -> bool {
+    let result = dynamo
+        .get_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(format!("BLOCKLIST#{}", session_id)))
+        .key("sk", AttributeValue::S("INFO".to_string()))
+        .send()
+        .await;
+    match result {
+        Ok(output) => output.item.is_some(),
+        Err(_) => false, // fail-open
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Rate limiting (DynamoDB-based, per email per minute)
 // ---------------------------------------------------------------------------
 
 /// Check rate limit for an action. Returns true if within limit, false if exceeded.
 /// Uses atomic counter in DynamoDB with TTL.
-/// pk: RATELIMIT#{email}, sk: WINDOW#{YYYYMMDDHHMM}
+/// window_fmt: "%Y%m%d%H%M" (per minute) or "%Y%m%d%H" (per hour)
 #[cfg(feature = "dynamodb-backend")]
-async fn check_rate_limit(
+async fn check_rate_limit_window(
     dynamo: &aws_sdk_dynamodb::Client,
     config_table: &str,
     key: &str,
-    max_per_minute: i64,
+    max: i64,
+    window_fmt: &str,
+    ttl_secs: i64,
 ) -> bool {
     let now = chrono::Utc::now();
-    let window = now.format("%Y%m%d%H%M").to_string();
+    let window = now.format(window_fmt).to_string();
     let pk = format!("RATELIMIT#{}", key);
     let sk = format!("WINDOW#{}", window);
-    let ttl = (now.timestamp() + 600).to_string(); // 10 min TTL
+    let ttl = (now.timestamp() + ttl_secs).to_string();
 
     let result = dynamo
         .update_item()
@@ -1061,7 +1088,7 @@ async fn check_rate_limit(
             if let Some(attrs) = output.attributes {
                 if let Some(count_val) = attrs.get("count").and_then(|v| v.as_n().ok()) {
                     if let Ok(count) = count_val.parse::<i64>() {
-                        return count <= max_per_minute;
+                        return count <= max;
                     }
                 }
             }
@@ -1072,6 +1099,28 @@ async fn check_rate_limit(
             true // allow on error (fail-open)
         }
     }
+}
+
+/// Convenience: per-minute rate limit (for auth endpoints, API, etc.)
+#[cfg(feature = "dynamodb-backend")]
+async fn check_rate_limit(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    key: &str,
+    max_per_minute: i64,
+) -> bool {
+    check_rate_limit_window(dynamo, config_table, key, max_per_minute, "%Y%m%d%H%M", 600).await
+}
+
+/// Convenience: per-hour rate limit (for chat endpoints)
+#[cfg(feature = "dynamodb-backend")]
+async fn check_rate_limit_hourly(
+    dynamo: &aws_sdk_dynamodb::Client,
+    config_table: &str,
+    key: &str,
+    max_per_hour: i64,
+) -> bool {
+    check_rate_limit_window(dynamo, config_table, key, max_per_hour, "%Y%m%d%H", 7200).await
 }
 
 /// Check daily request limit for guest sessions (unauthenticated users).
@@ -1639,12 +1688,44 @@ async fn deduct_credits(
             .table_name(&config_table)
             .item("pk", AttributeValue::S(usage_pk))
             .item("sk", AttributeValue::S(format!("{}#{}", now.timestamp_millis(), model)))
-            .item("user_id", AttributeValue::S(user_id))
+            .item("user_id", AttributeValue::S(user_id.clone()))
             .item("model", AttributeValue::S(model))
             .item("input_tokens", AttributeValue::N(input_tokens.to_string()))
             .item("output_tokens", AttributeValue::N(output_tokens.to_string()))
             .item("credits", AttributeValue::N(credits.to_string()))
             .item("timestamp", AttributeValue::S(now.to_rfc3339()))
+            .send()
+            .await;
+
+        // Hourly request counter (pk: STATS_HOURLY#{date}, sk: T{hour})
+        let channel_attr = if user_id.starts_with("webchat:") || user_id.starts_with("web:") { "ch_web" }
+            else if user_id.starts_with("line:") { "ch_line" }
+            else if user_id.starts_with("tg:") || user_id.starts_with("telegram:") { "ch_tg" }
+            else if user_id.starts_with("fb:") || user_id.starts_with("facebook:") { "ch_fb" }
+            else { "ch_api" };
+        let hourly_pk = now.format("STATS_HOURLY#%Y-%m-%d").to_string();
+        let hourly_sk = now.format("T%H").to_string();
+        let _ = dynamo
+            .update_item()
+            .table_name(&config_table)
+            .key("pk", AttributeValue::S(hourly_pk))
+            .key("sk", AttributeValue::S(hourly_sk))
+            .update_expression("ADD #req :one, #ch :one")
+            .expression_attribute_names("#req", "requests")
+            .expression_attribute_names("#ch", channel_attr)
+            .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+            .send()
+            .await;
+
+        // Daily unique users set (STATS_DAILY#{date} / UU)
+        let daily_pk = now.format("STATS_DAILY#%Y-%m-%d").to_string();
+        let _ = dynamo
+            .update_item()
+            .table_name(&config_table)
+            .key("pk", AttributeValue::S(daily_pk))
+            .key("sk", AttributeValue::S("UU".to_string()))
+            .update_expression("ADD uu_sessions :uid_set")
+            .expression_attribute_values(":uid_set", AttributeValue::Ss(vec![user_id.clone()]))
             .send()
             .await;
     });
@@ -3082,6 +3163,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Coupon
         .route("/api/v1/coupon/validate", post(handle_coupon_validate))
         .route("/api/v1/coupon/redeem", post(handle_coupon_redeem))
+        // Trial
+        .route("/api/v1/trial/start", post(handle_trial_start))
         // Omikuji (fortune)
         //         .route("/api/v1/omikuji", post(handle_omikuji))
         // Referral
@@ -3208,6 +3291,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/admin", get(handle_admin))
         .route("/api/v1/admin/check", get(handle_admin_check))
         .route("/api/v1/admin/stats", get(handle_admin_stats))
+        .route("/api/v1/admin/stats/timeseries", get(handle_admin_stats_timeseries))
         .route("/api/v1/admin/users", get(handle_admin_users))
         .route("/api/v1/admin/users/{user_id}/conversations", get(handle_admin_user_conversations))
         .route("/api/v1/admin/sessions/{session_key}/messages", get(handle_admin_session_messages))
@@ -3417,12 +3501,37 @@ async fn handle_chat(
         }
     }
 
+    // Blocklist check: permanently blocked sessions
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if is_session_blocked(dynamo, table, &req.session_id).await {
+                tracing::warn!("Blocked session attempt: {}", &req.session_id);
+                return Json(ChatResponse {
+                    response: "このセッションはご利用いただけません。".to_string(),
+                    session_id: req.session_id,
+                    agent: None,
+                    tools_used: None,
+                    credits_used: Some(0),
+                    credits_remaining: Some(0),
+                    model_used: None,
+                    models_consulted: None,
+                    action: None,
+                    input_tokens: None,
+                    output_tokens: None,
+                    estimated_cost_usd: None,
+                    mode: None,
+                });
+            }
+        }
+    }
+
     // Rate limiting: 60 requests per hour per session (anonymous users)
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let rate_key = format!("chat:{}", &req.session_id);
-            if !check_rate_limit(dynamo, table, &rate_key, 60).await {
+            if !check_rate_limit_hourly(dynamo, table, &rate_key, 120).await {
                 tracing::warn!("Rate limit exceeded for session: {}", &req.session_id);
                 return Json(ChatResponse {
                     response: ERR_RATE_LIMIT.to_string(),
@@ -3677,14 +3786,12 @@ async fn handle_chat(
             if user.credits_remaining <= 0 && !is_admin(&session_key) {
                 let msg = if user.plan == "free" {
                     "ありがとうございます！無料クレジットを使い切りました 🎉\n\
-                     ChatWebを気に入っていただけたなら、Starterプラン（月額¥980）で\n\
-                     毎月たっぷり使えます。今なら特別価格です！\n\n\
-                     Thank you! You've used all your free credits.\n\
-                     Upgrade to Starter (¥980/mo) for unlimited conversations!"
+                     たくさん使っていただけて嬉しいです！\n\
+                     Starterプラン（月額¥980）なら毎月たっぷり使い放題。\n\
+                     今すぐアップグレードして、会話を続けましょう！"
                 } else {
-                    "お疲れさまです！クレジットを使い切りました 💪\n\
-                     追加クレジットを購入して、引き続きお楽しみください。\n\n\
-                     You've used all your credits. Top up to keep going!"
+                    "お疲れさまです！今月もたくさん活用いただきました 💪\n\
+                     追加クレジットですぐに再開できます！"
                 };
                 return Json(ChatResponse {
                     response: msg.to_string(),
@@ -3739,6 +3846,48 @@ async fn handle_chat(
                         estimated_cost_usd: None,
                         mode: None,
                     });
+                }
+            }
+        }
+    }
+
+    // Daily request limit for authenticated users (plan-based)
+    // free: 500/day, starter: 3,000/day, pro: 30,000/day, enterprise/admin: unlimited
+    #[cfg(feature = "dynamodb-backend")]
+    if !is_admin(&session_key) {
+        if let Some(ref user) = cached_user {
+            let daily_limit: Option<i64> = match user.plan.as_str() {
+                "free"       => Some(500),
+                "starter"    => Some(3_000),
+                "pro"        => Some(30_000),
+                _            => None, // enterprise: unlimited
+            };
+            if let Some(limit) = daily_limit {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                    let (allowed, count) = check_guest_daily_limit(dynamo, table, &session_key, limit).await;
+                    if !allowed {
+                        tracing::warn!("Daily limit exceeded: session={} plan={} count={}", session_key, user.plan, count);
+                        let msg = match user.plan.as_str() {
+                            "free" => format!("1日の利用上限（{}回）に達しました。\nStarterプランにアップグレードすると3,000回/日まで使えます！", limit),
+                            "starter" => format!("1日の利用上限（{}回）に達しました。\nProプランにアップグレードすると30,000回/日まで使えます！", limit),
+                            _ => format!("1日の利用上限（{}回）に達しました。\nEnterpriseプランについてはお問い合わせください。", limit),
+                        };
+                        return Json(ChatResponse {
+                            response: msg,
+                            session_id: req.session_id,
+                            agent: None,
+                            tools_used: None,
+                            credits_used: Some(0),
+                            credits_remaining: Some(user.credits_remaining),
+                            model_used: None,
+                            models_consulted: None,
+                            action: Some("upgrade".to_string()),
+                            input_tokens: None,
+                            output_tokens: None,
+                            estimated_cost_usd: None,
+                            mode: None,
+                        });
+                    }
                 }
             }
         }
@@ -3860,7 +4009,7 @@ async fn handle_chat(
     {
         let mut sessions = state.sessions.lock().await;
         let session = sessions.refresh(&session_key);
-        let history = session.get_history_with_summary(16);
+        let history = session.get_history_with_summary(8);
         history_messages = history.iter().filter_map(|msg| {
             let role = msg.get("role").and_then(|v| v.as_str())?;
             let content = msg.get("content").and_then(|v| v.as_str())?;
@@ -3925,11 +4074,11 @@ async fn handle_chat(
             .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
             .or(agent.preferred_model)
             .unwrap_or_else(|| {
-                // Web channel uses minimax by default (best cost-performance)
-                if req.channel == "web" || req.channel.starts_with("webchat") {
-                    "minimax/minimax-m2.5"
+                // Default: Nemotron if pod is configured, else minimax via OpenRouter
+                if !std::env::var("NEMOTRON_POD_URL").unwrap_or_default().is_empty() {
+                    "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese"
                 } else {
-                    &default_model
+                    "minimax/minimax-m2.5"
                 }
             })
     };
@@ -5122,7 +5271,7 @@ async fn handle_get_session(
         .unwrap_or(100);
 
     let history = session.get_full_history(limit);
-    let is_summarized = session.messages.len() > 16; // Matches get_history_with_summary threshold
+    let is_summarized = session.messages.len() > 8; // Matches get_history_with_summary threshold
 
     Json(serde_json::json!({
         "key": id,
@@ -6643,12 +6792,28 @@ async fn handle_chat_stream(
         }
     }
 
+    // Blocklist check: permanently blocked sessions
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if is_session_blocked(dynamo, table, &req.session_id).await {
+                tracing::warn!("Blocked session attempt (stream): {}", &req.session_id);
+                let err_stream = stream::once(async {
+                    Ok::<_, Infallible>(Event::default().data(
+                        serde_json::json!({"type":"error","content":"このセッションはご利用いただけません。"}).to_string()
+                    ))
+                });
+                return Sse::new(err_stream).into_response();
+            }
+        }
+    }
+
     // Rate limiting: 60 requests per hour per session
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let rate_key = format!("chat_stream:{}", &req.session_id);
-            if !check_rate_limit(dynamo, table, &rate_key, 60).await {
+            if !check_rate_limit_hourly(dynamo, table, &rate_key, 120).await {
                 tracing::warn!("Rate limit exceeded for session (stream): {}", &req.session_id);
                 let err_stream = stream::once(async {
                     Ok::<_, Infallible>(Event::default().data(
@@ -6701,9 +6866,9 @@ async fn handle_chat_stream(
         if let Some(ref user) = stream_user {
             if user.credits_remaining <= 0 && !is_admin(&session_key) {
                 let content = if user.plan == "free" {
-                    "ありがとうございます！無料クレジットを使い切りました 🎉 Starterプラン（月額¥980）にアップグレードして、もっとたくさん話しましょう！"
+                    "ありがとうございます！無料クレジットを使い切りました 🎉 たくさん使っていただけて嬉しいです！Starterプラン（月額¥980）なら毎月たっぷり使い放題。今すぐアップグレードして会話を続けましょう！"
                 } else {
-                    "お疲れさまです！クレジットを使い切りました 💪 追加クレジットを購入して、引き続きお楽しみください。"
+                    "お疲れさまです！今月もたくさん活用いただきました 💪 追加クレジットですぐに再開できます！"
                 };
                 let err_stream = stream::once(async move {
                     Ok::<_, Infallible>(Event::default().data(
@@ -6738,6 +6903,39 @@ async fn handle_chat_stream(
                         ))
                     });
                     return Sse::new(err_stream).into_response();
+                }
+            }
+        }
+    }
+
+    // Daily request limit for authenticated users (plan-based) — stream endpoint
+    // free: 500/day, starter: 3,000/day, pro: 30,000/day, enterprise/admin: unlimited
+    #[cfg(feature = "dynamodb-backend")]
+    if !is_admin(&session_key) {
+        if let Some(ref user) = stream_user {
+            let daily_limit: Option<i64> = match user.plan.as_str() {
+                "free"    => Some(500),
+                "starter" => Some(3_000),
+                "pro"     => Some(30_000),
+                _         => None, // enterprise: unlimited
+            };
+            if let Some(limit) = daily_limit {
+                if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                    let (allowed, count) = check_guest_daily_limit(dynamo, table, &session_key, limit).await;
+                    if !allowed {
+                        tracing::warn!("Daily limit exceeded (stream): session={} plan={} count={}", session_key, user.plan, count);
+                        let content = match user.plan.as_str() {
+                            "free"    => format!("1日の利用上限（{}回）に達しました。\nStarterプランにアップグレードすると3,000回/日まで使えます！", limit),
+                            "starter" => format!("1日の利用上限（{}回）に達しました。\nProプランにアップグレードすると30,000回/日まで使えます！", limit),
+                            _         => format!("1日の利用上限（{}回）に達しました。\nEnterpriseプランについてはお問い合わせください。", limit),
+                        };
+                        let err_stream = stream::once(async move {
+                            Ok::<_, Infallible>(Event::default().data(
+                                serde_json::json!({"type":"error","content":content,"action":"upgrade"}).to_string()
+                            ))
+                        });
+                        return Sse::new(err_stream).into_response();
+                    }
                 }
             }
         }
@@ -6853,7 +7051,7 @@ async fn handle_chat_stream(
     {
         let mut sessions = state.sessions.lock().await;
         let session = sessions.refresh(&session_key);
-        let history = session.get_history_with_summary(16);
+        let history = session.get_history_with_summary(8);
         stream_history = history.iter().filter_map(|msg| {
             let role = msg.get("role").and_then(|v| v.as_str())?;
             let content = msg.get("content").and_then(|v| v.as_str())?;
@@ -6869,10 +7067,11 @@ async fn handle_chat_stream(
         .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
         .or(agent.preferred_model)
         .unwrap_or_else(|| {
-            if req.channel == "web" || req.channel.starts_with("webchat") {
-                "minimax/minimax-m2.5"
+            // Default: Nemotron if pod is configured, else minimax via OpenRouter
+            if !std::env::var("NEMOTRON_POD_URL").unwrap_or_default().is_empty() {
+                "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese"
             } else {
-                &default_model
+                "minimax/minimax-m2.5"
             }
         }).to_string();
 
@@ -7705,9 +7904,9 @@ async fn handle_chat_explore(
             let user = get_or_create_user(dynamo, table, &session_key).await;
             if user.credits_remaining <= 0 {
                 let content = if user.plan == "free" {
-                    "無料クレジットを使い切りました 🎉 Starterプランにアップグレードしましょう！"
+                    "ありがとうございます！無料クレジットを使い切りました 🎉 Starterプラン（月額¥980）で毎月たっぷり使い放題！"
                 } else {
-                    "クレジットを使い切りました 💪 追加購入して続けましょう！"
+                    "お疲れさまです！今月もたくさん活用いただきました 💪 追加クレジットですぐに再開できます！"
                 };
                 let err_stream = futures::stream::once(async move {
                     Ok::<_, Infallible>(Event::default()
@@ -7717,7 +7916,6 @@ async fn handle_chat_explore(
                 return Sse::new(err_stream).into_response();
             }
             // Note: All plans (including free) can use explore mode.
-            // Credits are deducted per model, so free users burn credits faster — incentivizing upgrades.
         }
     }
 
@@ -8034,7 +8232,11 @@ async fn handle_explore_synthesize(
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let user = get_or_create_user(dynamo, table, &session_key).await;
             if user.credits_remaining <= 0 {
-                let content = "クレジットを使い切りました 💪 追加購入して続けましょう！";
+                let content = if user.plan == "free" {
+                    "ありがとうございます！無料クレジットを使い切りました 🎉 Starterプラン（月額¥980）で毎月たっぷり使い放題！"
+                } else {
+                    "お疲れさまです！今月もたくさん活用いただきました 💪 追加クレジットですぐに再開できます！"
+                };
                 let err_stream = futures::stream::once(async move {
                     Ok::<_, Infallible>(Event::default()
                         .event("error")
@@ -8355,9 +8557,9 @@ async fn handle_chat_race(
             let user = get_or_create_user(dynamo, table, &session_key).await;
             if user.credits_remaining <= 0 {
                 let content = if user.plan == "free" {
-                    "無料クレジットを使い切りました 🎉 Starterプランにアップグレードしましょう！"
+                    "ありがとうございます！無料クレジットを使い切りました 🎉 Starterプラン（月額¥980）で毎月たっぷり使い放題！"
                 } else {
-                    "クレジットを使い切りました 💪 追加購入して続けましょう！"
+                    "お疲れさまです！今月もたくさん活用いただきました 💪 追加クレジットですぐに再開できます！"
                 };
                 let err_stream = futures::stream::once(async move {
                     Ok::<_, Infallible>(Event::default()
@@ -9745,6 +9947,159 @@ async fn handle_coupon_redeem(
 
     (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
         "error": "Coupon system not available"
+    }))).into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Trial start (14-day Starter trial, no card required)
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/trial/start — Start a 14-day Starter trial
+async fn handle_trial_start(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    const TRIAL_CREDITS: i64 = 5000;
+    const TRIAL_DAYS: i64 = 14;
+    const TRIAL_PLAN: &str = "starter";
+    const TRIAL_CODE: &str = "TRIAL_STARTER";
+
+    #[cfg(feature = "dynamodb-backend")]
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        // 1. Require authentication
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(id) => id,
+            None => return (axum::http::StatusCode::UNAUTHORIZED, Json(serde_json::json!({
+                "error": "Authentication required",
+                "error_ja": "ログインが必要です"
+            }))).into_response(),
+        };
+
+        let resolved_user = resolve_session_key(dynamo, table, &user_id).await;
+        let user = get_or_create_user(dynamo, table, &resolved_user).await;
+
+        // 2. Check user is on free plan
+        if user.plan != PLAN_FREE {
+            return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": "Trial is only available for free plan users",
+                "error_ja": "トライアルは無料プランのユーザーのみ利用可能です",
+                "current_plan": user.plan
+            }))).into_response();
+        }
+
+        // 3. Check if already used trial (REDEEM#{user_id}#TRIAL_STARTER / INFO)
+        let redeem_check = dynamo
+            .get_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S(format!("REDEEM#{}#{}", resolved_user, TRIAL_CODE)))
+            .key("sk", AttributeValue::S("INFO".to_string()))
+            .send()
+            .await;
+
+        if let Ok(output) = redeem_check {
+            if output.item.is_some() {
+                return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                    "error": "Trial already used",
+                    "error_ja": "トライアルは既に使用済みです"
+                }))).into_response();
+            }
+        }
+
+        // 4. Grant trial: update user profile (plan + credits + expiry)
+        let now = chrono::Utc::now().to_rfc3339();
+        let expires_at = (chrono::Utc::now() + chrono::Duration::days(TRIAL_DAYS)).to_rfc3339();
+        let pk = format!("USER#{}", resolved_user);
+
+        let _ = dynamo
+            .update_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S(pk))
+            .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+            .update_expression("SET credits_remaining = credits_remaining + :c, #p = :plan, coupon_code = :trial, coupon_expires = :exp, updated_at = :now")
+            .expression_attribute_names("#p", "plan")
+            .expression_attribute_values(":c", AttributeValue::N(TRIAL_CREDITS.to_string()))
+            .expression_attribute_values(":plan", AttributeValue::S(TRIAL_PLAN.to_string()))
+            .expression_attribute_values(":trial", AttributeValue::S(TRIAL_CODE.to_string()))
+            .expression_attribute_values(":exp", AttributeValue::S(expires_at.clone()))
+            .expression_attribute_values(":now", AttributeValue::S(now.clone()))
+            .send()
+            .await;
+
+        // 5. Record redemption
+        let ttl = (chrono::Utc::now() + chrono::Duration::days(TRIAL_DAYS + 30)).timestamp();
+        let _ = dynamo
+            .put_item()
+            .table_name(table)
+            .item("pk", AttributeValue::S(format!("REDEEM#{}#{}", resolved_user, TRIAL_CODE)))
+            .item("sk", AttributeValue::S("INFO".to_string()))
+            .item("user_id", AttributeValue::S(resolved_user.clone()))
+            .item("code", AttributeValue::S(TRIAL_CODE.to_string()))
+            .item("count", AttributeValue::N("1".to_string()))
+            .item("grant_credits", AttributeValue::N(TRIAL_CREDITS.to_string()))
+            .item("grant_plan", AttributeValue::S(TRIAL_PLAN.to_string()))
+            .item("first_redeemed_at", AttributeValue::S(now.clone()))
+            .item("last_redeemed_at", AttributeValue::S(now.clone()))
+            .item("ttl", AttributeValue::N(ttl.to_string()))
+            .send()
+            .await;
+
+        // 6. Audit log
+        emit_audit_log(dynamo.clone(), table.clone(), "trial_started", &resolved_user, "",
+            &format!("plan={}, credits={}, days={}", TRIAL_PLAN, TRIAL_CREDITS, TRIAL_DAYS));
+
+        // 7. Send welcome email (fire-and-forget)
+        if let Some(ref email) = user.email {
+            let email_addr = email.clone();
+            let resend_key = std::env::var("RESEND_API_KEY").ok().filter(|k| !k.is_empty());
+            if let Some(api_key) = resend_key {
+                tokio::spawn(async move {
+                    let client = reqwest::Client::new();
+                    let body = serde_json::json!({
+                        "from": "ChatWeb <noreply@chatweb.ai>",
+                        "to": [email_addr],
+                        "subject": "Starterプラン 14日間無料トライアル開始！ — ChatWeb",
+                        "html": "<div style='font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;'>\
+                            <h2 style='color:#6366f1;'>ChatWeb</h2>\
+                            <p style='font-size:18px;font-weight:700;'>Starterプラン トライアルへようこそ！</p>\
+                            <p>14日間、Starterプランの全機能を無料でお試しいただけます。</p>\
+                            <div style='background:#f3f4f6;border-radius:10px;padding:16px;margin:16px 0;'>\
+                                <p style='margin:0 0 8px;'><b>付与クレジット:</b> 5,000</p>\
+                                <p style='margin:0 0 8px;'><b>利用可能モデル:</b> GPT-4o, Claude Sonnet など</p>\
+                                <p style='margin:0;'><b>有効期限:</b> 14日間</p>\
+                            </div>\
+                            <a href='https://chatweb.ai/' style='display:inline-block;background:#6366f1;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;margin-top:8px;'>チャットを始める</a>\
+                            <p style='color:#6b7280;font-size:13px;margin-top:20px;'>トライアル期間終了後は自動的に無料プランに戻ります。</p>\
+                        </div>"
+                    });
+                    let _ = client.post("https://api.resend.com/emails")
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .json(&body)
+                        .send()
+                        .await;
+                });
+            }
+        }
+
+        // 8. Return updated user
+        let updated = get_or_create_user(dynamo, table, &resolved_user).await;
+
+        return Json(serde_json::json!({
+            "success": true,
+            "plan": TRIAL_PLAN,
+            "credits_granted": TRIAL_CREDITS,
+            "trial_days": TRIAL_DAYS,
+            "expires_at": expires_at,
+            "credits_remaining": updated.credits_remaining,
+            "message": "Trial started! Enjoy 14 days of Starter plan.",
+            "message_ja": "トライアル開始！14日間Starterプランをお楽しみください。"
+        })).into_response();
+    }
+
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = (&state, &headers);
+
+    (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+        "error": "Trial system not available"
     }))).into_response()
 }
 
@@ -11636,12 +11991,27 @@ async fn handle_admin_check(
     Json(serde_json::json!({ "is_admin": false }))
 }
 
-/// GET /api/v1/admin/stats — Admin stats dashboard data (Bearer token auth)
+/// GET /api/v1/admin/stats — Admin stats dashboard data (Bearer token auth or ADMIN_KEY)
+///
+/// Authentication: Either
+///   1. Bearer token for a registered admin user (authenticate_admin), or
+///   2. Bearer token matching the ADMIN_KEY environment variable (for external dashboards like enablerdao.com)
 async fn handle_admin_stats(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    if authenticate_admin(&state, &headers).await.is_none() {
+    // Check ADMIN_KEY env var first (for external dashboard calls from enablerdao.com etc.)
+    let bearer = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+    let admin_key_ok = if !bearer.is_empty() {
+        std::env::var("ADMIN_KEY").ok().map(|k| !k.is_empty() && k == bearer).unwrap_or(false)
+    } else {
+        false
+    };
+
+    if !admin_key_ok && authenticate_admin(&state, &headers).await.is_none() {
         return (StatusCode::FORBIDDEN, Json(serde_json::json!({
             "error": "Forbidden",
         }))).into_response();
@@ -11663,113 +12033,151 @@ async fn handle_admin_stats(
 
             type DynKey = std::collections::HashMap<String, AttributeValue>;
 
-            // 1. Count registered users + subscription breakdown (USER# + PROFILE)
-            let mut total_users: u64 = 0;
-            let mut plan_free: u64 = 0;
-            let mut plan_starter: u64 = 0;
-            let mut plan_pro: u64 = 0;
-            let mut plan_enterprise: u64 = 0;
-            let mut total_credits_remaining: i64 = 0;
-            let mut total_credits_used: i64 = 0;
-            let mut start_key: Option<DynKey> = None;
-            loop {
-                let mut scan = dynamo
-                    .scan()
-                    .table_name(config_table)
-                    .filter_expression("begins_with(pk, :prefix) AND sk = :sk")
-                    .expression_attribute_values(":prefix", AttributeValue::S("USER#".to_string()))
-                    .expression_attribute_values(":sk", AttributeValue::S(SK_PROFILE.to_string()))
-                    .projection_expression("pk, plan, credits_remaining, credits_used");
-                if let Some(ref key) = start_key {
-                    scan = scan.set_exclusive_start_key(Some(key.clone()));
-                }
-                match scan.send().await {
-                    Ok(output) => {
-                        for item in output.items() {
-                            total_users += 1;
-                            let plan = item.get("plan").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or("free");
-                            match plan {
-                                "starter" => plan_starter += 1,
-                                "pro" => plan_pro += 1,
-                                "enterprise" => plan_enterprise += 1,
-                                _ => plan_free += 1,
-                            }
-                            let cr = item.get("credits_remaining").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
-                            let cu = item.get("credits_used").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
-                            total_credits_remaining += cr;
-                            total_credits_used += cu;
-                        }
-                        match output.last_evaluated_key() {
-                            Some(k) => start_key = Some(k.to_owned()),
-                            None => break,
-                        }
-                    }
-                    Err(e) => { tracing::warn!("admin stats users scan: {}", e); break; }
-                }
-            }
+            // Run all 3 scans in PARALLEL to avoid API Gateway 30s timeout
+            let dynamo1 = dynamo.clone();
+            let dynamo2 = dynamo.clone();
+            let dynamo3 = dynamo.clone();
+            let ct1 = config_table.clone();
+            let ct2 = config_table.clone();
+            let st = sessions_table.clone();
+            let today2 = today.clone();
 
-            // 2. Count sessions by channel
-            let mut web: u64 = 0;
-            let mut line: u64 = 0;
-            let mut tg: u64 = 0;
-            let mut other: u64 = 0;
-            let mut start_key: Option<DynKey> = None;
-            loop {
-                let mut scan = dynamo
-                    .scan()
-                    .table_name(&sessions_table)
-                    .projection_expression("session_key");
-                if let Some(ref key) = start_key {
-                    scan = scan.set_exclusive_start_key(Some(key.clone()));
-                }
-                match scan.send().await {
-                    Ok(output) => {
-                        for item in output.items() {
-                            if let Some(sk) = item.get("session_key").and_then(|v| v.as_s().ok()) {
-                                if sk.starts_with("webchat:") { web += 1; }
-                                else if sk.starts_with("line:") { line += 1; }
-                                else if sk.starts_with("tg:") { tg += 1; }
-                                else { other += 1; }
+            // Scan 1: registered users + subscription breakdown
+            let users_fut = async move {
+                let mut total_users: u64 = 0;
+                let mut plan_free: u64 = 0;
+                let mut plan_starter: u64 = 0;
+                let mut plan_pro: u64 = 0;
+                let mut plan_enterprise: u64 = 0;
+                let mut total_credits_remaining: i64 = 0;
+                let mut total_credits_used: i64 = 0;
+                let mut start_key: Option<DynKey> = None;
+                loop {
+                    let mut scan = dynamo1
+                        .scan()
+                        .table_name(&ct1)
+                        .filter_expression("begins_with(pk, :prefix) AND sk = :sk")
+                        .expression_attribute_values(":prefix", AttributeValue::S("USER#".to_string()))
+                        .expression_attribute_values(":sk", AttributeValue::S(SK_PROFILE.to_string()))
+                        .expression_attribute_names("#p", "plan")
+                        .projection_expression("pk, #p, credits_remaining, credits_used");
+                    if let Some(ref key) = start_key {
+                        scan = scan.set_exclusive_start_key(Some(key.clone()));
+                    }
+                    match scan.send().await {
+                        Ok(output) => {
+                            for item in output.items() {
+                                total_users += 1;
+                                let plan = item.get("plan").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or("free");
+                                match plan {
+                                    "starter" => plan_starter += 1,
+                                    "pro" => plan_pro += 1,
+                                    "enterprise" => plan_enterprise += 1,
+                                    _ => plan_free += 1,
+                                }
+                                let cr = item.get("credits_remaining").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
+                                let cu = item.get("credits_used").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
+                                total_credits_remaining += cr;
+                                total_credits_used += cu;
+                            }
+                            match output.last_evaluated_key() {
+                                Some(k) => start_key = Some(k.to_owned()),
+                                None => break,
                             }
                         }
-                        match output.last_evaluated_key() {
-                            Some(k) => start_key = Some(k.to_owned()),
-                            None => break,
-                        }
+                        Err(e) => { tracing::warn!("admin stats users scan: {}", e); break; }
                     }
-                    Err(e) => { tracing::warn!("admin stats sessions scan: {}", e); break; }
                 }
-            }
+                (total_users, plan_free, plan_starter, plan_pro, plan_enterprise, total_credits_remaining, total_credits_used)
+            };
 
-            // 3. Count today's usage
-            let mut today_usage: u64 = 0;
-            let today_suffix = format!("#{}", today);
-            let mut start_key: Option<DynKey> = None;
-            loop {
-                let mut scan = dynamo
-                    .scan()
-                    .table_name(config_table)
-                    .filter_expression("begins_with(pk, :prefix) AND contains(pk, :date)")
-                    .expression_attribute_values(":prefix", AttributeValue::S("USAGE#".to_string()))
-                    .expression_attribute_values(":date", AttributeValue::S(today_suffix.clone()))
-                    .select(aws_sdk_dynamodb::types::Select::Count);
-                if let Some(ref key) = start_key {
-                    scan = scan.set_exclusive_start_key(Some(key.clone()));
-                }
-                match scan.send().await {
-                    Ok(output) => {
-                        today_usage += output.count() as u64;
-                        match output.last_evaluated_key() {
-                            Some(k) => start_key = Some(k.to_owned()),
-                            None => break,
-                        }
+            // Scan 2: sessions by channel
+            let sessions_fut = async move {
+                let mut web: u64 = 0;
+                let mut line: u64 = 0;
+                let mut tg: u64 = 0;
+                let mut other: u64 = 0;
+                let mut start_key: Option<DynKey> = None;
+                loop {
+                    let mut scan = dynamo2
+                        .scan()
+                        .table_name(&st)
+                        .projection_expression("session_key");
+                    if let Some(ref key) = start_key {
+                        scan = scan.set_exclusive_start_key(Some(key.clone()));
                     }
-                    Err(e) => { tracing::warn!("admin stats usage scan: {}", e); break; }
+                    match scan.send().await {
+                        Ok(output) => {
+                            for item in output.items() {
+                                if let Some(sk) = item.get("session_key").and_then(|v| v.as_s().ok()) {
+                                    if sk.starts_with("webchat:") { web += 1; }
+                                    else if sk.starts_with("line:") { line += 1; }
+                                    else if sk.starts_with("tg:") { tg += 1; }
+                                    else { other += 1; }
+                                }
+                            }
+                            match output.last_evaluated_key() {
+                                Some(k) => start_key = Some(k.to_owned()),
+                                None => break,
+                            }
+                        }
+                        Err(e) => { tracing::warn!("admin stats sessions scan: {}", e); break; }
+                    }
                 }
-            }
+                (web, line, tg, other)
+            };
+
+            // Scan 3: today's usage + unique active users
+            let usage_fut = async move {
+                let mut today_usage: u64 = 0;
+                let mut active_users: std::collections::HashSet<String> = std::collections::HashSet::new();
+                let today_suffix = format!("#{}", today2);
+                let mut start_key: Option<DynKey> = None;
+                loop {
+                    let mut scan = dynamo3
+                        .scan()
+                        .table_name(&ct2)
+                        .filter_expression("begins_with(pk, :prefix) AND contains(pk, :date)")
+                        .expression_attribute_values(":prefix", AttributeValue::S("USAGE#".to_string()))
+                        .expression_attribute_values(":date", AttributeValue::S(today_suffix.clone()))
+                        .projection_expression("pk");
+                    if let Some(ref key) = start_key {
+                        scan = scan.set_exclusive_start_key(Some(key.clone()));
+                    }
+                    match scan.send().await {
+                        Ok(output) => {
+                            for item in output.items() {
+                                today_usage += 1;
+                                if let Some(pk) = item.get("pk").and_then(|v| v.as_s().ok()) {
+                                    if let Some(rest) = pk.strip_prefix("USAGE#") {
+                                        if let Some(hash_pos) = rest.rfind('#') {
+                                            let user_id = &rest[..hash_pos];
+                                            if !user_id.is_empty() {
+                                                active_users.insert(user_id.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            match output.last_evaluated_key() {
+                                Some(k) => start_key = Some(k.to_owned()),
+                                None => break,
+                            }
+                        }
+                        Err(e) => { tracing::warn!("admin stats usage scan: {}", e); break; }
+                    }
+                }
+                (today_usage, active_users.len() as u64)
+            };
+
+            let (users_result, sessions_result, usage_result) = tokio::join!(users_fut, sessions_fut, usage_fut);
+            let (total_users, plan_free, plan_starter, plan_pro, plan_enterprise, total_credits_remaining, total_credits_used) = users_result;
+            let (web, line, tg, other) = sessions_result;
+            let (today_usage, today_active) = usage_result;
 
             return Json(serde_json::json!({
                 "total_users": total_users,
+                "today_active": today_active,
                 "subscriptions": {
                     "free": plan_free,
                     "starter": plan_starter,
@@ -11799,6 +12207,105 @@ async fn handle_admin_stats(
         "error": "DynamoDB not configured",
         "providers": providers,
     })).into_response()
+}
+
+/// GET /api/v1/admin/stats/timeseries — Hourly request counts and daily UU for the past N days
+async fn handle_admin_stats_timeseries(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let bearer = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+    let admin_key_ok = std::env::var("ADMIN_KEY").ok().map(|k| !k.is_empty() && k == bearer).unwrap_or(false);
+    if !admin_key_ok && authenticate_admin(&state, &headers).await.is_none() {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+
+    let days: u32 = q.get("days").and_then(|d| d.parse().ok()).unwrap_or(7).min(30);
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(config_table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let now = chrono::Utc::now();
+
+            // Collect date strings for the requested range
+            let dates: Vec<String> = (0..days as i64)
+                .map(|i| (now - chrono::Duration::days(i)).format("%Y-%m-%d").to_string())
+                .collect();
+
+            // Query STATS_HOURLY for each date (pk = STATS_HOURLY#{date}, sk = T{00..23})
+            let mut hourly_data: Vec<serde_json::Value> = Vec::new();
+            for date in &dates {
+                let pk = format!("STATS_HOURLY#{}", date);
+                let result = dynamo
+                    .query()
+                    .table_name(config_table)
+                    .key_condition_expression("pk = :pk")
+                    .expression_attribute_values(":pk", AttributeValue::S(pk))
+                    .send()
+                    .await;
+
+                if let Ok(output) = result {
+                    for item in output.items() {
+                        let sk = item.get("sk").and_then(|v| v.as_s().ok()).map(|s| s.as_str()).unwrap_or("T??");
+                        // sk = "T14" → hour string "2026-02-27T14"
+                        let hour = format!("{}{}",date, sk);
+                        let requests = item.get("requests").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0);
+                        let ch_web = item.get("ch_web").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0);
+                        let ch_line = item.get("ch_line").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0);
+                        let ch_tg = item.get("ch_tg").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0);
+                        let ch_fb = item.get("ch_fb").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0);
+                        let ch_api = item.get("ch_api").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<u64>().ok()).unwrap_or(0);
+                        hourly_data.push(serde_json::json!({
+                            "hour": hour,
+                            "requests": requests,
+                            "ch_web": ch_web,
+                            "ch_line": ch_line,
+                            "ch_tg": ch_tg,
+                            "ch_fb": ch_fb,
+                            "ch_api": ch_api,
+                        }));
+                    }
+                }
+            }
+
+            // Fetch daily UU from STATS_DAILY#{date}/UU
+            let mut daily_uu: Vec<serde_json::Value> = Vec::new();
+            for date in &dates {
+                let pk = format!("STATS_DAILY#{}", date);
+                let result = dynamo
+                    .get_item()
+                    .table_name(config_table)
+                    .key("pk", AttributeValue::S(pk))
+                    .key("sk", AttributeValue::S("UU".to_string()))
+                    .send()
+                    .await;
+                let uu_count = result.ok()
+                    .and_then(|o| o.item)
+                    .and_then(|item| item.get("uu_sessions").and_then(|v| v.as_ss().ok()).map(|ss| ss.len() as u64))
+                    .unwrap_or(0);
+                daily_uu.push(serde_json::json!({"date": date, "uu": uu_count}));
+            }
+
+            // Cumulative total requests from hourly data
+            let total_requests: u64 = hourly_data.iter()
+                .filter_map(|v| v["requests"].as_u64())
+                .sum();
+
+            return Json(serde_json::json!({
+                "days": days,
+                "hourly": hourly_data,
+                "daily_uu": daily_uu,
+                "total_requests": total_requests,
+                "generated_at": now.to_rfc3339(),
+            })).into_response();
+        }
+    }
+
+    Json(serde_json::json!({"error": "DynamoDB not configured"})).into_response()
 }
 
 /// GET /api/v1/admin/users — List all registered users (Bearer token auth)
@@ -20169,21 +20676,57 @@ async fn handle_openai_chat_completions(
     };
 
     let stream_mode = body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
-    let model = body.get("model").and_then(|v| v.as_str()).unwrap_or("gpt-4o").to_string();
+    // Default to Nemotron-9B-Japanese (free, hosted on RunPod GPU pod)
+    const NEMOTRON_MODEL: &str = "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese";
+    let requested_model = body.get("model").and_then(|v| v.as_str()).unwrap_or(NEMOTRON_MODEL).to_string();
     let max_tokens = body.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(4096).min(32768) as u32;
     let temperature = body.get("temperature").and_then(|v| v.as_f64()).unwrap_or(0.7);
 
-    // Authentication required
+    // Auth: authenticated users can use any model; anonymous users are limited to Nemotron (free)
     let user_id = auth_user_id(&state, &headers).await;
+    let model = if user_id.is_none() {
+        NEMOTRON_MODEL.to_string()
+    } else {
+        requested_model
+    };
+
+    // Rate limit for anonymous access: 10 req/min per IP
+    #[cfg(feature = "dynamodb-backend")]
     if user_id.is_none() {
-        let err = serde_json::json!({
-            "error": {
-                "message": "API key required. Get one at https://api.chatweb.ai",
-                "type": "invalid_request_error",
-                "code": "invalid_api_key"
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let ip = headers.get("x-forwarded-for")
+                .or_else(|| headers.get("x-real-ip"))
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            let rate_key = format!("anon_openai:{}", ip);
+            if !check_rate_limit(dynamo, table, &rate_key, 10).await {
+                return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({
+                    "error": {
+                        "message": "Rate limit exceeded. Anonymous access is limited to 10 requests/min. Sign up at https://chatweb.ai for higher limits.",
+                        "type": "rate_limit_exceeded",
+                        "code": "rate_limit_exceeded"
+                    }
+                }))).into_response();
             }
-        });
-        return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
+        }
+    }
+
+    // Credit check for authenticated users
+    #[cfg(feature = "dynamodb-backend")]
+    if let Some(ref uid) = user_id {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let user = get_or_create_user(dynamo, table, uid).await;
+            if user.credits_remaining <= 0 {
+                return (StatusCode::PAYMENT_REQUIRED, Json(serde_json::json!({
+                    "error": {
+                        "message": "Insufficient credits. Please top up at https://chatweb.ai/pricing",
+                        "type": "insufficient_quota",
+                        "code": "insufficient_credits"
+                    }
+                }))).into_response();
+            }
+        }
     }
 
     // Parse messages
@@ -20236,6 +20779,11 @@ async fn handle_openai_chat_completions(
         let (chunk_tx, chunk_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let (sse_tx, sse_rx) = futures::channel::mpsc::unbounded::<Result<Event, Infallible>>();
 
+        // Estimate input tokens from messages (approx 4 chars per token)
+        let input_token_est = messages.iter()
+            .map(|m| m.content.as_deref().unwrap_or("").len())
+            .sum::<usize>() as u32 / 4 + 4;
+
         // Spawn LLM call that streams chunks via chunk_tx
         let model_clone = model.clone();
         tokio::spawn(async move {
@@ -20243,11 +20791,20 @@ async fn handle_openai_chat_completions(
         });
 
         // Spawn chunk forwarder: convert chunks to SSE OpenAI delta events
+        // Also counts output chars for credit deduction
         let sse_tx_clone = sse_tx.clone();
         let completion_id_clone = completion_id.clone();
         let model_clone2 = model.clone();
+        #[cfg(feature = "dynamodb-backend")]
+        let (dynamo_for_stream, table_for_stream, uid_for_stream, model_for_deduct) = (
+            state.dynamo_client.clone(),
+            state.config_table.clone(),
+            user_id.clone(),
+            model.clone(),
+        );
         tokio::spawn(async move {
             let mut rx = chunk_rx;
+            let mut output_chars: usize = 0;
             // First chunk: send role delta
             let role_delta = serde_json::json!({
                 "id": completion_id_clone,
@@ -20259,6 +20816,7 @@ async fn handle_openai_chat_completions(
             let _ = sse_tx_clone.unbounded_send(Ok(Event::default().data(role_delta.to_string())));
 
             while let Some(chunk) = rx.recv().await {
+                output_chars += chunk.len();
                 let data = serde_json::json!({
                     "id": completion_id_clone,
                     "object": "chat.completion.chunk",
@@ -20269,6 +20827,13 @@ async fn handle_openai_chat_completions(
                 if sse_tx_clone.unbounded_send(Ok(Event::default().data(data.to_string()))).is_err() {
                     break;
                 }
+            }
+
+            // Deduct credits after streaming completes (fire-and-forget)
+            #[cfg(feature = "dynamodb-backend")]
+            if let (Some(dynamo), Some(table), Some(uid)) = (dynamo_for_stream, table_for_stream, uid_for_stream) {
+                let output_token_est = (output_chars / 4 + 1) as u32;
+                let _ = deduct_credits(&dynamo, &table, &uid, &model_for_deduct, input_token_est, output_token_est).await;
             }
 
             // Final chunk with finish_reason
@@ -20282,7 +20847,6 @@ async fn handle_openai_chat_completions(
             let _ = sse_tx_clone.unbounded_send(Ok(Event::default().data(final_data.to_string())));
             // Send [DONE] sentinel
             let _ = sse_tx_clone.unbounded_send(Ok(Event::default().data("[DONE]")));
-            // sse_tx_clone dropped → stream closes
         });
 
         Sse::new(sse_rx)
@@ -20296,6 +20860,15 @@ async fn handle_openai_chat_completions(
                 let prompt_tokens = resp.usage.prompt_tokens;
                 let completion_tokens = resp.usage.completion_tokens;
                 let total_tokens = resp.usage.total_tokens;
+
+                // Deduct credits for authenticated users
+                #[cfg(feature = "dynamodb-backend")]
+                if let Some(ref uid) = user_id {
+                    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                        let _ = deduct_credits(dynamo, table, uid, &model, prompt_tokens, completion_tokens).await;
+                    }
+                }
+
                 Json(serde_json::json!({
                     "id": completion_id,
                     "object": "chat.completion",
