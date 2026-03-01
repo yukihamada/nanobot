@@ -4272,6 +4272,53 @@
       </div>
     </div>
 
+    <section class="features-section" style="padding:60px 0; background:linear-gradient(135deg,#0a0a1a,#0d0d25);">
+      <div style="max-width:960px;margin:0 auto;padding:0 24px">
+        <h2 style="text-align:center;font-size:clamp(1.5rem,3vw,2rem);font-weight:700;color:#fff;margin-bottom:12px">
+          なぜ <span style="color:#10b981">chatweb.ai</span> が選ばれるのか
+        </h2>
+        <p style="text-align:center;color:#94a3b8;margin-bottom:48px;font-size:1rem">他のAIチャットとここが違う</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px">
+          <!-- Card 1 -->
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+            <div style="font-size:2rem;margin-bottom:12px">🎙️</div>
+            <h3 style="color:#fff;font-size:1.1rem;font-weight:600;margin-bottom:8px">音声ファースト</h3>
+            <p style="color:#94a3b8;font-size:0.9rem;line-height:1.6">話しかけるだけでAIが即答。Push-to-talkで手ぶら操作。音声入力→応答まで約1秒。</p>
+          </div>
+          <!-- Card 2 -->
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+            <div style="font-size:2rem;margin-bottom:12px">🔗</div>
+            <h3 style="color:#fff;font-size:1.1rem;font-weight:600;margin-bottom:8px">どこでも同じ会話</h3>
+            <p style="color:#94a3b8;font-size:0.9rem;line-height:1.6">Web・LINE・Telegramが同期。スマホでLINEで始めた会話をPCで続けられる。</p>
+          </div>
+          <!-- Card 3 -->
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+            <div style="font-size:2rem;margin-bottom:12px">🛠️</div>
+            <h3 style="color:#fff;font-size:1.1rem;font-weight:600;margin-bottom:8px">30+ ツール内蔵</h3>
+            <p style="color:#94a3b8;font-size:0.9rem;line-height:1.6">Web検索・コード実行・ファイル操作・天気・計算・ブラウザ自動化まで。指示1つで全部やってくれる。</p>
+          </div>
+          <!-- Card 4 -->
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+            <div style="font-size:2rem;margin-bottom:12px">🧠</div>
+            <h3 style="color:#fff;font-size:1.1rem;font-weight:600;margin-bottom:8px">長期記憶</h3>
+            <p style="color:#94a3b8;font-size:0.9rem;line-height:1.6">あなたの好みや過去の会話を覚えている。毎回説明しなくていい、本当の「マイAI」。</p>
+          </div>
+          <!-- Card 5 -->
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+            <div style="font-size:2rem;margin-bottom:12px">🤖</div>
+            <h3 style="color:#fff;font-size:1.1rem;font-weight:600;margin-bottom:8px">10+ モデル自動選択</h3>
+            <p style="color:#94a3b8;font-size:0.9rem;line-height:1.6">Claude・GPT-4o・Geminiを自動で最適選択。1つのチャットで全モデルが使える。</p>
+          </div>
+          <!-- Card 6 -->
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px">
+            <div style="font-size:2rem;margin-bottom:12px">🇯🇵</div>
+            <h3 style="color:#fff;font-size:1.1rem;font-weight:600;margin-bottom:8px">日本語に強い</h3>
+            <p style="color:#94a3b8;font-size:0.9rem;line-height:1.6">日本語最適化モデル搭載。敬語・方言・ビジネス文書も自然に対応。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <div id="recipe-section" class="fade-up fade-up-d3"></div>
 
     <div class="sync-section fade-up fade-up-d3" id="sync-section">
@@ -5953,13 +6000,13 @@
 
     const TOOL_LABELS = {
       web_search: { icon: '\uD83D\uDD0D', ja: 'Web\u691C\u7D22', en: 'Web Search' },
-      web_fetch: { icon: '\uD83C\uDF10', ja: '\u30DA\u30FC\u30B8\u53D6\u5F97', en: 'Page Fetch' },
+      read_webpage: { icon: '\uD83C\uDF10', ja: '\u30DA\u30FC\u30B8\u53D6\u5F97', en: 'Page Fetch' },
       calculator: { icon: '\uD83E\uDDEE', ja: '\u8A08\u7B97', en: 'Calculator' },
       weather: { icon: '\u26C5', ja: '\u5929\u6C17', en: 'Weather' },
       translate: { icon: '\uD83C\uDF0D', ja: '\u7FFB\u8A33', en: 'Translate' },
       wikipedia: { icon: '\uD83D\uDCDA', ja: 'Wikipedia', en: 'Wikipedia' },
       datetime: { icon: '\uD83D\uDD52', ja: '\u65E5\u6642', en: 'DateTime' },
-      qr_code: { icon: '\uD83D\uDCF1', ja: 'QR\u30B3\u30FC\u30C9', en: 'QR Code' },
+      create_qr: { icon: '\uD83D\uDCF1', ja: 'QR\u30B3\u30FC\u30C9', en: 'QR Code' },
       news_search: { icon: '\uD83D\uDCF0', ja: '\u30CB\u30E5\u30FC\u30B9', en: 'News' },
     };
 
@@ -10361,7 +10408,12 @@
           thinking.remove();
           appAddMsg(d.response, 'bot', d.agent || null, d.tools_used || null);
           knownMsgCount += 2; syncVersion++;
-          if (d.credits_remaining !== undefined) updateCredits(d.credits_remaining);
+          if (d.credits_remaining !== undefined) {
+            updateCredits(d.credits_remaining);
+            if (d.credits_remaining === 0 && d.action !== 'upgrade') {
+              setTimeout(function() { showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 1200);
+            }
+          }
           if (d.action === 'upgrade') { appendUpgradeButton(); setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800); }
           else if (d.action === 'retry_scheduled') { scheduleAutoRetry(d.auto_retry_after || 300); }
           autoPlayTTS(d.response);
@@ -10375,10 +10427,10 @@
           let streamingEl = null;
 
           const TOOL_ICONS = {
-            web_search:'🔍', web_fetch:'🌐', wikipedia:'📖', news_search:'📰', arxiv_search:'🎓',
+            web_search:'🔍', read_webpage:'🌐', wikipedia:'📖', news_search:'📰', arxiv_search:'🎓',
             calculator:'🔢', weather:'🌤', translate:'🌐', datetime:'🕐',
             code_execute:'💻', file_read:'📄', file_write:'✏️', file_list:'📂', filesystem:'📂',
-            image_generate:'🎨', music_generate:'🎵', video_generate:'🎬', qr_code:'◼',
+            image_generate:'🎨', music_generate:'🎵', video_generate:'🎬', create_qr:'◼',
             google_calendar:'📅', gmail:'📧', slack:'💬', discord:'💬', notion:'📝',
             github_read_file:'📁', github_create_or_update_file:'📝', github_create_pr:'🔀',
             git_status:'🌿', git_diff:'🔍', git_commit:'💾',
@@ -10388,10 +10440,10 @@
             csv_analysis:'📊', memory_log:'🧠', knowledge_graph:'🕸',
           };
           const TOOL_LABELS = {
-            web_search:'Web検索', web_fetch:'ページ取得', wikipedia:'Wikipedia', news_search:'ニュース',
+            web_search:'Web検索', read_webpage:'ページ取得', wikipedia:'Wikipedia', news_search:'ニュース',
             calculator:'計算', weather:'天気', translate:'翻訳', datetime:'日時',
             code_execute:'コード実行', file_read:'ファイル読込', file_write:'ファイル書込', file_list:'ファイル一覧',
-            image_generate:'画像生成', music_generate:'音楽生成', video_generate:'動画生成', qr_code:'QRコード',
+            image_generate:'画像生成', music_generate:'音楽生成', video_generate:'動画生成', create_qr:'QRコード',
             google_calendar:'カレンダー', gmail:'メール', github_read_file:'GitHub',
             github_create_pr:'PR作成', git_commit:'コミット',
             browser:'ブラウザ', browser_screenshot:'スクショ', browser_purchase:'購入',
@@ -10638,7 +10690,12 @@
                 window._sessionCost = (window._sessionCost || 0) + (evt.estimated_cost_usd || 0);
               }
               knownMsgCount += 2; syncVersion++;
-              if (evt.credits_remaining !== undefined) updateCredits(evt.credits_remaining);
+              if (evt.credits_remaining !== undefined) {
+                updateCredits(evt.credits_remaining);
+                if (evt.credits_remaining === 0) {
+                  setTimeout(function() { showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 1200);
+                }
+              }
               touchActivity();
               autoPlayTTS(evt.content);
             } else if (evt.type === 'error' || (!evt.type && evt.error)) {
