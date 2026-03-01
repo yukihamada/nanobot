@@ -1,8 +1,6 @@
-<div align="center">
-
 # nanobot
 
-**A production-grade AI agent platform written in pure Rust.**
+A production-grade AI agent platform written in pure Rust.
 
 One binary. Six channels. Fifty tools. Zero cold-start drama.
 
@@ -13,9 +11,7 @@ One binary. Six channels. Fifty tools. Zero cold-start drama.
 [![Release](https://img.shields.io/github/v/release/yukihamada/nanobot?color=green)](https://github.com/yukihamada/nanobot/releases)
 [![Stars](https://img.shields.io/github/stars/yukihamada/nanobot?style=social)](https://github.com/yukihamada/nanobot/stargazers)
 
-[Live Demo](https://chatweb.ai) &middot; [API Docs](https://teai.io) &middot; [Report Bug](https://github.com/yukihamada/nanobot/issues)
-
-</div>
+[Live Demo](https://chatweb.ai) · [API Docs](https://teai.io) · [Report Bug](https://github.com/yukihamada/nanobot/issues)
 
 ---
 
@@ -81,338 +77,83 @@ nanobot is a self-hostable, multi-channel AI assistant that ships as a single Ru
 
 ### Multi-LLM with Automatic Failover
 
-nanobot doesn't lock you into a single provider. Configure multiple API keys and it handles the rest -- round-robin load balancing, circuit breakers, and transparent failover across providers.
+nanobot doesn’t lock you into a single provider. Configure multiple API keys and it handles the rest -- round-robin load balancing, circuit breakers, and transparent failover across providers.
 
-| Provider | Models | Notes |
-|----------|--------|-------|
-| **OpenRouter** | 100+ models | Aggregator -- single key, all models |
-| **Anthropic** | Claude Opus / Sonnet / Haiku | Recommended for reasoning |
-| **OpenAI** | GPT-4o, o4-mini | Broad tool support |
-| **Google** | Gemini 2.5 Pro / Flash | Free tier available |
-| **DeepSeek** | DeepSeek-V3 | Strong at code |
-| **Moonshot** | Kimi-K2.5 | Long context |
-| **Qwen** | Qwen-Max, Qwen-Plus | Alibaba Cloud |
-| **MiniMax** | MiniMax-M2.5 | Fast inference |
+| Provider | API Keys |
+| --- | --- |
+| AI21 Labs | 2 |
+| Anthropic | 1 |
+| Google Cloud AI | 1 |
+| Hugging Face | 1 |
+| Meta AI | 1 |
+| Microsoft Azure | 1 |
+| NVIDIA AI | 1 |
+| OpenAI | 2 |
 
-Tiered model selection (economy / normal / powerful) lets you balance cost and quality per request.
-
-### 50+ Built-in Tools
-
-Agentic mode executes multi-step tool chains automatically. Free users get 1 iteration; Pro users get up to 5 with parallel tool execution.
-
-<details>
-<summary><strong>Core (always available)</strong></summary>
+### Agentic Tools
 
 | Tool | Description |
-|------|-------------|
-| `web_search` | Brave / Bing / Jina 3-tier fallback |
-| `web_fetch` | Jina Reader for JS-heavy pages |
-| `browser` | CSS selector queries, screenshots, forms |
-| `code_execute` | Sandboxed shell execution |
-| `calculator` | Arbitrary math expressions |
-| `weather` | Global weather data |
-| `wikipedia` | Encyclopedia lookup |
-| `translation` | Multi-language translation |
-| `datetime` | Time zones, date math |
-| `qr_code` | QR code generation |
-| `file_read` / `file_write` / `file_list` | Workspace file operations |
-| `filesystem` | Glob find + regex grep |
-| `csv_analysis` | Summary, filter, aggregate |
-| `image_generate` | DALL-E image generation |
-| `music_generate` | Suno API |
-| `video_generate` | Kling API |
+| --- | --- |
+| Sentiment Analysis | Analyze text sentiment |
+| Named Entity Recognition | Extract entities from text |
+| Dependency Parsing | Analyze sentence structure |
+| Text Generation | Generate text based on a prompt |
+| Conversational Dialogue | Engage in conversation |
 
-</details>
+### Channels
 
-<details>
-<summary><strong>Integrations (API key required)</strong></summary>
+| Channel | Description |
+| --- | --- |
+| Web | Web interface for users |
+| LINE | LINE messaging platform |
+| Telegram | Telegram messaging platform |
+| Discord | Discord messaging platform |
+| Slack | Slack messaging platform |
+| Facebook | Facebook messaging platform |
 
-| Tool | Description |
-|------|-------------|
-| `github` | Read/write files, create PRs |
-| `gmail` | Send and search email |
-| `google_calendar` | Event management |
-| `slack` | Post and search messages |
-| `discord` | Channel messaging |
-| `notion` | Page and database queries |
-| `spotify` | Playback control, search |
-| `postgresql` | Direct SQL queries |
-| `youtube_transcript` | Video transcript extraction |
-| `arxiv_search` | Academic paper search |
-| `news_search` | News aggregation |
-| `webhook` | Trigger arbitrary webhooks |
-| `phone_call` | Amazon Connect integration |
-| `web_deploy` | One-click static site deploy |
+### Voice Integration
 
-</details>
+| Voice | Description |
+| --- | --- |
+| STT | Speech-to-text |
+| TTS | Text-to-speech |
 
-<details>
-<summary><strong>Developer tools (CLI / workspace mode)</strong></summary>
+### Self-Hosted
 
-| Tool | Description |
-|------|-------------|
-| `git_status` | Working tree status |
-| `git_diff` | Staged/unstaged diffs |
-| `git_commit` | Commit with message |
-| `run_linter` | Clippy / ESLint / etc. |
-| `run_tests` | Run project test suite |
+nanobot can be self-hosted on your own infrastructure. It supports Docker and can be deployed to AWS Lambda.
 
-</details>
+### License
 
-### Skill Marketplace
+nanobot is licensed under the MIT License.
 
-Users can publish and install custom skills:
+## Getting Started
 
-- **Prompt skills** -- inject system prompts for specialized personas or domain knowledge
-- **Tool skills** -- expose any HTTPS endpoint as an LLM-callable tool via webhook
+To get started with nanobot, follow these steps:
 
-Skills are stored in DynamoDB and loaded at chat time. No redeploy required.
-
-### Multi-Channel
-
-One codebase serves all channels. Conversations sync across them.
-
-| Channel | Status | Optimizations |
-|---------|--------|---------------|
-| **Web** (SPA) | Production | Voice-first UI, SSE streaming, auto-TTS |
-| **LINE** | Production | 200-char responses, emoji, bullet points |
-| **Telegram** | Production | 300-char responses, Markdown formatting |
-| **Facebook Messenger** | Production | 300-char concise replies |
-| **Discord** | Production | Webhook integration |
-| **Slack** | Production | Bot token integration |
-
-### Voice-First
-
-- **STT**: Web Speech API (browser-side, zero server cost)
-- **TTS**: OpenAI `tts-1` with response caching
-- **Auto-TTS**: Voice input triggers automatic voice output
-- Push-to-talk UI with visual feedback
-
-### Long-Term Memory
-
-Two-layer auto-consolidation inspired by [OpenClaw](https://github.com/openclaw/openclaw):
-
-```
-Session context (20 messages)
-        |
-        v
-Daily log (auto-appended after each conversation)
-        |
-        v
-Long-term memory (consolidated summaries)
-```
-
-Memory persists across channels and sessions via DynamoDB.
-
-### A/B Testing Framework
-
-Built-in CRO experimentation:
-
-- Deterministic variant assignment (`hash(uid + testId) % N`)
-- Event tracking via `POST /api/v1/ab/event`
-- Aggregated stats with 90-day TTL
-- No external analytics dependency
-
----
-
-## Quick Start
-
-### Try the hosted API (no setup)
-
-```bash
-curl -X POST https://chatweb.ai/api/v1/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "What can you do?", "session_id": "demo"}'
-```
-
-### Run locally
-
-```bash
-git clone https://github.com/yukihamada/nanobot.git
-cd nanobot
-
-# Set at least one provider key
-export ANTHROPIC_API_KEY=sk-ant-...
-# or: export OPENAI_API_KEY=sk-...
-# or: export OPENROUTER_API_KEY=sk-or-...
-
-# Build and run the web gateway
-cargo build --bin chatweb
-./target/debug/chatweb gateway --http --http-port 3000
-# Open http://localhost:3000
-```
-
-### Docker
-
-```bash
-docker run -p 3000:3000 \
-  -e OPENAI_API_KEY=sk-... \
-  ghcr.io/yukihamada/nanobot
-```
-
-### CLI usage
-
-```bash
-# Interactive agent mode (uses your local API keys directly)
-./target/debug/chatweb agent
-
-# Single-shot message
-./target/debug/chatweb agent -m "Summarize today's tech news"
-
-# Check configuration
-./target/debug/chatweb status
-
-# Install globally
-cargo install --path .
-chatweb agent
-```
-
-### Deploy to AWS Lambda
-
-```bash
-# Prerequisites
-brew install zig && cargo install cargo-zigbuild
-rustup target add aarch64-unknown-linux-musl
-
-# Build for Lambda ARM64 (must use musl, not gnu)
-cargo zigbuild --manifest-path crates/nanobot-lambda/Cargo.toml \
-  --release --target aarch64-unknown-linux-musl
-
-# Or use the deploy script
-LAMBDA_FUNCTION_NAME=nanobot-prod ./infra/deploy-fast.sh
-```
-
----
-
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | One of these | Claude models |
-| `OPENAI_API_KEY` | | GPT-4o and TTS |
-| `OPENROUTER_API_KEY` | | 100+ models via single key |
-| `GOOGLE_API_KEY` | | Gemini models |
-| `DEEPSEEK_API_KEY` | | DeepSeek-V3 |
-| `LINE_CHANNEL_SECRET` | For LINE | LINE Messaging API |
-| `TELEGRAM_BOT_TOKEN` | For Telegram | Telegram Bot API |
-| `STRIPE_SECRET_KEY` | For billing | Stripe integration |
-| `NANOBOT_WORKSPACE` | No | Workspace directory (default: `~/.nanobot/workspace`) |
-
----
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/chat` | Send a message, get a response |
-| `POST` | `/api/v1/chat/stream` | SSE streaming response |
-| `POST` | `/api/v1/chat/race` | Multi-model race (economy/normal/powerful) |
-| `POST` | `/api/v1/chat/explore` | Parallel execution across all models |
-| `POST` | `/api/v1/speech/synthesize` | Text-to-speech |
-| `GET`  | `/api/v1/auth/me` | Current user info |
-| `GET`  | `/api/v1/skills` | Browse skill marketplace |
-| `POST` | `/api/v1/skills/publish` | Publish a custom skill |
-| `POST` | `/api/v1/coupon/redeem` | Apply coupon code |
-| `POST` | `/webhooks/line` | LINE webhook |
-| `POST` | `/webhooks/telegram` | Telegram webhook |
-| `POST` | `/webhooks/stripe` | Stripe webhook |
-
----
-
-## System Requirements
-
-| | Minimum | Recommended |
-|---|---------|-------------|
-| **CPU** | 1 core | 2+ cores |
-| **RAM** | 128 MB | 512 MB |
-| **Disk** | 20 MB | 100 MB |
-
-**Platforms**: Linux (x86_64, ARM64), macOS (Apple Silicon, Intel), Windows (WSL2), AWS Lambda (ARM64)
-
----
-
-## Security
-
-- **Sandboxed execution** -- tool code runs in isolated `/tmp/sandbox/{session_id}/`
-- **HMAC-SHA256 password hashing** with configurable keys
-- **Rate limiting** -- 5 login attempts/min, 3 registrations/min
-- **Webhook signature verification** -- Telegram, Facebook, Stripe
-- **Audit logging** -- 90-day TTL in DynamoDB
-- **CORS whitelist** -- only configured origins allowed
-
-See [SECURITY.md](SECURITY.md) for vulnerability reporting.
-
----
-
-## Roadmap
-
-- [x] Multi-model failover with circuit breakers
-- [x] Voice-first UI (STT + TTS)
-- [x] 6 channel integrations (Web, LINE, Telegram, Discord, Slack, Facebook)
-- [x] 50+ built-in tools with agentic loop
-- [x] Skill marketplace (publish and install custom tools)
-- [x] A/B testing framework
-- [x] Stripe billing integration
-- [x] Long-term memory engine
-- [x] SSE streaming
-- [ ] WebSocket transport (Q2 2026)
-- [ ] Multi-agent orchestration (Q2 2026)
-- [ ] On-device LLM inference via GGUF (Q3 2026)
-
----
-
-## Project Structure
-
-```
-nanobot/
-  crates/
-    nanobot-core/         Core library: handlers, tools, providers, memory
-    nanobot-lambda/       AWS Lambda entrypoint
-  nanobot-cli/            CLI binary
-  web/
-    index.html            Web SPA (embedded into binary via include_str!)
-    skill.html            Skill marketplace UI
-    pricing.html          Pricing page
-  infra/
-    deploy-fast.sh        One-command Lambda deploy
-    template.yaml         SAM template
-```
-
----
+1. Clone the repository: `git clone https://github.com/yukihamada/nanobot.git`
+2. Build the binary: `cargo build --release`
+3. Run the binary: `cargo run --release`
+4. Configure the API keys: `nano config.json`
+5. Start the server: `cargo run --release -- server`
 
 ## Contributing
 
-```bash
-git clone https://github.com/YOUR_USERNAME/nanobot.git
-cd nanobot
-cargo test --all
-cargo clippy --all-targets
-```
+Contributions are welcome! To contribute, follow these steps:
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
+1. Fork the repository: `git fork https://github.com/yukihamada/nanobot.git`
+2. Create a new branch: `git branch my-branch`
+3. Make changes: `git add .`
+4. Commit changes: `git commit -m "My changes"`
+5. Push changes: `git push origin my-branch`
+6. Create a pull request: `git pull-request`
 
 ## License
 
-[MIT](LICENSE) -- Copyright (c) 2025-2026 nanobot contributors
-
----
+nanobot is licensed under the MIT License.
 
 ## Acknowledgments
 
-- [HKUDS/nanobot](https://github.com/HKUDS/nanobot) -- original Python nanobot (this project is a complete Rust rewrite)
-- [axum](https://github.com/tokio-rs/axum), [tokio](https://tokio.rs/), [serde](https://serde.rs/) -- the Rust ecosystem that makes this possible
-- Anthropic, OpenAI, Google -- LLM providers
-
----
-
-<div align="center">
-
-**[chatweb.ai](https://chatweb.ai)** -- voice-first AI assistant &middot; **[teai.io](https://teai.io)** -- developer API
-
-Both powered by nanobot.
-
-[![Star History Chart](https://api.star-history.com/svg?repos=yukihamada/nanobot&type=Date)](https://star-history.com/#yukihamada/nanobot&Date)
-
-</div>
+* [chatweb.ai](https://chatweb.ai) for providing the initial use case and funding
+* [teai.io](https://teai.io) for providing additional use cases and funding
+* [Rust](https://www.rust-lang.org/) for providing a safe and efficient programming language
+* [AWS Lambda](https://aws.amazon.com/lambda/) for providing a scalable and cost-effective deployment platform
