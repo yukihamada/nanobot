@@ -2241,7 +2241,7 @@ const AGENT_COMMON: &str = "\n\n\
 - **ツール使用判断**: 自分の知識で答えられるなら即答。リアルタイムデータ（天気・最新ニュース・為替・株価等）が必要な時だけツールを使う。一般常識・歴史・科学・文化・有名人・地理などはツール不要で堂々と答える。\n\
 - **専用ツール優先 (CRITICAL)**: 以下のリクエストは必ず専用ツールを呼ぶ。web_searchで代替禁止。\n\
   - 「画像を生成/作成/描いて/イラスト/絵を作って」 → 必ず `image_generate` を呼ぶ\n\
-  - 「QRコードを作って/生成して/QRコード」 → 必ず `qr_code` を呼ぶ\n\
+  - 「QRコードを作って/生成して/QRコード」 → 必ず `create_qr` を呼ぶ\n\
   - 「ウィキペディアで調べて/Wikipedia」 → 必ず `wikipedia` を呼ぶ\n\
   - 「曲を作って/音楽/BGM/song」 → 必ず `music_generate` を呼ぶ\n\
   - 「計算して/計算/×/÷/数式」 → 必ず `calculator` を呼ぶ\n\
@@ -2309,7 +2309,7 @@ const AGENTS: &[AgentProfile] = &[
              以下のツールが使える。ユーザーが対応するタスクを依頼したら迷わずツールを呼ぶ。\n\n\
              ### 情報収集・検索\n\
              - `web_search` — ウェブ検索（最新ニュース・株価・現在のイベント）\n\
-             - `web_fetch` — URLのページ内容を取得・要約（記事・商品ページ）\n\
+             - `read_webpage` — URLのページ内容を取得・要約（記事・商品ページ）\n\
              - `wikipedia` — Wikipediaで調べる（「ウィキペディアで」と言われたら必ずこちら）\n\
              - `news_search` — ニュース特化検索\n\n\
              ### 計算・ユーティリティ\n\
@@ -2319,7 +2319,7 @@ const AGENTS: &[AgentProfile] = &[
              ### コンテンツ生成 ★重要\n\
              - `image_generate` — AI画像生成（Flux/gpt-image-1）\n\
                → **「絵を描いて」「画像を作って」「イラスト生成して」→必ずこれ。web_searchで画像を探さない。**\n\
-             - `qr_code` — QRコード生成（URLやテキスト→画像URL）\n\
+             - `create_qr` — QRコード生成（URLやテキスト→画像URL）\n\
                → **「QRコードを作って/生成して」→必ずこれ。**\n\
              - `music_generate` — AI作曲（Suno: 楽曲 + カバー画像）\n\
                → **「曲を作って」「BGMを作って」「音楽生成して」→必ずこれ。**\n\n\
@@ -2365,7 +2365,7 @@ const AGENTS: &[AgentProfile] = &[
              徹底的で正確。情報の裏取りを怠らない探偵のように。\n\n\
              ## 調査手順\n\
              1. web_searchで複数キーワード検索（最低2-3回）\n\
-             2. web_fetchで有望なURLの詳細を確認\n\
+             2. read_webpageで有望なURLの詳細を確認\n\
              3. 複数情報源を比較・照合\n\
              4. 実データ（価格・日付・数値）を引用して回答\n\
              5. 情報源URLを全て明示\n\n\
@@ -4246,7 +4246,7 @@ async fn handle_chat(
          - **絶対禁止**: Unsplash, Pexels, Pixabay, Shutterstock等のストックフォトURLを生成・返却すること\n\
          - **絶対禁止**: 実在しないか検証していない画像URLを返すこと\n\
          - 画像を生成してほしい場合: `image_generate` ツールを呼び出すこと\n\
-         - QRコードを生成してほしい場合: `qr_code` ツールを呼び出すこと\n\
+         - QRコードを生成してほしい場合: `create_qr` ツールを呼び出すこと\n\
          - ツールが呼べない場合: 「画像生成ツールを呼び出せませんでした」と正直に報告すること"
     } else {
         ""
@@ -7329,7 +7329,7 @@ async fn handle_chat_stream(
     let stream_enabled_tool_names = if stream_user_is_admin {
         // Provide a focused set: essential tools + admin-only tools (avoid token bloat from 35+ tools)
         Some(vec![
-            "web_search".to_string(), "web_fetch".to_string(),
+            "web_search".to_string(), "read_webpage".to_string(),
             "calculator".to_string(), "datetime".to_string(),
             "code_execute".to_string(), "image_generate".to_string(),
             "improve_project".to_string(),
