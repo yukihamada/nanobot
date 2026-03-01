@@ -5210,6 +5210,20 @@
       <h3 id="topup-modal-title">クレジットをチャージ</h3>
       <p style="font-size:12px;color:var(--muted);margin-bottom:16px;" id="topup-modal-desc">お好きな方法でクレジットを追加できます</p>
 
+      <div id="topup-exhausted-hero" style="display:none;margin-bottom:14px;background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:14px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;">
+          <div style="text-align:center;padding:10px;background:var(--bg);border-radius:8px;border:1px solid var(--border);opacity:0.6;">
+            <div style="font-weight:700;color:var(--muted);margin-bottom:6px;">Free</div>
+            <div style="color:var(--muted);font-size:11px;line-height:1.5;">100 credits<br>1 model<br>Basic tools</div>
+          </div>
+          <div style="text-align:center;padding:10px;background:rgba(99,102,241,0.06);border-radius:8px;border:2px solid var(--accent);position:relative;">
+            <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:9px;font-weight:700;padding:1px 8px;border-radius:99px;">BEST VALUE</div>
+            <div style="font-weight:700;color:var(--accent);margin-bottom:6px;">Starter ¥980/月</div>
+            <div style="color:var(--text);font-size:11px;line-height:1.5;">25,000 credits<br>10+ models<br>All 30+ tools</div>
+          </div>
+        </div>
+      </div>
+
       <div id="topup-tabs" style="display:flex;gap:4px;margin-bottom:14px;background:var(--bg);border-radius:10px;padding:3px;border:1px solid var(--border);">
         <button onclick="showTopupTab('plans')" id="topup-tab-plans" style="flex:1;padding:8px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;">プラン</button>
         <button onclick="showTopupTab('credits')" id="topup-tab-credits" style="flex:1;padding:8px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:var(--muted);">クレジット追加</button>
@@ -10411,10 +10425,10 @@
           if (d.credits_remaining !== undefined) {
             updateCredits(d.credits_remaining);
             if (d.credits_remaining === 0 && d.action !== 'upgrade') {
-              setTimeout(function() { showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 1200);
+              setTimeout(function() { showTopupModal((window._userPlan||'free')==='free'?'plans':'credits', 'exhausted'); }, 1200);
             }
           }
-          if (d.action === 'upgrade') { appendUpgradeButton(); setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 800); }
+          if (d.action === 'upgrade') { appendUpgradeButton(); setTimeout(function(){ showTopupModal((window._userPlan||'free')==='free'?'plans':'credits', 'exhausted'); }, 800); }
           else if (d.action === 'retry_scheduled') { scheduleAutoRetry(d.auto_retry_after || 300); }
           autoPlayTTS(d.response);
           setTimeout(() => appLoadConversations(), 1500);
@@ -10693,7 +10707,7 @@
               if (evt.credits_remaining !== undefined) {
                 updateCredits(evt.credits_remaining);
                 if (evt.credits_remaining === 0) {
-                  setTimeout(function() { showTopupModal((window._userPlan||'free')==='free'?'plans':'credits'); }, 1200);
+                  setTimeout(function() { showTopupModal((window._userPlan||'free')==='free'?'plans':'credits', 'exhausted'); }, 1200);
                 }
               }
               touchActivity();
@@ -10709,7 +10723,7 @@
                 appendUpgradeButton();
                 var plan = (window._userPlan || 'free').toLowerCase();
                 setTimeout(function() {
-                  showTopupModal(plan === 'free' ? 'plans' : 'credits');
+                  showTopupModal(plan === 'free' ? 'plans' : 'credits', 'exhausted');
                 }, 800);
               } else if (evt.action === 'retry_scheduled') {
                 var retrySecs = evt.auto_retry_after || 300;
@@ -13999,14 +14013,29 @@
     }
 
     // ---------------------------------------------------------------------------
-    function showTopupModal(tab) {
-      AB.track('upgrade_modal_open', { tab: tab || 'plans' });
+    function showTopupModal(tab, reason) {
+      AB.track('upgrade_modal_open', { tab: tab || 'plans', reason: reason || 'manual' });
       const l = document.documentElement.lang || 'ja';
-      document.getElementById('topup-modal-title').textContent = l === 'ja' ? 'クレジットをチャージ' : 'Top Up Credits';
-      document.getElementById('topup-modal-desc').textContent = l === 'ja' ? 'お好きな方法でクレジットを追加できます' : 'Add credits using your preferred payment method';
+      var plan = (window._userPlan || 'free').toLowerCase();
+      var titleEl = document.getElementById('topup-modal-title');
+      var descEl = document.getElementById('topup-modal-desc');
+      var exhaustedEl = document.getElementById('topup-exhausted-hero');
+
+      if (reason === 'exhausted') {
+        titleEl.textContent = l === 'ja' ? 'クレジットを使い切りました' : 'You\'ve run out of credits';
+        var msgCount = Math.floor(knownMsgCount / 2);
+        descEl.textContent = l === 'ja'
+          ? (msgCount > 0 ? msgCount + '回の会話を楽しみました！続けるにはプランを選択してください' : '続けるにはプランを選択してください')
+          : (msgCount > 0 ? 'You enjoyed ' + msgCount + ' conversations! Choose a plan to continue' : 'Choose a plan to continue');
+        if (exhaustedEl) exhaustedEl.style.display = 'block';
+      } else {
+        titleEl.textContent = l === 'ja' ? 'クレジットをチャージ' : 'Top Up Credits';
+        descEl.textContent = l === 'ja' ? 'お好きな方法でクレジットを追加できます' : 'Add credits using your preferred payment method';
+        if (exhaustedEl) exhaustedEl.style.display = 'none';
+      }
+
       var mp = document.getElementById('manage-plan-btn');
       if (mp) {
-        var plan = (window._userPlan || 'free').toLowerCase();
         mp.style.display = (plan !== 'free') ? 'flex' : 'none';
       }
       showTopupTab(tab || 'plans');
