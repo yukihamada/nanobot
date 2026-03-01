@@ -75,8 +75,8 @@ impl Plan {
     pub fn allowed_tools(&self) -> Option<&[&str]> {
         match self {
             Plan::Free => Some(&[
-                "web_search", "web_fetch", "calculator", "weather",
-                "translate", "wikipedia", "date_time", "qr_code", "news_search",
+                "web_search", "read_webpage", "calculator", "weather",
+                "translate", "wikipedia", "datetime", "create_qr", "news_search",
                 "image_generate",
             ]),
             _ => None, // Starter, Pro, Enterprise: all tools

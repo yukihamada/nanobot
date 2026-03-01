@@ -116,8 +116,8 @@ pub enum ApprovalResult {
 pub fn tool_permission(name: &str) -> ToolPermission {
     match name {
         // Auto-approve: read-only, safe tools
-        "web_search" | "web_fetch" | "calculator" | "weather" | "translate"
-        | "wikipedia" | "date_time" | "qr_code" | "news_search" | "csv_analysis"
+        "web_search" | "read_webpage" | "calculator" | "weather" | "translate"
+        | "wikipedia" | "datetime" | "create_qr" | "news_search" | "csv_analysis"
         | "browser" | "youtube_transcript" | "arxiv_search" | "tavily_search"
         | "file_read" | "file_list" | "git_status" | "git_diff"
         | "browser_screenshot" | "memory_log" | "knowledge_graph" => ToolPermission::AutoApprove,

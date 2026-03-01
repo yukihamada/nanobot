@@ -263,7 +263,7 @@ pub struct WebSearchTool;
 impl Tool for WebSearchTool {
     fn name(&self) -> &str { "web_search" }
     fn description(&self) -> &str {
-        "Search the web for current information. ALWAYS use this tool when the user asks about prices, products, recent events, news, comparisons, or anything that requires up-to-date data. Returns titles, URLs, and snippets from real web pages. You can then use web_fetch to read specific pages for more detail."
+        "Search the web for current information. ALWAYS use this tool when the user asks about prices, products, recent events, news, comparisons, or anything that requires up-to-date data. Returns titles, URLs, and snippets from real web pages. You can then use read_webpage to read specific pages for more detail."
     }
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
@@ -285,7 +285,7 @@ pub struct WebFetchTool;
 
 #[async_trait]
 impl Tool for WebFetchTool {
-    fn name(&self) -> &str { "web_fetch" }
+    fn name(&self) -> &str { "read_webpage" }
     fn description(&self) -> &str {
         "Fetch and read the content of a web page URL. Use this after web_search to get detailed content from specific pages (e.g., product pages for prices, articles for full text). Also use when the user provides a specific URL."
     }
@@ -435,9 +435,9 @@ pub struct QrCodeTool;
 
 #[async_trait]
 impl Tool for QrCodeTool {
-    fn name(&self) -> &str { "qr_code" }
+    fn name(&self) -> &str { "create_qr" }
     fn description(&self) -> &str {
-        "Generate a QR code image URL for any text or URL. MUST use this tool when the user asks to create/generate a QR code. Japanese: QRコードを作って/生成して → ALWAYS use qr_code tool directly, do not use web_search."
+        "Generate a QR code image URL for any text or URL. MUST use this tool when the user asks to create/generate a QR code. Japanese: QRコードを作って/生成して → ALWAYS use create_qr tool directly, do not use web_search."
     }
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
@@ -1309,7 +1309,7 @@ pub fn get_tool_definitions() -> Vec<serde_json::Value> {
             "type": "function",
             "function": {
                 "name": "web_search",
-                "description": "Search the web for current information. ALWAYS use this tool when the user asks about prices, products, recent events, news, comparisons, or anything that requires up-to-date data. Returns titles, URLs, and snippets from real web pages. You can then use web_fetch to read specific pages for more detail.",
+                "description": "Search the web for current information. ALWAYS use this tool when the user asks about prices, products, recent events, news, comparisons, or anything that requires up-to-date data. Returns titles, URLs, and snippets from real web pages. You can then use read_webpage to read specific pages for more detail.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -1325,7 +1325,7 @@ pub fn get_tool_definitions() -> Vec<serde_json::Value> {
         serde_json::json!({
             "type": "function",
             "function": {
-                "name": "web_fetch",
+                "name": "read_webpage",
                 "description": "Fetch and read the content of a web page URL. Use this after web_search to get detailed content from specific pages (e.g., product pages for prices, articles for full text). Also use when the user provides a specific URL.",
                 "parameters": {
                     "type": "object",
@@ -1385,7 +1385,7 @@ pub async fn execute_tool(name: &str, arguments: &HashMap<String, serde_json::Va
                 .unwrap_or("no query");
             execute_web_search(query).await
         }
-        "web_fetch" => {
+        "read_webpage" => {
             let url = arguments.get("url")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
@@ -1418,7 +1418,7 @@ pub async fn execute_tool(name: &str, arguments: &HashMap<String, serde_json::Va
             let tz = arguments.get("timezone").and_then(|v| v.as_str()).unwrap_or("UTC");
             execute_datetime(tz)
         }
-        "qr_code" => {
+        "create_qr" => {
             let data = arguments.get("data").and_then(|v| v.as_str()).unwrap_or("");
             let size = arguments.get("size").and_then(|v| v.as_i64()).unwrap_or(300);
             format!(
@@ -1817,7 +1817,7 @@ async fn direct_site_search(query: &str) -> String {
     }
 
     format!(
-        "Web search is limited. For pricing, try these URLs with web_fetch:\n\
+        "Web search is limited. For pricing, try these URLs with read_webpage:\n\
         - kakaku.com: https://search.kakaku.com/{enc}/\n\
         - Apple Store: https://www.apple.com/jp/shop/buy-iphone",
         enc = urlencoding::encode(&ascii_query)
@@ -5951,13 +5951,13 @@ mod tests {
             .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
             .collect();
         assert!(names.contains(&"web_search"));
-        assert!(names.contains(&"web_fetch"));
+        assert!(names.contains(&"read_webpage"));
         assert!(names.contains(&"calculator"));
         assert!(names.contains(&"weather"));
         assert!(names.contains(&"translate"));
         assert!(names.contains(&"wikipedia"));
         assert!(names.contains(&"datetime"));
-        assert!(names.contains(&"qr_code"));
+        assert!(names.contains(&"create_qr"));
         assert!(names.contains(&"news_search"));
         // Sandbox tools
         assert!(names.contains(&"code_execute"));

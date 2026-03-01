@@ -26,3 +26,27 @@
 - **問題**: `max_model_len=131072, max_num_seqs=4` → KVキャッシュ巨大 → 同時4リクエストで詰まる
 - **解決**: `max_model_len=8192, max_num_seqs=32` → 32同時推論可能
 - **教訓**: コンテキスト長と同時スループットはトレードオフ。多ユーザー環境では短めを選ぶ
+
+## pricing.rs case-sensitivity bug (2026-03-01)
+- **問題**: `lookup_model("nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese")` が失敗
+- **原因**: PRICING_TABLE エントリが混合ケースだが、比較がケースセンシティブだった
+- **修正**: `p.model.to_lowercase() == lower` に変更（PR: v138）
+- **影響**: Nemotron が誤課金（5/1k → 正しくは 1/1k）。123 credits → 28 credits に修正
+
+## Nemotron tool naming (2026-03-01)
+- **問題**: Nemotronが `web_fetch` と `qr_code` を呼ばず「利用できません」と返す
+- **原因**: これらの名前はNemotronの学習データで少ない → ツール名を知らない
+- **修正**: `web_fetch` → `read_webpage`, `qr_code` → `create_qr` に全ファイルでリネーム（v139）
+- **修正ファイル**: integrations.rs, auth.rs, tool_permissions.rs, saas_tools.rs, tool/web.rs, http.rs, web/index.html, web/skills.html, web/teai-index.html, tests/test_capabilities.sh
+- **注意**: ツール名変更時は8ファイル以上に影響する。grep で漏れを確認すること
+
+## 並行ビルドの危険性 (2026-03-01)
+- **問題**: 複数の `deploy-fast.sh` を同時に起動するとビルドが競合してKILL 9される
+- **教訓**: デプロイ前に `ps aux | grep deploy-fast` でアクティブなプロセスを確認
+- **対策**: 前のデプロイが完了してから次のデプロイを開始する
+
+## date_time vs datetime ツール名不一致 (2026-03-01)
+- **バグ**: `auth.rs:allowed_tools()` と `tool_permissions.rs` で `"date_time"` を使用
+- **正しい名前**: `integrations.rs` の実際のツール名は `"datetime"`（アンダースコアなし）
+- **修正**: 両ファイルで `"date_time"` → `"datetime"` に変更（v140）
+- **影響範囲**: Free プランの `allowed_tools()` 出力と auto-approve リスト

@@ -5,7 +5,7 @@
 /// List of tool names allowed in SaaS mode.
 pub const SAAS_ALLOWED_TOOLS: &[&str] = &[
     "web_search",
-    "web_fetch",
+    "read_webpage",
     "message",
     "github_read_file",
     "github_create_or_update_file",
@@ -37,7 +37,7 @@ mod tests {
     #[test]
     fn test_saas_tool_restrictions() {
         assert!(is_tool_allowed_in_saas("web_search"));
-        assert!(is_tool_allowed_in_saas("web_fetch"));
+        assert!(is_tool_allowed_in_saas("read_webpage"));
         assert!(is_tool_allowed_in_saas("message"));
         assert!(is_tool_allowed_in_saas("github_read_file"));
         assert!(is_tool_allowed_in_saas("github_create_or_update_file"));
