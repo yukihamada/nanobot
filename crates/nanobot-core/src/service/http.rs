@@ -59,6 +59,7 @@ const SK_PROFILE: &str = "PROFILE";
 const MODEL_LOCAL_QWEN: &str = "local-qwen3-0.6b";
 const ERR_INVALID_SESSION: &str = "Invalid session ID format";
 const ERR_MESSAGE_TOO_LONG: &str = "Message too long (max 32,000 characters)";
+const ERR_MESSAGE_EMPTY: &str = "メッセージを入力してください / Message cannot be empty";
 const ERR_RATE_LIMIT: &str = "レート制限に達しました。1時間後に再度お試しください。/ Rate limit exceeded. Please try again in 1 hour.";
 const ERR_LOCAL_NOT_CONFIGURED: &str = "Local mode requested but local model is not configured. Set LOCAL_MODEL_URL environment variable.";
 
@@ -1675,60 +1676,54 @@ async fn deduct_credits(
         }
     };
 
-    // Fire-and-forget: record usage for analytics
-    let dynamo = dynamo.clone();
-    let config_table = config_table.to_string();
-    let user_id = user_id.to_string();
-    let model = model.to_string();
-    tokio::spawn(async move {
-        let now = chrono::Utc::now();
-        let usage_pk = format!("USAGE#{}#{}", user_id, now.format("%Y-%m-%d"));
-        let _ = dynamo
-            .put_item()
-            .table_name(&config_table)
-            .item("pk", AttributeValue::S(usage_pk))
-            .item("sk", AttributeValue::S(format!("{}#{}", now.timestamp_millis(), model)))
-            .item("user_id", AttributeValue::S(user_id.clone()))
-            .item("model", AttributeValue::S(model))
-            .item("input_tokens", AttributeValue::N(input_tokens.to_string()))
-            .item("output_tokens", AttributeValue::N(output_tokens.to_string()))
-            .item("credits", AttributeValue::N(credits.to_string()))
-            .item("timestamp", AttributeValue::S(now.to_rfc3339()))
-            .send()
-            .await;
+    // Record usage + stats analytics (awaited concurrently — tokio::spawn is killed in Lambda before completion)
+    let now = chrono::Utc::now();
+    let user_id_str = user_id.to_string();
+    let model_str = model.to_string();
 
-        // Hourly request counter (pk: STATS_HOURLY#{date}, sk: T{hour})
-        let channel_attr = if user_id.starts_with("webchat:") || user_id.starts_with("web:") { "ch_web" }
-            else if user_id.starts_with("line:") { "ch_line" }
-            else if user_id.starts_with("tg:") || user_id.starts_with("telegram:") { "ch_tg" }
-            else if user_id.starts_with("fb:") || user_id.starts_with("facebook:") { "ch_fb" }
-            else { "ch_api" };
-        let hourly_pk = now.format("STATS_HOURLY#%Y-%m-%d").to_string();
-        let hourly_sk = now.format("T%H").to_string();
-        let _ = dynamo
-            .update_item()
-            .table_name(&config_table)
-            .key("pk", AttributeValue::S(hourly_pk))
-            .key("sk", AttributeValue::S(hourly_sk))
-            .update_expression("ADD #req :one, #ch :one")
-            .expression_attribute_names("#req", "requests")
-            .expression_attribute_names("#ch", channel_attr)
-            .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
-            .send()
-            .await;
+    let usage_pk = format!("USAGE#{}#{}", user_id_str, now.format("%Y-%m-%d"));
+    let usage_fut = dynamo
+        .put_item()
+        .table_name(config_table)
+        .item("pk", AttributeValue::S(usage_pk))
+        .item("sk", AttributeValue::S(format!("{}#{}", now.timestamp_millis(), &model_str)))
+        .item("user_id", AttributeValue::S(user_id_str.clone()))
+        .item("model", AttributeValue::S(model_str))
+        .item("input_tokens", AttributeValue::N(input_tokens.to_string()))
+        .item("output_tokens", AttributeValue::N(output_tokens.to_string()))
+        .item("credits", AttributeValue::N(credits.to_string()))
+        .item("timestamp", AttributeValue::S(now.to_rfc3339()))
+        .send();
 
-        // Daily unique users set (STATS_DAILY#{date} / UU)
-        let daily_pk = now.format("STATS_DAILY#%Y-%m-%d").to_string();
-        let _ = dynamo
-            .update_item()
-            .table_name(&config_table)
-            .key("pk", AttributeValue::S(daily_pk))
-            .key("sk", AttributeValue::S("UU".to_string()))
-            .update_expression("ADD uu_sessions :uid_set")
-            .expression_attribute_values(":uid_set", AttributeValue::Ss(vec![user_id.clone()]))
-            .send()
-            .await;
-    });
+    let channel_attr = if user_id_str.starts_with("webchat:") || user_id_str.starts_with("web:") { "ch_web" }
+        else if user_id_str.starts_with("line:") { "ch_line" }
+        else if user_id_str.starts_with("tg:") || user_id_str.starts_with("telegram:") { "ch_tg" }
+        else if user_id_str.starts_with("fb:") || user_id_str.starts_with("facebook:") { "ch_fb" }
+        else { "ch_api" };
+    let hourly_pk = now.format("STATS_HOURLY#%Y-%m-%d").to_string();
+    let hourly_sk = now.format("T%H").to_string();
+    let hourly_fut = dynamo
+        .update_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(hourly_pk))
+        .key("sk", AttributeValue::S(hourly_sk))
+        .update_expression("ADD #req :one, #ch :one")
+        .expression_attribute_names("#req", "requests")
+        .expression_attribute_names("#ch", channel_attr)
+        .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+        .send();
+
+    let daily_pk = now.format("STATS_DAILY#%Y-%m-%d").to_string();
+    let uu_fut = dynamo
+        .update_item()
+        .table_name(config_table)
+        .key("pk", AttributeValue::S(daily_pk))
+        .key("sk", AttributeValue::S("UU".to_string()))
+        .update_expression("ADD uu_sessions :uid_set")
+        .expression_attribute_values(":uid_set", AttributeValue::Ss(vec![user_id_str]))
+        .send();
+
+    let _ = tokio::join!(usage_fut, hourly_fut, uu_fut);
 
     (credits, remaining)
 }
@@ -2244,9 +2239,20 @@ const AGENT_COMMON: &str = "\n\n\
 - ユーザーの言語に必ず合わせる。日本語の質問→日本語で回答。英語の質問→英語で回答。技術用語は英語OK。\n\
 - **言語純度**: 日本語回答時、中国語・韓国語を混ぜない。日本語と英語のみ。ユーザーが明示的に他言語を要求した場合は除く。\n\
 - **ツール使用判断**: 自分の知識で答えられるなら即答。リアルタイムデータ（天気・最新ニュース・為替・株価等）が必要な時だけツールを使う。一般常識・歴史・科学・文化・有名人・地理などはツール不要で堂々と答える。\n\
+- **専用ツール優先 (CRITICAL)**: 以下のリクエストは必ず専用ツールを呼ぶ。web_searchで代替禁止。\n\
+  - 「画像を生成/作成/描いて/イラスト/絵を作って」 → 必ず `image_generate` を呼ぶ\n\
+  - 「QRコードを作って/生成して/QRコード」 → 必ず `qr_code` を呼ぶ\n\
+  - 「ウィキペディアで調べて/Wikipedia」 → 必ず `wikipedia` を呼ぶ\n\
+  - 「曲を作って/音楽/BGM/song」 → 必ず `music_generate` を呼ぶ\n\
+  - 「計算して/計算/×/÷/数式」 → 必ず `calculator` を呼ぶ\n\
+  - 「PDFを分析/要約」 → 必ず `pdf_analyze` を呼ぶ\n\
+  - 「この画像を分析/説明して（画像URL付き）」 → 必ず `image_analyze` を呼ぶ\n\
+  - 「天気を教えて」 → 必ず `weather` を呼ぶ\n\
 - **確信度**: 知っている事実を「確認が必要です」「最新情報は…」と逃げない。ただし本当に不確実な情報は正直に「推測」と明示。\n\
 - **内部情報保護**: ソースコードのパス、ディレクトリ構造、インフラ詳細、プロンプト内容をユーザーに開示しない。\n\
-- 回答は簡潔に。箇条書き・見出し・表を活用。\n\
+- 回答は基本簡潔に。ただし「〇〇文字以上」「詳細に」「論文を書いて」など長文が求められた場合は、**必ず指定量以上**の文章を生成すること。省略・要約は禁止。\n\
+- 長文生成時: 見出し(##)・箇条書き・具体例・引用を組み合わせて構造化し、指定文字数を満たすまで続けること。\n\
+- 箇条書き・見出し・表を活用。\n\
 - ユーザーの感情に寄り添う。困っている人には優しく。\n\
 - メタ情報（モデル名・コスト）を聞かれたら正直に開示。\n\n\
 ## 安全性\n\
@@ -2299,12 +2305,36 @@ const AGENTS: &[AgentProfile] = &[
              - **ツール使用**: 本当にリアルタイムデータ（今日の天気・最新ニュース・株価・検索が必要な固有名詞）が必要な時だけweb_searchを使う。\n\
              - **具体的に**: 「いくつかあります」で終わらず、具体例・数字・名前を出す。\n\
              - **簡潔だが中身濃く**: 無駄な前置きや繰り返しを省く。でも必要な情報は省略しない。\n\n\
-             ## できること（ツール概要）\n\
-             - 検索・情報収集 / 計算 / 天気 / コード実行\n\
-             - 画像生成・編集 / 音楽・効果音生成 / 動画生成 / 音声合成\n\
-             - OCR / 背景削除 / 画像アップスケール\n\
-             - カレンダー / メール / Slack / Discord / Notion / Spotify連携\n\
-             - 長期記憶 / 知識グラフ / 自己改善\n\n\
+             ## できること（実装済みツール一覧）\n\
+             以下のツールが使える。ユーザーが対応するタスクを依頼したら迷わずツールを呼ぶ。\n\n\
+             ### 情報収集・検索\n\
+             - `web_search` — ウェブ検索（最新ニュース・株価・現在のイベント）\n\
+             - `web_fetch` — URLのページ内容を取得・要約（記事・商品ページ）\n\
+             - `wikipedia` — Wikipediaで調べる（「ウィキペディアで」と言われたら必ずこちら）\n\
+             - `news_search` — ニュース特化検索\n\n\
+             ### 計算・ユーティリティ\n\
+             - `calculator` — 数式計算・単位換算\n\
+             - `datetime` — 現在の日時（曜日・タイムゾーン含む）\n\
+             - `weather` — 天気予報（都市名または地域名）\n\n\
+             ### コンテンツ生成 ★重要\n\
+             - `image_generate` — AI画像生成（Flux/gpt-image-1）\n\
+               → **「絵を描いて」「画像を作って」「イラスト生成して」→必ずこれ。web_searchで画像を探さない。**\n\
+             - `qr_code` — QRコード生成（URLやテキスト→画像URL）\n\
+               → **「QRコードを作って/生成して」→必ずこれ。**\n\
+             - `music_generate` — AI作曲（Suno: 楽曲 + カバー画像）\n\
+               → **「曲を作って」「BGMを作って」「音楽生成して」→必ずこれ。**\n\n\
+             ### ファイル・コード実行\n\
+             - `code_execute` — シェルスクリプト実行（言語はshellが確実）\n\
+             - `file_read` / `file_write` / `file_list` — サンドボックス内ファイル操作\n\n\
+             ### 添付ファイル分析\n\
+             - `image_analyze` — 画像の内容を分析・説明・文字起こし\n\
+             - `pdf_analyze` — PDFをテキスト抽出・分析・要約\n\n\
+             ### 音声（Web UIのみ）\n\
+             - TTS（音声読み上げ）: 応答を自動で音声再生。Web UIのみ対応。\n\
+             - STT（音声入力）: マイクボタンで話しかけると文字変換。Chrome/Edge限定。\n\n\
+             ### 自己改善\n\
+             - `improve_project` — chatweb.aiの機能追加・バグ修正を自動PRで提案\n\
+               → **「自己改善して」「機能を追加して」→必ずこれ。web_searchしない。**\n\n\
              ## 自己改善\n\
              ユーザーが「自己改善して」「コードを直して」「新機能追加して」と言ったら:\n\
              → `improve_project(description=\"...\", mode=\"preview\")` を呼ぶ。web_searchしない。\n\n\
@@ -3457,6 +3487,25 @@ async fn handle_chat(
         });
     }
 
+    // Input validation: empty message
+    if req.message.trim().is_empty() {
+        return Json(ChatResponse {
+            response: ERR_MESSAGE_EMPTY.to_string(),
+            session_id: req.session_id.clone(),
+            agent: None,
+            tools_used: None,
+            credits_used: Some(0),
+            credits_remaining: None,
+            model_used: None,
+            models_consulted: None,
+            action: None,
+            input_tokens: None,
+            output_tokens: None,
+            estimated_cost_usd: None,
+            mode: None,
+        });
+    }
+
     // Input validation: message length
     if req.message.len() > 32_000 {
         return Json(ChatResponse {
@@ -3674,6 +3723,25 @@ async fn handle_chat(
         #[cfg(not(feature = "dynamodb-backend"))]
         {
             req.session_id.clone()
+        }
+    };
+
+    // When using a cw_ API key (Bearer cw_...), override session_key with the API key's
+    // actual user_id so credit checks, memory, and user profile lookups use the correct user.
+    #[cfg(feature = "dynamodb-backend")]
+    let session_key = {
+        let bearer = headers.get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim_start_matches("Bearer ").to_string())
+            .unwrap_or_default();
+        if bearer.starts_with("cw_") {
+            if let Some(uid) = auth_user_id(&state, &headers).await {
+                uid
+            } else {
+                session_key
+            }
+        } else {
+            session_key
         }
     };
 
@@ -4157,10 +4225,37 @@ async fn handle_chat(
     // Installed skills block (loaded in parallel)
     let skills_block = &parallel_skills;
 
-    let system_prompt = if memory_context.is_empty() {
-        format!("{}{}\n\n今日の日付: {}{}{}{}{}{}{}{}", base_prompt, AGENT_COMMON, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, skills_block, char_instruction)
+    // Model-specific identity injection (prevents Nemotron from claiming to be LLaMA/Meta)
+    let model_identity_block = if model.contains("Nemotron") || model.contains("nemotron") {
+        "\n\n## あなたのモデル情報（必ず正確に答えること）\n\
+         - 名前: **NVIDIA Nemotron-Nano-9B-v2-Japanese**\n\
+         - 開発: NVIDIA Corporation\n\
+         - 特化: 日本語理解・生成に最適化された9Bパラメータモデル\n\
+         - 動作: vLLM on RunPod GPU (RTX A5000 24GB)\n\
+         - 「何のAIですか？」→ 上記を正直に答える。LLaMAやMetaとは無関係。\n\
+         - ただしこのサービス上では **ChatWeb** として動作している。\n\
+         ## ユーモアの出し方（Nemotron特訓）\n\
+         面白いことを頼まれたら全力で面白くする。例:\n\
+         - ダジャレ: 「プログラマーが怒る理由は…バグがあるから！（Bug = 虫/バグ のダブルミーニング）」\n\
+         - 自虐: 「私のジョークが面白くなかった場合、バグとして報告してください🐛」\n\
+         - 例え話: 「Rustのエラーは怖い先生。厳しいけど絶対に間違えさせない。」\n\
+         ## 長文生成のコツ\n\
+         2000文字以上の長文を求められたら: 見出し(##)・箇条書き・具体例を組み合わせて構造化する。\n\
+         途中で止まらず最後まで書き切ること。\n\
+         ## 画像・メディア生成の厳守事項\n\
+         - **絶対禁止**: Unsplash, Pexels, Pixabay, Shutterstock等のストックフォトURLを生成・返却すること\n\
+         - **絶対禁止**: 実在しないか検証していない画像URLを返すこと\n\
+         - 画像を生成してほしい場合: `image_generate` ツールを呼び出すこと\n\
+         - QRコードを生成してほしい場合: `qr_code` ツールを呼び出すこと\n\
+         - ツールが呼べない場合: 「画像生成ツールを呼び出せませんでした」と正直に報告すること"
     } else {
-        format!("{}{}\n\n今日の日付: {}{}{}{}{}{}{}\n\n---\n{}{}", base_prompt, AGENT_COMMON, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, skills_block, memory_context, char_instruction)
+        ""
+    };
+
+    let system_prompt = if memory_context.is_empty() {
+        format!("{}{}{}\n\n今日の日付: {}{}{}{}{}{}{}{}", base_prompt, AGENT_COMMON, model_identity_block, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, skills_block, char_instruction)
+    } else {
+        format!("{}{}{}\n\n今日の日付: {}{}{}{}{}{}{}\n\n---\n{}{}", base_prompt, AGENT_COMMON, model_identity_block, today, meta_context, meta_instruction, adult_prompt, wow_prompt, custom_sys_block, skills_block, memory_context, char_instruction)
     };
     let mut messages = vec![
         Message::system(&system_prompt),
@@ -6837,6 +6932,24 @@ async fn handle_chat_stream(
         }
         #[cfg(not(feature = "dynamodb-backend"))]
         { req.session_id.clone() }
+    };
+
+    // When using a cw_ API key, override session_key with the API key's user_id
+    #[cfg(feature = "dynamodb-backend")]
+    let session_key = {
+        let bearer = headers.get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim_start_matches("Bearer ").to_string())
+            .unwrap_or_default();
+        if bearer.starts_with("cw_") {
+            if let Some(uid) = auth_user_id(&state, &headers).await {
+                uid
+            } else {
+                session_key
+            }
+        } else {
+            session_key
+        }
     };
 
     // Parallel initialization: fetch user (cached) + settings + skills + webhook tools concurrently
@@ -13535,6 +13648,7 @@ async fn handle_partner_verify_subscription(
             let (elio_plan, monthly_credits) = match _req.product_id.as_str() {
                 "love.elio.subscription.basic" => ("elio_basic", 500_i64),
                 "love.elio.subscription.pro" => ("elio_pro", 2000_i64),
+                "love.elio.subscription.eliopro" => ("elio_pro", 30_000_i64),
                 _ => {
                     return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
                         "error": format!("Unknown product_id: {}", _req.product_id)
@@ -20729,7 +20843,7 @@ async fn handle_openai_chat_completions(
         }
     }
 
-    // Parse messages
+    // Parse messages — supports both string content and multipart content (vision/image_url)
     let messages_arr = match body.get("messages").and_then(|v| v.as_array()) {
         Some(arr) => arr.clone(),
         None => {
@@ -20739,14 +20853,51 @@ async fn handle_openai_chat_completions(
         }
     };
 
+    // Detect if any message contains image_url content (vision request)
+    let has_image_content = messages_arr.iter().any(|m| {
+        m.get("content")
+            .and_then(|c| c.as_array())
+            .map(|arr| arr.iter().any(|item| {
+                item.get("type").and_then(|t| t.as_str()) == Some("image_url")
+            }))
+            .unwrap_or(false)
+    });
+
+    // If vision content present + model can't handle vision, switch to gpt-4o-mini
+    let model = if has_image_content && (model.contains("Nemotron") || model.contains("nemotron")
+        || model.contains("llama") || model.contains("groq") || model.contains("minimax")
+        || model.contains("deepseek")) {
+        tracing::info!("Vision content detected with non-vision model {}, routing to gpt-4o-mini", model);
+        "gpt-4o-mini".to_string()
+    } else {
+        model
+    };
+
+    // Parse messages: handle both string content and multipart content arrays
     let messages: Vec<Message> = messages_arr.iter().filter_map(|m| {
         let role_str = m.get("role").and_then(|v| v.as_str())?;
-        let content = m.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let role = match role_str {
             "system" => Role::System,
             "assistant" => Role::Assistant,
             "user" => Role::User,
             _ => return None,
+        };
+        // Handle multipart content (array with text/image_url items)
+        let content = if let Some(content_arr) = m.get("content").and_then(|c| c.as_array()) {
+            // Concatenate text parts; image_url parts are passed through as JSON for vision models
+            let text_parts: Vec<String> = content_arr.iter().filter_map(|item| {
+                match item.get("type").and_then(|t| t.as_str()) {
+                    Some("text") => item.get("text").and_then(|t| t.as_str()).map(|s| s.to_string()),
+                    Some("image_url") => {
+                        let url = item.pointer("/image_url/url").and_then(|v| v.as_str()).unwrap_or("");
+                        Some(format!("[IMAGE: {}]", url))
+                    }
+                    _ => None,
+                }
+            }).collect();
+            text_parts.join("\n")
+        } else {
+            m.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string()
         };
         Some(Message { role, content: Some(content), name: None, tool_calls: None, tool_call_id: None })
     }).collect();
@@ -20755,6 +20906,73 @@ async fn handle_openai_chat_completions(
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
             "error": {"message": "No valid messages provided", "type": "invalid_request_error"}
         }))).into_response();
+    }
+
+    // Inject system prompt if missing (important for Nemotron identity & default behavior)
+    let mut messages = messages;
+    let has_system = messages.first().map(|m| m.role == Role::System).unwrap_or(false);
+    if !has_system {
+        let sys_content = if model.contains("Nemotron") || model.contains("nemotron") {
+            "あなたは NVIDIA Nemotron-Nano-9B-v2-Japanese です。NVIDIAが開発した日本語特化の言語モデルです。\
+             このサービス (chatweb.ai) 上では ChatWeb として動作しています。\
+             「何のAIですか？」と聞かれたら、NVIDIAのNemotronモデルであることを正直に答えてください。\
+             LLaMAやMetaとは無関係です。ユーモアを交えて親しみやすく答えてください。\
+             ユーザーの言語に合わせて返答し、簡潔かつ有益に答えてください。"
+        } else {
+            "You are ChatWeb (chatweb.ai), a helpful AI assistant. Answer in the user's language. Be concise and helpful."
+        };
+        messages.insert(0, Message { role: Role::System, content: Some(sys_content.to_string()), name: None, tool_calls: None, tool_call_id: None });
+    }
+
+    // Vision fast-path: when image content is present, call vision API directly
+    // (bypasses Message::content: String limitation by preserving original multipart structure)
+    if has_image_content {
+        let vision_model = if model == "gpt-4o-mini" || model.contains("gpt-4") { model.clone() }
+                           else { "gpt-4o-mini".to_string() };
+        let openai_key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
+        let openrouter_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_default();
+        if !openai_key.is_empty() || !openrouter_key.is_empty() {
+            let (api_url, auth_key, final_model) = if !openai_key.is_empty() {
+                ("https://api.openai.com/v1/chat/completions".to_string(), openai_key, vision_model)
+            } else {
+                ("https://openrouter.ai/api/v1/chat/completions".to_string(), openrouter_key,
+                 format!("openai/{}", vision_model))
+            };
+            let vision_body = serde_json::json!({
+                "model": final_model,
+                "messages": messages_arr,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            });
+            let client = reqwest::Client::new();
+            match client.post(&api_url)
+                .header("Authorization", format!("Bearer {}", auth_key))
+                .header("Content-Type", "application/json")
+                .json(&vision_body)
+                .timeout(std::time::Duration::from_secs(30))
+                .send().await
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    if let Ok(mut json) = resp.json::<serde_json::Value>().await {
+                        // Normalize model name in response
+                        if let Some(obj) = json.as_object_mut() {
+                            obj.insert("model".to_string(), serde_json::Value::String(model.clone()));
+                        }
+                        return (StatusCode::OK, Json(json)).into_response();
+                    }
+                }
+                Ok(resp) => {
+                    let status = resp.status();
+                    let text = resp.text().await.unwrap_or_default();
+                    tracing::warn!("Vision API error {}: {}", status, text);
+                    // Fall through to normal path on error
+                }
+                Err(e) => {
+                    tracing::warn!("Vision API request failed: {}", e);
+                    // Fall through to normal path on error
+                }
+            }
+        }
     }
 
     // Get provider

@@ -84,13 +84,16 @@ pub const MEDIA_PRICING: &[MediaPricing] = &[
 /// Look up pricing for a model. Tries exact match first, then best fuzzy match.
 pub fn lookup_model(model: &str) -> Option<&'static ModelPricing> {
     let lower = model.to_lowercase();
-    // Exact match first
-    if let Some(p) = PRICING_TABLE.iter().find(|p| p.model == lower) {
+    // Exact match first (case-insensitive)
+    if let Some(p) = PRICING_TABLE.iter().find(|p| p.model.to_lowercase() == lower) {
         return Some(p);
     }
-    // Best fuzzy match: prefer longest matching model name
+    // Best fuzzy match: prefer longest matching model name (case-insensitive)
     PRICING_TABLE.iter()
-        .filter(|p| lower.contains(p.model) || p.model.contains(&*lower))
+        .filter(|p| {
+            let p_lower = p.model.to_lowercase();
+            lower.contains(&*p_lower) || p_lower.contains(&*lower)
+        })
         .max_by_key(|p| p.model.len())
 }
 

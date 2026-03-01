@@ -87,16 +87,10 @@ impl OpenAiCompatProvider {
         if available > 50 { Some(available.saturating_sub(10)) } else { None }
     }
 
-    /// Cap max_tokens to a safe value for RunPod vLLM pods (max_model_len=8192).
-    /// Reserve ~5120 tokens for input, leaving 3072 for output.
-    fn safe_max_tokens(&self, max_tokens: u32) -> u32 {
-        if self.is_runpod() {
-            // Active pod: max_model_len=8192. Reserve 4096 tokens for input (system+history).
-            // Output cap: 8192 - 4096 = 4096 tokens max.
-            max_tokens.min(4096)
-        } else {
-            max_tokens
-        }
+    /// For RunPod vLLM pods, omit max_tokens entirely — vLLM auto-calculates remaining space.
+    /// For other providers, return the requested value as-is.
+    fn runpod_max_tokens(&self, max_tokens: u32) -> Option<u32> {
+        if self.is_runpod() { None } else { Some(max_tokens) }
     }
 
     pub fn new(api_key: String, api_base: Option<String>, default_model: String) -> Self {
@@ -203,9 +197,10 @@ impl LlmProvider for OpenAiCompatProvider {
         let mut body = json!({
             "model": model_name,
             "messages": msgs,
-            "max_tokens": self.safe_max_tokens(max_tokens),
             "temperature": temperature,
         });
+        // RunPod: omit max_tokens — vLLM auto-calculates remaining space (avoids 400 on long contexts)
+        if let Some(mt) = self.runpod_max_tokens(max_tokens) { body["max_tokens"] = json!(mt); }
 
         // RunPod/Nemotron: disable thinking mode — saves 200-800 tokens (~6-20s latency)
         // vLLM supports chat_template_kwargs to toggle thinking per-request.
@@ -352,9 +347,9 @@ impl LlmProvider for OpenAiCompatProvider {
         let mut body = json!({
             "model": model_name,
             "messages": msgs,
-            "max_tokens": self.safe_max_tokens(max_tokens),
             "temperature": temperature,
         });
+        if let Some(mt) = self.runpod_max_tokens(max_tokens) { body["max_tokens"] = json!(mt); }
 
         // RunPod/Nemotron: disable thinking mode — saves 200-800 tokens (~6-20s latency)
         if self.is_runpod() {
@@ -500,9 +495,10 @@ impl LlmProvider for OpenAiCompatProvider {
 
         let mut body = json!({
             "model": model_name, "messages": msgs,
-            "max_tokens": self.safe_max_tokens(max_tokens), "temperature": temperature,
+            "temperature": temperature,
             "stream": true, "stream_options": {"include_usage": true},
         });
+        if let Some(mt) = self.runpod_max_tokens(max_tokens) { body["max_tokens"] = json!(mt); }
         // RunPod/Nemotron: disable thinking mode — saves 200-800 tokens (~6-20s latency)
         if self.is_runpod() {
             body["chat_template_kwargs"] = json!({"enable_thinking": false});
