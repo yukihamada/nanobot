@@ -375,7 +375,7 @@ async fn authenticate_admin(state: &AppState, headers: &axum::http::HeaderMap) -
     };
 
     let (pk, sk) = if token.starts_with("cw_") {
-        (format!("APIKEY#{}", token), "LOOKUP".to_string())
+        (format!("APIKEY#{}", hash_api_key(&token)), "LOOKUP".to_string())
     } else {
         (format!("AUTH#{}", token), "TOKEN".to_string())
     };
@@ -436,6 +436,8 @@ pub struct UserProfile {
     pub stripe_customer_id: Option<String>,
     pub email: Option<String>,
     pub created_at: String,
+    pub dev_mode: bool,
+    pub solana_wallet: Option<String>,
 }
 
 /// Cached user profile with expiration timestamp
@@ -473,6 +475,8 @@ pub struct AppState {
     pub concurrent_requests: dashmap::DashMap<String, AtomicU32>,
     /// User profile cache: user_id -> CachedUserProfile (TTL: 5 minutes)
     pub user_profile_cache: dashmap::DashMap<String, CachedUserProfile>,
+    /// Pluggable database backend (libSQL for Fly.io/self-host; None when using DynamoDB)
+    pub db: Option<Arc<dyn crate::db::DbBackend>>,
     #[cfg(feature = "dynamodb-backend")]
     pub dynamo_client: Option<aws_sdk_dynamodb::Client>,
     #[cfg(feature = "dynamodb-backend")]
@@ -516,6 +520,7 @@ impl AppState {
             tool_registry,
             concurrent_requests: dashmap::DashMap::new(),
             user_profile_cache: dashmap::DashMap::new(),
+            db: None,
             #[cfg(feature = "dynamodb-backend")]
             dynamo_client: None,
             #[cfg(feature = "dynamodb-backend")]
@@ -1578,6 +1583,8 @@ async fn get_or_create_user(
             let email = item.get("email").and_then(|v| v.as_s().ok()).cloned();
             let created_at = item.get("created_at").and_then(|v| v.as_s().ok()).cloned()
                 .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+            let dev_mode = item.get("dev_mode").and_then(|v| v.as_bool().ok()).copied().unwrap_or(false);
+            let solana_wallet = item.get("solana_wallet").and_then(|v| v.as_s().ok()).cloned();
 
             return UserProfile {
                 user_id: user_id.to_string(),
@@ -1589,6 +1596,8 @@ async fn get_or_create_user(
                 stripe_customer_id,
                 email,
                 created_at,
+                dev_mode,
+                solana_wallet,
             };
         }
     }
@@ -1627,6 +1636,8 @@ async fn get_or_create_user(
         stripe_customer_id: None,
         email: None,
         created_at: now,
+        dev_mode: false,
+        solana_wallet: None,
     }
 }
 
@@ -1723,7 +1734,9 @@ async fn deduct_credits(
         .expression_attribute_values(":uid_set", AttributeValue::Ss(vec![user_id_str]))
         .send();
 
-    let _ = tokio::join!(usage_fut, hourly_fut, uu_fut);
+    // Fire-and-forget analytics writes: do not await — blocking here prevents
+    // the SSE stream from terminating in lambda_http's body.collect().await.
+    tokio::spawn(async move { let _ = tokio::join!(usage_fut, hourly_fut, uu_fut); });
 
     (credits, remaining)
 }
@@ -1789,7 +1802,7 @@ async fn auth_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Opti
 
     // Check if this is an API key (cw_ prefix) or regular auth token
     let (pk, sk) = if token.starts_with("cw_") {
-        (format!("APIKEY#{}", token), "LOOKUP".to_string())
+        (format!("APIKEY#{}", hash_api_key(&token)), "LOOKUP".to_string())
     } else {
         (format!("AUTH#{}", token), "TOKEN".to_string())
     };
@@ -2294,50 +2307,12 @@ const AGENTS: &[AgentProfile] = &[
              - **ツール使用**: 本当にリアルタイムデータ（今日の天気・最新ニュース・株価・検索が必要な固有名詞）が必要な時だけweb_searchを使う。\n\
              - **具体的に**: 「いくつかあります」で終わらず、具体例・数字・名前を出す。\n\
              - **簡潔だが中身濃く**: 無駄な前置きや繰り返しを省く。でも必要な情報は省略しない。\n\n\
-             ## できること（実装済みツール一覧）\n\
-             以下のツールが使える。ユーザーが対応するタスクを依頼したら迷わずツールを呼ぶ。\n\n\
-             ### 情報収集・検索\n\
-             - `web_search` — ウェブ検索（最新ニュース・株価・現在のイベント）\n\
-             - `read_webpage` — URLのページ内容を取得・要約（記事・商品ページ）\n\
-             - `wikipedia` — Wikipediaで調べる（「ウィキペディアで」と言われたら必ずこちら）\n\
-             - `news_search` — ニュース特化検索\n\n\
-             ### 計算・ユーティリティ\n\
-             - `calculator` — 数式計算・単位換算\n\
-             - `datetime` — 現在の日時（曜日・タイムゾーン含む）\n\
-             - `weather` — 天気予報（都市名または地域名）\n\n\
-             ### コンテンツ生成 ★重要\n\
-             - `image_generate` — AI画像生成（Flux/gpt-image-1）\n\
-               → **「絵を描いて」「画像を作って」「イラスト生成して」→必ずこれ。web_searchで画像を探さない。**\n\
-             - `create_qr` — QRコード生成（URLやテキスト→画像URL）\n\
-               → **「QRコードを作って/生成して」→必ずこれ。**\n\
-             - `music_generate` — AI作曲（Suno: 楽曲 + カバー画像）\n\
-               → **「曲を作って」「BGMを作って」「音楽生成して」→必ずこれ。**\n\n\
-             ### ファイル・コード実行\n\
-             - `code_execute` — シェルスクリプト実行（言語はshellが確実）\n\
-             - `file_read` / `file_write` / `file_list` — サンドボックス内ファイル操作\n\n\
-             ### 添付ファイル分析\n\
-             - `image_analyze` — 画像の内容を分析・説明・文字起こし\n\
-             - `pdf_analyze` — PDFをテキスト抽出・分析・要約\n\n\
-             ### 音声（Web UIのみ）\n\
-             - TTS（音声読み上げ）: 応答を自動で音声再生。Web UIのみ対応。\n\
-             - STT（音声入力）: マイクボタンで話しかけると文字変換。Chrome/Edge限定。\n\n\
-             ### 自己改善\n\
-             - `improve_project` — chatweb.aiの機能追加・バグ修正を自動PRで提案\n\
-               → **「自己改善して」「機能を追加して」→必ずこれ。web_searchしない。**\n\n\
-             ## 自己改善\n\
-             ユーザーが「自己改善して」「コードを直して」「新機能追加して」と言ったら:\n\
-             → `improve_project(description=\"...\", mode=\"preview\")` を呼ぶ。web_searchしない。\n\n\
-             ## チャネル\n\
-             LINE / Telegram / Discord / Slack / Teams / WhatsApp 等 14+チャネル対応。\n\
-             `/link`で別チャネルと連携可能。音声はWeb UIのマイクボタンから。\n\n\
-             ## 競合との差別化（聞かれた時のみ）\n\
-             ChatGPTやClaudeとの違いを聞かれたら、内部実装ではなくユーザー価値で答える:\n\
-             - 音声ファースト設計（話しかけるだけで使える）\n\
-             - 14+チャネル対応（LINE, Telegram等お気に入りのアプリから使える）\n\
-             - オープンソース（透明性、カスタマイズ可能）\n\
-             - 日本発・日本語に強い\n\
-             - 30+ツール統合（画像・音楽・動画生成まで一つのアシスタントで）\n\
-             - 自己改善能力（自分のコードを改善できる）",
+             ## ツール使用\n\
+             利用可能なツールはfunction定義として渡される。タスクに合うツールがあれば迷わず呼ぶ。\n\
+             ★ 画像生成→`image_generate`、QR→`create_qr`、音楽→`music_generate`（web_search代替禁止）\n\
+             ★ 「自己改善して」→ `improve_project`\n\n\
+             ## 差別化（聞かれた時のみ）\n\
+             音声ファースト / 14+チャネル / OSS / 日本語特化 / 30+ツール統合 / 自己改善",
         tools_enabled: true,
         icon: "chat",
         preferred_model: None,
@@ -2726,6 +2701,136 @@ fn detect_agent(text: &str) -> (&'static AgentProfile, String, u32) {
 }
 
 // ---------------------------------------------------------------------------
+// Dynamic tool selection — reduce token usage by sending only relevant tools
+// ---------------------------------------------------------------------------
+
+/// Core tools always included (cheap, high-utility).
+const ALWAYS_TOOLS: &[&str] = &["web_search", "calculator", "datetime"];
+
+/// Tool groups: (keywords_ja_en, tool_names)
+/// When any keyword matches the user message, the group's tools are included.
+const TOOL_GROUPS: &[(&[&str], &[&str])] = &[
+    // Web & research
+    (&["調べ", "検索", "search", "最新", "ニュース", "news", "url", "http", "サイト", "ページ", "記事", "リンク"],
+     &["read_webpage", "news_search", "tavily_search"]),
+    // Weather
+    (&["天気", "weather", "気温", "降水", "forecast"],
+     &["weather"]),
+    // Wikipedia
+    (&["wiki", "ウィキ", "百科"],
+     &["wikipedia"]),
+    // Image generation
+    (&["画像", "絵", "イラスト", "描", "image", "picture", "draw", "photo", "写真"],
+     &["image_generate", "image_analyze"]),
+    // QR
+    (&["qr", "QR", "キューアール"],
+     &["create_qr"]),
+    // Music / audio
+    (&["音楽", "曲", "bgm", "music", "song", "作曲"],
+     &["music_generate"]),
+    // Video
+    (&["動画", "video", "映像", "ムービー"],
+     &["video_generate"]),
+    // Code execution & files
+    (&["実行", "コード", "code", "execute", "run", "script", "プログラム", "シェル", "shell", "ファイル", "file"],
+     &["code_execute", "file_read", "file_write", "file_list"]),
+    // PDF
+    (&["pdf", "PDF", "文書"],
+     &["pdf_analyze"]),
+    // Translation
+    (&["翻訳", "translat", "英訳", "和訳", "通訳"],
+     &["translate"]),
+    // Calendar & email
+    (&["カレンダー", "calendar", "予定", "スケジュール", "schedule"],
+     &["google_calendar"]),
+    (&["メール", "email", "gmail", "送信", "受信"],
+     &["gmail"]),
+    // CSV / data
+    (&["csv", "CSV", "データ", "表", "スプレッドシート"],
+     &["csv_analysis"]),
+    // YouTube & arXiv
+    (&["youtube", "YouTube", "動画", "字幕", "transcript"],
+     &["youtube_transcript"]),
+    (&["arxiv", "論文", "paper", "学術"],
+     &["arxiv_search"]),
+    // Git / GitHub
+    (&["git", "github", "commit", "pr ", "プルリクエスト", "リポジトリ"],
+     &["git_status", "git_diff", "git_commit", "github_read_file", "github_create_or_update_file", "github_create_pr"]),
+    // Smart home
+    (&["照明", "ライト", "light", "hue", "switchbot", "スイッチ", "remo", "リモ", "エアコン", "テレビ"],
+     &["hue", "switchbot", "nature_remo"]),
+    // Webhook
+    (&["webhook", "通知", "notify"],
+     &["webhook_trigger"]),
+    // Memory
+    (&["記憶", "覚え", "memory", "remember", "メモ"],
+     &["memory_log", "knowledge_graph"]),
+    // Browser automation
+    (&["ブラウザ", "browser", "スクレイピング", "scrape", "自動操作", "購入"],
+     &["browser", "browser_session", "browser_action", "browser_screenshot", "browser_purchase"]),
+    // Improve project
+    (&["自己改善", "improve", "改善", "機能追加"],
+     &["improve_project"]),
+    // Phone
+    (&["電話", "phone", "call", "通話"],
+     &["phone_call"]),
+    // Slack / Discord / Notion
+    (&["slack", "Slack"],
+     &["slack"]),
+    (&["discord", "Discord"],
+     &["discord"]),
+    (&["notion", "Notion", "ノーション"],
+     &["notion"]),
+    // Spotify
+    (&["spotify", "Spotify", "スポティファイ"],
+     &["spotify"]),
+    // Postgres
+    (&["postgres", "sql", "database", "データベース", "DB", "テーブル"],
+     &["postgres"]),
+    // Web deploy
+    (&["デプロイ", "deploy", "公開", "ホスティング"],
+     &["web_deploy"]),
+    // Filesystem / linter / tests
+    (&["ディレクトリ", "フォルダ", "directory", "ls "],
+     &["filesystem"]),
+    (&["lint", "リンター", "clippy", "eslint"],
+     &["run_linter"]),
+    (&["テスト", "test"],
+     &["run_tests"]),
+];
+
+/// Select relevant tools based on user message content.
+/// Returns a set of tool names that should be included.
+fn select_relevant_tools(message: &str, history: &[(String, String)]) -> std::collections::HashSet<&'static str> {
+    let mut selected: std::collections::HashSet<&'static str> = ALWAYS_TOOLS.iter().copied().collect();
+
+    // Build scan text: current message + last 2 user messages from history
+    let lower_msg = message.to_lowercase();
+    let mut scan_texts = vec![lower_msg.as_str()];
+    let history_strings: Vec<String> = history.iter().rev()
+        .filter(|(role, _)| role == "user")
+        .take(2)
+        .map(|(_, content)| content.to_lowercase())
+        .collect();
+    for s in &history_strings {
+        scan_texts.push(s.as_str());
+    }
+
+    for (keywords, tools) in TOOL_GROUPS {
+        let matched = scan_texts.iter().any(|text| {
+            keywords.iter().any(|kw| text.contains(&kw.to_lowercase()))
+        });
+        if matched {
+            for tool_name in *tools {
+                selected.insert(tool_name);
+            }
+        }
+    }
+
+    selected
+}
+
+// ---------------------------------------------------------------------------
 // Device monitoring
 // ---------------------------------------------------------------------------
 
@@ -2832,6 +2937,10 @@ pub struct UserSettings {
     pub user_nickname: Option<String>,
     pub onboarding_completed: Option<bool>,
     pub use_master_key_fallback: Option<bool>,
+    // Developer mode: share conversations for training, earn ENAI tokens
+    pub dev_mode: Option<bool>,
+    pub solana_wallet: Option<String>,
+    pub enai_earned: Option<i64>,
 }
 
 /// Request body for updating settings (all fields optional for partial update)
@@ -2867,6 +2976,9 @@ pub struct UpdateSettingsRequest {
     pub ai_nickname: Option<String>,
     pub user_nickname: Option<String>,
     pub onboarding_completed: Option<bool>,
+    // Developer mode settings
+    pub dev_mode: Option<bool>,
+    pub solana_wallet: Option<String>,
 }
 
 /// Request body for email registration.
@@ -2974,7 +3086,10 @@ pub struct PartnerGrantCreditsRequest {
 /// Request for partner subscription verification.
 #[derive(Debug, Deserialize)]
 pub struct PartnerVerifySubscriptionRequest {
-    pub user_id: String,
+    /// user_id is optional when called with a user Bearer token (iOS app).
+    /// Required when called with a PARTNER_ key (server-to-server).
+    #[serde(default)]
+    pub user_id: Option<String>,
     pub product_id: String,
     pub transaction_id: String,
     /// Original transaction ID for renewal tracking
@@ -3260,6 +3375,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/cron", post(handle_cron_create))
         .route("/api/v1/cron/{id}", axum::routing::put(handle_cron_update))
         .route("/api/v1/cron/{id}", delete(handle_cron_delete))
+        .route("/api/v1/cron/daily-summary", post(handle_daily_summary))
         // Speech (TTS) — internal + OpenAI-compatible external API
         .route("/api/v1/speech/synthesize", post(handle_speech_synthesize))
         .route("/v1/audio/speech", post(handle_tts_openai_compat))
@@ -3290,6 +3406,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/pricing", get(handle_pricing_api))
         // Pages
         .route("/pricing", get(handle_pricing))
+        .route("/conversations", get(handle_conversations_page))
+        .route("/keys", get(handle_keys_page))
         .route("/landing", get(handle_landing))
         .route("/media", get(handle_media_demo))
         .route("/voices", get(handle_voices))
@@ -3354,13 +3472,31 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Partner API (Elio integration)
         .route("/api/v1/partner/grant-credits", post(handle_partner_grant_credits))
         .route("/api/v1/partner/verify-subscription", post(handle_partner_verify_subscription))
+        // EBR Airdrop (Solana SPL token)
+        .route("/api/v1/admin/ebr/airdrop", post(handle_ebr_airdrop))
+        .route("/api/v1/admin/ebr/airdrop/status", get(handle_ebr_airdrop_status))
+        // Developer mode
+        .route("/api/v1/dev-mode/stats", get(handle_dev_mode_stats))
+        .route("/api/v1/dev-mode/enai-redeem", post(handle_enai_redeem))
+        // ENAI Token Payment (Solana)
+        .route("/api/v1/crypto/enai/price", get(handle_enai_price))
+        .route("/api/v1/crypto/enai/initiate", post(handle_enai_initiate))
+        .route("/api/v1/crypto/enai/confirm", post(handle_enai_confirm))
+        // DePIN Node Rewards
+        .route("/api/v1/depin/report", post(handle_depin_report))
+        .route("/api/v1/depin/stats", get(handle_depin_stats))
+        // Agent wallet
+        .route("/api/v1/agent/wallet", get(handle_agent_wallet))
         // A/B test
         .route("/api/v1/ab/variant", get(handle_ab_variant))
         .route("/api/v1/ab/event", post(handle_ab_event))
         .route("/api/v1/ab/stats", get(handle_ab_stats))
+        .route("/api/v1/ab/model-test", get(handle_model_ab_config))
+        .route("/api/v1/ab/model-benchmark", post(handle_model_benchmark))
         // PWA
         .route("/manifest.json", get(handle_manifest_json))
         .route("/sw.js", get(handle_sw_js))
+        .route("/enai-metadata.json", get(handle_enai_metadata_json))
         .route("/icon-192.svg", get(handle_icon_192))
         .route("/icon-512.svg", get(handle_icon_512))
         // API docs (path alias)
@@ -3381,12 +3517,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             http::header::HeaderName::from_static("content-security-policy"),
             http::header::HeaderValue::from_static(
                 "default-src 'self'; \
-                 script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://accounts.google.com https://us.i.posthog.com; \
+                 script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://js.stripe.com https://accounts.google.com https://us.i.posthog.com https://cdn.tailwindcss.com; \
                  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
                  font-src 'self' https://fonts.gstatic.com; \
                  img-src 'self' data: blob: https: http:; \
                  media-src 'self' blob: https:; \
-                 connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://api.deepseek.com https://api.groq.com https://r.jina.ai https://us.i.posthog.com; \
+                 connect-src 'self' https: wss:; \
                  frame-src https://js.stripe.com https://accounts.google.com; \
                  object-src 'none'; \
                  base-uri 'self'"
@@ -3442,10 +3578,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .layer(SetResponseHeaderLayer::overriding(
             http::header::X_CONTENT_TYPE_OPTIONS,
             http::HeaderValue::from_static("nosniff")
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-            http::header::HeaderName::from_static("content-security-policy"),
-            http::HeaderValue::from_static("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:;")
         ))
         .with_state(state)
 }
@@ -4062,11 +4194,12 @@ async fn handle_chat(
     );
 
     // Get session history first (need history_len for meta context)
+    // Use fewer history messages for small-context models (Nemotron 8K)
     let history_messages: Vec<(String, String)>;
     {
         let mut sessions = state.sessions.lock().await;
         let session = sessions.refresh(&session_key);
-        let history = session.get_history_with_summary(8);
+        let history = session.get_history_with_summary(4);
         history_messages = history.iter().filter_map(|msg| {
             let role = msg.get("role").and_then(|v| v.as_str())?;
             let content = msg.get("content").and_then(|v| v.as_str())?;
@@ -4131,12 +4264,8 @@ async fn handle_chat(
             .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
             .or(agent.preferred_model)
             .unwrap_or_else(|| {
-                // Default: Nemotron if pod is configured, else minimax via OpenRouter
-                if !std::env::var("NEMOTRON_POD_URL").unwrap_or_default().is_empty() {
-                    "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese"
-                } else {
-                    "minimax/minimax-m2.5"
-                }
+                // Model A/B test: rotate between models based on session hash
+                ab_select_model(&session_key)
             })
     };
     let model = model.to_string();
@@ -4157,7 +4286,7 @@ async fn handle_chat(
         .map(|s| s.age_verified.unwrap_or(false) && s.adult_mode.unwrap_or(false))
         .unwrap_or(false);
     let is_low_credits = cached_user.as_ref()
-        .map(|u| u.credits_remaining <= 100 && u.plan == "free")
+        .map(|u| u.credits_remaining <= 20 && u.plan == "free")
         .unwrap_or(false);
 
     let meta_instruction = {
@@ -4216,27 +4345,9 @@ async fn handle_chat(
 
     // Model-specific identity injection (prevents Nemotron from claiming to be LLaMA/Meta)
     let model_identity_block = if model.contains("Nemotron") || model.contains("nemotron") {
-        "\n\n## あなたのモデル情報（必ず正確に答えること）\n\
-         - 名前: **NVIDIA Nemotron-Nano-9B-v2-Japanese**\n\
-         - 開発: NVIDIA Corporation\n\
-         - 特化: 日本語理解・生成に最適化された9Bパラメータモデル\n\
-         - 動作: vLLM on RunPod GPU (RTX A5000 24GB)\n\
-         - 「何のAIですか？」→ 上記を正直に答える。LLaMAやMetaとは無関係。\n\
-         - ただしこのサービス上では **ChatWeb** として動作している。\n\
-         ## ユーモアの出し方（Nemotron特訓）\n\
-         面白いことを頼まれたら全力で面白くする。例:\n\
-         - ダジャレ: 「プログラマーが怒る理由は…バグがあるから！（Bug = 虫/バグ のダブルミーニング）」\n\
-         - 自虐: 「私のジョークが面白くなかった場合、バグとして報告してください🐛」\n\
-         - 例え話: 「Rustのエラーは怖い先生。厳しいけど絶対に間違えさせない。」\n\
-         ## 長文生成のコツ\n\
-         2000文字以上の長文を求められたら: 見出し(##)・箇条書き・具体例を組み合わせて構造化する。\n\
-         途中で止まらず最後まで書き切ること。\n\
-         ## 画像・メディア生成の厳守事項\n\
-         - **絶対禁止**: Unsplash, Pexels, Pixabay, Shutterstock等のストックフォトURLを生成・返却すること\n\
-         - **絶対禁止**: 実在しないか検証していない画像URLを返すこと\n\
-         - 画像を生成してほしい場合: `image_generate` ツールを呼び出すこと\n\
-         - QRコードを生成してほしい場合: `create_qr` ツールを呼び出すこと\n\
-         - ツールが呼べない場合: 「画像生成ツールを呼び出せませんでした」と正直に報告すること"
+        "\n\n## モデル情報\n\
+         NVIDIA Nemotron-Nano-9B-v2-Japanese (NVIDIA開発、日本語特化9B)。ChatWebとして動作。LLaMA/Metaとは無関係。\n\
+         ## 厳守: ストックフォトURL生成禁止。画像→`image_generate`、QR→`create_qr`を使うこと。"
     } else {
         ""
     };
@@ -4305,9 +4416,10 @@ async fn handle_chat(
         #[cfg(not(feature = "dynamodb-backend"))]
         { false }
     };
+    // Dynamic tool selection: only send tools relevant to the user's message
+    let relevant_tool_names = select_relevant_tools(&clean_message, &history_messages);
     let tools = if agent.tools_enabled {
         let all_tools = state.tool_registry.get_definitions();
-        // Filter by user's enabled tools if set, and restrict GitHub tools to admin
         let mut filtered: Vec<serde_json::Value> = all_tools.into_iter()
             .filter(|t| {
                 let name = t.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("");
@@ -4315,11 +4427,12 @@ async fn handle_chat(
                 if GITHUB_TOOL_NAMES.contains(&name) && !user_is_admin {
                     return false;
                 }
-                // Filter by user's enabled tools if set
+                // User's explicit enabled tools override dynamic selection
                 if let Some(ref enabled) = enabled_tool_names {
                     return enabled.iter().any(|e| e == name);
                 }
-                true
+                // Dynamic tool filtering: only include relevant tools
+                relevant_tool_names.contains(name)
             })
             .collect();
         // Append user's installed webhook-type skill tools
@@ -4331,7 +4444,7 @@ async fn handle_chat(
 
     let tools_ref = if tools.is_empty() { None } else { Some(&tools[..]) };
 
-    info!("Calling LLM: model={}, tools={}, agent={}", model, tools.len(), agent.id);
+    info!("Calling LLM: model={}, tools={}/{} (dynamic), agent={}", model, tools.len(), state.tool_registry.len(), agent.id);
 
     // --- Parallel multi-model race path ---
     if req.multi_model {
@@ -4579,6 +4692,16 @@ async fn handle_chat(
             let sandbox_dir = format!("/tmp/sandbox/{}", session_key.replace(':', "_"));
             std::fs::create_dir_all(&sandbox_dir).ok();
 
+            // Keyword intercept: Nemotron fallback when model fails to call tools
+            if !current.has_tool_calls()
+                && (used_model.contains("Nemotron") || used_model.contains("nemotron"))
+            {
+                if let Some(tc) = crate::service::integrations::keyword_intercept(&req.message) {
+                    tracing::info!("keyword_intercept: injecting '{}' for Nemotron", tc.name);
+                    current.tool_calls.push(tc);
+                }
+            }
+
             // Multi-iteration tool loop (deadline-aware to avoid API Gateway 30s timeout)
             let chat_deadline = std::time::Instant::now() + std::time::Duration::from_secs(25);
             while current.has_tool_calls() && iteration < max_iterations
@@ -4807,6 +4930,7 @@ async fn handle_chat(
     }
 
     // Auto-update conversation title & message count (fire-and-forget)
+    // Use auth user_id as the DynamoDB PK so /api/v1/conversations can find it.
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
@@ -4815,8 +4939,10 @@ async fn handle_chat(
                     let mut sessions = state.sessions.lock().await;
                     sessions.get_or_create(&session_key).messages.len()
                 };
+                let conv_owner = auth_user_id(&state, &headers).await
+                    .unwrap_or_else(|| session_key.clone());
                 spawn_update_conv_meta(
-                    dynamo.clone(), table.clone(), session_key.clone(),
+                    dynamo.clone(), table.clone(), conv_owner,
                     conv_id.to_string(), req.message.clone(), msg_count,
                 );
             }
@@ -4846,6 +4972,41 @@ async fn handle_chat(
                     }
                 }
             });
+        }
+    }
+
+    // Dev mode: save training log and award ENAI tokens (fire-and-forget)
+    // Check dev_mode from the *authenticated* user's PROFILE (works across all sessions).
+    // When a Bearer token is present, load the auth user's profile directly; fall back to
+    // cached_user (which is session-key-based and may be a different key).
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let is_dev_mode = {
+            // Bypass cache: dev_mode may have been set after this Lambda container cached the profile.
+            if let (Some(auth_uid), Some(dynamo), Some(table)) = (
+                auth_user_id(&state, &headers).await,
+                state.dynamo_client.as_ref(),
+                state.config_table.as_ref(),
+            ) {
+                get_or_create_user(dynamo, table, &auth_uid).await.dev_mode
+            } else {
+                cached_user.as_ref().map(|u| u.dev_mode).unwrap_or(false)
+            }
+        };
+        if is_dev_mode {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                // Use auth user_id so training logs and ENAI awards share the same key
+                let award_key = auth_user_id(&state, &headers).await
+                    .unwrap_or_else(|| session_key.clone());
+                save_training_log(
+                    dynamo.clone(), table.clone(),
+                    award_key.clone(),
+                    req.message.clone(),
+                    response_text.clone(),
+                    used_model.clone(),
+                );
+                award_enai_for_training(dynamo.clone(), table.clone(), award_key, 1);
+            }
         }
     }
 
@@ -5355,7 +5516,7 @@ async fn handle_get_session(
         .unwrap_or(100);
 
     let history = session.get_full_history(limit);
-    let is_summarized = session.messages.len() > 8; // Matches get_history_with_summary threshold
+    let is_summarized = session.messages.len() > 4; // Matches get_history_with_summary threshold
 
     Json(serde_json::json!({
         "key": id,
@@ -7163,7 +7324,7 @@ async fn handle_chat_stream(
     {
         let mut sessions = state.sessions.lock().await;
         let session = sessions.refresh(&session_key);
-        let history = session.get_history_with_summary(8);
+        let history = session.get_history_with_summary(4);
         stream_history = history.iter().filter_map(|msg| {
             let role = msg.get("role").and_then(|v| v.as_str())?;
             let content = msg.get("content").and_then(|v| v.as_str())?;
@@ -7179,12 +7340,7 @@ async fn handle_chat_stream(
         .or(user_settings.as_ref().and_then(|s| s.preferred_model.as_deref()))
         .or(agent.preferred_model)
         .unwrap_or_else(|| {
-            // Default: Nemotron if pod is configured, else minimax via OpenRouter
-            if !std::env::var("NEMOTRON_POD_URL").unwrap_or_default().is_empty() {
-                "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese"
-            } else {
-                "minimax/minimax-m2.5"
-            }
+            ab_select_model(&session_key)
         }).to_string();
 
     // Build meta-cognition context (now includes model/cost info)
@@ -7339,6 +7495,8 @@ async fn handle_chat_stream(
     } else {
         user_settings.as_ref().and_then(|s| s.enabled_tools.clone())
     };
+    // Dynamic tool selection for streaming path
+    let stream_relevant_tools = select_relevant_tools(&clean_message, &stream_history);
     let tools: Vec<serde_json::Value> = if agent.tools_enabled {
         let all_defs = state.tool_registry.get_definitions();
         let mut defs: Vec<serde_json::Value> = all_defs.into_iter()
@@ -7348,10 +7506,12 @@ async fn handle_chat_stream(
                 if GITHUB_TOOL_NAMES.contains(&name) && !stream_user_is_admin {
                     return false;
                 }
+                // User's explicit enabled tools override dynamic selection
                 if let Some(ref enabled) = stream_enabled_tool_names {
                     return enabled.iter().any(|e| e == name);
                 }
-                true
+                // Dynamic tool filtering: only include relevant tools
+                stream_relevant_tools.contains(name)
             })
             .collect();
         // Append user's installed webhook-type skill tools
@@ -7441,6 +7601,8 @@ async fn handle_chat_stream(
             Err(_) => {
                 tracing::warn!("Stream LLM call timed out after {}s, returning fallback", stream_deadline_secs);
                 let fallback = timeout_fallback_message();
+                // Send content before done so the client renders the message correctly
+                send_sse!(serde_json::json!({"type":"content","content": fallback}));
                 #[cfg(feature = "dynamodb-backend")]
                 {
                     if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
@@ -7452,7 +7614,6 @@ async fn handle_chat_stream(
                         }
                     }
                 }
-                send_sse!(serde_json::json!({"type":"content","content": fallback}));
                 #[cfg(not(feature = "dynamodb-backend"))]
                 send_sse!(serde_json::json!({"type":"done"}));
                 return; // tx dropped → stream ends
@@ -7488,6 +7649,16 @@ async fn handle_chat_stream(
                 // Create sandbox directory
                 let sandbox_dir = format!("/tmp/sandbox/{}", session_key_clone.replace(':', "_"));
                 std::fs::create_dir_all(&sandbox_dir).ok();
+
+                // Keyword intercept: Nemotron fallback (streaming)
+                if !current.has_tool_calls()
+                    && (stream_used_model.contains("Nemotron") || stream_used_model.contains("nemotron"))
+                {
+                    if let Some(tc) = crate::service::integrations::keyword_intercept(&req_message) {
+                        tracing::info!("keyword_intercept (stream): injecting '{}' for Nemotron", tc.name);
+                        current.tool_calls.push(tc);
+                    }
+                }
 
                 // Multi-iteration tool loop
                 while current.has_tool_calls() && iteration < max_iterations {
@@ -7685,8 +7856,14 @@ async fn handle_chat_stream(
                         }
                     });
 
-                    match provider.chat_stream(&conversation, follow_up_tools, &model, max_tokens, temperature, &chat_extra, fu_chunk_tx).await {
-                        Ok(resp) => {
+                    // Wrap follow-up LLM call in same deadline to prevent indefinite hang
+                    // (LoadBalancedProvider's inner timeout is 600s > Lambda's 300s timeout)
+                    let follow_up_deadline = std::time::Duration::from_secs(stream_deadline_secs);
+                    match tokio::time::timeout(
+                        follow_up_deadline,
+                        provider.chat_stream(&conversation, follow_up_tools, &model, max_tokens, temperature, &chat_extra, fu_chunk_tx),
+                    ).await {
+                        Ok(Ok(resp)) => {
                             stream_total_input += resp.usage.prompt_tokens;
                             stream_total_output += resp.usage.completion_tokens;
                             #[cfg(feature = "dynamodb-backend")]
@@ -7700,13 +7877,14 @@ async fn handle_chat_stream(
                                     if remaining == Some(0) {
                                         current = resp;
                                         tracing::info!("Credits exhausted for user {} in stream, breaking tool loop at iteration {}", session_key_clone, iteration);
+                                        let _ = fu_forwarder.await;
                                         break;
                                     }
                                 }
                             }
                             current = resp;
                         }
-                        Err(e) => {
+                        Ok(Err(e)) => {
                             tracing::error!("LLM follow-up error in stream: {}", e);
                             current = crate::types::CompletionResponse {
                                 content: Some("申し訳ありません。一時的にAIサービスに接続できませんでした。もう一度お試しください。".to_string()),
@@ -7714,6 +7892,19 @@ async fn handle_chat_stream(
                                 finish_reason: crate::types::FinishReason::Stop,
                                 usage: crate::types::TokenUsage::default(),
                             };
+                            let _ = fu_forwarder.await;
+                            break;
+                        }
+                        Err(_elapsed) => {
+                            tracing::warn!("Follow-up LLM call timed out after {}s", stream_deadline_secs);
+                            // fu_chunk_tx dropped by cancellation → fu_forwarder completes
+                            current = crate::types::CompletionResponse {
+                                content: Some("申し訳ありません。処理がタイムアウトしました。".to_string()),
+                                tool_calls: vec![],
+                                finish_reason: crate::types::FinishReason::Stop,
+                                usage: crate::types::TokenUsage::default(),
+                            };
+                            let _ = fu_forwarder.await;
                             break;
                         }
                     }
@@ -7725,9 +7916,13 @@ async fn handle_chat_stream(
                 let mut response_text = super::tags::strip_provider_tags(&response_text);
 
                 // Auto-translate to Japanese if UI language is "ja" but response has no Japanese
+                // Wrapped in 5s timeout to prevent indefinite hang on Lambda
                 if req_language.as_deref() == Some("ja") && detect_language(&response_text) != "ja" {
                     let translate_provider = state_clone.get_lb_provider().or_else(|| state_clone.provider.clone());
-                    if let Some(translated) = maybe_translate_to_japanese(&response_text, translate_provider.as_ref()).await {
+                    if let Ok(Some(translated)) = tokio::time::timeout(
+                        std::time::Duration::from_secs(5),
+                        maybe_translate_to_japanese(&response_text, translate_provider.as_ref()),
+                    ).await {
                         response_text = translated;
                     }
                 }
@@ -7742,12 +7937,18 @@ async fn handle_chat_stream(
                 }
                 #[cfg(feature = "dynamodb-backend")]
                 {
-                    if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
-                        increment_sync_version(dynamo, table, &session_key_clone, "web").await;
+                    // Fire-and-forget: awaiting directly would block the spawned task holding `tx`,
+                    // preventing the SSE stream from terminating in lambda_http's body.collect().
+                    if let (Some(dynamo), Some(table)) = (state_clone.dynamo_client.clone(), state_clone.config_table.clone()) {
+                        let key_for_sync = session_key_clone.clone();
+                        tokio::spawn(async move {
+                            increment_sync_version(&dynamo, &table, &key_for_sync, "web").await;
+                        });
                     }
                 }
 
                 // Auto-update conversation title & message count
+                // Use auth user_id (stream_user_id) so /api/v1/conversations can find the record.
                 #[cfg(feature = "dynamodb-backend")]
                 {
                     if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
@@ -7756,8 +7957,10 @@ async fn handle_chat_stream(
                                 let mut sessions = state_clone.sessions.lock().await;
                                 sessions.get_or_create(&session_key_clone).messages.len()
                             };
+                            let conv_owner = stream_user_id.clone()
+                                .unwrap_or_else(|| session_key_clone.clone());
                             spawn_update_conv_meta(
-                                dynamo.clone(), table.clone(), session_key_clone.clone(),
+                                dynamo.clone(), table.clone(), conv_owner,
                                 conv_id.to_string(), req_message.clone(), msg_count,
                             );
                         }
@@ -7891,9 +8094,10 @@ async fn handle_chat_stream(
         // tx is dropped here → stream closes naturally
     });
 
-    Sse::new(rx)
-        .keep_alive(axum::response::sse::KeepAlive::default())
-        .into_response()
+    // Note: .keep_alive() is intentionally omitted — Lambda buffers the entire SSE body
+    // before returning it, so keep-alive pings accumulate as noise and provide no benefit.
+    // The stream naturally terminates when the spawned task drops `tx`.
+    Sse::new(rx).into_response()
 }
 
 // ============================================================================
@@ -8621,6 +8825,7 @@ pub struct RaceRequest {
 /// POST /api/v1/chat/race — Multi-model race with ranked results, or single-tier model.
 async fn handle_chat_race(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<RaceRequest>,
 ) -> impl IntoResponse {
     use axum::response::sse::{Event, Sse};
@@ -8660,6 +8865,25 @@ async fn handle_chat_race(
         }
         #[cfg(not(feature = "dynamodb-backend"))]
         { req.session_id.clone() }
+    };
+
+    // When using a cw_ API key (Bearer cw_...), override session_key with the API key's
+    // actual user_id so credit checks and user profile lookups use the correct user.
+    #[cfg(feature = "dynamodb-backend")]
+    let session_key = {
+        let bearer = headers.get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim_start_matches("Bearer ").to_string())
+            .unwrap_or_default();
+        if bearer.starts_with("cw_") {
+            if let Some(uid) = auth_user_id(&state, &headers).await {
+                uid
+            } else {
+                session_key
+            }
+        } else {
+            session_key
+        }
     };
 
     // Check credits
@@ -8796,76 +9020,83 @@ async fn handle_chat_race(
     let response_stream = futures::stream::once(async move {
         let start = std::time::Instant::now();
 
-        // If tier is specified, run single model
+        // If tier is specified, run single model with fallback chain
         if let Some(ref tier_name) = tier {
-            if let Some((provider, model_name)) = lb_raw.get_tier_model(tier_name) {
-                match provider.chat(&messages, None, &model_name, max_tokens, temperature).await {
-                    Ok(resp) => {
+            let mut tier_result: Option<(String, String, u32, u32, u64)> = None; // (text, model, in_tok, out_tok, ms)
+            for (provider, model_name) in lb_raw.get_tier_models(tier_name) {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(45),
+                    provider.chat(&messages, None, &model_name, max_tokens, temperature)
+                ).await {
+                    Ok(Ok(resp)) => {
                         let elapsed = start.elapsed().as_millis() as u64;
                         let response_text = resp.content.unwrap_or_default();
-                        let input_tokens = resp.usage.prompt_tokens;
-                        let output_tokens = resp.usage.completion_tokens;
-
-                        // Deduct credits
-                        #[allow(unused_mut)]
-                        let mut credits_used: i64 = 0;
-                        #[allow(unused_mut)]
-                        let mut credits_remaining: Option<i64> = None;
-                        #[cfg(feature = "dynamodb-backend")]
-                        {
-                            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
-                                let (c, r) = deduct_credits(dynamo, table, &session_key_clone, &model_name, input_tokens, output_tokens).await;
-                                credits_used = c;
-                                credits_remaining = r;
-                            }
+                        if !response_text.is_empty() {
+                            tier_result = Some((response_text, model_name, resp.usage.prompt_tokens, resp.usage.completion_tokens, elapsed));
+                            break;
                         }
-
-                        // Save to session
-                        {
-                            let mut sessions = state_clone.sessions.lock().await;
-                            let session = sessions.get_or_create(&session_key_clone);
-                            session.add_message_from_channel("user", &original_msg, "web");
-                            session.add_message_from_channel("assistant", &response_text, "web");
-                            sessions.save_by_key(&session_key_clone);
-                        }
-                        #[cfg(feature = "dynamodb-backend")]
-                        {
-                            if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
-                                increment_sync_version(dynamo, table, &session_key_clone, "web").await;
-                            }
-                        }
-
-                        return Ok::<_, Infallible>(Event::default().data(
-                            serde_json::json!({
-                                "type": "race_done",
-                                "results": [{
-                                    "rank": 1,
-                                    "model": model_name,
-                                    "response": response_text,
-                                    "time_ms": elapsed,
-                                    "credits_used": credits_used,
-                                    "input_tokens": input_tokens,
-                                    "output_tokens": output_tokens,
-                                }],
-                                "total_credits": credits_used,
-                                "credits_remaining": credits_remaining,
-                                "winner": model_name,
-                                "tier": tier_name,
-                            }).to_string()
-                        ));
                     }
-                    Err(e) => {
-                        tracing::error!("Race tier '{}' model failed: {}", tier_name, e);
-                        return Ok::<_, Infallible>(Event::default()
-                            .event("error")
-                            .data(serde_json::json!({"type":"error","content":"サービスが一時的に利用できません。しばらくしてからお試しください。","error":"サービスが一時的に利用できません。しばらくしてからお試しください。"}).to_string()));
+                    Ok(Err(e)) => {
+                        tracing::warn!("Race tier '{}' model '{}' failed: {}", tier_name, model_name, e);
+                    }
+                    Err(_) => {
+                        tracing::warn!("Race tier '{}' model '{}' timed out", tier_name, model_name);
                     }
                 }
-            } else {
-                tracing::warn!("Race: tier '{}' has no available provider", tier_name);
-                return Ok::<_, Infallible>(Event::default()
-                    .event("error")
-                    .data(serde_json::json!({"type":"error","content":"選択されたモデルが現在利用できません。Auto Raceをお試しください。","error":"選択されたモデルが現在利用できません。Auto Raceをお試しください。"}).to_string()));
+            }
+
+            match tier_result {
+                Some((response_text, model_name, input_tokens, output_tokens, elapsed)) => {
+                    #[allow(unused_mut)]
+                    let mut credits_used: i64 = 0;
+                    #[allow(unused_mut)]
+                    let mut credits_remaining: Option<i64> = None;
+                    #[cfg(feature = "dynamodb-backend")]
+                    {
+                        if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                            let (c, r) = deduct_credits(dynamo, table, &session_key_clone, &model_name, input_tokens, output_tokens).await;
+                            credits_used = c;
+                            credits_remaining = r;
+                        }
+                    }
+                    {
+                        let mut sessions = state_clone.sessions.lock().await;
+                        let session = sessions.get_or_create(&session_key_clone);
+                        session.add_message_from_channel("user", &original_msg, "web");
+                        session.add_message_from_channel("assistant", &response_text, "web");
+                        sessions.save_by_key(&session_key_clone);
+                    }
+                    #[cfg(feature = "dynamodb-backend")]
+                    {
+                        if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                            increment_sync_version(dynamo, table, &session_key_clone, "web").await;
+                        }
+                    }
+                    return Ok::<_, Infallible>(Event::default().data(
+                        serde_json::json!({
+                            "type": "race_done",
+                            "results": [{
+                                "rank": 1,
+                                "model": model_name,
+                                "response": response_text,
+                                "time_ms": elapsed,
+                                "credits_used": credits_used,
+                                "input_tokens": input_tokens,
+                                "output_tokens": output_tokens,
+                            }],
+                            "total_credits": credits_used,
+                            "credits_remaining": credits_remaining,
+                            "winner": model_name,
+                            "tier": tier_name,
+                        }).to_string()
+                    ));
+                }
+                None => {
+                    tracing::error!("Race tier '{}': all candidates failed", tier_name);
+                    return Ok::<_, Infallible>(Event::default()
+                        .event("error")
+                        .data(serde_json::json!({"type":"error","content":"サービスが一時的に利用できません。しばらくしてからお試しください。","error":"サービスが一時的に利用できません。しばらくしてからお試しください。"}).to_string()));
+                }
             }
         }
 
@@ -11824,6 +12055,21 @@ async fn handle_integrations(
 
 /// GET / — Root landing page (host-based routing)
 async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
+    // When STATIC_DIR is set (Fly.io deployment with WASM frontend),
+    // serve the WASM index.html instead of the legacy embedded HTML.
+    if let Ok(static_dir) = std::env::var("STATIC_DIR") {
+        let index_path = std::path::Path::new(&static_dir).join("index.html");
+        if let Ok(html) = std::fs::read_to_string(&index_path) {
+            return (
+                [
+                    (axum::http::header::CACHE_CONTROL, "no-store, must-revalidate"),
+                    (axum::http::header::PRAGMA, "no-cache"),
+                ],
+                axum::response::Html(std::borrow::Cow::<'static, str>::Owned(html)),
+            );
+        }
+    }
+
     let host = effective_host(&headers);
 
     let html: std::borrow::Cow<'static, str> = if host.starts_with("api.") {
@@ -11911,7 +12157,7 @@ async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
             (axum::http::header::CACHE_CONTROL, "no-store, must-revalidate"),
             (axum::http::header::PRAGMA, "no-cache"),
         ],
-        axum::response::Html(html.into_owned()),
+        axum::response::Html(html),
     )
 }
 
@@ -13525,6 +13771,36 @@ async fn validate_partner_key(
     false
 }
 
+/// Resolve user_id from a regular Bearer token (cw_ API key or session token).
+/// Returns None for PARTNER_ keys (those go through validate_partner_key instead).
+#[cfg(feature = "dynamodb-backend")]
+async fn resolve_user_from_bearer(
+    dynamo: &aws_sdk_dynamodb::Client,
+    table: &str,
+    headers: &axum::http::HeaderMap,
+) -> Option<String> {
+    let token = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    if token.is_empty() || token.starts_with("PARTNER_") { return None; }
+
+    let (pk, sk) = if token.starts_with("cw_") {
+        (format!("APIKEY#{}", hash_api_key(&token)), "LOOKUP".to_string())
+    } else {
+        (format!("AUTH#{}", token), "TOKEN".to_string())
+    };
+
+    let output = dynamo.get_item()
+        .table_name(table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S(sk))
+        .send().await.ok()?;
+    let item = output.item?;
+    item.get("user_id").and_then(|v| v.as_s().ok()).cloned()
+}
+
 /// POST /api/v1/partner/grant-credits — Grant credits to a user (partner API)
 async fn handle_partner_grant_credits(
     State(state): State<Arc<AppState>>,
@@ -13636,12 +13912,21 @@ async fn handle_partner_verify_subscription(
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            // Validate partner key
-            if !validate_partner_key(dynamo, table, &headers).await {
+            // Accept PARTNER_ key (server-to-server) OR user Bearer token (iOS app)
+            let user_id = if validate_partner_key(dynamo, table, &headers).await {
+                match _req.user_id.as_deref().filter(|s| !s.is_empty()) {
+                    Some(uid) => uid.to_string(),
+                    None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                        "error": "user_id required when using partner key auth"
+                    }))),
+                }
+            } else if let Some(uid) = resolve_user_from_bearer(dynamo, table, &headers).await {
+                uid
+            } else {
                 return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
-                    "error": "Invalid or inactive partner API key"
+                    "error": "Invalid or inactive auth token"
                 })));
-            }
+            };
 
             // Map product_id to plan and credits
             let (elio_plan, monthly_credits) = match _req.product_id.as_str() {
@@ -13658,7 +13943,7 @@ async fn handle_partner_verify_subscription(
             // Idempotency: use user_id + year-month + product_id
             let now = chrono::Utc::now();
             let idem_key = format!("{}:{}:{}",
-                _req.user_id,
+                user_id,
                 now.format("%Y-%m"),
                 _req.product_id
             );
@@ -13674,7 +13959,7 @@ async fn handle_partner_verify_subscription(
                 .await
             {
                 if output.item.is_some() {
-                    let profile = get_or_create_user(dynamo, table, &_req.user_id).await;
+                    let profile = get_or_create_user(dynamo, table, &user_id).await;
                     return (StatusCode::OK, Json(serde_json::json!({
                         "status": "already_processed",
                         "elio_plan": elio_plan,
@@ -13684,8 +13969,8 @@ async fn handle_partner_verify_subscription(
             }
 
             // Ensure user exists
-            let _ = get_or_create_user(dynamo, table, &_req.user_id).await;
-            let user_pk = format!("USER#{}", _req.user_id);
+            let _ = get_or_create_user(dynamo, table, &user_id).await;
+            let user_pk = format!("USER#{}", user_id);
 
             // Update user with elio_plan and grant credits
             let expires_at = (now + chrono::Duration::days(32)).to_rfc3339();
@@ -13712,7 +13997,7 @@ async fn handle_partner_verify_subscription(
                 .table_name(table)
                 .item("pk", AttributeValue::S(idem_pk))
                 .item("sk", AttributeValue::S("SUB_VERIFY".to_string()))
-                .item("user_id", AttributeValue::S(_req.user_id.clone()))
+                .item("user_id", AttributeValue::S(user_id.clone()))
                 .item("product_id", AttributeValue::S(_req.product_id.clone()))
                 .item("transaction_id", AttributeValue::S(_req.transaction_id.clone()))
                 .item("credits_granted", AttributeValue::N(monthly_credits.to_string()))
@@ -13721,10 +14006,10 @@ async fn handle_partner_verify_subscription(
                 .send()
                 .await;
 
-            emit_audit_log(dynamo.clone(), table.clone(), "partner_verify_subscription", &_req.user_id, "",
+            emit_audit_log(dynamo.clone(), table.clone(), "partner_verify_subscription", &user_id, "",
                 &format!("plan={} credits={} txn={}", elio_plan, monthly_credits, _req.transaction_id));
 
-            let profile = get_or_create_user(dynamo, table, &_req.user_id).await;
+            let profile = get_or_create_user(dynamo, table, &user_id).await;
             return (StatusCode::OK, Json(serde_json::json!({
                 "status": "verified",
                 "elio_plan": elio_plan,
@@ -13737,6 +14022,803 @@ async fn handle_partner_verify_subscription(
     (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
         "error": "DynamoDB not configured"
     })))
+}
+
+// ─── EBR Airdrop (Solana SPL Token) ───────────────────────────────────
+
+/// EBR token mint address on Solana mainnet.
+const EBR_TOKEN_MINT: &str = "E1JxwaWRd8nw8vDdWMdqwdbXGBshqDcnTcinHzNMqg2Y";
+/// Monthly EBR airdrop amount for Pro plan subscribers.
+const EBR_AIRDROP_AMOUNT_PRO: u64 = 200;
+
+#[derive(Deserialize)]
+struct EbrAirdropRequest {
+    /// Optional: airdrop to a specific user_id. If omitted, airdrop to all eligible Pro users.
+    #[serde(default)]
+    user_id: Option<String>,
+    /// Solana wallet address to receive EBR tokens (required if user_id specified).
+    #[serde(default)]
+    wallet_address: Option<String>,
+}
+
+#[derive(Serialize)]
+struct EbrAirdropResult {
+    user_id: String,
+    wallet_address: String,
+    amount: u64,
+    status: String, // "mock_success" | "mock_pending" | "error"
+    tx_signature: Option<String>,
+}
+
+/// POST /api/v1/admin/ebr/airdrop — Distribute EBR tokens to Pro plan subscribers.
+/// Admin-only. Requires ADMIN_SESSION_KEYS auth.
+/// In production this will execute Solana SPL token transfers; currently returns mock results.
+async fn handle_ebr_airdrop(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<EbrAirdropRequest>,
+) -> impl IntoResponse {
+    // Admin authentication
+    let sid = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .or_else(|| {
+            // Also check query param ?sid=...
+            None
+        })
+        .unwrap_or_default();
+
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+            "error": "Admin access required"
+        })));
+    }
+
+    let mut results: Vec<EbrAirdropResult> = Vec::new();
+
+    if let Some(user_id) = &req.user_id {
+        // Single-user airdrop
+        let wallet = req.wallet_address.unwrap_or_else(|| "unknown".to_string());
+        let result = mock_spl_transfer(&wallet, EBR_AIRDROP_AMOUNT_PRO);
+        results.push(EbrAirdropResult {
+            user_id: user_id.clone(),
+            wallet_address: wallet,
+            amount: EBR_AIRDROP_AMOUNT_PRO,
+            status: result.0,
+            tx_signature: result.1,
+        });
+    } else {
+        // Batch airdrop: find all Pro plan users from DynamoDB
+        #[cfg(feature = "dynamodb-backend")]
+        {
+            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+                // Scan for users with plan = "pro"
+                // In production, this would use a GSI or a more efficient query pattern.
+                // For now, we generate mock results for demonstration.
+                let mock_pro_users = vec![
+                    ("user_demo_1", "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"),
+                    ("user_demo_2", "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK"),
+                ];
+                for (uid, wallet) in mock_pro_users {
+                    let result = mock_spl_transfer(wallet, EBR_AIRDROP_AMOUNT_PRO);
+                    results.push(EbrAirdropResult {
+                        user_id: uid.to_string(),
+                        wallet_address: wallet.to_string(),
+                        amount: EBR_AIRDROP_AMOUNT_PRO,
+                        status: result.0,
+                        tx_signature: result.1,
+                    });
+                }
+                let _ = (dynamo, table); // suppress unused warnings
+            }
+        }
+    }
+
+    let total_distributed: u64 = results.iter().map(|r| r.amount).sum();
+    (StatusCode::OK, Json(serde_json::json!({
+        "ebr_token_mint": EBR_TOKEN_MINT,
+        "airdrop_amount_per_user": EBR_AIRDROP_AMOUNT_PRO,
+        "total_users": results.len(),
+        "total_ebr_distributed": total_distributed,
+        "results": results,
+        "note": "Mock mode — Solana transactions are simulated. Set SOLANA_PRIVATE_KEY to enable real transfers."
+    })))
+}
+
+/// GET /api/v1/admin/ebr/airdrop/status — Check last airdrop status and EBR distribution stats.
+async fn handle_ebr_airdrop_status(
+    State(_state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let sid = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .unwrap_or_default();
+
+    if !is_admin(&sid) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+            "error": "Admin access required"
+        })));
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "ebr_token_mint": EBR_TOKEN_MINT,
+        "monthly_amount_pro": EBR_AIRDROP_AMOUNT_PRO,
+        "mode": "mock",
+        "last_airdrop": serde_json::Value::Null,
+        "eligible_pro_users": 0,
+        "total_distributed_all_time": 0,
+        "note": "Airdrop system initialized. Set SOLANA_PRIVATE_KEY env var to enable real SPL token transfers."
+    })))
+}
+
+/// Mock SPL token transfer. Returns (status, tx_signature).
+/// In production, this would use solana-sdk to:
+/// 1. Create an AssociatedTokenAccount for the recipient if needed
+/// 2. Execute spl_token::instruction::transfer_checked
+/// 3. Return the real transaction signature
+fn mock_spl_transfer(wallet_address: &str, amount: u64) -> (String, Option<String>) {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    // Generate a deterministic mock tx signature from wallet + amount
+    let mut hasher = DefaultHasher::new();
+    wallet_address.hash(&mut hasher);
+    amount.hash(&mut hasher);
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    ts.hash(&mut hasher);
+    let hash = hasher.finish();
+    let mock_sig = format!("{:x}{:x}{:x}{:x}", hash, hash.wrapping_mul(7), hash.wrapping_mul(13), hash.wrapping_mul(31));
+
+    info!(
+        "EBR airdrop (mock): {} EBR -> {} [tx: {}]",
+        amount, wallet_address, &mock_sig[..32]
+    );
+
+    ("mock_success".to_string(), Some(mock_sig))
+}
+
+// ─── Developer Mode: Training Contributions + ENAI Rewards ──────────────
+
+/// GET /api/v1/dev-mode/stats?session_id=... — Get developer mode stats for authenticated user.
+/// Returns dev_mode status, solana_wallet, enai_earned, and training_count.
+/// Accepts optional `session_id` query param to locate settings saved under a session key.
+async fn handle_dev_mode_stats(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return Json(serde_json::json!({ "error": "Unauthorized" })),
+        };
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            // Read dev_mode and solana_wallet from PROFILE (persisted there for cross-session access)
+            let profile = get_or_create_user(dynamo, table, &user_id).await;
+            // Read enai_earned from auth user's SETTINGS (always auth-user-id-based, not session_key)
+            let settings = get_user_settings(dynamo, table, &user_id).await;
+            // Count training log entries for this user (check both auth user_id and session_key for backward compat)
+            let count_by_key = |key: String| {
+                let dynamo = dynamo.clone();
+                let table = table.clone();
+                async move {
+                    dynamo.query()
+                        .table_name(table)
+                        .key_condition_expression("pk = :pk")
+                        .expression_attribute_values(":pk", AttributeValue::S(format!("TRAINING#{}", key)))
+                        .select(aws_sdk_dynamodb::types::Select::Count)
+                        .send()
+                        .await
+                        .map(|o| o.count)
+                        .unwrap_or(0)
+                }
+            };
+            let (count_uid, count_sid) = tokio::join!(
+                count_by_key(user_id.clone()),
+                {
+                    let sid = if let Some(s) = params.get("session_id") { s.clone() } else { user_id.clone() };
+                    count_by_key(sid)
+                }
+            );
+            // Avoid double-counting if session_id == user_id
+            let training_count = if params.get("session_id").map(|s| s == &user_id).unwrap_or(true) {
+                count_uid
+            } else {
+                count_uid + count_sid
+            };
+            return Json(serde_json::json!({
+                "dev_mode": profile.dev_mode,
+                "solana_wallet": profile.solana_wallet,
+                "enai_earned": settings.enai_earned.unwrap_or(0),
+                "training_count": training_count,
+                "enai_mint": "8CeusiVAeibuBGv5xcf7kt7JQZzqwTS5pD7u2CfyoWnL",
+            }));
+        }
+    }
+    Json(serde_json::json!({
+        "dev_mode": false,
+        "solana_wallet": null,
+        "enai_earned": 0,
+        "training_count": 0,
+    }))
+}
+
+/// POST /api/v1/dev-mode/enai-redeem — Convert accumulated ENAI points into credits.
+/// 1 ENAI = 10 credits. Resets enai_earned to 0.
+async fn handle_enai_redeem(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        let user_id = match auth_user_id(&state, &headers).await {
+            Some(uid) => uid,
+            None => return Json(serde_json::json!({ "ok": false, "error": "Unauthorized" })),
+        };
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let settings = get_user_settings(dynamo, table, &user_id).await;
+            let enai = settings.enai_earned.unwrap_or(0);
+            if enai <= 0 {
+                return Json(serde_json::json!({ "ok": false, "error": "No ENAI to redeem" }));
+            }
+            let credits = enai * 10; // 1 ENAI = 10 credits
+            // Add credits to profile
+            add_credits_to_user(dynamo, table, &user_id, credits, "", "").await;
+            // Reset enai_earned to 0
+            let pk = format!("USER#{}", user_id);
+            let _ = dynamo
+                .update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(pk))
+                .key("sk", AttributeValue::S("SETTINGS".to_string()))
+                .update_expression("SET enai_earned = :zero, updated_at = :now")
+                .expression_attribute_values(":zero", AttributeValue::N("0".to_string()))
+                .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                .send()
+                .await;
+            emit_audit_log(dynamo.clone(), table.clone(), "enai_redeemed", &user_id, "", &format!("enai={enai} credits={credits}"));
+            return Json(serde_json::json!({
+                "ok": true,
+                "enai_redeemed": enai,
+                "credits_added": credits,
+            }));
+        }
+    }
+    Json(serde_json::json!({ "ok": false, "error": "DynamoDB not configured" }))
+}
+
+// ─── ENAI Token Payment (Solana SPL) ─────────────────────────────────────
+
+/// ENAI credits-per-ENAI exchange rate: 1 ENAI = 10 credits
+const ENAI_CREDITS_PER_ENAI: i64 = 10;
+/// ENAI token decimals
+const ENAI_DECIMALS: u32 = 6;
+
+#[derive(Debug, Deserialize)]
+struct EnaiInitiateRequest {
+    wallet_address: String,
+    credit_amount: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct EnaiConfirmRequest {
+    tx_id: String,
+    tx_signature: String,
+}
+
+/// GET /api/v1/crypto/enai/price — ENAI token exchange rate
+async fn handle_enai_price(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
+    Json(serde_json::json!({
+        "token": "ENAI",
+        "mint": crate::service::solana::enai_mint(),
+        "enai_per_credit": 0.1,
+        "credits_per_enai": ENAI_CREDITS_PER_ENAI,
+        "decimals": ENAI_DECIMALS,
+        "treasury_wallet": crate::service::solana::treasury_wallet(),
+        "note": "1 ENAI = 10 credits. Send ENAI to treasury wallet then call /confirm."
+    }))
+}
+
+/// POST /api/v1/crypto/enai/initiate — Begin ENAI payment flow
+async fn handle_enai_initiate(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<EnaiInitiateRequest>,
+) -> impl IntoResponse {
+    if req.credit_amount < 10 || req.credit_amount > 100_000 {
+        return Json(serde_json::json!({
+            "error": "credit_amount must be between 10 and 100,000"
+        }))
+        .into_response();
+    }
+
+    // Resolve user (must be authenticated)
+    #[cfg(feature = "dynamodb-backend")]
+    let user_id = match auth_user_id(&state, &headers).await {
+        Some(id) if !id.is_empty() => id,
+        _ => {
+            return Json(serde_json::json!({ "error": "Login required" })).into_response();
+        }
+    };
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let user_id = {
+        let _ = (&state, &headers);
+        String::new()
+    };
+
+    let treasury = crate::service::solana::treasury_wallet();
+    if treasury.is_empty() {
+        return Json(serde_json::json!({
+            "error": "ENAI payment not configured (SOLANA_TREASURY_WALLET missing)"
+        }))
+        .into_response();
+    }
+
+    // Calculate ENAI amount: credits / 10 = ENAI amount
+    let enai_amount_raw = crate::service::solana::credits_to_enai_raw(req.credit_amount);
+    let enai_display = crate::service::solana::raw_to_enai_display(enai_amount_raw);
+
+    let tx_id = uuid::Uuid::new_v4().to_string();
+    let expires_at = chrono::Utc::now().timestamp() + 600; // 10 min expiry
+
+    // Store pending transaction
+    #[cfg(feature = "dynamodb-backend")]
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        let _ = dynamo
+            .put_item()
+            .table_name(table)
+            .item("pk", AttributeValue::S(format!("ENAI_TX#{}", tx_id)))
+            .item("sk", AttributeValue::S("PENDING".to_string()))
+            .item("user_id", AttributeValue::S(user_id.clone()))
+            .item("wallet", AttributeValue::S(req.wallet_address.clone()))
+            .item("enai_amount_raw", AttributeValue::N(enai_amount_raw.to_string()))
+            .item("credits", AttributeValue::N(req.credit_amount.to_string()))
+            .item("created_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+            .item("ttl", AttributeValue::N(expires_at.to_string()))
+            .send()
+            .await;
+    }
+
+    // Generate Solana Pay / Phantom deeplink
+    // Format: solana:<recipient>?spl-token=<mint>&amount=<raw>&label=...
+    let phantom_deeplink = format!(
+        "solana:{}?spl-token={}&amount={}&label=ChatwebAI&message=ENAI+Credits",
+        treasury,
+        crate::service::solana::enai_mint(),
+        enai_amount_raw
+    );
+
+    Json(serde_json::json!({
+        "tx_id": tx_id,
+        "treasury_wallet": treasury,
+        "enai_token_mint": crate::service::solana::enai_mint(),
+        "enai_amount": enai_display,
+        "enai_amount_raw": enai_amount_raw,
+        "credits_to_add": req.credit_amount,
+        "expires_at": expires_at,
+        "phantom_deeplink": phantom_deeplink,
+        "instructions": "Send exactly this amount of ENAI to the treasury wallet, then call /confirm with your tx_id and Solana transaction signature."
+    }))
+    .into_response()
+}
+
+/// POST /api/v1/crypto/enai/confirm — Verify ENAI payment and add credits
+async fn handle_enai_confirm(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<EnaiConfirmRequest>,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    let user_id = match auth_user_id(&state, &headers).await {
+        Some(id) if !id.is_empty() => id,
+        _ => {
+            return Json(serde_json::json!({ "error": "Login required" })).into_response();
+        }
+    };
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let user_id = {
+        let _ = (&state, &headers);
+        String::new()
+    };
+
+    #[cfg(feature = "dynamodb-backend")]
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        // Look up pending transaction
+        let item = dynamo
+            .get_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S(format!("ENAI_TX#{}", req.tx_id)))
+            .key("sk", AttributeValue::S("PENDING".to_string()))
+            .send()
+            .await;
+
+        let pending = match item {
+            Ok(resp) => resp.item,
+            Err(e) => {
+                tracing::error!("DynamoDB lookup failed: {}", e);
+                return Json(serde_json::json!({ "error": "Transaction lookup failed" }))
+                    .into_response();
+            }
+        };
+
+        let pending = match pending {
+            Some(p) => p,
+            None => {
+                return Json(serde_json::json!({
+                    "error": "Transaction not found or expired. Start a new payment."
+                }))
+                .into_response();
+            }
+        };
+
+        // Verify tx_id belongs to this user
+        let stored_user = pending
+            .get("user_id")
+            .and_then(|v| v.as_s().ok())
+            .cloned()
+            .unwrap_or_default();
+        if stored_user != user_id {
+            return Json(serde_json::json!({
+                "error": "Transaction does not belong to this user"
+            }))
+            .into_response();
+        }
+
+        // Check expiry
+        let expires_at: i64 = pending
+            .get("ttl")
+            .and_then(|v| v.as_n().ok())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        if chrono::Utc::now().timestamp() > expires_at {
+            return Json(serde_json::json!({
+                "error": "Transaction expired. Please start a new payment."
+            }))
+            .into_response();
+        }
+
+        let required_raw: u64 = pending
+            .get("enai_amount_raw")
+            .and_then(|v| v.as_n().ok())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        let credits: i64 = pending
+            .get("credits")
+            .and_then(|v| v.as_n().ok())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        // Check if already confirmed (idempotency)
+        let existing = dynamo
+            .get_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S(format!("ENAI_SIG#{}", req.tx_signature)))
+            .key("sk", AttributeValue::S("CONFIRMED".to_string()))
+            .send()
+            .await;
+
+        if existing.ok().and_then(|r| r.item).is_some() {
+            return Json(serde_json::json!({
+                "error": "This transaction signature was already used"
+            }))
+            .into_response();
+        }
+
+        // Verify on Solana blockchain (or mock if not configured)
+        let treasury = crate::service::solana::treasury_wallet();
+        let verified = if treasury.is_empty()
+            || crate::service::solana::enai_mint().starts_with("ENAI")
+        {
+            // Mock mode: accept any signature in development
+            tracing::warn!(
+                "ENAI payment in mock mode — SOLANA_TREASURY_WALLET or ENAI_TOKEN_MINT not configured"
+            );
+            Ok(required_raw)
+        } else {
+            crate::service::solana::verify_enai_payment(&req.tx_signature, required_raw).await
+        };
+
+        match verified {
+            Ok(received_raw) => {
+                // Mark as confirmed (idempotency key = tx_signature)
+                let _ = dynamo
+                    .put_item()
+                    .table_name(table)
+                    .item(
+                        "pk",
+                        AttributeValue::S(format!("ENAI_SIG#{}", req.tx_signature)),
+                    )
+                    .item("sk", AttributeValue::S("CONFIRMED".to_string()))
+                    .item("tx_id", AttributeValue::S(req.tx_id.clone()))
+                    .item("user_id", AttributeValue::S(user_id.clone()))
+                    .item("credits_added", AttributeValue::N(credits.to_string()))
+                    .item(
+                        "enai_received_raw",
+                        AttributeValue::N(received_raw.to_string()),
+                    )
+                    .item(
+                        "confirmed_at",
+                        AttributeValue::S(chrono::Utc::now().to_rfc3339()),
+                    )
+                    .send()
+                    .await;
+
+                // Add credits to user
+                add_credits_to_user(dynamo, table, &user_id, credits, "", "").await;
+
+                // Get updated balance
+                let user = get_or_create_user(dynamo, table, &user_id).await;
+
+                emit_audit_log(
+                    dynamo.clone(),
+                    table.clone(),
+                    "enai_payment",
+                    &user_id,
+                    &req.tx_signature,
+                    &format!("credits_added={}, enai_raw={}", credits, received_raw),
+                );
+
+                return Json(serde_json::json!({
+                    "success": true,
+                    "tx_signature": req.tx_signature,
+                    "credits_added": credits,
+                    "credits_remaining": user.credits_remaining,
+                    "enai_received": crate::service::solana::raw_to_enai_display(received_raw),
+                    "message": format!("支払い確認完了！{}クレジットを追加しました。", credits),
+                }))
+                .into_response();
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "ENAI payment verification failed for sig {}: {}",
+                    req.tx_signature,
+                    e
+                );
+                return Json(serde_json::json!({
+                    "error": format!("Payment verification failed: {}", e),
+                    "hint": "Make sure the transaction is finalized on Solana and you sent the correct amount."
+                }))
+                .into_response();
+            }
+        }
+    }
+
+    Json(serde_json::json!({ "error": "Payment system not available" })).into_response()
+}
+
+// ─── DePIN Node Rewards ────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct DepinReportRequest {
+    node_wallet: String,
+    query_hash: String,
+    proof_timestamp: i64,
+}
+
+/// POST /api/v1/depin/report — Report a processed query and receive ENAI reward
+async fn handle_depin_report(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<DepinReportRequest>,
+) -> impl IntoResponse {
+    // Basic validation
+    if req.node_wallet.is_empty() || req.query_hash.is_empty() {
+        return Json(serde_json::json!({
+            "error": "node_wallet and query_hash required"
+        }))
+        .into_response();
+    }
+
+    // Verify proof_timestamp is recent (within 5 minutes)
+    let now = chrono::Utc::now().timestamp();
+    if (now - req.proof_timestamp).abs() > 300 {
+        return Json(serde_json::json!({
+            "error": "proof_timestamp too old (must be within 5 minutes)"
+        }))
+        .into_response();
+    }
+
+    // Check for duplicate query_hash (prevent double-claiming)
+    #[cfg(feature = "dynamodb-backend")]
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        let existing = dynamo
+            .get_item()
+            .table_name(table)
+            .key(
+                "pk",
+                AttributeValue::S(format!("DEPIN_QUERY#{}", req.query_hash)),
+            )
+            .key("sk", AttributeValue::S("CLAIMED".to_string()))
+            .send()
+            .await;
+
+        if existing.ok().and_then(|r| r.item).is_some() {
+            return Json(serde_json::json!({ "error": "Query already claimed" })).into_response();
+        }
+
+        // Record claim
+        let _ = dynamo
+            .put_item()
+            .table_name(table)
+            .item(
+                "pk",
+                AttributeValue::S(format!("DEPIN_QUERY#{}", req.query_hash)),
+            )
+            .item("sk", AttributeValue::S("CLAIMED".to_string()))
+            .item("node_wallet", AttributeValue::S(req.node_wallet.clone()))
+            .item(
+                "claimed_at",
+                AttributeValue::S(chrono::Utc::now().to_rfc3339()),
+            )
+            .item("ttl", AttributeValue::N((now + 86400 * 30).to_string())) // 30 days
+            .send()
+            .await;
+
+        // Update DePIN stats
+        let _ = dynamo
+            .update_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S("DEPIN_STATS".to_string()))
+            .key("sk", AttributeValue::S("GLOBAL".to_string()))
+            .update_expression(
+                "ADD total_queries :one, total_rewards :one SET updated_at = :now",
+            )
+            .expression_attribute_values(":one", AttributeValue::N("1".to_string()))
+            .expression_attribute_values(
+                ":now",
+                AttributeValue::S(chrono::Utc::now().to_rfc3339()),
+            )
+            .send()
+            .await;
+    }
+
+    // Send ENAI reward (1 ENAI = 1_000_000 raw units)
+    let reward_enai_raw: u64 = 1_000_000; // 1 ENAI
+    let treasury = crate::service::solana::treasury_wallet();
+
+    let reward_tx = if treasury.is_empty() || crate::service::solana::enai_mint().starts_with("ENAI") {
+        // Mock mode
+        format!(
+            "mock_{}",
+            &req.query_hash[..8.min(req.query_hash.len())]
+        )
+    } else {
+        // Real Solana transfer (future: implement send_enai)
+        format!("pending_{}", uuid::Uuid::new_v4())
+    };
+
+    let mode = if treasury.is_empty() { "mock" } else { "live" };
+    Json(serde_json::json!({
+        "success": true,
+        "query_hash": req.query_hash,
+        "node_wallet": req.node_wallet,
+        "reward_tx": reward_tx,
+        "enai_sent": crate::service::solana::raw_to_enai_display(reward_enai_raw),
+        "enai_sent_raw": reward_enai_raw,
+        "mode": mode,
+        "message": "1 ENAIの報酬を送信しました。"
+    }))
+    .into_response()
+}
+
+/// GET /api/v1/depin/stats — DePIN network statistics
+async fn handle_depin_stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        let item = dynamo
+            .get_item()
+            .table_name(table)
+            .key("pk", AttributeValue::S("DEPIN_STATS".to_string()))
+            .key("sk", AttributeValue::S("GLOBAL".to_string()))
+            .send()
+            .await
+            .ok()
+            .and_then(|r| r.item);
+
+        let total_queries: i64 = item
+            .as_ref()
+            .and_then(|i| i.get("total_queries"))
+            .and_then(|v| v.as_n().ok())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        let total_rewards: i64 = item
+            .as_ref()
+            .and_then(|i| i.get("total_rewards"))
+            .and_then(|v| v.as_n().ok())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        return Json(serde_json::json!({
+            "total_nodes": 0, // TODO: track unique nodes
+            "total_queries": total_queries,
+            "total_rewards_distributed": total_rewards,
+            "reward_per_query_enai": 1.0,
+            "enai_token_mint": crate::service::solana::enai_mint(),
+            "network": "solana",
+        }))
+        .into_response();
+    }
+
+    Json(serde_json::json!({
+        "total_nodes": 0,
+        "total_queries": 0,
+        "total_rewards_distributed": 0,
+        "reward_per_query_enai": 1.0,
+    }))
+    .into_response()
+}
+
+// ─── Agent Wallet (x402 micropayments) ───────────────────────────────────
+
+/// GET /api/v1/agent/wallet — Get agent wallet balance for authenticated user
+async fn handle_agent_wallet(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    #[cfg(feature = "dynamodb-backend")]
+    let user_id = match auth_user_id(&state, &headers).await {
+        Some(id) if !id.is_empty() => id,
+        _ => {
+            return Json(serde_json::json!({ "error": "Login required" })).into_response();
+        }
+    };
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let user_id = {
+        let _ = (&state, &headers);
+        String::new()
+    };
+
+    #[cfg(feature = "dynamodb-backend")]
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        let item = dynamo
+            .get_item()
+            .table_name(table)
+            .key(
+                "pk",
+                AttributeValue::S(format!("AGENT_WALLET#{}", user_id)),
+            )
+            .key("sk", AttributeValue::S("BALANCE".to_string()))
+            .send()
+            .await
+            .ok()
+            .and_then(|r| r.item);
+
+        let balance_raw: u64 = item
+            .as_ref()
+            .and_then(|i| i.get("enai_balance_raw"))
+            .and_then(|v| v.as_n().ok())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        let wallet_address = item
+            .as_ref()
+            .and_then(|i| i.get("wallet_address"))
+            .and_then(|v| v.as_s().ok())
+            .cloned()
+            .unwrap_or_default();
+        let auto_pay_limit_raw: u64 = item
+            .as_ref()
+            .and_then(|i| i.get("auto_pay_limit_raw"))
+            .and_then(|v| v.as_n().ok())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10_000_000); // 10 ENAI default limit
+
+        return Json(serde_json::json!({
+            "user_id": user_id,
+            "wallet_address": wallet_address,
+            "enai_balance": crate::service::solana::raw_to_enai_display(balance_raw),
+            "enai_balance_raw": balance_raw,
+            "auto_pay_limit_enai": crate::service::solana::raw_to_enai_display(auto_pay_limit_raw),
+            "enai_token_mint": crate::service::solana::enai_mint(),
+            "x402_enabled": !wallet_address.is_empty(),
+        }))
+        .into_response();
+    }
+
+    Json(serde_json::json!({ "error": "Not available" })).into_response()
 }
 
 // Cache provider count at startup (computed once)
@@ -13809,6 +14891,13 @@ async fn handle_manifest_json() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "application/manifest+json")],
         include_str!("../../../../web/manifest.json"),
+    )
+}
+
+async fn handle_enai_metadata_json() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        include_str!("../../../../web/enai-metadata.json"),
     )
 }
 
@@ -14818,6 +15907,9 @@ async fn handle_get_settings(
             user_nickname: None,
             onboarding_completed: None,
             use_master_key_fallback: None,
+            dev_mode: None,
+            solana_wallet: None,
+            enai_earned: None,
         },
         "session_id": id,
     }))
@@ -14849,6 +15941,34 @@ async fn handle_update_settings(
             }
 
             save_user_settings(dynamo, table, &session_key, &_req).await;
+            // When authenticated, also save dev_mode/solana_wallet to the auth user's PROFILE
+            // so it persists across different session IDs.
+            if let Some(ref uid) = caller_id {
+                if *uid != session_key {
+                    if _req.dev_mode.is_some() || _req.solana_wallet.is_some() {
+                        let mut profile_expr = vec!["SET updated_at = :now".to_string()];
+                        let mut profile_vals: std::collections::HashMap<String, AttributeValue> = std::collections::HashMap::new();
+                        profile_vals.insert(":now".to_string(), AttributeValue::S(chrono::Utc::now().to_rfc3339()));
+                        if let Some(dm) = _req.dev_mode {
+                            profile_expr.push("dev_mode = :dm".to_string());
+                            profile_vals.insert(":dm".to_string(), AttributeValue::Bool(dm));
+                        }
+                        if let Some(ref sw) = _req.solana_wallet {
+                            profile_expr.push("solana_wallet = :sw".to_string());
+                            profile_vals.insert(":sw".to_string(), AttributeValue::S(sw.clone()));
+                        }
+                        let _ = dynamo
+                            .update_item()
+                            .table_name(table)
+                            .key("pk", AttributeValue::S(format!("USER#{}", uid)))
+                            .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                            .update_expression(&profile_expr.join(", "))
+                            .set_expression_attribute_values(Some(profile_vals))
+                            .send()
+                            .await;
+                    }
+                }
+            }
             let settings = get_user_settings(dynamo, table, &session_key).await;
             return Json(serde_json::json!({
                 "ok": true,
@@ -14912,13 +16032,16 @@ async fn get_user_settings(
             let user_nickname = item.get("user_nickname").and_then(|v| v.as_s().ok()).cloned();
             let onboarding_completed = item.get("onboarding_completed").and_then(|v| v.as_bool().ok()).copied();
             let use_master_key_fallback = item.get("use_master_key_fallback").and_then(|v| v.as_bool().ok()).copied();
+            let dev_mode = item.get("dev_mode").and_then(|v| v.as_bool().ok()).copied();
+            let solana_wallet = item.get("solana_wallet").and_then(|v| v.as_s().ok()).cloned();
+            let enai_earned = item.get("enai_earned").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok());
             return UserSettings {
                 preferred_model, temperature, enabled_tools, custom_api_keys, language,
                 adult_mode, age_verified, top_p, frequency_penalty, presence_penalty,
                 custom_system_prompt, streaming_enabled, show_thinking, theme, ui_language,
                 font_size, send_method, tts_speed, show_token_info, show_timestamps, compact_mode,
                 preferred_voice, preferred_tts_provider, ai_nickname, user_nickname, onboarding_completed,
-                use_master_key_fallback,
+                use_master_key_fallback, dev_mode, solana_wallet, enai_earned,
             };
         }
     }
@@ -14955,6 +16078,9 @@ async fn get_user_settings(
         user_nickname: None,
         onboarding_completed: None,
         use_master_key_fallback: None,
+        dev_mode: None,
+        solana_wallet: None,
+        enai_earned: None,
     }
 }
 
@@ -15118,17 +16244,106 @@ async fn save_user_settings(
         update_expr.push("onboarding_completed = :oc".to_string());
         expr_values.insert(":oc".to_string(), AttributeValue::Bool(oc));
     }
+    let dev_mode_val = req.dev_mode;
+    let solana_wallet_val = req.solana_wallet.clone();
+    if let Some(dm) = req.dev_mode {
+        update_expr.push("dev_mode = :dm".to_string());
+        expr_values.insert(":dm".to_string(), AttributeValue::Bool(dm));
+    }
+    if let Some(ref sw) = req.solana_wallet {
+        update_expr.push("solana_wallet = :sw".to_string());
+        expr_values.insert(":sw".to_string(), AttributeValue::S(sw.clone()));
+    }
 
     let update_expression = update_expr.join(", ");
     let _ = dynamo
         .update_item()
         .table_name(config_table)
-        .key("pk", AttributeValue::S(pk))
+        .key("pk", AttributeValue::S(pk.clone()))
         .key("sk", AttributeValue::S("SETTINGS".to_string()))
         .update_expression(&update_expression)
         .set_expression_attribute_values(Some(expr_values))
         .send()
         .await;
+
+    // Also persist dev_mode and solana_wallet to PROFILE so handle_chat can read them
+    // regardless of which session_id is used in the chat request.
+    if dev_mode_val.is_some() || solana_wallet_val.is_some() {
+        let mut profile_expr = vec!["SET updated_at = :now".to_string()];
+        let mut profile_vals: std::collections::HashMap<String, AttributeValue> = std::collections::HashMap::new();
+        profile_vals.insert(":now".to_string(), AttributeValue::S(chrono::Utc::now().to_rfc3339()));
+        if let Some(dm) = dev_mode_val {
+            profile_expr.push("dev_mode = :dm".to_string());
+            profile_vals.insert(":dm".to_string(), AttributeValue::Bool(dm));
+        }
+        if let Some(ref sw) = solana_wallet_val {
+            profile_expr.push("solana_wallet = :sw".to_string());
+            profile_vals.insert(":sw".to_string(), AttributeValue::S(sw.clone()));
+        }
+        let _ = dynamo
+            .update_item()
+            .table_name(config_table)
+            .key("pk", AttributeValue::S(pk))
+            .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+            .update_expression(&profile_expr.join(", "))
+            .set_expression_attribute_values(Some(profile_vals))
+            .send()
+            .await;
+    }
+}
+
+/// Save a training log entry for dev mode (fire-and-forget).
+/// Stores the conversation in TRAINING#{user_id}/TS#{timestamp} with 1-year TTL.
+#[cfg(feature = "dynamodb-backend")]
+fn save_training_log(
+    dynamo: aws_sdk_dynamodb::Client,
+    config_table: String,
+    user_id: String,
+    user_msg: String,
+    bot_msg: String,
+    model: String,
+) {
+    tokio::spawn(async move {
+        let ts = chrono::Utc::now();
+        let pk = format!("TRAINING#{}", user_id);
+        let sk = format!("TS#{}", ts.format("%Y%m%dT%H%M%S%.3fZ"));
+        let ttl = (ts.timestamp() + 365 * 24 * 3600).to_string();
+        let _ = dynamo
+            .put_item()
+            .table_name(&config_table)
+            .item("pk", AttributeValue::S(pk))
+            .item("sk", AttributeValue::S(sk))
+            .item("model", AttributeValue::S(model))
+            .item("user_msg", AttributeValue::S(user_msg))
+            .item("bot_msg", AttributeValue::S(bot_msg))
+            .item("created_at", AttributeValue::S(ts.to_rfc3339()))
+            .item("ttl", AttributeValue::N(ttl))
+            .send()
+            .await;
+    });
+}
+
+/// Add ENAI tokens to a user's earned balance (fire-and-forget, uses ADD to atomically increment).
+#[cfg(feature = "dynamodb-backend")]
+fn award_enai_for_training(
+    dynamo: aws_sdk_dynamodb::Client,
+    config_table: String,
+    user_id: String,
+    amount: i64,
+) {
+    tokio::spawn(async move {
+        let pk = format!("USER#{}", user_id);
+        let _ = dynamo
+            .update_item()
+            .table_name(&config_table)
+            .key("pk", AttributeValue::S(pk))
+            .key("sk", AttributeValue::S("SETTINGS".to_string()))
+            .update_expression("ADD enai_earned :amt SET updated_at = :now")
+            .expression_attribute_values(":amt", AttributeValue::N(amount.to_string()))
+            .expression_attribute_values(":now", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+            .send()
+            .await;
+    });
 }
 
 /// GET /settings — Settings page
@@ -15136,6 +16351,20 @@ async fn handle_settings_page() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
         include_str!("../../../../web/settings.html"),
+    )
+}
+
+async fn handle_conversations_page() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        include_str!("../../../../web/conversations.html"),
+    )
+}
+
+async fn handle_keys_page() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        include_str!("../../../../web/keys.html"),
     )
 }
 
@@ -15354,6 +16583,35 @@ async fn handle_google_callback(
         }
     }
 
+    // DbBackend path (libsql / Fly.io)
+    if let Some(ref db) = state.db {
+        let google_channel = format!("google:{}", google_sub);
+
+        // Check if this Google account is already linked to a user
+        let user_id = if let Ok(Some(uid)) = db.get_channel_map(&google_channel).await {
+            uid
+        } else {
+            // Create new user
+            let uid = format!("user:{}", uuid::Uuid::new_v4());
+            let _ = db.get_or_create_user(&uid).await;
+            let _ = db.set_channel_map(&google_channel, &uid).await;
+            uid
+        };
+
+        // Update user profile
+        if !_display_name.is_empty() {
+            let _ = db.update_user_display_name(&user_id, &_display_name).await;
+        }
+
+        // Create auth token (30 days)
+        let auth_token = uuid::Uuid::new_v4().to_string();
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(30);
+        let _ = db.create_auth_token(&auth_token, &user_id, Some(&expires_at.to_rfc3339())).await;
+
+        let redirect = format!("/?auth=success&token={}", auth_token);
+        return axum::response::Redirect::temporary(&redirect);
+    }
+
     axum::response::Redirect::temporary("/?auth=error&reason=no_db")
 }
 
@@ -15376,7 +16634,7 @@ async fn handle_auth_me(
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Check if this is an API key (cw_ prefix) or regular auth token
             let (pk, sk) = if token.starts_with("cw_") {
-                (format!("APIKEY#{}", token), "LOOKUP".to_string())
+                (format!("APIKEY#{}", hash_api_key(&token)), "LOOKUP".to_string())
             } else {
                 (format!("AUTH#{}", token), "TOKEN".to_string())
             };
@@ -15459,6 +16717,23 @@ async fn handle_auth_me(
                         "is_admin": user_is_admin,
                     }));
                 }
+            }
+        }
+    }
+
+    // DbBackend path (libsql / Fly.io)
+    if let Some(ref db) = state.db {
+        if let Ok(Some(user_id)) = db.resolve_auth_token(&token).await {
+            if let Ok(profile) = db.get_or_create_user(&user_id).await {
+                return Json(serde_json::json!({
+                    "authenticated": true,
+                    "user_id": user_id,
+                    "email": profile.email.unwrap_or_default(),
+                    "display_name": profile.display_name.unwrap_or_default(),
+                    "credits_remaining": profile.credits_remaining,
+                    "credits_used": profile.credits_used,
+                    "plan": profile.plan,
+                }));
             }
         }
     }
@@ -16067,7 +17342,64 @@ async fn handle_auth_email(
         }
     }
 
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+    // DbBackend path (libsql / Fly.io)
+    if let Some(ref db) = state.db {
+        // If RESEND_API_KEY is set, use verification code flow
+        if let Some(ref api_key) = resend_api_key {
+            let uuid_bytes = uuid::Uuid::new_v4();
+            let num = u32::from_le_bytes([uuid_bytes.as_bytes()[0], uuid_bytes.as_bytes()[1], uuid_bytes.as_bytes()[2], uuid_bytes.as_bytes()[3]]);
+            let code = format!("{:06}", num % 1_000_000);
+
+            // Store code via channel_map (verify:{email} → code)
+            let _ = db.set_channel_map(&format!("verify:{}", email), &code).await;
+
+            match send_verification_email(&email, &code, api_key).await {
+                Ok(()) => {
+                    tracing::info!("Verification email sent to {}", email);
+                    return (StatusCode::OK, Json(serde_json::json!({
+                        "ok": true,
+                        "pending_verification": true,
+                        "message": "認証コードをメールに送信しました。"
+                    })));
+                }
+                Err(e) => {
+                    tracing::error!("Failed to send verification email: {}", e);
+                    // Fall through to instant auth
+                }
+            }
+        }
+
+        // Instant auth (no RESEND_API_KEY or email send failed)
+        let display_name = req.name
+            .as_ref()
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| email.clone());
+
+        let user_id = if let Ok(Some(profile)) = db.find_user_by_email(&email).await {
+            profile.user_id
+        } else {
+            let uid = format!("user:{}", uuid::Uuid::new_v4());
+            let _ = db.get_or_create_user(&uid).await;
+            let _ = db.update_user_display_name(&uid, &display_name).await;
+            let _ = db.set_channel_map(&format!("email:{}", email), &uid).await;
+            uid
+        };
+
+        let auth_token = uuid::Uuid::new_v4().to_string();
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(30);
+        let _ = db.create_auth_token(&auth_token, &user_id, Some(&expires_at.to_rfc3339())).await;
+
+        return (StatusCode::OK, Json(serde_json::json!({
+            "ok": true,
+            "token": auth_token,
+            "user_id": user_id,
+            "email": email,
+            "display_name": display_name,
+        })));
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Database not configured" })))
 }
 
 /// POST /api/v1/auth/verify — Verify email with 6-digit code
@@ -16316,7 +17648,54 @@ async fn handle_auth_verify(
         }
     }
 
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+    // DbBackend path (libsql / Fly.io)
+    if let Some(ref db) = state.db {
+        // Look up stored code via channel_map
+        let verify_key = format!("verify:{}", email);
+        let stored_code = match db.get_channel_map(&verify_key).await {
+            Ok(Some(c)) => c,
+            _ => {
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                    "error": "認証コードが見つかりません。もう一度メールアドレスを入力してください。"
+                })));
+            }
+        };
+
+        if code != stored_code {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": "認証コードが正しくありません。"
+            })));
+        }
+
+        // Delete used code
+        let _ = db.set_channel_map(&verify_key, "").await;
+
+        // Get or create user
+        let display_name = email.clone();
+        let user_id = if let Ok(Some(profile)) = db.find_user_by_email(&email).await {
+            profile.user_id
+        } else {
+            let uid = format!("user:{}", uuid::Uuid::new_v4());
+            let _ = db.get_or_create_user(&uid).await;
+            let _ = db.update_user_display_name(&uid, &display_name).await;
+            let _ = db.set_channel_map(&format!("email:{}", email), &uid).await;
+            uid
+        };
+
+        let auth_token = uuid::Uuid::new_v4().to_string();
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(30);
+        let _ = db.create_auth_token(&auth_token, &user_id, Some(&expires_at.to_rfc3339())).await;
+
+        return (StatusCode::OK, Json(serde_json::json!({
+            "ok": true,
+            "token": auth_token,
+            "user_id": user_id,
+            "email": email,
+            "display_name": display_name,
+        })));
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Database not configured" })))
 }
 
 // ---------------------------------------------------------------------------
@@ -17907,6 +19286,14 @@ async fn resolve_user_from_token(
 // API Key management
 // ---------------------------------------------------------------------------
 
+/// SHA-256 hash of an API key for safe DynamoDB storage/lookup.
+fn hash_api_key(key: &str) -> String {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(key.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
 /// GET /api/v1/apikeys — List user's API keys
 async fn handle_list_apikeys(
     State(state): State<Arc<AppState>>,
@@ -17969,23 +19356,24 @@ async fn handle_create_apikey(
         let now = chrono::Utc::now().to_rfc3339();
 
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            // Store under user
+            let key_hash = hash_api_key(&api_key);
+            // Store under user (hash only — never store plaintext key)
             let _ = dynamo
                 .put_item()
                 .table_name(table)
                 .item("pk", AttributeValue::S(format!("USER#{}", user_id)))
                 .item("sk", AttributeValue::S(format!("APIKEY#{}", key_id)))
                 .item("name", AttributeValue::S(name.clone()))
-                .item("api_key_hash", AttributeValue::S(api_key.clone())) // In production, hash this
+                .item("api_key_hash", AttributeValue::S(key_hash.clone()))
                 .item("key_prefix", AttributeValue::S(key_prefix.clone()))
                 .item("created_at", AttributeValue::S(now.clone()))
                 .send()
                 .await;
-            // Store reverse lookup: APIKEY#<key> -> user_id
+            // Store reverse lookup: APIKEY#{SHA256(key)} -> user_id
             let _ = dynamo
                 .put_item()
                 .table_name(table)
-                .item("pk", AttributeValue::S(format!("APIKEY#{}", api_key)))
+                .item("pk", AttributeValue::S(format!("APIKEY#{}", key_hash)))
                 .item("sk", AttributeValue::S("LOOKUP".to_string()))
                 .item("user_id", AttributeValue::S(user_id.clone()))
                 .item("key_id", AttributeValue::S(key_id.clone()))
@@ -19955,18 +21343,17 @@ async fn handle_media_video_status(
     State(state): State<Arc<AppState>>,
     _headers: axum::http::HeaderMap,
     axum::extract::Path(video_id): axum::extract::Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<axum::response::Response, (StatusCode, String)> {
     // Fetch job from DynamoDB
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             if let Some(job) = get_video_job(dynamo, table, &video_id).await {
-                return Ok(Json(job));
+                return Ok(Json(job).into_response());
             }
         }
     }
 
-    #[cfg(not(feature = "dynamodb-backend"))]
     let _ = (&state, &video_id);
 
     Err((StatusCode::NOT_FOUND, "Video job not found".to_string()))
@@ -20363,18 +21750,17 @@ async fn handle_media_music_status(
     State(state): State<Arc<AppState>>,
     _headers: axum::http::HeaderMap,
     axum::extract::Path(music_id): axum::extract::Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<axum::response::Response, (StatusCode, String)> {
     // Fetch job from DynamoDB
     #[cfg(feature = "dynamodb-backend")]
     {
         if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             if let Some(job) = get_music_job(dynamo, table, &music_id).await {
-                return Ok(Json(job));
+                return Ok(Json(job).into_response());
             }
         }
     }
 
-    #[cfg(not(feature = "dynamodb-backend"))]
     let _ = (&state, &music_id);
 
     Err((StatusCode::NOT_FOUND, "Music job not found".to_string()))
@@ -22119,6 +23505,138 @@ async fn handle_cron_delete(
     (StatusCode::NOT_IMPLEMENTED, Json(serde_json::json!({ "error": "DynamoDB backend required" }))).into_response()
 }
 
+/// Daily summary notification — sends usage summary to linked LINE/Telegram channels.
+/// Admin-only endpoint. Triggered by EventBridge or manual cURL.
+async fn handle_daily_summary(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Admin auth required
+    if authenticate_admin(&state, &headers).await.is_none() {
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Admin only" }))).into_response();
+    }
+
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let yesterday = {
+                let now = chrono::Utc::now() + chrono::Duration::hours(9); // JST
+                (now - chrono::Duration::days(1)).format("%Y-%m-%d").to_string()
+            };
+
+            // Scan all LINK# records to find users with linked channels
+            let mut linked_users: std::collections::HashMap<String, Vec<(String, String)>> = std::collections::HashMap::new(); // user_id → [(channel_type, channel_key)]
+
+            let mut last_key: Option<std::collections::HashMap<String, AttributeValue>> = None;
+            loop {
+                let mut scan = dynamo.scan()
+                    .table_name(table)
+                    .filter_expression("begins_with(pk, :prefix) AND sk = :sk")
+                    .expression_attribute_values(":prefix", AttributeValue::S("LINK#".to_string()))
+                    .expression_attribute_values(":sk", AttributeValue::S("CHANNEL_MAP".to_string()))
+                    .limit(100);
+                if let Some(ref key) = last_key {
+                    scan = scan.set_exclusive_start_key(Some(key.clone()));
+                }
+                match scan.send().await {
+                    Ok(output) => {
+                        for item in output.items.unwrap_or_default() {
+                            let pk = item.get("pk").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let user_id = item.get("user_id").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
+                            let channel_key = pk.trim_start_matches("LINK#").to_string();
+                            let ch_type = if channel_key.starts_with("line:") {
+                                "line"
+                            } else if channel_key.starts_with("tg:") || channel_key.starts_with("telegram:") {
+                                "telegram"
+                            } else {
+                                continue;
+                            };
+                            if !user_id.is_empty() {
+                                linked_users.entry(user_id).or_default().push((ch_type.to_string(), channel_key));
+                            }
+                        }
+                        last_key = output.last_evaluated_key;
+                        if last_key.is_none() { break; }
+                    }
+                    Err(e) => {
+                        warn!("daily_summary: scan LINK# failed: {}", e);
+                        break;
+                    }
+                }
+            }
+
+            let mut sent = 0u32;
+            let mut errors = 0u32;
+            let line_token = std::env::var("LINE_CHANNEL_ACCESS_TOKEN").unwrap_or_default();
+            let tg_token = std::env::var("TELEGRAM_BOT_TOKEN").unwrap_or_default();
+            let client = reqwest::Client::new();
+
+            for (user_id, channels) in &linked_users {
+                // Query yesterday's usage
+                let usage_pk = format!("USAGE#{}#{}", user_id, yesterday);
+                let usage_resp = dynamo.query()
+                    .table_name(table)
+                    .key_condition_expression("pk = :pk")
+                    .expression_attribute_values(":pk", AttributeValue::S(usage_pk))
+                    .select(aws_sdk_dynamodb::types::Select::Count)
+                    .send().await;
+                let msg_count = usage_resp.as_ref().map(|r| r.count()).unwrap_or(0);
+
+                // Get credits remaining
+                let profile_resp = dynamo.get_item()
+                    .table_name(table)
+                    .key("pk", AttributeValue::S(format!("USER#{}", user_id)))
+                    .key("sk", AttributeValue::S(SK_PROFILE.to_string()))
+                    .send().await;
+                let credits = profile_resp.ok()
+                    .and_then(|o| o.item)
+                    .and_then(|i| i.get("credits_remaining").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()))
+                    .unwrap_or(0);
+
+                // Skip users with no activity yesterday
+                if msg_count == 0 { continue; }
+
+                let summary = format!(
+                    "📊 昨日のまとめ ({})\n\n💬 {} 回の会話\n💰 残りクレジット: {}\n\n今日も何でも聞いてくださいね！\nhttps://chatweb.ai",
+                    yesterday, msg_count, credits
+                );
+
+                for (ch_type, ch_key) in channels {
+                    let result = match ch_type.as_str() {
+                        "line" if !line_token.is_empty() => {
+                            let line_uid = ch_key.trim_start_matches("line:");
+                            crate::channel::line::LineChannel::push_message(&line_token, line_uid, &summary).await
+                        }
+                        "telegram" if !tg_token.is_empty() => {
+                            let chat_id = ch_key.trim_start_matches("tg:").trim_start_matches("telegram:");
+                            crate::channel::telegram::TelegramChannel::send_message_static(&client, &tg_token, chat_id, &summary).await
+                        }
+                        _ => continue,
+                    };
+                    match result {
+                        Ok(_) => sent += 1,
+                        Err(e) => {
+                            warn!("daily_summary: send to {} failed: {}", ch_key, e);
+                            errors += 1;
+                        }
+                    }
+                }
+            }
+
+            info!("daily_summary: {} users, {} sent, {} errors", linked_users.len(), sent, errors);
+            return Json(serde_json::json!({
+                "ok": true,
+                "date": yesterday,
+                "users_scanned": linked_users.len(),
+                "messages_sent": sent,
+                "errors": errors,
+            })).into_response();
+        }
+    }
+
+    (StatusCode::NOT_IMPLEMENTED, Json(serde_json::json!({ "error": "DynamoDB backend required" }))).into_response()
+}
+
 /// Start the HTTP server on the given address.
 /// Serve HTTP API with optional Bearer Token authentication.
 /// If `require_auth` is true, validates tokens from config.gateway.api_tokens.
@@ -22259,6 +23777,177 @@ async fn gateway_ip_middleware(
 
 /// A/B test experiment variants.
 /// Each variant has a conversation style that the AI and UI adopt.
+// ---------------------------------------------------------------------------
+// Model A/B Test — rotate default model based on session hash
+// ---------------------------------------------------------------------------
+
+/// Models in the A/B test rotation pool.
+/// Each session is deterministically assigned one model via hash.
+const AB_MODEL_POOL: &[&str] = &[
+    "minimax-m2.5",             // MiniMax native API
+    "deepseek-chat",            // DeepSeek
+    "google/gemini-2.5-flash",  // Gemini Flash
+    "qwen3-32b",                // Qwen3
+    "kimi-k2.5",                // Moonshot Kimi
+];
+
+/// Deterministically select a model based on session key hash.
+/// Same session always gets the same model for consistency.
+fn ab_select_model(session_key: &str) -> &'static str {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    session_key.hash(&mut hasher);
+    let hash = hasher.finish();
+    AB_MODEL_POOL[(hash as usize) % AB_MODEL_POOL.len()]
+}
+
+/// GET /api/v1/ab/model-test — Return current model A/B test config and 30 test patterns
+async fn handle_model_ab_config() -> impl IntoResponse {
+    Json(serde_json::json!({
+        "model_pool": AB_MODEL_POOL,
+        "total_patterns": MODEL_TEST_PATTERNS.len(),
+        "patterns": MODEL_TEST_PATTERNS.iter().map(|p| serde_json::json!({
+            "test_id": p.test_id,
+            "category": p.category,
+            "prompt": p.prompt,
+            "models": p.models,
+            "measure": p.measure,
+        })).collect::<Vec<_>>(),
+    }))
+}
+
+/// POST /api/v1/ab/model-benchmark — Run a single test pattern against specified models
+/// Body: { "test_id": "casual_01" } or { "prompt": "...", "models": ["minimax-m2.5", "deepseek-chat"] }
+async fn handle_model_benchmark(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // Admin check
+    let token = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or_default()
+        .to_string();
+    let is_admin_user = is_admin(&token);
+    if !is_admin_user {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "Admin only" })));
+    }
+
+    let prompt = if let Some(test_id) = req.get("test_id").and_then(|v| v.as_str()) {
+        MODEL_TEST_PATTERNS.iter().find(|p| p.test_id == test_id)
+            .map(|p| (p.prompt.to_string(), p.models.to_vec()))
+    } else {
+        let p = req.get("prompt").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let m: Vec<&str> = req.get("models").and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_else(|| AB_MODEL_POOL.to_vec());
+        if p.is_empty() { None } else { Some((p, m)) }
+    };
+
+    let (prompt_text, models) = match prompt {
+        Some((p, m)) => (p, m),
+        None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": "test_id or prompt required" }))),
+    };
+
+    let max_tokens: u32 = req.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(1024) as u32;
+    let messages = vec![crate::types::Message::user(&prompt_text)];
+    let mut results = Vec::new();
+
+    for model_name in &models {
+        let start = std::time::Instant::now();
+        let provider = state.get_lb_provider().or_else(|| state.provider.clone());
+        let resp = match provider {
+            Some(p) => p.chat(&messages, None, model_name, max_tokens, 0.7).await,
+            None => Err(crate::error::ProviderError::Other("No provider available".to_string())),
+        };
+        let elapsed = start.elapsed().as_millis() as u64;
+
+        match resp {
+            Ok(r) => {
+                results.push(serde_json::json!({
+                    "model": model_name,
+                    "response": r.content.unwrap_or_default(),
+                    "latency_ms": elapsed,
+                    "input_tokens": r.usage.prompt_tokens,
+                    "output_tokens": r.usage.completion_tokens,
+                    "status": "ok",
+                }));
+            }
+            Err(e) => {
+                results.push(serde_json::json!({
+                    "model": model_name,
+                    "error": format!("{}", e),
+                    "latency_ms": elapsed,
+                    "status": "error",
+                }));
+            }
+        }
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "prompt": prompt_text,
+        "results": results,
+    })))
+}
+
+/// 30 model A/B test patterns
+struct ModelTestPattern {
+    test_id: &'static str,
+    category: &'static str,
+    prompt: &'static str,
+    models: &'static [&'static str],
+    measure: &'static [&'static str],
+}
+
+const MODEL_TEST_PATTERNS: &[ModelTestPattern] = &[
+    // Japanese casual conversation (5)
+    ModelTestPattern { test_id: "casual_01", category: "japanese_casual", prompt: "最近めっちゃ暑くない？なんかいい暑さ対策ある？", models: &["minimax-m2.5", "deepseek-chat", "qwen3-32b"], measure: &["quality", "naturalness", "speed"] },
+    ModelTestPattern { test_id: "casual_02", category: "japanese_casual", prompt: "友達が急に「明日引っ越し手伝って」って言ってきたんだけど、正直行きたくない。うまく断る方法教えて。", models: &["kimi-k2.5", "google/gemini-2.5-flash", "minimax-m2.5"], measure: &["quality", "creativity", "naturalness"] },
+    ModelTestPattern { test_id: "casual_03", category: "japanese_casual", prompt: "おすすめのアニメ教えて！最近見たのは「葬送のフリーレン」と「推しの子」。こういう系が好き。", models: &["minimax-m2.5", "qwen3-32b", "deepseek-chat"], measure: &["quality", "accuracy", "speed"] },
+    ModelTestPattern { test_id: "casual_04", category: "japanese_casual", prompt: "今日仕事でやらかしちゃってさ…上司にメール送る時に宛先間違えて全社に送っちゃった。もう死にたい。", models: &["deepseek-chat", "google/gemini-2.5-flash", "minimax-m2.5"], measure: &["quality", "naturalness", "empathy"] },
+    ModelTestPattern { test_id: "casual_05", category: "japanese_casual", prompt: "彼女の誕生日に何あげたらいいかな？付き合って半年、25歳、カフェ巡りが趣味。予算は1万円くらい。", models: &["kimi-k2.5", "minimax-m2.5", "qwen3-32b"], measure: &["quality", "creativity", "speed"] },
+    // Japanese formal/business (3)
+    ModelTestPattern { test_id: "formal_01", category: "japanese_formal", prompt: "取引先に納期遅延のお詫びメールを書いてください。納期は当初3月10日でしたが、部品調達の遅れにより3月20日になります。今後の対策も含めてください。", models: &["deepseek-chat", "minimax-m2.5", "qwen3-32b"], measure: &["quality", "accuracy", "formality"] },
+    ModelTestPattern { test_id: "formal_02", category: "japanese_formal", prompt: "社内向けに、リモートワーク制度を週3日から週5日に拡大する提案書の骨子を作成してください。メリット・デメリット・導入スケジュールを含めること。", models: &["qwen3-32b", "google/gemini-2.5-flash", "minimax-m2.5"], measure: &["quality", "accuracy", "structure"] },
+    ModelTestPattern { test_id: "formal_03", category: "japanese_formal", prompt: "以下の議事録を要約し、アクションアイテムを抽出してください。\n参加者：田中部長、佐藤課長、鈴木、山田\n議題：Q3売上低迷への対策\n田中：Q3の売上が前年比15%減。特にBtoB部門が厳しい。\n佐藤：新規営業のリード数は増えているが、成約率が低下。提案書テンプレを刷新すべき。\n鈴木：競合A社が価格を20%下げた。価格改定も検討が必要。\n山田：既存顧客のアップセルに注力したい。CRMデータの分析を来週までにまとめる。\n田中：佐藤さんは提案書テンプレートを来週金曜までに。鈴木さんは競合価格調査を。次回は来週水曜。", models: &["minimax-m2.5", "kimi-k2.5", "deepseek-chat"], measure: &["quality", "accuracy", "structure"] },
+    // Code generation (5)
+    ModelTestPattern { test_id: "code_01", category: "code", prompt: "RustでHTTPサーバーを書いて。axum 0.7を使い、GET /health でJSON {\"status\":\"ok\"} を返し、POST /echo でリクエストボディをそのまま返すこと。", models: &["deepseek-chat", "qwen3-32b", "minimax-m2.5"], measure: &["accuracy", "quality", "speed"] },
+    ModelTestPattern { test_id: "code_02", category: "code", prompt: "TypeScriptで、配列をチャンクに分割するジェネリック関数を書いて。型安全で、エッジケース（空配列、チャンクサイズ0や負数）も処理すること。テストコードも付けて。", models: &["deepseek-chat", "google/gemini-2.5-flash", "minimax-m2.5"], measure: &["accuracy", "quality", "completeness"] },
+    ModelTestPattern { test_id: "code_03", category: "code", prompt: "以下のPythonコードのバグを見つけて修正してください。\ndef merge_sorted(a, b):\n    result = []\n    i = j = 0\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            result.append(a[i])\n            i += 1\n        else:\n            result.append(b[j])\n            j += 1\n    return result", models: &["kimi-k2.5", "minimax-m2.5", "deepseek-chat"], measure: &["accuracy", "quality", "speed"] },
+    ModelTestPattern { test_id: "code_04", category: "code", prompt: "SQLiteで月別の売上ランキングTOP5を出すクエリを書いて。\nCREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER, amount REAL, created_at TEXT);\nCREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, region TEXT);", models: &["qwen3-32b", "deepseek-chat", "minimax-m2.5"], measure: &["accuracy", "quality", "speed"] },
+    ModelTestPattern { test_id: "code_05", category: "code", prompt: "React + TypeScriptで、無限スクロール対応のリストコンポーネントを書いて。Intersection Observer APIを使い、ローディング状態とエラー状態も扱うこと。", models: &["google/gemini-2.5-flash", "minimax-m2.5", "deepseek-chat"], measure: &["accuracy", "quality", "completeness"] },
+    // Math/logic (3)
+    ModelTestPattern { test_id: "math_01", category: "math_logic", prompt: "ある牧場に羊と鶏がいます。頭の数の合計は50、足の数の合計は140です。羊と鶏はそれぞれ何匹いますか？途中の計算過程も示してください。", models: &["deepseek-chat", "qwen3-32b", "google/gemini-2.5-flash"], measure: &["accuracy", "quality", "speed"] },
+    ModelTestPattern { test_id: "math_02", category: "math_logic", prompt: "5人が円形に座っています。隣り合う2人が同じ色にならないように3色で塗り分ける方法は何通りですか？", models: &["kimi-k2.5", "minimax-m2.5", "deepseek-chat"], measure: &["accuracy", "quality", "reasoning"] },
+    ModelTestPattern { test_id: "math_03", category: "math_logic", prompt: "A,B,C,D,Eの5人がレースをしました。AはBより先、CはDより後、BはEより後、DはAより先、Cは最下位ではない。全員の順位を確定してください。", models: &["minimax-m2.5", "deepseek-chat", "qwen3-32b"], measure: &["accuracy", "quality", "speed"] },
+    // Creative writing (3)
+    ModelTestPattern { test_id: "creative_01", category: "creative", prompt: "「最後の自動販売機」というタイトルで、ポスト・アポカリプスの世界を舞台にした400字程度のショートショートを書いてください。", models: &["minimax-m2.5", "kimi-k2.5", "deepseek-chat"], measure: &["creativity", "quality", "naturalness"] },
+    ModelTestPattern { test_id: "creative_02", category: "creative", prompt: "新しいスマホアプリのキャッチコピーを10案考えてください。アプリは「散歩中に見つけた花をAIで識別して図鑑を作れるアプリ」です。ターゲットは30-50代女性。", models: &["google/gemini-2.5-flash", "qwen3-32b", "minimax-m2.5"], measure: &["creativity", "quality", "speed"] },
+    ModelTestPattern { test_id: "creative_03", category: "creative", prompt: "「時間」「猫」「コーヒー」の3つの単語を使って、俳句を5つ作ってください。季語も意識すること。", models: &["deepseek-chat", "kimi-k2.5", "minimax-m2.5"], measure: &["creativity", "accuracy", "naturalness"] },
+    // Translation (3)
+    ModelTestPattern { test_id: "translate_01", category: "translation", prompt: "以下の英文を自然な日本語に翻訳してください。\n\"The thing about working remotely is that it's not just about the flexibility — it's about reclaiming those stolen hours. The commute, the small talk, the performative busyness.\"", models: &["minimax-m2.5", "deepseek-chat", "google/gemini-2.5-flash"], measure: &["accuracy", "naturalness", "speed"] },
+    ModelTestPattern { test_id: "translate_02", category: "translation", prompt: "以下の日本語を英語に翻訳してください。ビジネスメールとして適切なトーンで。\n「先日はお忙しい中お時間をいただき、誠にありがとうございました。ご提案いただいた件について社内で検討いたしましたが、現時点では予算の都合上、来期以降の導入を前提に引き続き協議させていただければ幸いです。」", models: &["qwen3-32b", "minimax-m2.5", "kimi-k2.5"], measure: &["accuracy", "naturalness", "formality"] },
+    ModelTestPattern { test_id: "translate_03", category: "translation", prompt: "以下の技術文書を日本語に翻訳してください。\n\"Rust's ownership model ensures memory safety without a garbage collector. Each value has a single owner, and when the owner goes out of scope, the value is dropped.\"", models: &["kimi-k2.5", "deepseek-chat", "minimax-m2.5"], measure: &["accuracy", "quality", "speed"] },
+    // Summarization (2)
+    ModelTestPattern { test_id: "summary_01", category: "summary", prompt: "以下の文章を3行で要約してください。\n生成AIの急速な普及に伴い、著作権をめぐる議論が世界中で活発化している。米国では複数の大手出版社やアーティストがAI企業を相手に訴訟を起こしており、学習データに著作物が無断使用されたと主張。一方AI企業側はフェアユースの原則を根拠に正当性を訴えている。EUではAI規制法が2024年に発効し、学習データの透明性開示が義務付けられた。日本では文化庁がガイドラインを策定し、AI学習目的の著作物利用は原則として著作権侵害に当たらないとの見解を示したが、生成物が既存作品と類似する場合は侵害となり得るとしている。", models: &["google/gemini-2.5-flash", "minimax-m2.5", "qwen3-32b"], measure: &["accuracy", "quality", "speed"] },
+    ModelTestPattern { test_id: "summary_02", category: "summary", prompt: "以下のユーザーレビュー群から、ポジティブ・ネガティブそれぞれの主要な意見を3つずつ抽出してください。\nレビュー1:「UIがすごく使いやすい。直感的に操作できる。ただ検索機能が弱い。」\nレビュー2:「無料プランでも十分使える。広告が少し多いのが気になる。」\nレビュー3:「動作が軽くて快適。でもたまに落ちる。」\nレビュー4:「デザインがおしゃれ。他のアプリとの連携がもっとほしい。」\nレビュー5:「カスタマーサポートの対応が早くて助かった。料金プランがわかりにくい。」\nレビュー6:「オフラインでも使えるのが最高。バッテリー消費が激しいのが難点。」", models: &["deepseek-chat", "kimi-k2.5", "minimax-m2.5"], measure: &["accuracy", "quality", "structure"] },
+    // Tool usage (3)
+    ModelTestPattern { test_id: "tool_01", category: "tool_usage", prompt: "東京の今日の天気を調べて、それに合った服装を提案してください。", models: &["qwen3-32b", "google/gemini-2.5-flash", "minimax-m2.5"], measure: &["accuracy", "tool_selection", "speed"] },
+    ModelTestPattern { test_id: "tool_02", category: "tool_usage", prompt: "住宅ローン3500万円、金利0.5%、35年返済の場合、月々の返済額と総返済額を計算してください。金利が1.0%に上がった場合との比較も出してください。", models: &["deepseek-chat", "minimax-m2.5", "qwen3-32b"], measure: &["accuracy", "tool_selection", "quality"] },
+    ModelTestPattern { test_id: "tool_03", category: "tool_usage", prompt: "「量子コンピュータ 2025年 実用化」で最新情報を検索して、現在の開発状況を500字程度でまとめてください。情報源も明記すること。", models: &["kimi-k2.5", "qwen3-32b", "minimax-m2.5"], measure: &["accuracy", "tool_selection", "quality"] },
+    // Multi-turn (3)
+    ModelTestPattern { test_id: "multiturn_01", category: "multi_turn", prompt: "Pythonで簡単なTodoアプリのCLIを作りたい。まず設計を教えて。", models: &["deepseek-chat", "google/gemini-2.5-flash", "minimax-m2.5"], measure: &["accuracy", "quality", "context_retention"] },
+    ModelTestPattern { test_id: "multiturn_02", category: "multi_turn", prompt: "来週の金曜日に会社の飲み会の幹事を任された。20人くらいで予算は一人5000円。渋谷周辺で探してる。", models: &["minimax-m2.5", "kimi-k2.5", "qwen3-32b"], measure: &["quality", "context_retention", "naturalness"] },
+    ModelTestPattern { test_id: "multiturn_03", category: "multi_turn", prompt: "機械学習のoverfittingについて簡単に説明して。", models: &["qwen3-32b", "deepseek-chat", "minimax-m2.5"], measure: &["accuracy", "quality", "context_retention"] },
+];
+
+// ---------------------------------------------------------------------------
+// Personality A/B Test
+// ---------------------------------------------------------------------------
+
 const AB_VARIANTS: &[AbVariant] = &[
     AbVariant {
         id: "warm_casual",
