@@ -1,0 +1,68 @@
+# Stage 1: WASM build
+FROM rust:latest AS wasm-builder
+
+RUN rustup target add wasm32-unknown-unknown
+RUN cargo install trunk wasm-bindgen-cli
+
+WORKDIR /app
+
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+COPY src/ src/
+COPY web/ web/
+
+# Dev build (no wasm-opt). Compression (brotli/gzip) handles transfer size.
+RUN cd crates/chatweb-frontend && trunk build
+
+# Stage 2: Server build
+FROM rust:latest AS builder
+
+# System dependencies for libSQL (needs cmake, clang for libsql-ffi)
+RUN apt-get update && apt-get install -y \
+    cmake \
+    clang \
+    libclang-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+COPY src/ src/
+COPY web/ web/
+
+# Build the Fly.io entry point (libsql-backend + http-api + stripe)
+RUN cargo build --release \
+    --bin nanobot-fly \
+    -p nanobot-fly \
+    --no-default-features
+
+# Stage 3: Runtime (must match glibc from rust:latest = Debian trixie)
+FROM debian:trixie-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3t64 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /app/target/release/nanobot-fly /app/nanobot-fly
+
+# WASM static files (index.html, *.wasm, *.js, *.css)
+COPY --from=wasm-builder /app/dist /app/static
+# OG images for social sharing
+COPY web/og.svg web/og-teai.svg /app/static/
+
+# Web assets embedded via include_str!() still work for legacy routes.
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV DATABASE_URL=/data/nanobot.db
+ENV DATA_DIR=/data
+ENV STATIC_DIR=/app/static
+
+CMD ["/app/nanobot-fly"]
