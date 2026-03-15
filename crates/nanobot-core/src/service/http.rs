@@ -1800,8 +1800,8 @@ async fn auth_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Opti
         .unwrap_or_default();
     if token.is_empty() { return None; }
 
-    // Check if this is an API key (cw_ prefix) or regular auth token
-    let (pk, sk) = if token.starts_with("cw_") {
+    // Check if this is an API key (cw_ or te_ prefix) or regular auth token
+    let (pk, sk) = if token.starts_with("cw_") || token.starts_with("te_") {
         (format!("APIKEY#{}", hash_api_key(&token)), "LOOKUP".to_string())
     } else {
         (format!("AUTH#{}", token), "TOKEN".to_string())
@@ -2251,7 +2251,8 @@ pub struct AgentProfile {
 // Shared rules appended to all agent prompts (avoid duplication)
 const AGENT_COMMON: &str = "\n\n\
 ## 共通規範\n\
-- 言語: ユーザーの言語で回答（技術用語は英語OK）。日本語回答時は中国語・韓国語を混ぜない。\n\
+- 言語: ユーザーの言語で回答（技術用語は英語OK）。日本語回答時は中国語(簡体字/繁体字)・韓国語を絶対に混ぜない。\n\
+- 推論強化: 数学・論理・コード生成では内部で英語で思考し、最終回答をユーザーの言語で出力。\n\
 - ツール判断: 知識で答えられるなら即答。リアルタイムデータ（天気/ニュース/為替/株価）のみツール使用。\n\
 - **専用ツール優先**: 以下は必ず専用ツールを呼ぶ（web_search代替禁止）:\n\
   画像生成→`image_generate` | QR→`create_qr` | Wikipedia→`wikipedia` | 音楽→`music_generate` | 計算→`calculator` | PDF→`pdf_analyze` | 画像分析→`image_analyze` | 天気→`weather`\n\
@@ -3382,6 +3383,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // OpenAI-compatible Chat API — drop-in replacement for OpenAI API
         .route("/v1/chat/completions", post(handle_openai_chat_completions))
         .route("/v1/models", get(handle_openai_models))
+        .route("/v1/models/pricing", get(handle_openai_models_pricing))
+        // OpenAI-compatible Image Generation API
+        .route("/v1/images/generations", post(handle_openai_image_generations))
         .route("/api/v1/models", get(handle_list_models))
         // Media API — unified multimodal generation
         .route("/api/v1/media/tts", post(handle_media_tts))
@@ -3406,6 +3410,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/pricing", get(handle_pricing_api))
         // Pages
         .route("/pricing", get(handle_pricing))
+        .route("/dashboard", get(handle_dashboard))
         .route("/conversations", get(handle_conversations_page))
         .route("/keys", get(handle_keys_page))
         .route("/landing", get(handle_landing))
@@ -3418,6 +3423,13 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/docs", get(handle_docs))
         .route("/contact", get(handle_contact))
         .route("/terms", get(handle_terms))
+        .route("/privacy", get(handle_privacy))
+        .route("/about", get(handle_about))
+        .route("/security", get(handle_security))
+        .route("/sla", get(handle_sla))
+        .route("/changelog", get(handle_changelog))
+        .route("/api-reference", get(handle_api_reference))
+        .route("/register", get(handle_register))
         // Contact form submission
         .route("/api/v1/contact", post(handle_contact_submit))
         // Status
@@ -3503,6 +3515,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api-docs", get(handle_api_docs))
         // AI agent friendly
         .route("/robots.txt", get(handle_robots_txt))
+        .route("/sitemap.xml", get(handle_sitemap_xml))
         .route("/llms.txt", get(handle_llms_txt))
         .route("/llms-full.txt", get(handle_llms_full_txt))
         .route("/.well-known/ai-plugin.json", get(handle_ai_plugin))
@@ -3511,6 +3524,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Health
         .route("/health", get(handle_health))
         .route("/api/v1/health", get(handle_health))
+        .fallback(handle_404)
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1MB max body
         .layer(CompressionLayer::new())
         .layer(SetResponseHeaderLayer::overriding(
@@ -4041,7 +4055,7 @@ async fn handle_chat(
     }
 
     // Daily request limit for authenticated users (plan-based)
-    // free: 500/day, starter: 3,000/day, pro: 30,000/day, enterprise/admin: unlimited
+    // free: 500/day, starter: 3,000/day, pro: 30,000/day, business/admin: unlimited
     #[cfg(feature = "dynamodb-backend")]
     if !is_admin(&session_key) {
         if let Some(ref user) = cached_user {
@@ -4049,7 +4063,7 @@ async fn handle_chat(
                 "free"       => Some(500),
                 "starter"    => Some(3_000),
                 "pro"        => Some(30_000),
-                _            => None, // enterprise: unlimited
+                _            => None, // business: unlimited
             };
             if let Some(limit) = daily_limit {
                 if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
@@ -4059,7 +4073,7 @@ async fn handle_chat(
                         let msg = match user.plan.as_str() {
                             "free" => format!("1日の利用上限（{}回）に達しました。\nStarterプランにアップグレードすると3,000回/日まで使えます！", limit),
                             "starter" => format!("1日の利用上限（{}回）に達しました。\nProプランにアップグレードすると30,000回/日まで使えます！", limit),
-                            _ => format!("1日の利用上限（{}回）に達しました。\nEnterpriseプランについてはお問い合わせください。", limit),
+                            _ => format!("1日の利用上限（{}回）に達しました。\nBusinessプランについてはお問い合わせください。", limit),
                         };
                         return Json(ChatResponse {
                             response: msg,
@@ -4642,7 +4656,7 @@ async fn handle_chat(
                 #[cfg(feature = "dynamodb-backend")]
                 {
                     match cached_user.as_ref().map(|u| u.plan.as_str()) {
-                        Some("pro") | Some("enterprise") => 5,
+                        Some("pro") | Some("business") => 5,
                         Some("starter") => 3,
                         _ => {
                             // Wow Factor: new free users get extra tool iteration
@@ -7182,7 +7196,7 @@ async fn handle_chat_stream(
     }
 
     // Daily request limit for authenticated users (plan-based) — stream endpoint
-    // free: 500/day, starter: 3,000/day, pro: 30,000/day, enterprise/admin: unlimited
+    // free: 500/day, starter: 3,000/day, pro: 30,000/day, business/admin: unlimited
     #[cfg(feature = "dynamodb-backend")]
     if !is_admin(&session_key) {
         if let Some(ref user) = stream_user {
@@ -7190,7 +7204,7 @@ async fn handle_chat_stream(
                 "free"    => Some(500),
                 "starter" => Some(3_000),
                 "pro"     => Some(30_000),
-                _         => None, // enterprise: unlimited
+                _         => None, // business: unlimited
             };
             if let Some(limit) = daily_limit {
                 if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
@@ -7200,7 +7214,7 @@ async fn handle_chat_stream(
                         let content = match user.plan.as_str() {
                             "free"    => format!("1日の利用上限（{}回）に達しました。\nStarterプランにアップグレードすると3,000回/日まで使えます！", limit),
                             "starter" => format!("1日の利用上限（{}回）に達しました。\nProプランにアップグレードすると30,000回/日まで使えます！", limit),
-                            _         => format!("1日の利用上限（{}回）に達しました。\nEnterpriseプランについてはお問い合わせください。", limit),
+                            _         => format!("1日の利用上限（{}回）に達しました。\nBusinessプランについてはお問い合わせください。", limit),
                         };
                         let err_stream = stream::once(async move {
                             Ok::<_, Infallible>(Event::default().data(
@@ -7532,7 +7546,7 @@ async fn handle_chat_stream(
         #[cfg(feature = "dynamodb-backend")]
         {
             match stream_user.as_ref().map(|u| u.plan.as_str()) {
-                Some("pro") | Some("enterprise") => 5,
+                Some("pro") | Some("business") => 5,
                 Some("starter") => 3,
                 _ => {
                     // Wow Factor: new free users get extra tool iteration
@@ -9280,7 +9294,7 @@ async fn handle_billing_checkout(
     let price_id = match plan.as_str() {
         "starter" => std::env::var("STRIPE_PRICE_STARTER").unwrap_or_default(),
         "pro" => std::env::var("STRIPE_PRICE_PRO").unwrap_or_default(),
-        "enterprise" => std::env::var("STRIPE_PRICE_ENTERPRISE").unwrap_or_default(),
+        "business" => std::env::var("STRIPE_PRICE_BUSINESS").unwrap_or_default(),
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
@@ -9296,8 +9310,9 @@ async fn handle_billing_checkout(
         );
     }
 
-    let success_url = "https://chatweb.ai/?checkout=success&session_id={CHECKOUT_SESSION_ID}";
-    let cancel_url = "https://chatweb.ai/?checkout=cancel";
+    let base_url = if effective_host(&headers).contains("teai.io") { "https://teai.io" } else { "https://chatweb.ai" };
+    let success_url = format!("{}/?checkout=success&session_id={{CHECKOUT_SESSION_ID}}", base_url);
+    let cancel_url = format!("{}/?checkout=cancel", base_url);
 
     let params = vec![
         ("mode", "subscription".to_string()),
@@ -9367,8 +9382,9 @@ async fn handle_credit_pack_checkout(
         _ => (50000, 12800, "ChatWeb 50,000 クレジット"),
     };
 
-    let success_url = "https://chatweb.ai/?checkout=success&session_id={CHECKOUT_SESSION_ID}";
-    let cancel_url = "https://chatweb.ai/?checkout=cancel";
+    let base_url = if effective_host(&headers).contains("teai.io") { "https://teai.io" } else { "https://chatweb.ai" };
+    let success_url = format!("{}/?checkout=success&session_id={{CHECKOUT_SESSION_ID}}", base_url);
+    let cancel_url = format!("{}/?checkout=cancel", base_url);
 
     let params = vec![
         ("mode", "payment".to_string()),
@@ -9478,7 +9494,7 @@ async fn handle_billing_portal(
                 let client = reqwest::Client::new();
                 let params = vec![
                     ("customer", customer_id.as_str()),
-                    ("return_url", "https://chatweb.ai/"),
+                    ("return_url", if effective_host(&headers).contains("teai.io") { "https://teai.io/" } else { "https://chatweb.ai/" }),
                 ];
                 if let Ok(resp) = client.post("https://api.stripe.com/v1/billing_portal/sessions")
                     .header("Authorization", format!("Bearer {}", stripe_key))
@@ -9518,7 +9534,8 @@ async fn handle_stripe_webhook(
     {
         // V3 FIX: Reject requests when webhook secret is not configured
         let webhook_secret = std::env::var("STRIPE_WEBHOOK_SECRET").unwrap_or_default();
-        if webhook_secret.is_empty() {
+        let webhook_secret_teai = std::env::var("STRIPE_WEBHOOK_SECRET_TEAI").unwrap_or_default();
+        if webhook_secret.is_empty() && webhook_secret_teai.is_empty() {
             warn!("STRIPE_WEBHOOK_SECRET not configured — rejecting webhook");
             return StatusCode::SERVICE_UNAVAILABLE;
         }
@@ -9528,7 +9545,9 @@ async fn handle_stripe_webhook(
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
 
-        if !verify_webhook_signature(body.as_bytes(), signature, &webhook_secret) {
+        let sig_ok = (!webhook_secret.is_empty() && verify_webhook_signature(body.as_bytes(), signature, &webhook_secret))
+            || (!webhook_secret_teai.is_empty() && verify_webhook_signature(body.as_bytes(), signature, &webhook_secret_teai));
+        if !sig_ok {
             warn!("Stripe webhook signature verification failed");
             return StatusCode::UNAUTHORIZED;
         }
@@ -10397,12 +10416,14 @@ async fn handle_trial_start(
             if let Some(api_key) = resend_key {
                 tokio::spawn(async move {
                     let client = reqwest::Client::new();
+                    let (from, brand, color) = email_brand(true);
+                    let site_url = if brand == "teai.io" { "https://teai.io/" } else { "https://chatweb.ai/" };
                     let body = serde_json::json!({
-                        "from": "ChatWeb <noreply@chatweb.ai>",
+                        "from": from,
                         "to": [email_addr],
-                        "subject": "Starterプラン 14日間無料トライアル開始！ — ChatWeb",
-                        "html": "<div style='font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;'>\
-                            <h2 style='color:#6366f1;'>ChatWeb</h2>\
+                        "subject": format!("Starterプラン 14日間無料トライアル開始！ — {}", brand),
+                        "html": format!("<div style='font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;'>\
+                            <h2 style='color:{color};'>{brand}</h2>\
                             <p style='font-size:18px;font-weight:700;'>Starterプラン トライアルへようこそ！</p>\
                             <p>14日間、Starterプランの全機能を無料でお試しいただけます。</p>\
                             <div style='background:#f3f4f6;border-radius:10px;padding:16px;margin:16px 0;'>\
@@ -10410,9 +10431,9 @@ async fn handle_trial_start(
                                 <p style='margin:0 0 8px;'><b>利用可能モデル:</b> GPT-4o, Claude Sonnet など</p>\
                                 <p style='margin:0;'><b>有効期限:</b> 14日間</p>\
                             </div>\
-                            <a href='https://chatweb.ai/' style='display:inline-block;background:#6366f1;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;margin-top:8px;'>チャットを始める</a>\
+                            <a href='{site_url}' style='display:inline-block;background:{color};color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;margin-top:8px;'>チャットを始める</a>\
                             <p style='color:#6b7280;font-size:13px;margin-top:20px;'>トライアル期間終了後は自動的に無料プランに戻ります。</p>\
-                        </div>"
+                        </div>")
                     });
                     let _ = client.post("https://api.resend.com/emails")
                         .header("Authorization", format!("Bearer {}", api_key))
@@ -12077,17 +12098,17 @@ async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
     } else if host.contains("chatweb-pi") || host.contains(".local") || (!host.contains('.') && !host.contains("chatweb.ai") && !host.contains("teai.io")) {
         std::borrow::Cow::Borrowed(include_str!("../../../../web/pi.html"))
     } else if host.contains("teai.io") {
-        // teai.io: serve the main SPA (index.html) with teai.io branding applied
+        // teai.io: serve the dedicated landing page (API gateway LP)
+        std::borrow::Cow::Borrowed(include_str!("../../../../web/teai-index.html"))
+    } else if false {
+        // NOTE: Legacy teai.io chat SPA branding — moved to /chat route
         let base = include_str!("../../../../web/index.html");
         let branded = base
-            // HTML lang & title
             .replacen("<html lang=\"ja\">", "<html lang=\"en\">", 1)
             .replacen("<title>chatweb.ai - お願いしたら、本当にやってくれるAI</title>",
                        "<title>teai.io - AI Agent for Developers</title>", 1)
-            // Meta description
             .replacen("content=\"声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料で始められます。\"",
                        "content=\"Ship faster with AI. Code, search, automate — from your terminal or browser.\"", 1)
-            // OGP
             .replacen("content=\"chatweb.ai - お願いしたら、本当にやってくれるAI\"",
                        "content=\"teai.io - AI Agent for Developers\"", 1)
             .replacen("content=\"声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料。\"",
@@ -12098,7 +12119,6 @@ async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
                        "content=\"https://teai.io\"", 1)
             .replacen("content=\"chatweb.ai\"",
                        "content=\"teai.io\"", 1)
-            // Twitter card
             .replacen("content=\"@chatweb_ai\"",
                        "content=\"@teai_io\"", 1)
             .replacen("content=\"chatweb.ai - お願いしたら、本当にやってくれるAI\"",
@@ -12211,9 +12231,19 @@ async fn handle_welcome() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/welcome.html"))
 }
 
+/// GET /dashboard — API dashboard (teai.io)
+async fn handle_dashboard() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/teai-dashboard.html"))
+}
+
 /// GET /status — Status page
-async fn handle_status() -> impl IntoResponse {
-    axum::response::Html(include_str!("../../../../web/status.html"))
+async fn handle_status(headers: axum::http::HeaderMap) -> impl IntoResponse {
+    let host = effective_host(&headers);
+    if host.contains("teai.io") {
+        axum::response::Html(include_str!("../../../../web/teai-status.html"))
+    } else {
+        axum::response::Html(include_str!("../../../../web/status.html"))
+    }
 }
 
 /// GET /features — Features overview page
@@ -12232,12 +12262,68 @@ async fn handle_contact() -> impl IntoResponse {
 }
 
 /// GET /terms — Terms of Service page
-async fn handle_terms() -> impl IntoResponse {
-    axum::response::Html(include_str!("../../../../web/terms.html"))
+async fn handle_terms(headers: axum::http::HeaderMap) -> impl IntoResponse {
+    let host = effective_host(&headers);
+    if host.contains("teai.io") {
+        axum::response::Html(include_str!("../../../../web/teai-terms.html"))
+    } else {
+        axum::response::Html(include_str!("../../../../web/terms.html"))
+    }
 }
 
-async fn handle_docs() -> impl IntoResponse {
-    axum::response::Html(include_str!("../../../../web/docs.html"))
+/// GET /about — About / Company info page
+async fn handle_about() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/teai-about.html"))
+}
+
+/// GET /privacy — Privacy Policy page
+async fn handle_privacy() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/privacy.html"))
+}
+
+/// GET /security — Security & Compliance page
+async fn handle_security() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/teai-security.html"))
+}
+
+/// GET /sla — SLA details page
+async fn handle_sla() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/teai-sla.html"))
+}
+
+/// GET /changelog — Changelog page
+async fn handle_changelog() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/teai-changelog.html"))
+}
+
+/// GET /api-reference — Full API reference page
+async fn handle_api_reference() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/teai-api-reference.html"))
+}
+
+/// GET /register — Registration/login page
+async fn handle_register(headers: axum::http::HeaderMap) -> impl IntoResponse {
+    let host = effective_host(&headers);
+    if host.contains("teai.io") {
+        axum::response::Html(include_str!("../../../../web/teai-register.html"))
+    } else {
+        // chatweb.ai uses the main index page for auth
+        axum::response::Html(include_str!("../../../../web/teai-register.html"))
+    }
+}
+
+/// Fallback 404 handler
+async fn handle_404() -> impl IntoResponse {
+    (axum::http::StatusCode::NOT_FOUND, axum::response::Html(include_str!("../../../../web/404.html")))
+}
+
+async fn handle_docs(headers: axum::http::HeaderMap) -> impl IntoResponse {
+    let host = effective_host(&headers);
+    if host.contains("teai.io") {
+        axum::response::Html(include_str!("../../../../web/teai-docs.html"))
+    } else {
+        axum::response::Html(include_str!("../../../../web/docs.html"))
+    }
 }
 
 /// Contact form submission request.
@@ -12406,7 +12492,7 @@ async fn handle_admin_stats(
                 let mut plan_free: u64 = 0;
                 let mut plan_starter: u64 = 0;
                 let mut plan_pro: u64 = 0;
-                let mut plan_enterprise: u64 = 0;
+                let mut plan_business: u64 = 0;
                 let mut total_credits_remaining: i64 = 0;
                 let mut total_credits_used: i64 = 0;
                 let mut start_key: Option<DynKey> = None;
@@ -12430,7 +12516,7 @@ async fn handle_admin_stats(
                                 match plan {
                                     "starter" => plan_starter += 1,
                                     "pro" => plan_pro += 1,
-                                    "enterprise" => plan_enterprise += 1,
+                                    "business" => plan_business += 1,
                                     _ => plan_free += 1,
                                 }
                                 let cr = item.get("credits_remaining").and_then(|v| v.as_n().ok()).and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
@@ -12446,7 +12532,7 @@ async fn handle_admin_stats(
                         Err(e) => { tracing::warn!("admin stats users scan: {}", e); break; }
                     }
                 }
-                (total_users, plan_free, plan_starter, plan_pro, plan_enterprise, total_credits_remaining, total_credits_used)
+                (total_users, plan_free, plan_starter, plan_pro, plan_business, total_credits_remaining, total_credits_used)
             };
 
             // Scan 2: sessions by channel
@@ -12529,7 +12615,7 @@ async fn handle_admin_stats(
             };
 
             let (users_result, sessions_result, usage_result) = tokio::join!(users_fut, sessions_fut, usage_fut);
-            let (total_users, plan_free, plan_starter, plan_pro, plan_enterprise, total_credits_remaining, total_credits_used) = users_result;
+            let (total_users, plan_free, plan_starter, plan_pro, plan_business, total_credits_remaining, total_credits_used) = users_result;
             let (web, line, tg, other) = sessions_result;
             let (today_usage, today_active) = usage_result;
 
@@ -12540,8 +12626,8 @@ async fn handle_admin_stats(
                     "free": plan_free,
                     "starter": plan_starter,
                     "pro": plan_pro,
-                    "enterprise": plan_enterprise,
-                    "paid_total": plan_starter + plan_pro + plan_enterprise,
+                    "business": plan_business,
+                    "paid_total": plan_starter + plan_pro + plan_business,
                 },
                 "credits": {
                     "total_remaining": total_credits_remaining,
@@ -14961,6 +15047,24 @@ async fn handle_robots_txt() -> impl IntoResponse {
     )
 }
 
+async fn handle_sitemap_xml(headers: axum::http::HeaderMap) -> impl IntoResponse {
+    let host = effective_host(&headers);
+    let base = if host.contains("teai.io") { "https://teai.io" } else { "https://chatweb.ai" };
+    let today = chrono::Utc::now().format("%Y-%m-%d");
+    let xml = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{base}/</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>{base}/pricing</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>{base}/skill</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>
+</urlset>"#
+    );
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/xml; charset=utf-8")],
+        xml,
+    )
+}
+
 async fn handle_llms_txt() -> impl IntoResponse {
     let base = get_base_url();
     (
@@ -16901,9 +17005,64 @@ async fn handle_auth_register(
                 }
             }
 
-            let user_id = format!("user:{}", uuid::Uuid::new_v4());
             let salt = uuid::Uuid::new_v4().to_string();
             let password_hash = hash_password(&req.password, &salt);
+
+            // If RESEND_API_KEY is set, send verification email before creating account
+            let resend_api_key = std::env::var("RESEND_API_KEY").ok().filter(|k| !k.is_empty());
+            if let Some(ref api_key) = resend_api_key {
+                // Generate 6-digit code
+                let uuid_bytes = uuid::Uuid::new_v4();
+                let num = u32::from_le_bytes([uuid_bytes.as_bytes()[0], uuid_bytes.as_bytes()[1], uuid_bytes.as_bytes()[2], uuid_bytes.as_bytes()[3]]);
+                let code = format!("{:06}", num % 1_000_000);
+                let ttl = (chrono::Utc::now().timestamp() + 600).to_string(); // 10 min
+
+                // Store verification code + password hash in VERIFY record
+                let verify_pk = format!("VERIFY#{}", email);
+                let mut put_req = dynamo
+                    .put_item()
+                    .table_name(table)
+                    .item("pk", AttributeValue::S(verify_pk))
+                    .item("sk", AttributeValue::S("CODE".to_string()))
+                    .item("code", AttributeValue::S(code.clone()))
+                    .item("password_hash", AttributeValue::S(password_hash.clone()))
+                    .item("salt", AttributeValue::S(salt.clone()))
+                    .item("attempts", AttributeValue::N("0".to_string()))
+                    .item("auth_type", AttributeValue::S("register".to_string()))
+                    .item("ttl", AttributeValue::N(ttl))
+                    .item("created_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()));
+                if let Some(ref name) = req.name {
+                    let trimmed = name.trim();
+                    if !trimmed.is_empty() {
+                        put_req = put_req.item("name", AttributeValue::S(trimmed.to_string()));
+                    }
+                }
+                if let Some(ref ref_code) = req.referral_code {
+                    let trimmed = ref_code.trim().to_uppercase();
+                    if !trimmed.is_empty() {
+                        put_req = put_req.item("referral_code", AttributeValue::S(trimmed));
+                    }
+                }
+                let _ = put_req.send().await;
+
+                match send_verification_email(&email, &code, api_key).await {
+                    Ok(()) => {
+                        tracing::info!("Registration verification email sent to {}", email);
+                        return (StatusCode::OK, Json(serde_json::json!({
+                            "ok": true,
+                            "pending_verification": true,
+                            "message": "認証コードをメールに送信しました。"
+                        })));
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to send verification email for register: {}", e);
+                        // Fall through to instant registration
+                    }
+                }
+            }
+
+            // Fallback: instant registration (no RESEND_API_KEY or email send failed)
+            let user_id = format!("user:{}", uuid::Uuid::new_v4());
             let now = chrono::Utc::now().to_rfc3339();
 
             // Store EMAIL#{email} CREDENTIALS
@@ -17136,23 +17295,33 @@ async fn handle_auth_login(
     (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
 }
 
+/// Get branded email sender based on host context.
+fn email_brand(is_teai: bool) -> (&'static str, &'static str, &'static str) {
+    if is_teai || std::env::var("RESEND_API_KEY_TEAI").ok().filter(|k| !k.is_empty()).is_some() {
+        ("teai.io <noreply@teai.io>", "teai.io", "#10b981")
+    } else {
+        ("ChatWeb <noreply@chatweb.ai>", "ChatWeb", "#6366f1")
+    }
+}
+
 /// Send a verification email via Resend API. Returns Ok(()) on success.
 #[allow(dead_code)]
 async fn send_verification_email(email: &str, code: &str, resend_api_key: &str) -> Result<(), String> {
+    let (from, brand, color) = email_brand(true);
     let client = reqwest::Client::new();
     let body = serde_json::json!({
-        "from": "ChatWeb <noreply@chatweb.ai>",
+        "from": from,
         "to": [email],
-        "subject": format!("認証コード: {} — ChatWeb", code),
+        "subject": format!("認証コード: {} — {}", code, brand),
         "html": format!(
             "<div style='font-family:sans-serif;max-width:400px;margin:0 auto;padding:20px;'>\
-             <h2 style='color:#6366f1;'>ChatWeb</h2>\
+             <h2 style='color:{};'>{}</h2>\
              <p>ログイン認証コード:</p>\
              <div style='font-size:32px;letter-spacing:8px;font-weight:bold;text-align:center;\
              background:#f3f4f6;padding:16px;border-radius:8px;margin:16px 0;'>{}</div>\
              <p style='color:#6b7280;font-size:14px;'>このコードは10分間有効です。<br>\
              心当たりがない場合は無視してください。</p>\
-             </div>", code
+             </div>", color, brand, code
         ),
     });
     let resp = client.post("https://api.resend.com/emails")
@@ -17428,7 +17597,7 @@ async fn handle_auth_verify(
                 .send()
                 .await;
 
-            let (stored_code, stored_session_id, attempts, stored_name) = match stored {
+            let (stored_code, stored_session_id, attempts, stored_name, stored_password_hash, stored_salt, stored_referral_code) = match stored {
                 Ok(output) => {
                     if let Some(item) = output.item {
                         let sc = item.get("code").and_then(|v| v.as_s().ok()).cloned().unwrap_or_default();
@@ -17436,6 +17605,9 @@ async fn handle_auth_verify(
                         let att = item.get("attempts").and_then(|v| v.as_n().ok())
                             .and_then(|n| n.parse::<i64>().ok()).unwrap_or(0);
                         let name = item.get("name").and_then(|v| v.as_s().ok()).cloned();
+                        let pw_hash = item.get("password_hash").and_then(|v| v.as_s().ok()).cloned();
+                        let salt = item.get("salt").and_then(|v| v.as_s().ok()).cloned();
+                        let ref_code = item.get("referral_code").and_then(|v| v.as_s().ok()).cloned();
                         // Check TTL
                         if let Some(ttl_val) = item.get("ttl").and_then(|v| v.as_n().ok()) {
                             if let Ok(ttl) = ttl_val.parse::<i64>() {
@@ -17446,7 +17618,7 @@ async fn handle_auth_verify(
                                 }
                             }
                         }
-                        (sc, sid, att, name)
+                        (sc, sid, att, name, pw_hash, salt, ref_code)
                     } else {
                         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
                             "error": "認証コードが見つかりません。もう一度メールアドレスを入力してください。"
@@ -17513,16 +17685,21 @@ async fn handle_auth_verify(
                     let new_user_id = format!("user:{}", uuid::Uuid::new_v4());
                     let now = chrono::Utc::now().to_rfc3339();
 
-                    let _ = dynamo
+                    // Store credentials — include password_hash if this was a register-with-password flow
+                    let mut cred_req = dynamo
                         .put_item()
                         .table_name(table)
                         .item("pk", AttributeValue::S(email_pk))
                         .item("sk", AttributeValue::S("CREDENTIALS".to_string()))
                         .item("user_id", AttributeValue::S(new_user_id.clone()))
                         .item("auth_method", AttributeValue::S("email_verified".to_string()))
-                        .item("created_at", AttributeValue::S(now.clone()))
-                        .send()
-                        .await;
+                        .item("created_at", AttributeValue::S(now.clone()));
+                    if let (Some(ref pw_hash), Some(ref salt)) = (&stored_password_hash, &stored_salt) {
+                        cred_req = cred_req
+                            .item("password_hash", AttributeValue::S(pw_hash.clone()))
+                            .item("salt", AttributeValue::S(salt.clone()));
+                    }
+                    let _ = cred_req.send().await;
 
                     let _ = get_or_create_user(dynamo, table, &new_user_id).await;
                     let user_pk = format!("USER#{}", new_user_id);
@@ -17582,9 +17759,10 @@ async fn handle_auth_verify(
                 .send()
                 .await;
 
-            // Apply referral code if provided
+            // Apply referral code if provided (from request or from stored registration data)
             let mut referral_bonus: i64 = 0;
-            if let Some(ref ref_code) = req.referral_code {
+            let effective_referral = req.referral_code.as_ref().or(stored_referral_code.as_ref());
+            if let Some(ref ref_code) = effective_referral {
                 let rcode = ref_code.trim().to_uppercase();
                 if rcode.len() >= 4 && rcode.len() <= 10 {
                     if let Ok(output) = dynamo
@@ -17763,19 +17941,20 @@ async fn handle_forgot_password(
             let resend_api_key = std::env::var("RESEND_API_KEY").ok().filter(|k| !k.is_empty());
             if let Some(api_key) = resend_api_key {
                 let client = reqwest::Client::new();
+                let (from, brand, color) = email_brand(true);
                 let body = serde_json::json!({
-                    "from": "ChatWeb <noreply@chatweb.ai>",
+                    "from": from,
                     "to": [email],
-                    "subject": format!("パスワードリセット: {} — ChatWeb", code),
+                    "subject": format!("パスワードリセット: {} — {}", code, brand),
                     "html": format!(
                         "<div style='font-family:sans-serif;max-width:400px;margin:0 auto;padding:20px;'>\
-                         <h2 style='color:#6366f1;'>ChatWeb</h2>\
+                         <h2 style='color:{};'>{}</h2>\
                          <p>パスワードリセットコード:</p>\
                          <div style='font-size:32px;letter-spacing:8px;font-weight:bold;text-align:center;\
                          background:#f3f4f6;padding:16px;border-radius:8px;margin:16px 0;'>{}</div>\
                          <p style='color:#6b7280;font-size:14px;'>このコードは10分間有効です。<br>\
                          心当たりがない場合は無視してください。</p>\
-                         </div>", code
+                         </div>", color, brand, code
                     ),
                 });
                 let _ = client.post("https://api.resend.com/emails")
@@ -19349,10 +19528,15 @@ async fn handle_create_apikey(
             None => return Json(serde_json::json!({ "error": "Unauthorized" })),
         };
         let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("default").to_string();
-        // Generate API key: cw_<random>
+        // Generate API key: te_<random> for teai.io, cw_<random> for chatweb.ai
         let key_id = uuid::Uuid::new_v4().to_string().replace("-", "");
-        let api_key = format!("cw_{}", &key_id);
-        let key_prefix = format!("cw_{}...", &key_id[..8]);
+        let host = headers.get("x-forwarded-host")
+            .or_else(|| headers.get("host"))
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let prefix = if host.contains("teai.io") { "te" } else { "cw" };
+        let api_key = format!("{}_{}", prefix, &key_id);
+        let key_prefix = format!("{}_{}...", prefix, &key_id[..8]);
         let now = chrono::Utc::now().to_rfc3339();
 
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
@@ -22134,6 +22318,180 @@ async fn handle_openai_models(
     )
 }
 
+/// GET /v1/models/pricing — Detailed model pricing in OpenAI-compatible list format.
+async fn handle_openai_models_pricing(
+    State(_state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    use crate::provider::pricing::PRICING_TABLE;
+
+    let data: Vec<serde_json::Value> = PRICING_TABLE.iter().map(|p| {
+        let free = p.input_per_1m == 0.0 && p.output_per_1m == 0.0;
+        serde_json::json!({
+            "id": p.model,
+            "provider": p.provider,
+            "input_per_1m_tokens": p.input_per_1m,
+            "output_per_1m_tokens": p.output_per_1m,
+            "context_window": p.context_window,
+            "credits_in_1k": p.credits_in_1k,
+            "credits_out_1k": p.credits_out_1k,
+            "free": free,
+        })
+    }).collect();
+
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        Json(serde_json::json!({ "object": "list", "data": data })),
+    )
+}
+
+/// POST /v1/images/generations — OpenAI-compatible image generation endpoint.
+/// Requires authenticated cw_xxx API key. Costs 50 credits per image.
+/// Returns OpenAI-compatible format: {"created":..,"data":[{"url":"..."}]}
+async fn handle_openai_image_generations(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // Require authenticated user (no anonymous access)
+    let user_id = match auth_user_id(&state, &headers).await {
+        Some(uid) => uid,
+        None => {
+            return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
+                "error": {
+                    "message": "Authentication required. Please provide a valid cw_xxx API key.",
+                    "type": "invalid_request_error",
+                    "code": "unauthorized"
+                }
+            }))).into_response();
+        }
+    };
+
+    let prompt = match req.get("prompt").and_then(|v| v.as_str()) {
+        Some(p) if !p.is_empty() => p.to_string(),
+        _ => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": {
+                    "message": "`prompt` field is required",
+                    "type": "invalid_request_error",
+                    "code": "invalid_request"
+                }
+            }))).into_response();
+        }
+    };
+
+    let model = req.get("model").and_then(|v| v.as_str()).unwrap_or("dall-e-3");
+    let size = req.get("size").and_then(|v| v.as_str()).unwrap_or("1024x1024");
+    let quality = req.get("quality").and_then(|v| v.as_str()).unwrap_or("standard");
+    let n = req.get("n").and_then(|v| v.as_u64()).unwrap_or(1).min(4) as usize;
+
+    // Cost: 50 credits per image
+    let credits_to_use: i64 = 50 * (n as i64);
+
+    // Deduct credits
+    #[cfg(feature = "dynamodb-backend")]
+    {
+        if let (Some(ref dynamo), Some(ref table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            if let Err(e) = deduct_credits_direct(dynamo, table, &user_id, credits_to_use).await {
+                return (StatusCode::PAYMENT_REQUIRED, Json(serde_json::json!({
+                    "error": {
+                        "message": e,
+                        "type": "insufficient_quota",
+                        "code": "insufficient_credits"
+                    }
+                }))).into_response();
+            }
+        }
+    }
+    #[cfg(not(feature = "dynamodb-backend"))]
+    let _ = user_id;
+
+    // Call OpenAI DALL-E API
+    let openai_key = match get_api_key("openai") {
+        Some(k) => k,
+        None => {
+            return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+                "error": {
+                    "message": "Image generation is not available at this time.",
+                    "type": "service_unavailable",
+                    "code": "service_unavailable"
+                }
+            }))).into_response();
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "model": model,
+        "prompt": prompt,
+        "n": n,
+        "size": size,
+        "quality": quality,
+    });
+
+    let resp = match client
+        .post("https://api.openai.com/v1/images/generations")
+        .header("Authorization", format!("Bearer {}", openai_key))
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(90))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": {
+                    "message": format!("Image generation request failed: {}", e),
+                    "type": "api_error",
+                    "code": "api_error"
+                }
+            }))).into_response();
+        }
+    };
+
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return (status, Json(serde_json::json!({
+            "error": {
+                "message": format!("Image generation failed: {}", text),
+                "type": "api_error",
+                "code": "api_error"
+            }
+        }))).into_response();
+    }
+
+    let json: serde_json::Value = match resp.json().await {
+        Ok(j) => j,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "error": {
+                    "message": format!("Failed to parse response: {}", e),
+                    "type": "api_error",
+                    "code": "api_error"
+                }
+            }))).into_response();
+        }
+    };
+
+    // Forward OpenAI-compatible response directly, adding created timestamp if missing
+    let created = json.get("created")
+        .and_then(|v| v.as_u64())
+        .unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        });
+
+    let data = json.get("data").cloned().unwrap_or(serde_json::json!([]));
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "created": created,
+        "data": data
+    }))).into_response()
+}
+
 /// GET /api/v1/models — List all models with pricing and context window info.
 async fn handle_list_models() -> impl IntoResponse {
     use crate::provider::pricing::PRICING_TABLE;
@@ -22202,7 +22560,7 @@ async fn handle_openai_chat_completions(
             if !check_rate_limit(dynamo, table, &rate_key, 10).await {
                 return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({
                     "error": {
-                        "message": "Rate limit exceeded. Anonymous access is limited to 10 requests/min. Sign up at https://chatweb.ai for higher limits.",
+                        "message": "Rate limit exceeded. Anonymous access is limited to 10 requests/min. Sign up at https://teai.io for higher limits.",
                         "type": "rate_limit_exceeded",
                         "code": "rate_limit_exceeded"
                     }
@@ -22219,7 +22577,7 @@ async fn handle_openai_chat_completions(
             if user.credits_remaining <= 0 {
                 return (StatusCode::PAYMENT_REQUIRED, Json(serde_json::json!({
                     "error": {
-                        "message": "Insufficient credits. Please top up at https://chatweb.ai/pricing",
+                        "message": "Insufficient credits. Please top up at https://teai.io/pricing",
                         "type": "insufficient_quota",
                         "code": "insufficient_credits"
                     }
@@ -23333,7 +23691,7 @@ async fn handle_cron_create(
             let plan = user.plan.as_str();
             let max_jobs: usize = match plan {
                 "starter" => 5,
-                "pro" | "enterprise" => 20,
+                "pro" | "business" => 20,
                 _ => 1,
             };
 
@@ -23784,11 +24142,11 @@ async fn gateway_ip_middleware(
 /// Models in the A/B test rotation pool.
 /// Each session is deterministically assigned one model via hash.
 const AB_MODEL_POOL: &[&str] = &[
-    "minimax-m2.5",             // MiniMax native API
-    "deepseek-chat",            // DeepSeek
-    "google/gemini-2.5-flash",  // Gemini Flash
-    "qwen3-32b",                // Qwen3
-    "kimi-k2.5",                // Moonshot Kimi
+    "google/gemini-2.5-flash",  // Gemini Flash — 日本語品質◎、コスパ最強
+    "deepseek-chat",            // DeepSeek V3 — 日本語対応、格安
+    "qwen3-32b",                // Qwen3 — 日中に強い
+    "kimi-k2.5",                // Moonshot Kimi — 日本語対応
+    // minimax-m2.5 removed: 日本語出力に簡体字が混入する問題あり
 ];
 
 /// Deterministically select a model based on session key hash.
