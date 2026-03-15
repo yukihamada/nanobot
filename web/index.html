@@ -3,23 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>chatweb.ai - お願いしたら、本当にやってくれるAI</title>
-  <meta name="description" content="声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料で始められます。">
+  <title>chatweb.ai — GPT-4o・Claude・Geminiをまとめて使えるAIチャット</title>
+  <meta name="description" content="日本語対応AIチャット。GPT-4o・Claude・Gemini・Nemotronを1つのUIで。無料から使える。声で頼むだけで検索・コード実行・ファイル操作まで全自動。">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
   <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%236366f1'/%3E%3Ctext x='90' y='115' text-anchor='middle' font-size='80' font-weight='800' font-family='sans-serif' fill='white'%3Ecw%3C/text%3E%3C/svg%3E">
-  <meta property="og:title" content="chatweb.ai - お願いしたら、本当にやってくれるAI">
-  <meta property="og:description" content="声で頼むだけ。検索、コード実行、ファイル操作、定期監視まで全自動。Web・LINE・Telegram対応。無料。">
-  <meta property="og:image" content="https://chatweb.ai/og.svg">
-  <meta property="og:url" content="https://chatweb.ai">
+  <meta property="og:title" content="chatweb.ai — 複数のAIモデルをひとつの画面で">
+  <meta property="og:description" content="GPT-4o、Claude、Gemini、Nemotronを切り替えながら使えるマルチモデルAIチャット。無料で始められます。">
   <meta property="og:type" content="website">
+  <meta property="og:url" content="https://chatweb.ai">
+  <meta property="og:image" content="https://chatweb.ai/og-image.png">
   <meta property="og:site_name" content="chatweb.ai">
   <meta property="og:locale" content="ja_JP">
   <meta property="og:locale:alternate" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@chatweb_ai">
-  <meta name="twitter:title" content="chatweb.ai - お願いしたら、本当にやってくれるAI">
-  <meta name="twitter:description" content="声で頼むだけ。検索・コード実行・定期監視まで全自動。Web・LINE・Telegram対応。">
-  <meta name="twitter:image" content="https://chatweb.ai/og.svg">
+  <meta name="twitter:title" content="chatweb.ai — 複数のAIモデルをひとつの画面で">
+  <meta name="twitter:description" content="GPT-4o、Claude、Gemini、Nemotronを切り替えながら使えるマルチモデルAIチャット。無料で始められます。">
+  <meta name="twitter:image" content="https://chatweb.ai/og-image.png">
   <!-- GA4: chatweb.ai -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-3YF25NMXG8"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-3YF25NMXG8');</script>
@@ -49,18 +49,19 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
+    "@type": "WebApplication",
     "name": "chatweb.ai",
     "url": "https://chatweb.ai",
-    "description": "Voice-first AI assistant. Research, automation, development - all by voice. Works on Web, LINE, and Telegram.",
+    "description": "日本語対応AIチャット。GPT-4o・Claude・Gemini・Nemotronを1つのUIで。声で頼むだけで検索・コード実行・自動化まで全対応。無料から使える。",
     "applicationCategory": "ProductivityApplication",
     "operatingSystem": "Web",
+    "browserRequirements": "HTML5",
     "offers": [
-      {"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD"},
-      {"@type": "Offer", "name": "Starter", "price": "9", "priceCurrency": "USD"},
-      {"@type": "Offer", "name": "Pro", "price": "29", "priceCurrency": "USD"}
+      {"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD", "description": "100クレジット無料"},
+      {"@type": "Offer", "name": "Starter", "price": "9", "priceCurrency": "USD", "billingIncrement": "P1M"},
+      {"@type": "Offer", "name": "Pro", "price": "29", "priceCurrency": "USD", "billingIncrement": "P1M"}
     ],
-    "featureList": "Voice Input, Web Search, Multi-Channel (LINE, Telegram, Web), 5+ AI Models, Long-term Memory, TTS, REST API, SSE Streaming, Slash Commands, Conversation Sharing",
+    "featureList": "音声入力, Webサーチ, GPT-4o, Claude, Gemini, Nemotron, LINE連携, Telegram連携, 長期記憶, TTS, SSEストリーミング, スキルマーケット",
     "inLanguage": ["ja", "en", "zh", "ko", "es", "fr", "de"],
     "potentialAction": {
       "@type": "SearchAction",
@@ -4200,6 +4201,7 @@
       </div>
       <div class="chat-input" style="position:relative;">
         <input type="text" id="input" placeholder="何でも聞いてください..." autocomplete="off">
+        <button onclick="toggleImageMode()" id="image-mode-btn" title="画像生成モード（/image: または /画像: でも起動）" style="background:none;border:1px solid var(--border);border-radius:8px;padding:0 10px;height:36px;cursor:pointer;color:var(--muted);font-size:15px;margin-right:4px;transition:all 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="if(!window._imageModeActive)this.style.color='var(--muted)'">🎨</button>
         <button onclick="send()" id="send-btn">送信</button>
         <div id="chat-login-overlay" class="chat-login-overlay hidden" onclick="openAuthModal()">
           <span id="chat-login-text">ログインして会話を始める</span>
@@ -6195,6 +6197,75 @@
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
+    window._imageModeActive = false;
+    function toggleImageMode() {
+      window._imageModeActive = !window._imageModeActive;
+      const btn = document.getElementById('image-mode-btn');
+      const inp = document.getElementById('input');
+      if (window._imageModeActive) {
+        btn.style.color = 'var(--accent)';
+        btn.style.borderColor = 'var(--accent)';
+        inp.placeholder = '画像の説明を入力してください...';
+        if (!inp.value.startsWith('/image: ') && !inp.value.startsWith('/画像: ')) {
+          inp.value = '/image: ' + inp.value;
+        }
+      } else {
+        btn.style.color = 'var(--muted)';
+        btn.style.borderColor = 'var(--border)';
+        inp.placeholder = '何でも聞いてください...';
+        inp.value = inp.value.replace(/^\/(image|画像): /, '');
+      }
+      inp.focus();
+    }
+
+    async function generateImage(prompt) {
+      if (!currentUser) { openAuthModal(); return; }
+      addMsg('🎨 ' + prompt, 'user');
+      const typing = document.createElement('div');
+      typing.className = 'msg typing';
+      typing.innerHTML = '<div class="thinking-status"><span class="thinking-icon">🎨</span><span class="thinking-text">画像を生成中...</span><span class="thinking-elapsed">(0.0s)</span></div><div class="shimmer-bar"></div>';
+      msgs.appendChild(typing);
+      msgs.scrollTop = msgs.scrollHeight;
+      const startTime = Date.now();
+      const elapsed = setInterval(() => {
+        const el = typing.querySelector('.thinking-elapsed');
+        if (el) el.textContent = '(' + ((Date.now()-startTime)/1000).toFixed(1) + 's)';
+      }, 100);
+      try {
+        const r = await fetch(API + '/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (currentUser?.token || localStorage.getItem('cw_token') || ''),
+          },
+          body: JSON.stringify({ model: 'dall-e-3', prompt: prompt, n: 1, size: '1024x1024' }),
+        });
+        const d = await r.json();
+        clearInterval(elapsed);
+        typing.remove();
+        if (d.error) {
+          addMsg('画像生成エラー: ' + d.error.message, 'bot');
+        } else {
+          const url = d.data && d.data[0] && d.data[0].url;
+          if (url) {
+            const div = document.createElement('div');
+            div.className = 'msg bot';
+            div.innerHTML = '<img src="' + url + '" alt="生成画像: ' + prompt.replace(/"/g,'&quot;') + '" style="max-width:100%;border-radius:12px;margin-top:6px;" loading="lazy"><p style="font-size:0.82rem;color:var(--muted);margin-top:6px;">🎨 ' + prompt + '</p>';
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+          } else {
+            addMsg('画像の生成に失敗しました。', 'bot');
+          }
+        }
+      } catch(e) {
+        clearInterval(elapsed);
+        typing.remove();
+        addMsg('画像生成エラー: ' + e.message, 'bot');
+      }
+      // Reset image mode after generation
+      if (window._imageModeActive) toggleImageMode();
+    }
+
     async function send() {
       if (!currentUser && getGuestTurns() >= GUEST_MAX_TURNS) {
         openAuthModal();
@@ -6202,6 +6273,16 @@
       }
       const text = input.value.trim();
       if (!text) return;
+
+      // Image generation mode: /image: or /画像: prefix
+      const imgMatch = text.match(/^\/(image|画像):\s*(.+)/i);
+      if (imgMatch) {
+        input.value = '';
+        if (window._imageModeActive) toggleImageMode();
+        await generateImage(imgMatch[2].trim());
+        return;
+      }
+
       input.value = '';
       // Hide demo messages on first guest send
       if (!currentUser && getGuestTurns() === 0) {
@@ -8457,17 +8538,26 @@
           const blob = new Blob(chunks, { type: 'audio/webm' });
           if (blob.size < 100) return;
           const token = localStorage.getItem('authToken');
-          if (!token) { showToast('ログインしてください'); return; }
+          // Send as FormData to /v1/audio/transcriptions (OpenAI Whisper compatible)
           try {
-            const r = await fetch(API + '/api/v1/speech/recognize', {
+            let r, d;
+            const fd = new FormData();
+            fd.append('file', blob, 'audio.webm');
+            fd.append('model', 'whisper-1');
+            const headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            r = await fetch(API + '/api/v1/speech/recognize', {
               method: 'POST',
-              headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'audio/webm' },
+              headers: { 'Authorization': token ? 'Bearer ' + token : '', 'Content-Type': 'audio/webm' },
               body: blob
             });
-            const d = await r.json();
+            d = await r.json();
             if (d.ok && d.text) {
-              document.getElementById('app-input').value = d.text;
-              appSend();
+              const inputEl = document.getElementById('app-input');
+              if (inputEl) {
+                inputEl.value = (inputEl.value ? inputEl.value + ' ' : '') + d.text;
+                inputEl.focus();
+              }
             } else {
               showToast(d.error || '音声認識に失敗しました');
             }
@@ -12453,7 +12543,7 @@
             {g:'Anthropic', items:[['claude-sonnet-4-5-20250929','Claude Sonnet 4.5'],['claude-sonnet-4-6','Claude Sonnet 4.6'],['claude-haiku-4-5-20251001','Claude Haiku 4.5'],['claude-opus-4-6','Claude Opus 4.6']]},
             {g:'OpenAI', items:[['gpt-4.1','GPT-4.1'],['gpt-4o','GPT-4o'],['gpt-4o-mini','GPT-4o Mini'],['o4-mini','o4-mini']]},
             {g:'Google', items:[['gemini-2.5-flash','Gemini 2.5 Flash'],['gemini-2.5-pro','Gemini 2.5 Pro']]},
-            {g:'Other', items:[['deepseek-chat','DeepSeek Chat'],['qwen/qwen3-32b','Qwen3 32B']]}
+            {g:'Other', items:[['deepseek-chat','DeepSeek Chat'],['qwen3-32b','Qwen3 32B (RunPod)']]}
           ];
           fallback.forEach(({g,items}) => {
             const og = document.createElement('optgroup');

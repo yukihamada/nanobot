@@ -6,9 +6,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pricing - chatweb.ai</title>
-  <meta name="description" content="chatweb.ai pricing plans. Free, Starter $9/mo, Pro $29/mo.">
-  <meta property="og:title" content="Pricing - chatweb.ai">
-  <meta property="og:description" content="AI assistant pricing plans. Free, Starter ($9/mo), and Pro ($29/mo).">
+  <meta name="description" content="chatweb.ai 料金プラン。Free（無料）、Pro（¥1,980/月）、Enterprise（要相談）。GPT-4o・Claude・Gemini対応。">
+  <meta property="og:title" content="料金プラン — chatweb.ai">
+  <meta property="og:description" content="chatweb.ai の料金プラン。Free（無料/50メッセージ）、Pro（¥1,980/月・全モデル無制限）、Enterprise（要相談）。">
   <meta property="og:image" content="https://chatweb.ai/og.svg">
   <meta property="og:url" content="https://chatweb.ai/pricing">
   <meta property="og:type" content="website">
@@ -321,6 +321,18 @@
     .guarantee-text strong { font-size: 14px; display: block; margin-bottom: 2px; }
     .guarantee-text span { font-size: 12px; color: var(--muted); }
 
+    .dev-section { margin-bottom: 48px; }
+    .dev-section h2 { font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 8px; }
+    .dev-section .sub { font-size: 14px; color: var(--muted); text-align: center; margin-bottom: 28px; }
+    .dev-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .dev-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+    .dev-card .icon { font-size: 28px; margin-bottom: 10px; }
+    .dev-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .dev-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .dev-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 24px; }
+    .dev-step { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; font-size: 13px; font-weight: 600; text-align: center; }
+    .dev-arrow { color: var(--muted); font-size: 18px; }
+    .enai-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.3); border-radius: 20px; padding: 6px 14px; font-size: 13px; font-weight: 700; color: #a78bfa; }
     .faq { margin-bottom: 48px; }
     .faq h2 { font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 24px; }
     .faq-item {
@@ -445,39 +457,55 @@
       <div class="plan-card">
         <div class="plan-name" id="p-free-name">Free</div>
         <div class="plan-desc" id="p-free-desc">個人利用・お試しに</div>
-        <div class="plan-price"><span class="currency">$</span>0<span class="period" id="p-free-period">/月</span></div>
+        <div class="plan-price"><span class="currency">¥</span>0<span class="period" id="p-free-period">/月</span></div>
         <div class="plan-daily-price" id="p-free-daily">完全無料で始められる</div>
-        <ul class="plan-features" id="p-free-features"></ul>
+        <ul class="plan-features" id="p-free-features">
+          <li>50メッセージ/日</li>
+          <li>GPT-4o mini</li>
+          <li>Nemotron</li>
+          <li>音声入力対応</li>
+        </ul>
         <a href="/" class="plan-cta secondary" id="p-free-cta">今すぐ使う</a>
       </div>
 
-      <!-- Starter -->
+      <!-- Pro (featured; internally "starter" for JS compat) -->
       <div class="plan-card featured">
         <div class="plan-badge" id="p-starter-badge">🔥 人気No.1</div>
-        <div class="plan-name" id="p-starter-name">Starter</div>
-        <div class="plan-desc" id="p-starter-desc">小規模チーム・本格利用に</div>
-        <div class="plan-price"><span class="currency">$</span>9<span class="period" id="p-starter-period">/月</span></div>
-        <div class="plan-daily-price" id="p-starter-daily">1日あたり$0.30</div>
-        <div class="plan-value-tag" id="p-starter-value">コーヒー1杯分より安い！</div>
+        <div class="plan-name" id="p-starter-name">Pro</div>
+        <div class="plan-desc" id="p-starter-desc">本格利用・全モデル対応</div>
+        <div class="plan-price"><span class="currency">¥</span>1,980<span class="period" id="p-starter-period">/月</span></div>
+        <div class="plan-daily-price" id="p-starter-daily">1日あたり約¥66</div>
+        <div class="plan-value-tag" id="p-starter-value">コーヒー1杯分以下！</div>
         <div id="trial-badge" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:12px;font-weight:700;padding:5px 14px;border-radius:20px;margin:8px 0;animation:valueTagPulse 2s ease-in-out infinite;">
           <span id="trial-badge-text">14日間無料トライアル</span>
         </div>
         <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:8px 12px;margin:12px 0;font-size:12px;color:#10b981;text-align:center;">
           ✓ いつでもキャンセル可能 &nbsp;·&nbsp; ✓ 即時開始
         </div>
-        <ul class="plan-features" id="p-starter-features"></ul>
-        <a href="#" class="plan-cta primary" id="p-starter-cta" data-plan="starter">今すぐ Starter を始める →</a>
+        <ul class="plan-features" id="p-starter-features">
+          <li>メッセージ無制限</li>
+          <li>GPT-4o・Claude・Gemini・Nemotron 全モデル対応</li>
+          <li>音声入力・TTS対応</li>
+          <li>長期記憶</li>
+          <li>LINE / Telegram 連携</li>
+        </ul>
+        <a href="#" class="plan-cta primary" id="p-starter-cta" data-plan="starter">今すぐ Pro を始める →</a>
       </div>
 
-      <!-- Pro -->
+      <!-- Enterprise -->
       <div class="plan-card">
-        <div class="plan-name" id="p-pro-name">Pro</div>
-        <div class="plan-desc" id="p-pro-desc">大規模利用・高性能モデルに</div>
-        <div class="plan-price"><span class="currency">$</span>29<span class="period" id="p-pro-period">/月</span></div>
-        <div class="plan-daily-price" id="p-pro-daily">1日あたり$0.97</div>
-        <div class="plan-value-tag" id="p-pro-value">ランチ1回分で30万クレジット</div>
-        <ul class="plan-features" id="p-pro-features"></ul>
-        <a href="#" class="plan-cta primary" id="p-pro-cta" data-plan="pro">Proを始める</a>
+        <div class="plan-name" id="p-pro-name">Enterprise</div>
+        <div class="plan-desc" id="p-pro-desc">大規模・API連携・カスタムモデル</div>
+        <div class="plan-price" style="font-size:28px;font-weight:800;line-height:1.2;">要相談<span id="p-pro-period" style="display:none;"></span></div>
+        <div class="plan-daily-price" id="p-pro-daily">ニーズに合わせてカスタマイズ</div>
+        <ul class="plan-features" id="p-pro-features">
+          <li>メッセージ無制限</li>
+          <li>API連携・カスタムモデル対応</li>
+          <li>専任サポート</li>
+          <li>SLA保証</li>
+          <li>請求書払い対応</li>
+        </ul>
+        <a href="/contact" class="plan-cta secondary" id="p-pro-cta">お問い合わせ</a>
       </div>
     </div>
 
@@ -573,12 +601,50 @@
       </div>
     </div>
 
+    <!-- Developer Mode / ENAI section -->
+    <div class="dev-section" id="dev-section">
+      <h2 id="t-dev-title">&#128640; Developer Mode &amp; ENAI</h2>
+      <p class="sub" id="t-dev-sub">会話を学習データとして提供してENAIトークンを獲得。chatweb.aiをOpenRouter代替として使おう。</p>
+      <div class="dev-flow" id="t-dev-flow">
+        <div class="dev-step">&#128172; 会話する</div>
+        <div class="dev-arrow">&#8594;</div>
+        <div class="dev-step">&#9881; Developer Mode ON</div>
+        <div class="dev-arrow">&#8594;</div>
+        <div class="dev-step">&#127881; 1会話 = 1 ENAI獲得</div>
+        <div class="dev-arrow">&#8594;</div>
+        <div class="dev-step">&#127881; 10 ENAI = 100cr 交換</div>
+      </div>
+      <div class="dev-cards" id="t-dev-cards">
+        <div class="dev-card">
+          <div class="icon">&#128172;</div>
+          <h3>会話を提供して稼ぐ</h3>
+          <p>Developer Modeを有効にして会話するたびに1 ENAIを獲得。貯めてクレジットに交換できます。</p>
+        </div>
+        <div class="dev-card">
+          <div class="icon">&#128273;</div>
+          <h3>OpenRouter代替API</h3>
+          <p>ベースURL <code style="color:#a78bfa">api.chatweb.ai/v1</code> でOpenAI SDK互換。100+モデルに対応。Devモードで使うとENAI還元付き。</p>
+        </div>
+        <div class="dev-card">
+          <div class="icon">&#128296;</div>
+          <h3>Solana SPLトークン</h3>
+          <p>ENAIはSolanaのSPLトークン（Mint: 8Ceusi...）。ウォレットアドレスを設定すると直接受け取れます。</p>
+        </div>
+      </div>
+      <div style="text-align:center">
+        <a href="/settings" style="text-decoration:none">
+          <span class="enai-badge">&#128640; Developer Modeを有効にする</span>
+        </a>
+        <span style="font-size:13px;color:var(--muted);display:block;margin-top:10px" id="t-dev-note">設定ページ → Developer Mode でONにするだけ</span>
+      </div>
+    </div>
+
     <div class="faq" id="faq-section"></div>
   </div>
 
   <!-- Sticky CTA -->
   <div id="sticky-cta" style="position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,10,0.95);backdrop-filter:blur(12px);border-top:1px solid var(--border);padding:12px 24px;display:none;justify-content:center;align-items:center;gap:16px;z-index:100;">
-    <span style="font-size:13px;color:var(--muted);" id="sticky-cta-text">Starterプランで画像・音楽・動画も使い放題</span>
+    <span style="font-size:13px;color:var(--muted);" id="sticky-cta-text">Proプランで全モデルを無制限に使おう</span>
     <a href="#" onclick="document.querySelector('[data-plan=starter]').click();return false;" style="background:var(--accent);color:#fff;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap;" id="sticky-cta-btn">今すぐ始める</a>
   </div>
 
@@ -597,12 +663,12 @@
 
     const PRICING = {
       jp: {
-        starter: { amount: 9, currency: '$', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
-        pro: { amount: 29, currency: '$', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
+        starter: { amount: 1980, currency: '¥', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
+        pro: { amount: 1980, currency: '¥', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
       },
       intl: {
-        starter: { amount: 19, currency: '$', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
-        pro: { amount: 49, currency: '$', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
+        starter: { amount: 1980, currency: '¥', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
+        pro: { amount: 1980, currency: '¥', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
       },
     };
 
@@ -612,28 +678,9 @@
       pro: PRICING[region].pro.link,
     };
 
-    // Apply region pricing to DOM after page load
+    // Apply region pricing to DOM after page load (unified JPY pricing)
     function applyRegionPricing() {
-      if (!isJP) {
-        const starterPrice = document.querySelector('.plan-card.featured .plan-price');
-        if (starterPrice && !starterPrice.classList.contains('coupon-modified')) {
-          starterPrice.innerHTML = '<span class="currency">$</span>' + PRICING.intl.starter.amount +
-            '<span class="period" id="p-starter-period">' +
-            (document.documentElement.lang === 'ja' ? '/月' : '/mo') + '</span>';
-        }
-        const proCards = document.querySelectorAll('.plan-card:not(.featured)');
-        proCards.forEach(card => {
-          const name = card.querySelector('.plan-name');
-          if (name && name.textContent === 'Pro') {
-            const priceEl = card.querySelector('.plan-price');
-            if (priceEl && !priceEl.classList.contains('coupon-modified')) {
-              priceEl.innerHTML = '<span class="currency">$</span>' + PRICING.intl.pro.amount +
-                '<span class="period" id="p-pro-period">' +
-                (document.documentElement.lang === 'ja' ? '/月' : '/mo') + '</span>';
-            }
-          }
-        });
-      }
+      // Pricing is always ¥1,980/mo — no region adjustment needed
     }
 
     let activeCoupon = null;
@@ -701,12 +748,12 @@
 
       // Update price display
       const priceEl = starterCard.querySelector('.plan-price');
-      priceEl.innerHTML = '<span class="original-price">$9</span><span class="currency">$</span>0<span class="period">' +
+      priceEl.innerHTML = '<span class="original-price">¥1,980</span><span class="currency">¥</span>0<span class="period">' +
         (lang === 'ja' ? '/月' : '/mo') + '</span>' +
         '<span class="trial-note">' +
         (lang === 'ja'
-          ? (noCard ? 'カード登録不要・' + grantDays + '日間無料' : (grantDays + 1) + '日目から$' + PRICING[region].starter.amount + '/月・いつでもキャンセル可')
-          : (noCard ? 'No card required. ' + grantDays + ' days free' : 'After ' + grantDays + ' days: $' + PRICING[region].starter.amount + '/mo. Cancel anytime.')) +
+          ? (noCard ? 'カード登録不要・' + grantDays + '日間無料' : (grantDays + 1) + '日目から¥' + PRICING[region].starter.amount + '/月・いつでもキャンセル可')
+          : (noCard ? 'No card required. ' + grantDays + ' days free' : 'After ' + grantDays + ' days: ¥' + PRICING[region].starter.amount + '/mo. Cancel anytime.')) +
         '</span>';
 
       // Add free badge
@@ -745,7 +792,7 @@
 
       // Restore price
       const priceEl = starterCard.querySelector('.plan-price');
-      priceEl.innerHTML = '<span class="currency">$</span>9<span class="period" id="p-starter-period">' +
+      priceEl.innerHTML = '<span class="currency">¥</span>1,980<span class="period" id="p-starter-period">' +
         T[l].starter.period + '</span>';
 
       // Remove free badge
@@ -766,37 +813,30 @@
         navHome: 'ホーム',
         badge: '人気',
         free: { name: 'Free', desc: '個人利用・お試しに', cta: '今すぐ使う', period: '/月', daily: '完全無料で始められる' },
-        starter: { name: 'Starter', desc: '小規模チーム・本格利用に', cta: 'Starterを始める', period: '/月', daily: () => `1日あたり$${(PRICING[region].starter.amount / 30).toFixed(2)}`, value: 'コーヒー1杯分より安い！' },
-        pro: { name: 'Pro', desc: '大規模利用・高性能モデルに', cta: 'Proを始める', period: '/月', daily: () => `1日あたり$${(PRICING[region].pro.amount / 30).toFixed(2)}`, value: 'ランチ1回分で30万クレジット' },
+        starter: { name: 'Pro', desc: '本格利用・全モデル対応', cta: 'Proを始める', period: '/月', daily: '1日あたり約¥66', value: 'コーヒー1杯分以下！' },
+        pro: { name: 'Enterprise', desc: '大規模・API連携・カスタムモデル', cta: 'お問い合わせ', period: '', daily: 'ニーズに合わせてカスタマイズ', value: '' },
         socialUsers: 'アクティブユーザー',
         socialRating: 'ユーザー評価',
         socialSatisfaction: '満足度',
         features: {
           free: [
-            '1,000 クレジット/月',
-            '5 リクエスト/分',
-            'GPT-4o-mini, Gemini Flash',
-            '100 エージェント実行/月',
-            'Web・LINE・Telegram対応',
+            '50メッセージ/日',
+            'GPT-4o mini・Nemotron',
+            '音声入力対応',
           ],
           starter: [
-            '25,000 クレジット/月',
-            '30 リクエスト/分',
-            'GPT-4o-mini, Gemini Flash',
-            '+ GPT-4o, Claude Sonnet',
-            '2,000 エージェント実行/月',
-            'Web・LINE・Telegram対応',
-            '優先サポート',
+            'メッセージ無制限',
+            'GPT-4o・Claude・Gemini・Nemotron 全モデル対応',
+            '音声入力・TTS対応',
+            '長期記憶',
+            'LINE / Telegram 連携',
           ],
           pro: [
-            '300,000 クレジット/月',
-            '120 リクエスト/分',
-            '全モデル利用可能',
-            '+ Claude Opus',
-            '20,000 エージェント実行/月',
-            'Web・LINE・Telegram対応',
-            '優先サポート',
-            'カスタムエージェント',
+            'メッセージ無制限',
+            'API連携・カスタムモデル対応',
+            '専任サポート',
+            'SLA保証',
+            '請求書払い対応',
           ],
         },
         couponTitle: 'クーポンコードをお持ちですか？',
@@ -810,9 +850,9 @@
         faqTitle: 'よくある質問',
         faqs: [
           { q: 'クレジットとは何ですか？', a: 'クレジットはAPIの利用量を表す単位です。モデルによって消費量が異なります。GPT-4o-miniは1K入力トークンで1クレジット、Claude Opusは30クレジットです。' },
-          { q: 'Starterプランで何ができますか？', a: '25,000クレジットで毎日の検索・翻訳はもちろん、画像生成（週10枚程度）、音楽生成（月5曲程度）、GPT-4oやClaude Sonnetなど高性能モデルが使えます。' },
+          { q: 'Proプランで何ができますか？', a: 'メッセージ無制限で、GPT-4o・Claude・Gemini・Nemotronなど全モデルを利用できます。音声入力・TTS・長期記憶・LINE/Telegram連携も対応。' },
           { q: 'プランはいつでも変更できますか？', a: 'はい、いつでもアップグレード・ダウングレードが可能です。アップグレードは即座に反映され、差額が日割り計算されます。' },
-          { q: '無料プランに制限はありますか？', a: '無料プランでは月1,000クレジット、分5リクエストまで利用可能です。GPT-4o-miniとGemini Flashモデルが使えます。画像・音楽・動画生成はStarterプラン以上が必要です。' },
+          { q: '無料プランに制限はありますか？', a: '無料プランでは1日50メッセージまで利用可能です。GPT-4o miniとNemotronモデルが使えます。全モデル・無制限利用にはProプランが必要です。' },
           { q: 'データは安全ですか？', a: '全通信はSSL暗号化、データはAWS東京リージョンで管理されます。会話データは他のユーザーと共有されることはありません。' },
           { q: '支払い方法は何が使えますか？', a: 'Stripeを通じてVisa、Mastercard、American Express、JCBなど主要なクレジットカードとデビットカードに対応しています。暗号通貨（ETH/Base）での支払いも可能です。' },
         ],
@@ -823,37 +863,30 @@
         navHome: 'Home',
         badge: 'Popular',
         free: { name: 'Free', desc: 'For personal use & trial', cta: 'Get Started', period: '/mo', daily: 'Start completely free' },
-        starter: { name: 'Starter', desc: 'For small teams & serious use', cta: 'Start Starter', period: '/mo', daily: () => `$${(PRICING[region].starter.amount / 30).toFixed(2)} per day`, value: 'Less than a coffee!' },
-        pro: { name: 'Pro', desc: 'For high-volume & advanced models', cta: 'Start Pro', period: '/mo', daily: () => `$${(PRICING[region].pro.amount / 30).toFixed(2)} per day`, value: 'Lunch price for 300K credits' },
+        starter: { name: 'Pro', desc: 'All models, unlimited messages', cta: 'Start Pro', period: '/mo', daily: '¥66/day', value: 'Less than a coffee!' },
+        pro: { name: 'Enterprise', desc: 'Large-scale, API & custom models', cta: 'Contact Us', period: '', daily: 'Customized to your needs', value: '' },
         socialUsers: 'Active Users',
         socialRating: 'User Rating',
         socialSatisfaction: 'Satisfaction',
         features: {
           free: [
-            '1,000 credits/mo',
-            '5 requests/min',
-            'GPT-4o-mini, Gemini Flash',
-            '100 agent runs/mo',
-            'Web, LINE & Telegram',
+            '50 messages/day',
+            'GPT-4o mini & Nemotron',
+            'Voice input',
           ],
           starter: [
-            '25,000 credits/mo',
-            '30 requests/min',
-            'GPT-4o-mini, Gemini Flash',
-            '+ GPT-4o, Claude Sonnet',
-            '2,000 agent runs/mo',
-            'Web, LINE & Telegram',
-            'Priority support',
+            'Unlimited messages',
+            'GPT-4o, Claude, Gemini & Nemotron',
+            'Voice input & TTS',
+            'Long-term memory',
+            'LINE / Telegram integration',
           ],
           pro: [
-            '300,000 credits/mo',
-            '120 requests/min',
-            'All models available',
-            '+ Claude Opus',
-            '20,000 agent runs/mo',
-            'Web, LINE & Telegram',
-            'Priority support',
-            'Custom agents',
+            'Unlimited messages',
+            'API integration & custom models',
+            'Dedicated support',
+            'SLA guarantee',
+            'Invoice billing',
           ],
         },
         couponTitle: 'Have a coupon code?',
@@ -867,9 +900,9 @@
         faqTitle: 'FAQ',
         faqs: [
           { q: 'What are credits?', a: 'Credits measure API usage. Different models consume different amounts. GPT-4o-mini costs 1 credit per 1K input tokens, while Claude Opus costs 30 credits.' },
-          { q: 'What can I do with Starter?', a: 'With 25,000 credits you get daily search & translation, image generation (~10/week), music generation (~5/month), and access to GPT-4o and Claude Sonnet.' },
+          { q: 'What can I do with Pro?', a: 'Unlimited messages with all models: GPT-4o, Claude, Gemini, and Nemotron. Includes voice input, TTS, long-term memory, and LINE/Telegram integration.' },
           { q: 'Can I change plans anytime?', a: 'Yes, you can upgrade or downgrade anytime. Upgrades take effect immediately with prorated billing.' },
-          { q: 'Are there limits on the free plan?', a: 'The free plan includes 1,000 credits/month and 5 requests/minute with GPT-4o-mini and Gemini Flash. Image, music, and video generation require Starter or above.' },
+          { q: 'Are there limits on the free plan?', a: 'The free plan allows up to 50 messages per day with GPT-4o mini and Nemotron. For unlimited messages and all models, upgrade to the Pro plan.' },
           { q: 'Is my data safe?', a: 'All communication is SSL encrypted and data is stored in AWS Tokyo region. Your conversations are never shared with other users.' },
           { q: 'What payment methods are accepted?', a: 'We accept Visa, Mastercard, American Express, JCB and other major credit/debit cards via Stripe. Crypto payments (ETH/Base) are also available.' },
         ],
