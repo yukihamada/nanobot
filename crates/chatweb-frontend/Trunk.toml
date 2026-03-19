@@ -1,0 +1,11 @@
+[build]
+target = "index.html"
+dist = "../../dist"
+public_url = "/pkg/"
+
+
+[watch]
+watch = ["../chatweb-app/src", "src", "index.html", "style.css"]
+
+[serve]
+port = 8080

@@ -1,0 +1,32 @@
+[package]
+name = "nanobot-fly"
+version = "0.1.0"
+edition = "2021"
+description = "Fly.io / self-host entry point for nanobot (libSQL backend)"
+license = "MIT"
+
+[[bin]]
+name = "nanobot-fly"
+path = "src/main.rs"
+
+[features]
+default = []
+local-fallback = ["nanobot-core/local-fallback"]
+stripe = ["nanobot-core/stripe"]
+
+[dependencies]
+nanobot-core = { path = "../nanobot-core", features = ["fly", "http-api"] }
+axum = { version = "0.8" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+serde_json = "1"
+tower-http = { version = "0.6", features = ["fs", "set-header"] }
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
