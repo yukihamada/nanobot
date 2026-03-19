@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>利用規約 - teai.io</title>
+  <meta name="description" content="teai.io Terms of Service / 利用規約">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    :root { --bg:#0a0a0a; --surface:#141414; --border:#1e1e1e; --text:#e5e5e5; --muted:#777; --accent:#10b981; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }
+    .logo { font-size:18px; font-weight:700; text-decoration:none; color:var(--text); }
+    .logo span { color:var(--accent); }
+    .nav-links a { color:var(--muted); text-decoration:none; font-size:14px; margin-left:16px; }
+    .nav-links a:hover { color:var(--text); }
+    .main { max-width:760px; margin:0 auto; padding:40px 24px 80px; }
+    .hero { text-align:center; margin-bottom:48px; }
+    .hero h1 { font-size:32px; font-weight:800; letter-spacing:-1px; margin-bottom:12px; }
+    .hero p { color:var(--muted); font-size:15px; }
+    .section { margin-bottom:36px; }
+    .section h2 { font-size:20px; font-weight:700; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+    .section h3 { font-size:16px; font-weight:600; margin:16px 0 8px; }
+    .section p, .section li { color:var(--muted); font-size:14px; line-height:1.8; margin-bottom:8px; }
+    .section ul, .section ol { padding-left:24px; margin-bottom:12px; }
+    .section li { margin-bottom:4px; }
+    .updated { text-align:center; color:var(--muted); font-size:13px; margin-top:48px; padding-top:24px; border-top:1px solid var(--border); }
+    footer { text-align:center; padding:24px; color:var(--muted); font-size:12px; }
+    footer a { color:var(--accent); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>te</span>ai.io</a>
+    <div class="nav-links">
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/security">Security</a>
+      <a href="/status">Status</a>
+      <a href="/about">About</a>
+    </div>
+  </nav>
+  <div class="main">
+    <div class="hero">
+      <h1>利用規約</h1>
+      <p>Terms of Service</p>
+    </div>
+
+    <div class="section">
+      <h2>第1条（適用）</h2>
+      <p>本利用規約（以下「本規約」）は、teai.io（以下「本サービス」）の利用に関する条件を定めるものです。ユーザーは本サービスを利用することにより、本規約に同意したものとみなされます。</p>
+      <p>本サービスは、株式会社イネブラ（以下「当社」）が運営しています。</p>
+    </div>
+
+    <div class="section">
+      <h2>第2条（サービスの内容）</h2>
+      <p>teai.io は、複数の大規模言語モデル（LLM）を統合したAPIゲートウェイサービスです。以下の機能を提供します：</p>
+      <ul>
+        <li>OpenAI互換APIエンドポイント（<code style="color:var(--accent)">https://api.teai.io/v1</code>）</li>
+        <li>複数LLMプロバイダーへの統合アクセス（OpenAI, Anthropic, Google, Groq 等）</li>
+        <li>自動フェイルオーバーおよびロードバランシング</li>
+        <li>APIキーによる認証・クレジット管理</li>
+        <li>Webチャットインターフェース（teai.io）</li>
+        <li>Web検索・計算・コード実行などのツール機能</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>第3条（アカウントおよびAPIキー）</h2>
+      <p>ユーザーは、メールアドレスを使用してアカウントを作成できます。</p>
+      <ul>
+        <li>アカウント情報は正確かつ最新の状態を維持してください。</li>
+        <li>アカウントおよびAPIキーの管理責任はユーザーにあります。</li>
+        <li>第三者へのアカウントの共有・譲渡は禁止します。</li>
+        <li>APIキー（<code style="color:var(--accent)">cw_</code> プレフィックス）は安全に保管してください。流出した場合は速やかに再発行してください。</li>
+        <li>APIキーを通じた利用に関するすべての責任はキー保有者が負います。</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>第4条（禁止事項）</h2>
+      <p>ユーザーは以下の行為を行ってはなりません：</p>
+      <ul>
+        <li>法令に違反する行為、または犯罪に関連する行為</li>
+        <li>本サービスを利用した違法コンテンツ・有害コンテンツの生成</li>
+        <li>本サービスのインフラに過度な負荷をかける行為（DDoS攻撃等）</li>
+        <li>APIキーの無断転売・再配布</li>
+        <li>本サービスのリバースエンジニアリングまたはソースコードの不正取得</li>
+        <li>自動化されたスクレイピングや大量リクエストによる不正利用</li>
+        <li>他のユーザーへの嫌がらせ、なりすまし行為</li>
+        <li>本サービスを利用したスパム・フィッシング行為</li>
+        <li>未成年者に有害なコンテンツの生成</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>第5条（クレジットおよび料金）</h2>
+      <p>本サービスはクレジット制を採用しています。</p>
+      <h3>5.1 プラン</h3>
+      <ul>
+        <li><strong>Free プラン</strong>：サインアップ時に100クレジット付与。基本機能のみ。</li>
+        <li><strong>Pro プラン</strong>：月額¥4,350（税別）。月100,000クレジット。</li>
+        <li><strong>Business プラン</strong>：月額¥14,800（税別）。無制限クレジット。IP制限・請求書払い対応。</li>
+      </ul>
+      <h3>5.2 課金・返金</h3>
+      <ul>
+        <li>有料プランはStripe, Inc.を通じた自動課金です。</li>
+        <li>解約はいつでも可能で、次の請求サイクルから停止されます。</li>
+        <li>未使用クレジットの返金は原則として行いません。ただし、当社のシステム障害に起因する場合はこの限りではありません。</li>
+        <li>プロモーションコードによる無料期間中は課金されません。</li>
+      </ul>
+      <h3>5.3 クレジット消費</h3>
+      <ul>
+        <li>各APIリクエストは、使用モデルおよびトークン数に応じてクレジットを消費します。</li>
+        <li>クレジット残高が0になった場合、有料機能の利用が停止されます（HTTP 402を返します）。</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>第6条（知的財産権）</h2>
+      <p>本サービスのソフトウェア、デザイン、ロゴ等の知的財産権は当社に帰属します。</p>
+      <p>APIを通じてLLMが生成したコンテンツについて、ユーザーは個人的・商業的な利用が可能です。ただし、AIの出力の正確性・完全性について当社は保証しません。</p>
+      <p>ユーザーが本サービスに送信したプロンプト等のコンテンツの知的財産権はユーザーに帰属します。当社はサービス提供の目的に限りこれらを処理します。</p>
+    </div>
+
+    <div class="section">
+      <h2>第7条（免責事項および責任の制限）</h2>
+      <ul>
+        <li>本サービスは「現状有姿（as is）」で提供されます。明示または黙示を問わず、いかなる保証もいたしません。</li>
+        <li>AIの回答の正確性、完全性、有用性について保証しません。医療・法律・投資等の専門的判断にAIの出力のみを用いないでください。</li>
+        <li>サービスの中断・停止・データ損失について、当社は法令上の責任を超えた責任を負いません。</li>
+        <li>ユーザーがAIの回答に基づいて行った判断・行動の結果について、当社は責任を負いません。</li>
+        <li>当社の損害賠償責任は、直近3ヶ月間にユーザーが支払った料金を上限とします。</li>
+        <li>間接損害・逸失利益・特別損害については、当社は一切の責任を負いません。</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>第8条（サービスの変更・停止・終了）</h2>
+      <p>当社は、事前の通知なくサービスの内容を変更、または一時停止できるものとします。有料プランのユーザーに対しては、サービス終了の場合に合理的な事前通知（原則30日前）を行うよう努めます。</p>
+      <p>当社は、ユーザーが本規約に違反した場合、事前通知なくアカウントを停止または終了できます。</p>
+    </div>
+
+    <div class="section">
+      <h2>第8条の2（アカウント削除時のデータ処理）</h2>
+      <p>ユーザーがアカウントの削除を申し出た場合、当社は以下の対応を行います。</p>
+      <ul>
+        <li>アカウント情報（メールアドレス、認証トークン等）は、削除申請から30日以内に完全に削除します。</li>
+        <li>APIキーは即座に無効化され、以降のAPIリクエストは拒否されます。</li>
+        <li>監査ログは法令上の保存義務に基づき、削除申請後も最大90日間保持されます。</li>
+        <li>長期記憶・会話履歴等のユーザーデータは、削除申請から30日以内に削除します。</li>
+        <li>請求・課金に関する記録は、税法上の要件に基づき最大7年間保持する場合があります。</li>
+        <li>削除処理の完了後、確認のメールをお送りします。</li>
+      </ul>
+      <p>アカウント削除のご依頼は <a href="mailto:info@enablerhq.com" style="color:var(--accent);text-decoration:none;">info@enablerhq.com</a> までお問い合わせください。</p>
+    </div>
+
+    <div class="section">
+      <h2>第9条（規約の変更）</h2>
+      <p>当社は本規約を変更できるものとします。重要な変更がある場合は、本サービス内での通知またはメールにて30日前に周知します。変更後もサービスを継続利用した場合、変更後の規約に同意したものとみなします。</p>
+    </div>
+
+    <div class="section">
+      <h2>第10条（準拠法・管轄裁判所）</h2>
+      <p>本規約は日本法に準拠し、日本法に従って解釈されます。本規約に関する紛争は、東京地方裁判所を第一審の専属的合意管轄裁判所とします。</p>
+    </div>
+
+    <div class="section">
+      <h2>第11条（お問い合わせ）</h2>
+      <p>本規約に関するお問い合わせは、<a href="mailto:info@enablerhq.com" style="color:var(--accent)">info@enablerhq.com</a> までご連絡ください。</p>
+    </div>
+
+    <div class="updated">最終更新日：2026年3月10日 / Last updated: March 10, 2026</div>
+  </div>
+  <footer>&copy; 2026 株式会社イネブラ. <a href="/terms">Terms</a> | <a href="/privacy">Privacy</a> | <a href="/security">Security</a> | <a href="/sla">SLA</a> | <a href="/status">Status</a> | <a href="/about">About</a></footer>
+</body>
+</html>

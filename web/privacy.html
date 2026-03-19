@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - teai.io</title>
+  <meta name="description" content="teai.io Privacy Policy / プライバシーポリシー">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    :root { --bg:#0a0a0a; --surface:#141414; --border:#1e1e1e; --text:#e5e5e5; --muted:#777; --accent:#10b981; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }
+    .logo { font-size:18px; font-weight:700; text-decoration:none; color:var(--text); }
+    .logo span { color:var(--accent); }
+    .nav-links a { color:var(--muted); text-decoration:none; font-size:14px; margin-left:16px; }
+    .nav-links a:hover { color:var(--text); }
+    .main { max-width:760px; margin:0 auto; padding:40px 24px 80px; }
+    .hero { text-align:center; margin-bottom:48px; }
+    .hero h1 { font-size:32px; font-weight:800; letter-spacing:-1px; margin-bottom:12px; }
+    .hero p { color:var(--muted); font-size:15px; }
+    .section { margin-bottom:36px; }
+    .section h2 { font-size:20px; font-weight:700; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+    .section h3 { font-size:16px; font-weight:600; margin:16px 0 8px; }
+    .section p, .section li { color:var(--muted); font-size:14px; line-height:1.8; margin-bottom:8px; }
+    .section ul { padding-left:24px; margin-bottom:12px; }
+    .section li { margin-bottom:4px; }
+    .updated { text-align:center; color:var(--muted); font-size:13px; margin-top:48px; padding-top:24px; border-top:1px solid var(--border); }
+    footer { text-align:center; padding:24px; color:var(--muted); font-size:12px; }
+    footer a { color:var(--accent); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>te</span>ai.io</a>
+    <div class="nav-links">
+      <a href="/pricing">Pricing</a>
+      <a href="/terms">Terms</a>
+      <a href="/docs">Docs</a>
+    </div>
+  </nav>
+  <div class="main">
+    <div class="hero">
+      <h1>Privacy Policy</h1>
+      <p>プライバシーポリシー</p>
+    </div>
+
+    <div class="section">
+      <h2>1. 運営者情報</h2>
+      <p>teai.io（以下「本サービス」）は、株式会社イネブラ（以下「当社」）が運営するLLM APIゲートウェイサービスです。</p>
+      <p>連絡先: info@enablerhq.com</p>
+    </div>
+
+    <div class="section">
+      <h2>2. 収集する情報</h2>
+      <h3>2.1 アカウント情報</h3>
+      <ul>
+        <li>メールアドレス（認証・連絡用）</li>
+        <li>パスワード（HMAC暗号化して保存、平文は保持しません）</li>
+        <li>表示名（任意）</li>
+      </ul>
+      <h3>2.2 利用データ</h3>
+      <ul>
+        <li>APIリクエストのメタデータ（タイムスタンプ、使用モデル、トークン数）</li>
+        <li>クレジット使用量</li>
+        <li>IPアドレス（レート制限・不正利用防止のため）</li>
+      </ul>
+      <h3>2.3 決済情報</h3>
+      <ul>
+        <li>決済処理はStripe, Inc.が行います。当社はクレジットカード番号を直接保持しません。</li>
+        <li>Stripeのプライバシーポリシー: https://stripe.com/privacy</li>
+      </ul>
+      <h3>2.4 収集しない情報</h3>
+      <ul>
+        <li>APIリクエストの本文（プロンプト・レスポンス）は保存しません</li>
+        <li>Cookie追跡・サードパーティトラッカーは使用しません</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>3. 情報の利用目的</h2>
+      <ul>
+        <li>サービスの提供・運営・改善</li>
+        <li>アカウント認証・パスワードリセット</li>
+        <li>利用量の計測・課金処理</li>
+        <li>不正利用の検知・防止</li>
+        <li>サービスに関する重要な通知</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>4. 情報の第三者提供</h2>
+      <p>以下の場合を除き、個人情報を第三者に提供しません。</p>
+      <ul>
+        <li>LLMプロバイダー（OpenAI, Anthropic, Google等）: APIリクエスト処理のため、プロンプト内容を送信します。各プロバイダーのプライバシーポリシーが適用されます。</li>
+        <li>Stripe: 決済処理のため</li>
+        <li>法令に基づく開示要求がある場合</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>5. データの保管</h2>
+      <ul>
+        <li>データはAWS（東京リージョン）に保管されます</li>
+        <li>監査ログは90日間保持後、自動削除されます</li>
+        <li>アカウント削除時、関連データは30日以内に削除されます</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>6. セキュリティ</h2>
+      <ul>
+        <li>全通信はTLS 1.2以上で暗号化</li>
+        <li>パスワードはHMAC-SHA256で暗号化保存</li>
+        <li>APIキーは一方向ハッシュで保存（プレフィックスのみ可読）</li>
+        <li>Webhook署名検証による改ざん防止</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>7. ユーザーの権利</h2>
+      <ul>
+        <li><strong>アクセス権</strong>: ダッシュボードで利用データを確認できます</li>
+        <li><strong>訂正権</strong>: アカウント設定でメールアドレス・表示名を変更できます</li>
+        <li><strong>削除権</strong>: info@enablerhq.com へ連絡でアカウント削除を依頼できます</li>
+        <li><strong>データポータビリティ</strong>: APIを通じて利用データをエクスポートできます</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>8. 未成年者の利用</h2>
+      <p>本サービスは13歳以上の方を対象としています。13歳未満の方は利用できません。</p>
+    </div>
+
+    <div class="section">
+      <h2>9. ポリシーの変更</h2>
+      <p>本ポリシーは変更される場合があります。重要な変更がある場合は、登録メールアドレスに通知します。</p>
+    </div>
+
+    <div class="section">
+      <h2>10. お問い合わせ</h2>
+      <p>プライバシーに関するお問い合わせ: <a href="mailto:info@enablerhq.com" style="color:var(--accent)">info@enablerhq.com</a></p>
+    </div>
+
+    <div class="updated">Last updated: March 10, 2026</div>
+  </div>
+  <footer>&copy; 2026 株式会社イネブラ. <a href="/terms">Terms</a> | <a href="/privacy">Privacy</a></footer>
+</body>
+</html>

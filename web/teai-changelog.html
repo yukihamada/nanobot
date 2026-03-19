@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Changelog - teai.io</title>
+  <meta name="description" content="teai.io の更新履歴。新機能、改善、バグ修正の一覧。">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    :root{--bg:#0a0a0a;--surface:#141414;--border:#1e1e1e;--text:#e5e5e5;--muted:#777;--accent:#10b981}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+
+    /* Nav */
+    nav{padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:100}
+    .logo{font-size:18px;font-weight:700;text-decoration:none;color:var(--text)}.logo span{color:var(--accent)}
+    .nav-r{display:flex;align-items:center;gap:16px}
+    .nav-r a{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;transition:color .15s}.nav-r a:hover{color:var(--text)}
+
+    /* Main */
+    .container{max-width:720px;margin:0 auto;padding:48px 24px 80px}
+    h1{font-size:32px;font-weight:800;letter-spacing:-0.5px;margin-bottom:8px}
+    .subtitle{color:var(--muted);font-size:15px;margin-bottom:48px}
+
+    /* Timeline */
+    .timeline{position:relative;padding-left:28px}
+    .timeline::before{content:'';position:absolute;left:6px;top:8px;bottom:0;width:2px;background:var(--border)}
+
+    /* Release */
+    .release{position:relative;margin-bottom:40px}
+    .release::before{content:'';position:absolute;left:-24px;top:8px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);z-index:1}
+    .release-header{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+    .release-date{font-size:14px;color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
+    .release-version{font-size:20px;font-weight:700;color:var(--text)}
+    .release-title{font-size:14px;color:var(--muted);font-weight:400}
+    .release-entries{list-style:none}
+    .release-entries li{padding:6px 0;font-size:14px;color:#ccc;display:flex;align-items:flex-start;gap:8px}
+    .release-entries li::before{display:none}
+
+    /* Badges */
+    .badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:.3px;flex-shrink:0;margin-top:2px}
+    .badge-new{background:rgba(16,185,129,.15);color:#10b981}
+    .badge-improved{background:rgba(59,130,246,.15);color:#3b82f6}
+    .badge-fix{background:rgba(245,158,11,.15);color:#f59e0b}
+    .badge-breaking{background:rgba(239,68,68,.15);color:#ef4444}
+
+    /* Policy */
+    .policy{margin-top:56px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px}
+    .policy h2{font-size:16px;font-weight:700;margin-bottom:12px}
+    .policy ul{list-style:none;padding:0}
+    .policy li{font-size:13px;color:#ccc;padding:4px 0;padding-left:16px;position:relative}
+    .policy li::before{content:'';position:absolute;left:0;top:11px;width:5px;height:5px;border-radius:50%;background:var(--border)}
+
+    /* Footer */
+    footer{text-align:center;padding:24px;color:var(--muted);font-size:12px;border-top:1px solid var(--border)}
+    footer a{color:var(--accent);text-decoration:none}
+    footer a:hover{text-decoration:underline}
+
+    @media(max-width:600px){
+      .container{padding:32px 16px 60px}
+      h1{font-size:26px}
+      .release-header{flex-direction:column;gap:4px}
+    }
+  </style>
+</head>
+<body>
+<nav>
+  <a href="/" class="logo"><span>te</span>ai.io</a>
+  <div class="nav-r">
+    <a href="/pricing">Pricing</a>
+    <a href="/docs">Docs</a>
+    <a href="/security">Security</a>
+    <a href="/status">Status</a>
+    <a href="/about">About</a>
+  </div>
+</nav>
+
+<div class="container">
+  <h1>Changelog</h1>
+  <p class="sub" style="color:var(--muted);font-size:18px;margin-bottom:8px;">変更履歴</p>
+  <p class="subtitle">teai.io の更新履歴と変更点</p>
+
+  <div class="timeline">
+
+    <!-- v1.0.0 -->
+    <div class="release">
+      <div class="release-header">
+        <span class="release-date">2026-03-10</span>
+        <span class="release-version">v1.0.0</span>
+        <span class="release-title">General Availability</span>
+      </div>
+      <ul class="release-entries">
+        <li><span class="badge badge-new">NEW</span>teai.io 正式リリース</li>
+        <li><span class="badge badge-new">NEW</span>OpenAI互換 API (<code>/v1/chat/completions</code>, <code>/v1/models</code>)</li>
+        <li><span class="badge badge-new">NEW</span>54モデル対応（OpenAI, Anthropic, Google, DeepSeek, Groq, Qwen, Cohere, xAI, Meta, MiniMax等）</li>
+        <li><span class="badge badge-new">NEW</span>SSE ストリーミング対応</li>
+        <li><span class="badge badge-new">NEW</span>Nemotron 9B 日本語モデル無料提供</li>
+        <li><span class="badge badge-new">NEW</span>クレジットベース課金システム</li>
+        <li><span class="badge badge-new">NEW</span>Stripe決済連携</li>
+        <li><span class="badge badge-new">NEW</span>セキュリティ＆コンプライアンスページ公開</li>
+        <li><span class="badge badge-new">NEW</span>SLA詳細ページ公開</li>
+        <li><span class="badge badge-new">NEW</span>完全なAPIリファレンス公開</li>
+      </ul>
+    </div>
+
+    <!-- v0.9.0 -->
+    <div class="release">
+      <div class="release-header">
+        <span class="release-date">2026-03-08</span>
+        <span class="release-version">v0.9.0</span>
+        <span class="release-title">Beta</span>
+      </div>
+      <ul class="release-entries">
+        <li><span class="badge badge-new">NEW</span>Qwen3-32B セルフホスト追加</li>
+        <li><span class="badge badge-new">NEW</span>自動フェイルオーバー（サーキットブレーカー）</li>
+        <li><span class="badge badge-improved">IMPROVED</span>ストリーミングレスポンスの安定性向上</li>
+        <li><span class="badge badge-fix">FIX</span>クレジット計算のceiling division修正</li>
+      </ul>
+    </div>
+
+    <!-- v0.8.0 -->
+    <div class="release">
+      <div class="release-header">
+        <span class="release-date">2026-03-01</span>
+        <span class="release-version">v0.8.0</span>
+        <span class="release-title">Beta</span>
+      </div>
+      <ul class="release-entries">
+        <li><span class="badge badge-new">NEW</span>マルチプラットフォーム対応（Lambda + Fly.io + Docker self-host）</li>
+        <li><span class="badge badge-new">NEW</span>LibSQL/SQLite バックエンド</li>
+        <li><span class="badge badge-new">NEW</span>APIキー管理ダッシュボード</li>
+        <li><span class="badge badge-improved">IMPROVED</span>レート制限をDynamoDB atomic counterに変更</li>
+      </ul>
+    </div>
+
+    <!-- v0.7.0 -->
+    <div class="release">
+      <div class="release-header">
+        <span class="release-date">2026-02-15</span>
+        <span class="release-version">v0.7.0</span>
+        <span class="release-title">Alpha</span>
+      </div>
+      <ul class="release-entries">
+        <li><span class="badge badge-new">NEW</span>ツール呼び出し機能（web_search, calculator, code_execute等）</li>
+        <li><span class="badge badge-new">NEW</span>Agentic Mode（マルチイテレーション）</li>
+        <li><span class="badge badge-new">NEW</span>LINE / Telegram Bot連携</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="policy">
+    <h2>変更通知ポリシー</h2>
+    <ul>
+      <li>破壊的変更（Breaking Changes）は最低30日前にメール通知</li>
+      <li>新機能追加・改善はこのページで随時更新</li>
+      <li>APIバージョニング: 現在 v1。メジャーバージョン変更時は旧バージョンを最低6ヶ月サポート</li>
+    </ul>
+  </div>
+</div>
+
+<footer>&copy; 2026 株式会社イネブラ. <a href="/terms">Terms</a> | <a href="/privacy">Privacy</a> | <a href="/security">Security</a> | <a href="/sla">SLA</a> | <a href="/status">Status</a> | <a href="/about">About</a></footer>
+</body>
+</html>

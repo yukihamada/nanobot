@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - teai.io</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg:#09090b;--surface:#18181b;--surface2:#27272a;--border:#3f3f46;
+      --text:#fafafa;--muted:#a1a1aa;--accent:#10b981;--accent2:#34d399;
+      --red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI','Hiragino Sans',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased;}
+    a{color:var(--accent2);text-decoration:none;}
+    .layout{display:flex;min-height:100vh;}
+    .sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);padding:20px 0;flex-shrink:0;}
+    .sidebar .logo{padding:0 20px 24px;font-size:18px;font-weight:800;}
+    .sidebar .logo span{color:var(--accent);}
+    .sidebar nav a{display:block;padding:8px 20px;font-size:14px;color:var(--muted);font-weight:500;border-left:3px solid transparent;}
+    .sidebar nav a:hover,.sidebar nav a.active{color:var(--text);background:rgba(255,255,255,0.03);border-left-color:var(--accent);}
+    .sidebar .plan-badge{margin:24px 20px 0;padding:8px 12px;background:var(--surface2);border-radius:8px;font-size:12px;}
+    .sidebar .plan-badge .plan-name{color:var(--accent);font-weight:700;}
+    .main{flex:1;padding:32px;overflow-x:hidden;}
+    h1{font-size:24px;font-weight:800;margin-bottom:24px;}
+    .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px;}
+    .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;}
+    .stat-card .label{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;}
+    .stat-card .value{font-size:28px;font-weight:800;}
+    .stat-card .change{font-size:12px;margin-top:4px;}
+    .stat-card .change.up{color:var(--accent);}
+    .stat-card .change.down{color:var(--red);}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:24px;}
+    .card h2{font-size:16px;font-weight:700;margin-bottom:16px;}
+    .api-key-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+    .api-key-row:last-child{border-bottom:none;}
+    .api-key-row .key{font-family:'SF Mono','Fira Code',monospace;font-size:13px;color:var(--muted);flex:1;}
+    .api-key-row .name{font-weight:600;min-width:100px;}
+    .api-key-row .created{font-size:12px;color:var(--muted);}
+    .btn{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:600;border:none;cursor:pointer;}
+    .btn-sm{padding:4px 10px;font-size:12px;}
+    .btn-primary{background:var(--accent);color:#fff;}
+    .btn-danger{background:transparent;color:var(--red);border:1px solid var(--red);}
+    .btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+    .btn:hover{opacity:0.85;}
+    .usage-bar{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;margin:8px 0;}
+    .usage-bar .fill{height:100%;background:var(--accent);border-radius:4px;transition:width 0.3s;}
+    .usage-info{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);}
+    .model-usage-list .row{display:flex;align-items:center;padding:8px 0;border-bottom:1px solid rgba(63,63,70,0.3);font-size:14px;}
+    .model-usage-list .row:last-child{border-bottom:none;}
+    .model-usage-list .model-name{flex:1;font-weight:600;}
+    .model-usage-list .reqs{min-width:80px;text-align:right;color:var(--muted);}
+    .model-usage-list .cost{min-width:80px;text-align:right;font-family:monospace;}
+    .model-usage-list .bar-wrap{width:120px;margin-left:16px;}
+    .model-usage-list .mini-bar{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;}
+    .model-usage-list .mini-bar .fill{height:100%;border-radius:2px;}
+    .empty{text-align:center;padding:40px;color:var(--muted);font-size:14px;}
+    .input{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font-size:14px;outline:none;width:100%;}
+    .input:focus{border-color:var(--accent);}
+    .flex{display:flex;gap:8px;align-items:center;}
+    .mt-8{margin-top:8px;}.mt-16{margin-top:16px;}
+    .copy-btn{cursor:pointer;padding:4px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:11px;}
+    .copy-btn:hover{color:var(--text);}
+    #toast{position:fixed;bottom:24px;right:24px;background:var(--accent);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;display:none;z-index:999;}
+    @media(max-width:768px){.layout{flex-direction:column;}.sidebar{width:100%;border-right:none;border-bottom:1px solid var(--border);padding:12px 0;}.sidebar nav{display:flex;overflow-x:auto;}.sidebar nav a{white-space:nowrap;border-left:none;border-bottom:3px solid transparent;}.sidebar nav a.active{border-bottom-color:var(--accent);}.stats-grid{grid-template-columns:repeat(2,1fr);}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar">
+    <div class="logo"><span>te</span>ai.io</div>
+    <nav>
+      <a href="#overview" class="active" onclick="showTab('overview',this)">概要</a>
+      <a href="#api-keys" onclick="showTab('keys',this)">APIキー</a>
+      <a href="#usage" onclick="showTab('usage',this)">使用量</a>
+      <a href="#models" onclick="showTab('models',this)">モデル</a>
+      <a href="#settings" onclick="showTab('settings',this)">設定</a>
+      <a href="/docs" onclick="return true">ドキュメント</a>
+      <a href="/status" onclick="return true" style="margin-top:auto;">稼働状況</a>
+    </nav>
+    <div class="plan-badge">
+      <div>Plan: <span class="plan-name" id="planName">Free</span></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Credits: <span id="creditsLeft">100</span></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- Overview Tab -->
+    <div id="tab-overview">
+      <h1>ダッシュボード</h1>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="label">今日のリクエスト</div>
+          <div class="value" id="reqToday">0</div>
+          <div class="change up" id="reqChange"></div>
+        </div>
+        <div class="stat-card">
+          <div class="label">使用クレジット</div>
+          <div class="value" id="creditsUsed">0</div>
+          <div class="change" id="creditsChange"></div>
+        </div>
+        <div class="stat-card">
+          <div class="label">残りクレジット</div>
+          <div class="value" id="creditsRemaining">100</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">平均レイテンシ</div>
+          <div class="value" id="avgLatency">-</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>クイックスタート</h2>
+        <div style="background:var(--surface2);border-radius:8px;padding:16px;font-family:'SF Mono','Fira Code',monospace;font-size:13px;line-height:1.7;position:relative;overflow-x:auto;">
+          <span class="copy-btn" style="position:absolute;top:8px;right:8px;" onclick="copyCode(this)">Copy</span>
+          <span style="color:#c084fc">from</span> openai <span style="color:#c084fc">import</span> OpenAI<br><br>
+          client = OpenAI(<br>
+          &nbsp;&nbsp;base_url=<span style="color:#34d399">"https://api.teai.io/v1"</span>,<br>
+          &nbsp;&nbsp;api_key=<span style="color:#34d399">"<span id="quickstartKey">te_your_api_key</span>"</span>,<br>
+          )<br><br>
+          resp = client.chat.completions.create(<br>
+          &nbsp;&nbsp;model=<span style="color:#34d399">"gpt-4o"</span>,<br>
+          &nbsp;&nbsp;messages=[{<span style="color:#34d399">"role"</span>: <span style="color:#34d399">"user"</span>, <span style="color:#34d399">"content"</span>: <span style="color:#34d399">"Hello!"</span>}],<br>
+          )
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>モデル使用状況（今日）</h2>
+        <div class="model-usage-list" id="modelUsageList">
+          <div style="text-align:center;padding:32px 20px;">
+  <div style="font-size:32px;margin-bottom:12px;">🚀</div>
+  <p style="color:var(--text);font-weight:600;margin-bottom:8px;">最初のAPIコールを実行しましょう</p>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">上のクイックスタートコードをコピーして実行するだけ。<br>Nemotron 9Bなら無料・無制限で使えます。</p>
+  <a href="/docs" style="display:inline-block;background:var(--accent);color:#fff;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;">APIドキュメントを見る</a>
+</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- API Keys Tab -->
+    <div id="tab-keys" style="display:none">
+      <h1>APIキー</h1>
+      <div class="card">
+        <div class="flex" style="margin-bottom:16px;">
+          <input class="input" id="newKeyName" placeholder="キー名（例: production, staging）" style="max-width:300px;">
+          <button class="btn btn-primary" onclick="createKey()">キーを作成</button>
+        </div>
+        <div id="keysList">
+          <div style="text-align:center;padding:24px;">
+  <p style="color:var(--muted);font-size:14px;">APIキーがまだありません。上の「キーを作成」ボタンで最初のキーを作成してください。</p>
+  <p style="color:var(--muted);font-size:12px;margin-top:8px;">キーは安全に保管し、公開リポジトリにコミットしないでください。</p>
+</div>
+        </div>
+      </div>
+      <div class="card" id="newKeyDisplay" style="display:none;border-color:var(--accent);">
+        <h2 style="color:var(--accent);">APIキーが作成されました</h2>
+        <p style="color:var(--muted);font-size:14px;margin-bottom:12px;">今すぐコピーしてください。このキーは二度と表示されません。</p>
+        <div class="flex">
+          <input class="input" id="newKeyValue" readonly style="font-family:monospace;">
+          <button class="btn btn-ghost" onclick="copyKey()">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Usage Tab -->
+    <div id="tab-usage" style="display:none">
+      <h1>使用量</h1>
+      <div class="card">
+        <h2>クレジット使用量</h2>
+        <div class="usage-bar"><div class="fill" id="usageBar" style="width:0%"></div></div>
+        <div class="usage-info">
+          <span><span id="usedCredits">0</span> クレジット使用</span>
+          <span><span id="totalCredits">100</span> クレジット合計</span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>モデル別使用量</h2>
+        <div class="model-usage-list" id="usageByModel">
+          <div style="text-align:center;padding:24px;">
+  <p style="color:var(--muted);font-size:14px;">まだ使用データがありません。APIコールを実行すると、ここにモデル別の使用量が表示されます。</p>
+</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>クレジット追加</h2>
+        <p style="color:var(--muted);font-size:14px;margin-bottom:16px;">クレジット残高が不足した場合はプランをアップグレードしてください。</p>
+        <div class="flex">
+          <a href="/pricing" class="btn btn-primary" style="text-decoration:none;">プランを見る</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Models Tab -->
+    <div id="tab-models" style="display:none">
+      <h1>利用可能なモデル</h1>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:14px 16px;background:var(--surface2);color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);">Model</th>
+              <th style="text-align:left;padding:14px 16px;background:var(--surface2);color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);">Provider</th>
+              <th style="text-align:right;padding:14px 16px;background:var(--surface2);color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);">Input/1M</th>
+              <th style="text-align:right;padding:14px 16px;background:var(--surface2);color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);">Output/1M</th>
+              <th style="text-align:right;padding:14px 16px;background:var(--surface2);color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);">Context</th>
+            </tr>
+          </thead>
+          <tbody id="modelsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="tab-settings" style="display:none">
+      <h1>設定</h1>
+      <div class="card">
+        <h2>アカウント</h2>
+        <div style="font-size:14px;color:var(--muted);">
+          <p>Email: <span id="userEmail" style="color:var(--text)">-</span></p>
+          <p class="mt-8">User ID: <span id="userId" style="color:var(--text);font-family:monospace;">-</span></p>
+          <p class="mt-8">Plan: <span id="userPlan" style="color:var(--accent);font-weight:700;">Free</span></p>
+        </div>
+      </div>
+      <div class="card">
+        <h2>危険な操作</h2>
+        <button class="btn btn-danger" onclick="if(confirm('アカウントを削除しますか？この操作は取り消せません。'))alert('アカウント削除はinfo@enablerhq.comまでご連絡ください')">アカウント削除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = window.location.origin;
+let authToken = localStorage.getItem('te_token') || localStorage.getItem('auth_token') || '';
+
+function showTab(tab, el) {
+  document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+  document.getElementById('tab-' + tab).style.display = 'block';
+  document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
+  if (el) el.classList.add('active');
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2000);
+}
+
+function copyCode(btn) {
+  const code = btn.parentElement.textContent.replace('Copy', '').trim();
+  navigator.clipboard.writeText(code); toast('コピーしました');
+}
+
+function copyKey() {
+  const v = document.getElementById('newKeyValue').value;
+  navigator.clipboard.writeText(v); toast('APIキーをコピーしました');
+}
+
+async function createKey() {
+  const name = document.getElementById('newKeyName').value || 'default';
+  try {
+    const r = await fetch(API + '/api/v1/apikeys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify({ name })
+    });
+    const d = await r.json();
+    if (d.api_key) {
+      document.getElementById('newKeyValue').value = d.api_key;
+      document.getElementById('newKeyDisplay').style.display = 'block';
+      document.getElementById('quickstartKey').textContent = d.key_prefix;
+      loadKeys();
+      toast('APIキーを作成しました');
+    } else {
+      toast('Error: ' + (d.error || 'Failed'));
+    }
+  } catch (e) { toast('Error: ' + e.message); }
+}
+
+async function deleteKey(id) {
+  if (!confirm('Delete this API key?')) return;
+  await fetch(API + '/api/v1/apikeys/' + id, {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + authToken }
+  });
+  loadKeys(); toast('キーを削除しました');
+}
+
+async function loadKeys() {
+  try {
+    const r = await fetch(API + '/api/v1/apikeys', {
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    const d = await r.json();
+    const list = document.getElementById('keysList');
+    if (!d.api_keys || d.api_keys.length === 0) {
+      list.innerHTML = '<div style="text-align:center;padding:24px;"><p style="color:var(--muted);font-size:14px;">APIキーがまだありません。上の「キーを作成」ボタンで最初のキーを作成してください。</p><p style="color:var(--muted);font-size:12px;margin-top:8px;">キーは安全に保管し、公開リポジトリにコミットしないでください。</p></div>';
+      return;
+    }
+    list.innerHTML = d.api_keys.map(k => `
+      <div class="api-key-row">
+        <span class="name">${k.name}</span>
+        <span class="key">${k.key_prefix}</span>
+        <span class="created">${k.created_at ? new Date(k.created_at).toLocaleDateString('ja-JP') : ''}</span>
+        <button class="btn btn-danger btn-sm" onclick="deleteKey('${k.id}')">削除</button>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+async function loadModels() {
+  try {
+    const r = await fetch(API + '/v1/models');
+    const d = await r.json();
+    const tbody = document.getElementById('modelsTableBody');
+    // Pricing data (hardcoded for display)
+    const pricing = {
+      'gpt-4o':{p:'OpenAI',i:2.50,o:10.00,c:'128K'},
+      'gpt-4o-mini':{p:'OpenAI',i:0.15,o:0.60,c:'128K'},
+      'gpt-4.1':{p:'OpenAI',i:2.00,o:8.00,c:'1M'},
+      'gpt-4.1-mini':{p:'OpenAI',i:0.40,o:1.60,c:'1M'},
+      'gpt-4.1-nano':{p:'OpenAI',i:0.10,o:0.40,c:'1M'},
+      'o3-mini':{p:'OpenAI',i:1.10,o:4.40,c:'200K'},
+      'o4-mini':{p:'OpenAI',i:1.10,o:4.40,c:'200K'},
+      'claude-sonnet-4-6':{p:'Anthropic',i:3.00,o:15.00,c:'200K'},
+      'claude-haiku-4-5-20251001':{p:'Anthropic',i:1.00,o:5.00,c:'200K'},
+      'claude-opus-4-6':{p:'Anthropic',i:5.00,o:25.00,c:'200K'},
+      'claude-opus-4-5':{p:'Anthropic',i:5.00,o:25.00,c:'200K'},
+      'gemini-2.5-flash':{p:'Google',i:0.30,o:2.50,c:'1M'},
+      'gemini-2.5-flash-lite':{p:'Google',i:0.10,o:0.40,c:'1M'},
+      'gemini-2.5-pro':{p:'Google',i:1.25,o:10.00,c:'1M'},
+      'gemini-2.0-flash':{p:'Google',i:0.10,o:0.40,c:'1M'},
+      'deepseek-chat':{p:'DeepSeek',i:0.28,o:0.42,c:'128K'},
+      'deepseek-reasoner':{p:'DeepSeek',i:0.28,o:0.42,c:'128K'},
+      'llama-3.3-70b-specdec':{p:'Groq',i:0.59,o:0.79,c:'128K'},
+      'qwen3-32b':{p:'Groq',i:0.29,o:0.59,c:'32K'},
+      'nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese':{p:'teai.io',i:0,o:0,c:'8K'},
+    };
+    if (d.data) {
+      // Sort: free first, then by input price
+      const sorted = d.data.sort((a, b) => {
+        const pa = pricing[a.id], pb = pricing[b.id];
+        if (pa && pa.i === 0) return -1;
+        if (pb && pb.i === 0) return 1;
+        return ((pa?.i||99) - (pb?.i||99));
+      });
+      tbody.innerHTML = sorted.map(m => {
+        const p = pricing[m.id] || { p: m.owned_by || '?', i: '?', o: '?', c: '?' };
+        const isFree = p.i === 0;
+        return `<tr style="border-bottom:1px solid rgba(63,63,70,0.5)">
+          <td style="padding:10px 16px;font-weight:600">${m.id}${isFree ? ' <span style="color:var(--accent);font-size:11px">FREE</span>' : ''}</td>
+          <td style="padding:10px 16px"><span style="display:inline-block;padding:2px 8px;background:var(--surface2);border-radius:4px;font-size:11px;font-weight:600;color:var(--muted)">${p.p}</span></td>
+          <td style="padding:10px 16px;text-align:right;font-family:monospace;font-size:13px;${isFree?'color:var(--accent);font-weight:700':''}">${isFree ? 'FREE' : '$'+p.i.toFixed(2)}</td>
+          <td style="padding:10px 16px;text-align:right;font-family:monospace;font-size:13px;${isFree?'color:var(--accent);font-weight:700':''}">${isFree ? 'FREE' : '$'+p.o.toFixed(2)}</td>
+          <td style="padding:10px 16px;text-align:right">${p.c}</td>
+        </tr>`;
+      }).join('');
+    }
+  } catch (e) { console.error(e); }
+}
+
+async function loadAccount() {
+  try {
+    const r = await fetch(API + '/api/v1/auth/me', {
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.credits_remaining !== undefined) {
+        document.getElementById('creditsLeft').textContent = d.credits_remaining;
+        document.getElementById('creditsRemaining').textContent = d.credits_remaining;
+      }
+      if (d.email) document.getElementById('userEmail').textContent = d.email;
+      if (d.user_id) document.getElementById('userId').textContent = d.user_id;
+      if (d.plan) {
+        document.getElementById('planName').textContent = d.plan;
+        document.getElementById('userPlan').textContent = d.plan;
+      }
+    }
+  } catch (e) {}
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+  loadModels();
+  if (authToken) {
+    loadKeys();
+    loadAccount();
+  } else {
+    window.location.href = '/register';
+  }
+});
+</script>
+</body>
+</html>

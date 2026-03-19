@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SLA（サービスレベル契約） - teai.io</title>
+  <meta name="description" content="teai.io APIサービスのSLA（サービスレベル契約）。稼働率保証、クレジットバック、サポート応答時間について。">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    :root { --bg:#0a0a0a; --surface:#141414; --border:#1e1e1e; --text:#e5e5e5; --muted:#777; --accent:#10b981; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }
+    .logo { font-size:18px; font-weight:700; text-decoration:none; color:var(--text); }
+    .logo span { color:var(--accent); }
+    .nav-links a { color:var(--muted); text-decoration:none; font-size:14px; margin-left:16px; }
+    .nav-links a:hover { color:var(--text); }
+    .main { max-width:760px; margin:0 auto; padding:40px 24px 80px; }
+    .hero { text-align:center; margin-bottom:48px; }
+    .hero h1 { font-size:32px; font-weight:800; letter-spacing:-1px; margin-bottom:12px; }
+    .hero p { color:var(--muted); font-size:15px; }
+    .section { margin-bottom:36px; }
+    .section h2 { font-size:20px; font-weight:700; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+    .section h3 { font-size:16px; font-weight:600; margin:16px 0 8px; }
+    .section p, .section li { color:var(--muted); font-size:14px; line-height:1.8; margin-bottom:8px; }
+    .section ul, .section ol { padding-left:24px; margin-bottom:12px; }
+    .section li { margin-bottom:4px; }
+    table { width:100%; border-collapse:collapse; margin:16px 0 20px; font-size:14px; }
+    thead th { background:var(--surface); color:var(--text); font-weight:600; text-align:left; padding:12px 14px; border-bottom:2px solid var(--border); }
+    tbody td { padding:10px 14px; border-bottom:1px solid var(--border); color:var(--muted); }
+    tbody tr:hover { background:var(--surface); }
+    .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:12px; font-weight:600; }
+    .badge-green { background:rgba(16,185,129,0.15); color:var(--accent); }
+    .badge-gray { background:rgba(119,119,119,0.15); color:var(--muted); }
+    code { color:var(--accent); font-size:13px; }
+    .updated { text-align:center; color:var(--muted); font-size:13px; margin-top:48px; padding-top:24px; border-top:1px solid var(--border); }
+    footer { text-align:center; padding:24px; color:var(--muted); font-size:12px; }
+    footer a { color:var(--accent); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>te</span>ai.io</a>
+    <div class="nav-links">
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/security">Security</a>
+      <a href="/status">Status</a>
+      <a href="/about">About</a>
+    </div>
+  </nav>
+  <div class="main">
+    <div class="hero">
+      <h1>SLA（サービスレベル契約）</h1>
+      <p>Service Level Agreement</p>
+    </div>
+
+    <!-- 1. SLA概要 -->
+    <div class="section">
+      <h2>1. SLA概要</h2>
+      <p>本SLA（サービスレベル契約）は、teai.io APIサービス（以下「本サービス」）の可用性に関する保証を定めるものです。株式会社イネブラ（以下「当社」）は、本SLAに基づき、有料プランのお客様に対してサービス稼働率の目標値を設定し、未達成の場合にはクレジットバックを提供いたします。</p>
+      <p>本SLAは、teai.io の利用規約およびプライバシーポリシーと併せて適用されます。</p>
+    </div>
+
+    <!-- 2. プラン別稼働率保証 -->
+    <div class="section">
+      <h2>2. プラン別稼働率保証</h2>
+      <p>各プランにおけるサービス稼働率の目標値およびSLA保証の適用範囲は以下のとおりです。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>プラン</th>
+            <th>月間稼働率目標</th>
+            <th>SLA保証</th>
+            <th>クレジットバック</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Free</td>
+            <td>ベストエフォート</td>
+            <td><span class="badge badge-gray">なし</span></td>
+            <td><span class="badge badge-gray">なし</span></td>
+          </tr>
+          <tr>
+            <td>Pro</td>
+            <td>99.5%</td>
+            <td><span class="badge badge-green">あり</span></td>
+            <td><span class="badge badge-green">あり</span></td>
+          </tr>
+          <tr>
+            <td>Business</td>
+            <td>99.9%</td>
+            <td><span class="badge badge-green">あり</span></td>
+            <td><span class="badge badge-green">あり</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 3. 稼働率の定義 -->
+    <div class="section">
+      <h2>3. 稼働率の定義</h2>
+      <p>本SLAにおける「稼働率」は、以下の定義に基づき算出されます。</p>
+      <h3>「稼働」の定義</h3>
+      <p>APIエンドポイント（<code>https://api.teai.io</code>）が、リクエスト送信から5秒以内にHTTPステータスコード 200、201、または4xx系（クライアントエラー）を返すことをもって「稼働」とみなします。</p>
+      <h3>「ダウンタイム」の定義</h3>
+      <p>5分以上連続してHTTP 5xx系エラーまたはタイムアウト（応答なし）が発生した場合を「ダウンタイム」とみなします。5分未満の一時的な障害はダウンタイムに含まれません。</p>
+      <h3>稼働率の算出</h3>
+      <p>月間稼働率（%）=（月間総分数 - ダウンタイム分数）/ 月間総分数 &times; 100</p>
+      <h3>除外事項</h3>
+      <p>以下の事象に起因するダウンタイムは、稼働率の算出から除外されます。</p>
+      <ul>
+        <li>事前に通知された計画メンテナンス（第6条参照）</li>
+        <li>上流LLMプロバイダー（OpenAI、Anthropic、Google等）に起因する障害</li>
+        <li>不可抗力（天災、戦争、テロ、政府の行為、大規模なインターネット障害等）</li>
+        <li>お客様の環境、ネットワーク、またはアプリケーションに起因する障害</li>
+        <li>当社が定めるレート制限を超過したリクエスト</li>
+      </ul>
+    </div>
+
+    <!-- 4. SLAクレジットバック -->
+    <div class="section">
+      <h2>4. SLAクレジットバック</h2>
+      <p>有料プランのお客様が稼働率目標を下回った場合、以下の表に基づきクレジットバックの対象となります。クレジットバックは申請ベースで対応いたします（第5条の申請手順を参照）。適用されたクレジットバックは翌月以降の月額料金に充当されます。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>月間稼働率</th>
+            <th>クレジットバック率</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>99.0% - 99.5%（Pro） / 99.5% - 99.9%（Business）</td>
+            <td>月額の10%</td>
+          </tr>
+          <tr>
+            <td>95.0% - 99.0%（Pro） / 95.0% - 99.5%（Business）</td>
+            <td>月額の25%</td>
+          </tr>
+          <tr>
+            <td>95.0%未満</td>
+            <td>月額の50%</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>クレジットバックの上限は、該当月の月額料金の50%とします。現金による返金は行いません。</p>
+    </div>
+
+    <!-- 5. クレジットバック申請 -->
+    <div class="section">
+      <h2>5. クレジットバック申請</h2>
+      <p>クレジットバックの適用を受けるには、以下の手順に従い申請を行ってください。</p>
+      <ul>
+        <li><strong>申請期限:</strong> 障害が発生した月の翌月末日まで</li>
+        <li><strong>申請方法:</strong> メールにて申請</li>
+        <li><strong>申請先:</strong> <code>sla@enablerhq.com</code></li>
+      </ul>
+      <h3>申請時に必要な情報</h3>
+      <ul>
+        <li>アカウントID（メールアドレスまたはユーザーID）</li>
+        <li>影響を受けた期間（開始日時・終了日時、JST表記）</li>
+        <li>エラーログまたはスクリーンショット（HTTPステータスコード、レスポンス内容等）</li>
+      </ul>
+      <p>当社は申請受領後、10営業日以内に調査を実施し、結果をメールにて通知いたします。当社の監視データに基づき稼働率を最終的に判定します。</p>
+    </div>
+
+    <!-- 6. 計画メンテナンス -->
+    <div class="section">
+      <h2>6. 計画メンテナンス</h2>
+      <p>サービスの安定運用のため、定期的にメンテナンスを実施する場合があります。</p>
+      <ul>
+        <li><strong>実施時間帯:</strong> 原則として日本時間（JST）02:00 - 05:00</li>
+        <li><strong>Proプランのお客様:</strong> 72時間前までにメールにて事前通知</li>
+        <li><strong>Businessプランのお客様:</strong> 7日前までにメールにて事前通知</li>
+      </ul>
+      <p>緊急メンテナンス（セキュリティパッチの適用等、緊急性の高い対応）については、上記の通知期間を適用せず、可能な限り速やかに事前通知を行います。</p>
+      <p>計画メンテナンス中のダウンタイムは、稼働率の算出対象から除外されます。</p>
+    </div>
+
+    <!-- 7. サポート応答時間 -->
+    <div class="section">
+      <h2>7. サポート応答時間</h2>
+      <p>障害およびお問い合わせに対するサポート応答時間は、重要度およびプランに応じて以下のとおりです。応答時間は営業時間（JST 09:00 - 18:00、土日祝除く）に基づきます。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>重要度</th>
+            <th>Free</th>
+            <th>Pro</th>
+            <th>Business</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>P1</strong>（全面停止）</td>
+            <td>-</td>
+            <td>4時間</td>
+            <td>1時間</td>
+          </tr>
+          <tr>
+            <td><strong>P2</strong>（一部機能障害）</td>
+            <td>-</td>
+            <td>8時間</td>
+            <td>2時間</td>
+          </tr>
+          <tr>
+            <td><strong>P3</strong>（質問・要望）</td>
+            <td>コミュニティ</td>
+            <td>24時間</td>
+            <td>8時間</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>P1障害については、Businessプランのお客様に限り、営業時間外（24時間365日）での対応を行います。</p>
+    </div>
+
+    <!-- 8. エスカレーションフロー -->
+    <div class="section">
+      <h2>8. エスカレーションフロー</h2>
+      <p>障害発生時およびお問い合わせ時のエスカレーション手順は以下のとおりです。</p>
+      <ul>
+        <li><strong>Level 1（通常問い合わせ）:</strong> <code>support@enablerhq.com</code> にメールにてご連絡ください。</li>
+        <li><strong>Level 2（P1/P2障害時）:</strong> <code>urgent@enablerhq.com</code> に障害内容を記載のうえご連絡ください。</li>
+        <li><strong>Level 3（Business契約のお客様）:</strong> 契約時に割り当てられる専任担当者に直接ご連絡いただけます。</li>
+      </ul>
+      <h3>電話サポート</h3>
+      <p>電話によるサポートは、Businessプランのお客様に限り提供いたします。専用の電話番号は契約締結時に個別に発行いたします。</p>
+      <h3>エンタープライズ向け個別SLA</h3>
+      <p>Business プラン以上のお客様には、個別のSLA条件（カスタム稼働率保証・専任担当者・オンサイトサポート等）のご相談に応じます。詳しくは <a href="mailto:info@enablerhq.com?subject=teai.io Enterprise SLA" style="color:var(--accent)">info@enablerhq.com</a> までお問い合わせください。</p>
+    </div>
+
+    <!-- 9. ステータス監視 -->
+    <div class="section">
+      <h2>9. ステータス監視</h2>
+      <p>サービスの稼働状況およびインシデント情報は、以下の手段にてご確認いただけます。</p>
+      <ul>
+        <li><strong>リアルタイムステータス:</strong> <a href="https://teai.io/status" style="color:var(--accent)">https://teai.io/status</a></li>
+        <li><strong>インシデント通知:</strong> すべての有料プランのお客様に対し、障害発生時にメールにて自動配信</li>
+        <li><strong>Slack / Teams Webhook連携:</strong> Businessプランのお客様は、Slack または Microsoft Teams への Webhook 通知を設定可能</li>
+      </ul>
+      <p>ステータスページでは、APIエンドポイントのレスポンスタイム、過去30日間のアップタイム履歴、および現在進行中のインシデント情報を公開しています。</p>
+    </div>
+
+    <!-- 10. SLA適用開始日・改定 -->
+    <div class="section">
+      <h2>10. SLA適用開始日・改定</h2>
+      <p>本SLAは、2026年3月10日より施行いたします。</p>
+      <p>当社は、本SLAの内容を変更する場合、変更後のSLAの施行日の30日前までに、メールまたは本サービス上での通知により、お客様にその旨をお知らせいたします。</p>
+      <p>変更後のSLAに同意いただけない場合、お客様は施行日前にサービスを解約することができます。施行日以降にサービスを継続して利用された場合、変更後のSLAに同意したものとみなされます。</p>
+    </div>
+
+    <div class="updated">最終更新日: 2026年3月10日</div>
+  </div>
+  <footer>&copy; 2026 株式会社イネブラ. <a href="/terms">Terms</a> | <a href="/privacy">Privacy</a> | <a href="/security">Security</a> | <a href="/sla">SLA</a> | <a href="/status">Status</a> | <a href="/about">About</a></footer>
+</body>
+</html>

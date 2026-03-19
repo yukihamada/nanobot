@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Documentation - teai.io</title>
+  <meta name="description" content="teai.io OpenAI-compatible LLM API Gateway. Python, Node.js, curl examples.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    :root{--bg:#0a0a0a;--s:#141414;--s2:#1a1a2e;--b:#1e1e1e;--t:#e5e5e5;--m:#777;--a:#10b981;--ah:#34d399;--g:#22c55e;--y:#f59e0b;--r:#ef4444;--code-bg:#0d1117}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;line-height:1.6}
+    nav{padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);z-index:100}
+    .logo{font-size:18px;font-weight:700;text-decoration:none;color:var(--t)}.logo span{color:var(--a)}
+    .nav-r{display:flex;align-items:center;gap:16px}
+    .nav-r a{color:var(--m);text-decoration:none;font-size:14px;font-weight:500}.nav-r a:hover{color:var(--t)}
+    .layout{display:flex;max-width:1200px;margin:0 auto}
+    .sidebar{width:240px;min-width:240px;border-right:1px solid var(--b);padding:24px 16px;position:sticky;top:57px;height:calc(100vh - 57px);overflow-y:auto}
+    .sidebar h4{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--m);margin:16px 0 8px}
+    .sidebar h4:first-child{margin-top:0}
+    .sidebar a{display:block;color:var(--m);text-decoration:none;font-size:13px;padding:5px 8px;border-radius:6px;transition:all .15s}
+    .sidebar a:hover{color:var(--t);background:var(--s)}
+    .sidebar a.active{color:var(--a);background:rgba(16,185,129,.1)}
+    .content{flex:1;padding:32px 40px 80px;min-width:0}
+    h1{font-size:32px;font-weight:800;letter-spacing:-0.5px;margin-bottom:8px}
+    .subtitle{color:var(--m);font-size:15px;margin-bottom:32px}
+    .section{margin-bottom:48px;scroll-margin-top:80px}
+    .section h2{font-size:22px;font-weight:700;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--b)}
+    .section h3{font-size:16px;font-weight:600;margin:20px 0 8px}
+    .section p,.section li{color:#ccc;font-size:14px;line-height:1.8;margin-bottom:8px}
+    .section ul{padding-left:20px;margin-bottom:16px}
+    .base-url{background:var(--s);border:1px solid var(--b);border-radius:8px;padding:12px 16px;margin-bottom:24px;font-family:'SF Mono',Menlo,monospace;font-size:14px;color:var(--ah);display:flex;justify-content:space-between;align-items:center}
+    .base-url button{background:var(--a);color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer}
+    .card{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:20px;margin-bottom:16px}
+    .card h3{margin-top:0}
+    pre{background:var(--code-bg);border:1px solid var(--b);border-radius:8px;padding:14px;overflow-x:auto;font-size:12.5px;line-height:1.6;margin:8px 0}
+    code{font-family:'SF Mono',Menlo,'Courier New',monospace}
+    .inline-code{background:var(--s);padding:2px 6px;border-radius:4px;font-size:13px;color:var(--ah)}
+    .tabs{display:flex;gap:4px;margin-bottom:0}
+    .tab-btn{background:var(--s);border:1px solid var(--b);border-bottom:none;border-radius:6px 6px 0 0;padding:6px 14px;font-size:11px;font-weight:600;color:var(--m);cursor:pointer;transition:all .15s}
+    .tab-btn.active{background:var(--code-bg);color:var(--t)}
+    .tab-content{display:none}.tab-content.active{display:block}
+    .tab-content pre{border-radius:0 8px 8px 8px;margin-top:0}
+    .badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px}
+    .badge-free{background:rgba(34,197,94,.15);color:var(--g)}
+    .badge-auth{background:rgba(245,158,11,.15);color:var(--y)}
+    .method{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.3px;padding:1px 5px;border-radius:3px;margin-right:5px;font-family:monospace}
+    .method.get{background:rgba(34,197,94,.15);color:var(--g)}
+    .method.post{background:rgba(16,185,129,.15);color:var(--a)}
+    table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+    th{text-align:left;padding:8px 12px;border-bottom:2px solid var(--b);color:var(--m);font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+    td{padding:8px 12px;border-bottom:1px solid var(--b)}
+    td:first-child{font-family:monospace;color:var(--ah);font-weight:600}
+    .note{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:12px 16px;font-size:13px;color:#ccc;margin:16px 0}
+    .note strong{color:var(--a)}
+    .warning{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px 16px;font-size:13px;color:#ccc;margin:16px 0}
+    .warning strong{color:var(--y)}
+    footer{text-align:center;padding:24px;color:var(--m);font-size:12px;border-top:1px solid var(--b)}
+    footer a{color:var(--a);text-decoration:none}
+    @media(max-width:900px){
+      .sidebar{display:none}
+      .content{padding:24px 16px 60px}
+      h1{font-size:26px}
+    }
+  </style>
+</head>
+<body>
+<nav>
+  <a href="/" class="logo"><span>te</span>ai.io <span style="color:var(--m);font-weight:400;font-size:14px;margin-left:8px">API Docs</span></a>
+  <div class="nav-r">
+    <a href="/pricing">Pricing</a>
+    <a href="/docs">Docs</a>
+    <a href="/security">Security</a>
+    <a href="/status">Status</a>
+    <a href="/about">About</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <div class="sidebar">
+    <h4>Getting Started</h4>
+    <a href="#quickstart" class="active">Quickstart</a>
+    <a href="#auth">Authentication</a>
+    <a href="#base-url">Base URL</a>
+
+    <h4>API Reference</h4>
+    <a href="#chat"><span class="method post">POST</span>chat/completions</a>
+    <a href="#models"><span class="method get">GET</span>models</a>
+    <a href="#models-pricing"><span class="method get">GET</span>models/pricing</a>
+
+    <h4>SDK Examples</h4>
+    <a href="#python">Python</a>
+    <a href="#nodejs">Node.js</a>
+    <a href="#go">Go</a>
+    <a href="#java">Java</a>
+    <a href="#curl">curl</a>
+
+    <h4>Advanced</h4>
+    <a href="#streaming">Streaming</a>
+    <a href="#sse-format">SSE Event Format</a>
+    <a href="#credits">Credits</a>
+    <a href="#tool-calling">Tool Calling</a>
+    <a href="#errors">Error Handling</a>
+    <a href="#rate-limits">Rate Limits</a>
+    <a href="#timeouts">Timeouts</a>
+    <a href="#versioning">Model Versioning</a>
+    <a href="#failover">Failover</a>
+    <a href="#models-table">Models</a>
+
+    <h4>Resources</h4>
+    <a href="/api-reference">API Reference</a>
+    <a href="/changelog">Changelog</a>
+    <a href="/security">Security</a>
+    <a href="/sla">SLA</a>
+  </div>
+
+  <div class="content">
+    <h1>API Documentation</h1>
+    <p class="subtitle">OpenAI互換 LLM API Gateway — 45以上のモデルを1つのAPIキーで</p>
+
+    <!-- Quickstart -->
+    <div class="section" id="quickstart">
+      <h2>Quickstart</h2>
+      <p>teai.ioはOpenAI互換APIを提供します。既存のOpenAI SDKコードを<strong>1行変更するだけ</strong>で利用できます。</p>
+
+      <h3>1. APIキーを取得</h3>
+      <p><a href="/dashboard" style="color:var(--a)">Dashboard</a>でアカウント作成後、APIキーを発行してください。キーは<code class="inline-code">te_</code>で始まります。</p>
+
+      <h3>2. base_urlを変更</h3>
+      <div class="base-url">
+        <span>https://api.teai.io/v1</span>
+        <button onclick="navigator.clipboard.writeText('https://api.teai.io/v1')">Copy</button>
+      </div>
+
+      <h3>3. コードを実行</h3>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="showTab(event,'qs-py')">Python</button>
+        <button class="tab-btn" onclick="showTab(event,'qs-js')">Node.js</button>
+        <button class="tab-btn" onclick="showTab(event,'qs-curl')">curl</button>
+      </div>
+      <div class="tab-content active" id="qs-py">
+<pre><code><span style="color:#ff7b72">from</span> openai <span style="color:#ff7b72">import</span> OpenAI
+
+client = OpenAI(
+    <span style="color:#79c0ff">base_url</span>=<span style="color:#a5d6ff">"https://api.teai.io/v1"</span>,
+    <span style="color:#79c0ff">api_key</span>=<span style="color:#a5d6ff">"te_your_api_key"</span>,
+)
+
+response = client.chat.completions.create(
+    <span style="color:#79c0ff">model</span>=<span style="color:#a5d6ff">"gpt-4o"</span>,
+    <span style="color:#79c0ff">messages</span>=[{<span style="color:#a5d6ff">"role"</span>: <span style="color:#a5d6ff">"user"</span>, <span style="color:#a5d6ff">"content"</span>: <span style="color:#a5d6ff">"Hello!"</span>}],
+)
+print(response.choices[0].message.content)</code></pre>
+      </div>
+      <div class="tab-content" id="qs-js">
+<pre><code><span style="color:#ff7b72">import</span> OpenAI <span style="color:#ff7b72">from</span> <span style="color:#a5d6ff">"openai"</span>;
+
+<span style="color:#ff7b72">const</span> client = <span style="color:#ff7b72">new</span> OpenAI({
+  <span style="color:#79c0ff">baseURL</span>: <span style="color:#a5d6ff">"https://api.teai.io/v1"</span>,
+  <span style="color:#79c0ff">apiKey</span>: <span style="color:#a5d6ff">"te_your_api_key"</span>,
+});
+
+<span style="color:#ff7b72">const</span> response = <span style="color:#ff7b72">await</span> client.chat.completions.create({
+  <span style="color:#79c0ff">model</span>: <span style="color:#a5d6ff">"gpt-4o"</span>,
+  <span style="color:#79c0ff">messages</span>: [{ <span style="color:#79c0ff">role</span>: <span style="color:#a5d6ff">"user"</span>, <span style="color:#79c0ff">content</span>: <span style="color:#a5d6ff">"Hello!"</span> }],
+});
+console.log(response.choices[0].message.content);</code></pre>
+      </div>
+      <div class="tab-content" id="qs-curl">
+<pre><code>curl https://api.teai.io/v1/chat/completions \
+  -H <span style="color:#a5d6ff">"Authorization: Bearer te_your_api_key"</span> \
+  -H <span style="color:#a5d6ff">"Content-Type: application/json"</span> \
+  -d <span style="color:#a5d6ff">'{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'</span></code></pre>
+      </div>
+
+      <div class="note">
+        <strong>Tip:</strong> Nemotron 9B (日本語特化) は無料で無制限利用可能。<code class="inline-code">"model": "nemotron-9b-jp"</code>を指定してください。
+      </div>
+    </div>
+
+    <!-- Auth -->
+    <div class="section" id="auth">
+      <h2>Authentication</h2>
+      <p>全てのAPIリクエストには<code class="inline-code">Authorization</code>ヘッダーが必要です。</p>
+<pre><code>Authorization: Bearer te_your_api_key</code></pre>
+      <p>APIキーは<a href="/dashboard" style="color:var(--a)">Dashboard</a>で発行・管理できます。キーは発行時に1回だけ表示されるので、安全に保管してください。</p>
+
+      <div class="warning">
+        <strong>Security:</strong> APIキーをクライアントサイドのコードやGitリポジトリに含めないでください。環境変数で管理することを推奨します。
+      </div>
+    </div>
+
+    <!-- Base URL -->
+    <div class="section" id="base-url">
+      <h2>Base URL</h2>
+      <div class="base-url">
+        <span>https://api.teai.io/v1</span>
+        <button onclick="navigator.clipboard.writeText('https://api.teai.io/v1')">Copy</button>
+      </div>
+      <p>全てのエンドポイントはこのBase URLからの相対パスです。OpenAI SDKの<code class="inline-code">base_url</code>にそのまま設定できます。</p>
+    </div>
+
+    <!-- Chat Completions -->
+    <div class="section" id="chat">
+      <h2>POST /v1/chat/completions</h2>
+      <p>チャット補完を生成します。OpenAI Chat Completions API完全互換。</p>
+
+      <div class="card">
+        <h3>Request Body</h3>
+        <table>
+          <tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr>
+          <tr><td>model</td><td>string</td><td>Yes</td><td>使用するモデル (例: <code class="inline-code">gpt-4o</code>, <code class="inline-code">claude-sonnet-4-6</code>)</td></tr>
+          <tr><td>messages</td><td>array</td><td>Yes</td><td>メッセージ配列 (role: system/user/assistant)</td></tr>
+          <tr><td>temperature</td><td>number</td><td>No</td><td>0.0~2.0 (default: 1.0)</td></tr>
+          <tr><td>max_tokens</td><td>integer</td><td>No</td><td>生成する最大トークン数</td></tr>
+          <tr><td>stream</td><td>boolean</td><td>No</td><td>SSEストリーミングを有効にする</td></tr>
+          <tr><td>tools</td><td>array</td><td>No</td><td>Function calling用のツール定義</td></tr>
+          <tr><td>tool_choice</td><td>string</td><td>No</td><td>"auto", "none", "required"</td></tr>
+        </table>
+      </div>
+
+      <h3>Response</h3>
+<pre><code>{
+  <span style="color:#79c0ff">"id"</span>: <span style="color:#a5d6ff">"chatcmpl-abc123"</span>,
+  <span style="color:#79c0ff">"object"</span>: <span style="color:#a5d6ff">"chat.completion"</span>,
+  <span style="color:#79c0ff">"created"</span>: <span style="color:#79c0ff">1710000000</span>,
+  <span style="color:#79c0ff">"model"</span>: <span style="color:#a5d6ff">"gpt-4o"</span>,
+  <span style="color:#79c0ff">"choices"</span>: [{
+    <span style="color:#79c0ff">"index"</span>: <span style="color:#79c0ff">0</span>,
+    <span style="color:#79c0ff">"message"</span>: {
+      <span style="color:#79c0ff">"role"</span>: <span style="color:#a5d6ff">"assistant"</span>,
+      <span style="color:#79c0ff">"content"</span>: <span style="color:#a5d6ff">"Hello! How can I help you?"</span>
+    },
+    <span style="color:#79c0ff">"finish_reason"</span>: <span style="color:#a5d6ff">"stop"</span>
+  }],
+  <span style="color:#79c0ff">"usage"</span>: {
+    <span style="color:#79c0ff">"prompt_tokens"</span>: <span style="color:#79c0ff">12</span>,
+    <span style="color:#79c0ff">"completion_tokens"</span>: <span style="color:#79c0ff">8</span>,
+    <span style="color:#79c0ff">"total_tokens"</span>: <span style="color:#79c0ff">20</span>
+  }
+}</code></pre>
+    </div>
+
+    <!-- Streaming -->
+    <div class="section" id="streaming">
+      <h2>Streaming</h2>
+      <p><code class="inline-code">"stream": true</code>を指定すると、SSE (Server-Sent Events) でトークンが逐次返されます。</p>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="showTab(event,'stream-py')">Python</button>
+        <button class="tab-btn" onclick="showTab(event,'stream-js')">Node.js</button>
+        <button class="tab-btn" onclick="showTab(event,'stream-curl')">curl</button>
+      </div>
+      <div class="tab-content active" id="stream-py">
+<pre><code>stream = client.chat.completions.create(
+    <span style="color:#79c0ff">model</span>=<span style="color:#a5d6ff">"claude-sonnet-4-6"</span>,
+    <span style="color:#79c0ff">messages</span>=[{<span style="color:#a5d6ff">"role"</span>: <span style="color:#a5d6ff">"user"</span>, <span style="color:#a5d6ff">"content"</span>: <span style="color:#a5d6ff">"Rustの特徴を3つ教えて"</span>}],
+    <span style="color:#79c0ff">stream</span>=<span style="color:#79c0ff">True</span>,
+)
+<span style="color:#ff7b72">for</span> chunk <span style="color:#ff7b72">in</span> stream:
+    <span style="color:#ff7b72">if</span> chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end=<span style="color:#a5d6ff">""</span>)</code></pre>
+      </div>
+      <div class="tab-content" id="stream-js">
+<pre><code><span style="color:#ff7b72">const</span> stream = <span style="color:#ff7b72">await</span> client.chat.completions.create({
+  <span style="color:#79c0ff">model</span>: <span style="color:#a5d6ff">"claude-sonnet-4-6"</span>,
+  <span style="color:#79c0ff">messages</span>: [{ <span style="color:#79c0ff">role</span>: <span style="color:#a5d6ff">"user"</span>, <span style="color:#79c0ff">content</span>: <span style="color:#a5d6ff">"Rustの特徴を3つ教えて"</span> }],
+  <span style="color:#79c0ff">stream</span>: <span style="color:#79c0ff">true</span>,
+});
+<span style="color:#ff7b72">for await</span> (<span style="color:#ff7b72">const</span> chunk <span style="color:#ff7b72">of</span> stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content || <span style="color:#a5d6ff">""</span>);
+}</code></pre>
+      </div>
+      <div class="tab-content" id="stream-curl">
+<pre><code>curl https://api.teai.io/v1/chat/completions \
+  -H <span style="color:#a5d6ff">"Authorization: Bearer te_your_api_key"</span> \
+  -H <span style="color:#a5d6ff">"Content-Type: application/json"</span> \
+  -N \
+  -d <span style="color:#a5d6ff">'{
+    "model": "claude-sonnet-4-6",
+    "messages": [{"role": "user", "content": "Rustの特徴を3つ教えて"}],
+    "stream": true
+  }'</span></code></pre>
+      </div>
+    </div>
+
+    <!-- SSE Event Format -->
+    <div class="section" id="sse-format">
+      <h3>SSE Event Format</h3>
+      <p>ストリーミング時、各チャンクは以下のフォーマットで返されます。各行は <code class="inline-code">data: </code> プレフィックスで始まり、最終行は <code class="inline-code">data: [DONE]</code> です。</p>
+<pre><code><span style="color:#8b949e"># コンテンツチャンク</span>
+<span style="color:#79c0ff">data:</span> <span style="color:#a5d6ff">{"id":"chatcmpl-abc","object":"chat.completion.chunk","created":1710000000,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}</span>
+
+<span style="color:#8b949e"># 終了チャンク</span>
+<span style="color:#79c0ff">data:</span> <span style="color:#a5d6ff">{"id":"chatcmpl-abc","object":"chat.completion.chunk","created":1710000000,"model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}</span>
+
+<span style="color:#8b949e"># ストリーム終端</span>
+<span style="color:#79c0ff">data:</span> <span style="color:#a5d6ff">[DONE]</span></code></pre>
+      <div class="note">
+        <strong>Note:</strong> OpenAI SDK を使う場合、このフォーマット解析は SDK が自動で処理します。直接 SSE を消費する場合は <code class="inline-code">data: </code> プレフィックスを除去し、<code class="inline-code">[DONE]</code> をストリーム終端として扱ってください。
+      </div>
+    </div>
+
+    <!-- Credits -->
+    <div class="section" id="credits">
+      <h2>Credits</h2>
+      <p>teai.io はクレジット制を採用しています。1 クレジットはコスト単位であり、トークン数と直接は一致しません。モデルごとに 1K トークンあたりのクレジット消費量が異なります。</p>
+
+      <div class="card">
+        <h3>クレジット消費の目安</h3>
+        <table>
+          <tr><th>モデル</th><th>Input (per 1K tokens)</th><th>Output (per 1K tokens)</th></tr>
+          <tr><td>nemotron-9b-jp</td><td style="color:var(--g)">0 credits (無料)</td><td style="color:var(--g)">0 credits (無料)</td></tr>
+          <tr><td>gemini-2.5-flash</td><td>0.075 credits</td><td>0.30 credits</td></tr>
+          <tr><td>deepseek-chat</td><td>0.135 credits</td><td>0.54 credits</td></tr>
+          <tr><td>gpt-4o</td><td>0.375 credits</td><td>1.50 credits</td></tr>
+          <tr><td>claude-sonnet-4-6</td><td>0.375 credits</td><td>1.50 credits</td></tr>
+        </table>
+      </div>
+
+      <ul>
+        <li><strong>Free プラン</strong>: サインアップ時に 100 クレジット付与 + Nemotron 9B は無制限</li>
+        <li><strong>有効期限なし</strong>: クレジットは期限切れになりません</li>
+        <li><strong>残高確認</strong>: レスポンスの <code class="inline-code">X-Credits-Remaining</code> ヘッダー、または <code class="inline-code">GET /api/v1/auth/me</code> で確認できます</li>
+      </ul>
+
+<pre><code><span style="color:#8b949e"># 残高確認</span>
+curl https://api.teai.io/api/v1/auth/me \
+  -H <span style="color:#a5d6ff">"Authorization: Bearer te_your_api_key"</span>
+
+<span style="color:#8b949e"># レスポンス例</span>
+{
+  <span style="color:#79c0ff">"user_id"</span>: <span style="color:#a5d6ff">"usr_abc"</span>,
+  <span style="color:#79c0ff">"credits"</span>: <span style="color:#79c0ff">87</span>,
+  <span style="color:#79c0ff">"plan"</span>: <span style="color:#a5d6ff">"free"</span>
+}</code></pre>
+    </div>
+
+    <!-- Models -->
+    <div class="section" id="models">
+      <h2>GET /v1/models</h2>
+      <p>利用可能な全モデルの一覧を返します。</p>
+<pre><code>curl https://api.teai.io/v1/models \
+  -H <span style="color:#a5d6ff">"Authorization: Bearer te_your_api_key"</span></code></pre>
+    </div>
+
+    <!-- Models Pricing -->
+    <div class="section" id="models-pricing">
+      <h2>GET /v1/models/pricing</h2>
+      <p>各モデルの料金情報を含む詳細一覧を返します。</p>
+<pre><code>curl https://api.teai.io/v1/models/pricing \
+  -H <span style="color:#a5d6ff">"Authorization: Bearer te_your_api_key"</span></code></pre>
+      <p>詳細な料金は<a href="/pricing" style="color:var(--a)">Pricing</a>ページを参照してください。</p>
+    </div>
+
+    <!-- Tool Calling -->
+    <div class="section" id="tool-calling">
+      <h2>Tool Calling (Function Calling)</h2>
+      <p>OpenAI互換のFunction Calling形式でツールを定義できます。</p>
+<pre><code>response = client.chat.completions.create(
+    <span style="color:#79c0ff">model</span>=<span style="color:#a5d6ff">"gpt-4o"</span>,
+    <span style="color:#79c0ff">messages</span>=[{<span style="color:#a5d6ff">"role"</span>: <span style="color:#a5d6ff">"user"</span>, <span style="color:#a5d6ff">"content"</span>: <span style="color:#a5d6ff">"東京の天気は？"</span>}],
+    <span style="color:#79c0ff">tools</span>=[{
+        <span style="color:#a5d6ff">"type"</span>: <span style="color:#a5d6ff">"function"</span>,
+        <span style="color:#a5d6ff">"function"</span>: {
+            <span style="color:#a5d6ff">"name"</span>: <span style="color:#a5d6ff">"get_weather"</span>,
+            <span style="color:#a5d6ff">"description"</span>: <span style="color:#a5d6ff">"Get current weather"</span>,
+            <span style="color:#a5d6ff">"parameters"</span>: {
+                <span style="color:#a5d6ff">"type"</span>: <span style="color:#a5d6ff">"object"</span>,
+                <span style="color:#a5d6ff">"properties"</span>: {
+                    <span style="color:#a5d6ff">"city"</span>: {<span style="color:#a5d6ff">"type"</span>: <span style="color:#a5d6ff">"string"</span>}
+                },
+                <span style="color:#a5d6ff">"required"</span>: [<span style="color:#a5d6ff">"city"</span>]
+            }
+        }
+    }],
+)</code></pre>
+    </div>
+
+    <!-- Python SDK -->
+    <div class="section" id="python">
+      <h2>Python SDK</h2>
+      <h3>Installation</h3>
+<pre><code>pip install openai</code></pre>
+
+      <h3>Setup</h3>
+<pre><code><span style="color:#ff7b72">import</span> os
+<span style="color:#ff7b72">from</span> openai <span style="color:#ff7b72">import</span> OpenAI
+
+client = OpenAI(
+    <span style="color:#79c0ff">base_url</span>=<span style="color:#a5d6ff">"https://api.teai.io/v1"</span>,
+    <span style="color:#79c0ff">api_key</span>=os.environ[<span style="color:#a5d6ff">"TEAI_API_KEY"</span>],
+)
+
+<span style="color:#8b949e"># GPT-4oを使用</span>
+r = client.chat.completions.create(
+    <span style="color:#79c0ff">model</span>=<span style="color:#a5d6ff">"gpt-4o"</span>,
+    <span style="color:#79c0ff">messages</span>=[{<span style="color:#a5d6ff">"role"</span>: <span style="color:#a5d6ff">"user"</span>, <span style="color:#a5d6ff">"content"</span>: <span style="color:#a5d6ff">"日本の首都は？"</span>}],
+)
+print(r.choices[0].message.content)
+
+<span style="color:#8b949e"># Claude Sonnetに切り替え（コード変更は1箇所だけ）</span>
+r = client.chat.completions.create(
+    <span style="color:#79c0ff">model</span>=<span style="color:#a5d6ff">"claude-sonnet-4-6"</span>,
+    <span style="color:#79c0ff">messages</span>=[{<span style="color:#a5d6ff">"role"</span>: <span style="color:#a5d6ff">"user"</span>, <span style="color:#a5d6ff">"content"</span>: <span style="color:#a5d6ff">"Pythonでクイックソートを書いて"</span>}],
+)
+print(r.choices[0].message.content)
+
+<span style="color:#8b949e"># 無料モデル（Nemotron 9B）</span>
+r = client.chat.completions.create(
+    <span style="color:#79c0ff">model</span>=<span style="color:#a5d6ff">"nemotron-9b-jp"</span>,
+    <span style="color:#79c0ff">messages</span>=[{<span style="color:#a5d6ff">"role"</span>: <span style="color:#a5d6ff">"user"</span>, <span style="color:#a5d6ff">"content"</span>: <span style="color:#a5d6ff">"自己紹介して"</span>}],
+)
+print(r.choices[0].message.content)</code></pre>
+    </div>
+
+    <!-- Node.js SDK -->
+    <div class="section" id="nodejs">
+      <h2>Node.js SDK</h2>
+      <h3>Installation</h3>
+<pre><code>npm install openai</code></pre>
+
+      <h3>Setup</h3>
+<pre><code><span style="color:#ff7b72">import</span> OpenAI <span style="color:#ff7b72">from</span> <span style="color:#a5d6ff">"openai"</span>;
+
+<span style="color:#ff7b72">const</span> client = <span style="color:#ff7b72">new</span> OpenAI({
+  <span style="color:#79c0ff">baseURL</span>: <span style="color:#a5d6ff">"https://api.teai.io/v1"</span>,
+  <span style="color:#79c0ff">apiKey</span>: process.env.TEAI_API_KEY,
+});
+
+<span style="color:#8b949e">// モデルを自由に切り替え</span>
+<span style="color:#ff7b72">const</span> models = [<span style="color:#a5d6ff">"gpt-4o"</span>, <span style="color:#a5d6ff">"claude-sonnet-4-6"</span>, <span style="color:#a5d6ff">"gemini-2.5-flash"</span>];
+
+<span style="color:#ff7b72">for</span> (<span style="color:#ff7b72">const</span> model <span style="color:#ff7b72">of</span> models) {
+  <span style="color:#ff7b72">const</span> r = <span style="color:#ff7b72">await</span> client.chat.completions.create({
+    model,
+    <span style="color:#79c0ff">messages</span>: [{ <span style="color:#79c0ff">role</span>: <span style="color:#a5d6ff">"user"</span>, <span style="color:#79c0ff">content</span>: <span style="color:#a5d6ff">"1+1="</span> }],
+  });
+  console.log(<span style="color:#a5d6ff">`${model}: ${r.choices[0].message.content}`</span>);
+}</code></pre>
+    </div>
+
+    <!-- Go SDK -->
+    <div class="section" id="go">
+      <h2>Go SDK</h2>
+      <h3>Installation</h3>
+<pre><code>go get github.com/sashabaranov/go-openai</code></pre>
+      <h3>Setup</h3>
+<pre><code><span style="color:#ff7b72">package</span> main
+
+<span style="color:#ff7b72">import</span> (
+    <span style="color:#a5d6ff">"context"</span>
+    <span style="color:#a5d6ff">"fmt"</span>
+    <span style="color:#a5d6ff">"os"</span>
+    openai <span style="color:#a5d6ff">"github.com/sashabaranov/go-openai"</span>
+)
+
+<span style="color:#ff7b72">func</span> main() {
+    config := openai.DefaultConfig(os.Getenv(<span style="color:#a5d6ff">"TEAI_API_KEY"</span>))
+    config.BaseURL = <span style="color:#a5d6ff">"https://api.teai.io/v1"</span>
+    client := openai.NewClientWithConfig(config)
+
+    resp, err := client.CreateChatCompletion(
+        context.Background(),
+        openai.ChatCompletionRequest{
+            Model: <span style="color:#a5d6ff">"gpt-4o"</span>,
+            Messages: []openai.ChatCompletionMessage{
+                {Role: openai.ChatMessageRoleUser, Content: <span style="color:#a5d6ff">"Hello!"</span>},
+            },
+        },
+    )
+    <span style="color:#ff7b72">if</span> err != <span style="color:#79c0ff">nil</span> {
+        panic(err)
+    }
+    fmt.Println(resp.Choices[0].Message.Content)
+}</code></pre>
+    </div>
+
+    <!-- Java SDK -->
+    <div class="section" id="java">
+      <h2>Java SDK</h2>
+      <h3>Maven</h3>
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;com.openai&lt;/groupId&gt;
+    &lt;artifactId&gt;openai-java&lt;/artifactId&gt;
+    &lt;version&gt;0.8.0&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+      <h3>Setup</h3>
+<pre><code><span style="color:#ff7b72">import</span> com.openai.client.OpenAIClient;
+<span style="color:#ff7b72">import</span> com.openai.client.okhttp.OpenAIOkHttpClient;
+<span style="color:#ff7b72">import</span> com.openai.models.*;
+
+OpenAIClient client = OpenAIOkHttpClient.builder()
+    .baseUrl(<span style="color:#a5d6ff">"https://api.teai.io/v1"</span>)
+    .apiKey(System.getenv(<span style="color:#a5d6ff">"TEAI_API_KEY"</span>))
+    .build();
+
+ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
+    .model(<span style="color:#a5d6ff">"gpt-4o"</span>)
+    .addUserMessage(<span style="color:#a5d6ff">"Hello!"</span>)
+    .build();
+
+client.chat().completions().create(params)
+    .choices()
+    .forEach(c -> System.out.println(c.message().content()));</code></pre>
+    </div>
+
+    <!-- curl -->
+    <div class="section" id="curl">
+      <h2>curl</h2>
+<pre><code><span style="color:#8b949e"># 環境変数にAPIキーを設定</span>
+export TEAI_API_KEY=<span style="color:#a5d6ff">"te_your_api_key"</span>
+
+<span style="color:#8b949e"># Chat Completion</span>
+curl https://api.teai.io/v1/chat/completions \
+  -H <span style="color:#a5d6ff">"Authorization: Bearer $TEAI_API_KEY"</span> \
+  -H <span style="color:#a5d6ff">"Content-Type: application/json"</span> \
+  -d <span style="color:#a5d6ff">'{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'</span>
+
+<span style="color:#8b949e"># モデル一覧</span>
+curl https://api.teai.io/v1/models \
+  -H <span style="color:#a5d6ff">"Authorization: Bearer $TEAI_API_KEY"</span>
+
+<span style="color:#8b949e"># ストリーミング</span>
+curl https://api.teai.io/v1/chat/completions \
+  -H <span style="color:#a5d6ff">"Authorization: Bearer $TEAI_API_KEY"</span> \
+  -H <span style="color:#a5d6ff">"Content-Type: application/json"</span> \
+  -N \
+  -d <span style="color:#a5d6ff">'{
+    "model": "deepseek-chat",
+    "messages": [{"role": "user", "content": "日本の歴史を要約して"}],
+    "stream": true
+  }'</span></code></pre>
+    </div>
+
+    <!-- Errors -->
+    <div class="section" id="errors">
+      <h2>Error Handling</h2>
+      <p>全てのエラーレスポンスは統一的なJSON形式で返されます。</p>
+      <table>
+        <tr><th>Status</th><th>error.type</th><th>Description</th><th>対処法</th></tr>
+        <tr><td>400</td><td>invalid_request</td><td>リクエスト形式が不正</td><td>パラメータを確認</td></tr>
+        <tr><td>401</td><td>authentication_error</td><td>APIキーが無効または未指定</td><td>APIキーを確認・再発行</td></tr>
+        <tr><td>402</td><td>insufficient_credits</td><td>クレジット残高不足</td><td>クレジットを追加購入</td></tr>
+        <tr><td>404</td><td>model_not_found</td><td>指定モデルが存在しない</td><td>/v1/models で確認</td></tr>
+        <tr><td>429</td><td>rate_limit_exceeded</td><td>レート制限超過</td><td>Retry-Afterヘッダーに従う</td></tr>
+        <tr><td>500</td><td>internal_error</td><td>サーバー内部エラー</td><td>エクスポネンシャルバックオフでリトライ</td></tr>
+        <tr><td>502</td><td>upstream_error</td><td>上流プロバイダーエラー</td><td>別モデルを試す or リトライ</td></tr>
+        <tr><td>503</td><td>service_unavailable</td><td>メンテナンス中</td><td><a href="/status" style="color:var(--a)">ステータスページ</a>を確認</td></tr>
+      </table>
+
+      <h3>エラーレスポンス形式</h3>
+<pre><code>{
+  <span style="color:#79c0ff">"error"</span>: {
+    <span style="color:#79c0ff">"type"</span>: <span style="color:#a5d6ff">"rate_limit_exceeded"</span>,
+    <span style="color:#79c0ff">"message"</span>: <span style="color:#a5d6ff">"Rate limit exceeded. Retry after 30 seconds."</span>,
+    <span style="color:#79c0ff">"code"</span>: <span style="color:#79c0ff">429</span>,
+    <span style="color:#79c0ff">"retry_after"</span>: <span style="color:#79c0ff">30</span>
+  }
+}</code></pre>
+
+      <h3>リトライ戦略</h3>
+      <p>5xx エラーや 429 が返された場合は、エクスポネンシャルバックオフでリトライを推奨します。</p>
+<pre><code><span style="color:#8b949e"># Python: エクスポネンシャルバックオフ例</span>
+<span style="color:#ff7b72">import</span> time, random
+
+<span style="color:#ff7b72">def</span> <span style="color:#d2a8ff">call_with_retry</span>(fn, max_retries=<span style="color:#79c0ff">3</span>):
+    <span style="color:#ff7b72">for</span> i <span style="color:#ff7b72">in</span> range(max_retries):
+        <span style="color:#ff7b72">try</span>:
+            <span style="color:#ff7b72">return</span> fn()
+        <span style="color:#ff7b72">except</span> Exception <span style="color:#ff7b72">as</span> e:
+            <span style="color:#ff7b72">if</span> i == max_retries - <span style="color:#79c0ff">1</span>:
+                <span style="color:#ff7b72">raise</span>
+            wait = (<span style="color:#79c0ff">2</span> ** i) + random.random()
+            time.sleep(wait)</code></pre>
+    </div>
+
+    <!-- Rate Limits -->
+    <div class="section" id="rate-limits">
+      <h2>Rate Limits</h2>
+      <table>
+        <tr><th>Plan</th><th>Requests/hour</th><th>Requests/day</th></tr>
+        <tr><td>Free (認証済み)</td><td>120</td><td>500</td></tr>
+        <tr><td>Guest (未認証)</td><td>30</td><td>30</td></tr>
+        <tr><td>Pro</td><td>120</td><td>30,000</td></tr>
+        <tr><td>Business</td><td>カスタム</td><td>無制限</td></tr>
+      </table>
+
+      <p>レート制限に達した場合、エラーメッセージが返されます。レスポンスボディの<code class="inline-code">error</code>フィールドを確認し、適切な間隔をあけてリトライしてください。</p>
+      <div class="note">
+        <strong>Tip:</strong> 未認証（Guest）は30リクエスト/日の制限があります。APIキーを使用することで制限が大幅に緩和されます。
+      </div>
+    </div>
+
+    <!-- Timeouts -->
+    <div class="section" id="timeouts">
+      <h2>Timeouts</h2>
+      <table>
+        <tr><th>Parameter</th><th>Value</th><th>Description</th></tr>
+        <tr><td>接続タイムアウト</td><td>10秒</td><td>TCP接続の確立まで</td></tr>
+        <tr><td>非ストリーミング</td><td>25秒</td><td>レスポンス完了まで</td></tr>
+        <tr><td>ストリーミング</td><td>25秒（各チャンク間）</td><td>各チャンク間の最大待ち時間</td></tr>
+        <tr><td>アイドルタイムアウト</td><td>30秒</td><td>SSEチャンク間の最大待ち時間</td></tr>
+      </table>
+      <div class="warning">
+        <strong>推奨:</strong> クライアント側でもタイムアウトを設定してください。長時間のレスポンスが予想される場合は<code class="inline-code">stream: true</code>の使用を推奨します。
+      </div>
+    </div>
+
+    <!-- Model Versioning -->
+    <div class="section" id="versioning">
+      <h2>Model Versioning</h2>
+      <p>モデルIDの指定方法により、バージョン固定の有無を制御できます。</p>
+      <table>
+        <tr><th>指定方法</th><th>例</th><th>動作</th></tr>
+        <tr><td>エイリアス（推奨）</td><td><code class="inline-code">gpt-4o</code></td><td>プロバイダーの最新安定版を自動追従</td></tr>
+        <tr><td>バージョン固定</td><td><code class="inline-code">gpt-4o-2024-08-06</code></td><td>指定バージョンに固定。廃止予定時は30日前に通知</td></tr>
+      </table>
+      <ul>
+        <li><strong>バージョン変更通知</strong>: エイリアスが指すバージョンが変更される場合、<a href="/changelog" style="color:var(--a)">Changelog</a>で事前告知します</li>
+        <li><strong>旧バージョン保持</strong>: 廃止されたバージョンは最低90日間サポートを継続</li>
+        <li><strong>本番環境</strong>: 回帰テストの安定性が重要な場合はバージョン固定を推奨</li>
+      </ul>
+    </div>
+
+    <!-- Failover -->
+    <div class="section" id="failover">
+      <h2>Failover Behavior</h2>
+      <p>teai.ioの自動フェイルオーバーはリクエストの指定方法により動作が異なります。</p>
+      <p>teai.ioの内部ルーティングは<code class="inline-code">LoadBalancedProvider</code>により、サーキットブレーカー + ラウンドロビンで自動フェイルオーバーを実現しています。</p>
+      <ul>
+        <li><strong>明示的モデル指定</strong>: <code class="inline-code">"model": "gpt-4o"</code> のように指定した場合、そのモデルを使用します。プロバイダー障害時はティア内の次のモデルにフェイルオーバーします。</li>
+        <li><strong>ティアベースの自動選択</strong>: economy / normal / powerful ティアに応じて最適なモデルが自動選択されます。</li>
+        <li><strong>全プロバイダー障害時</strong>: Nemotron 9B（セルフホスト）が最終フォールバックとして動作します。</li>
+      </ul>
+      <h3>レスポンスの model_used フィールド</h3>
+      <p>レスポンスボディの<code class="inline-code">model</code>フィールドに、実際に使用されたモデル名が返されます。フェイルオーバーが発生したかを確認できます。</p>
+<pre><code>{
+  <span style="color:#79c0ff">"model"</span>: <span style="color:#a5d6ff">"claude-sonnet-4-6"</span>,  <span style="color:#8b949e">// 実際に使用されたモデル</span>
+  <span style="color:#79c0ff">"choices"</span>: [...]
+}</code></pre>
+    </div>
+
+    <!-- Models Table -->
+    <div class="section" id="models-table">
+      <h2>Models</h2>
+      <p>主要モデルの一覧です。全モデルと詳細な料金は<a href="/pricing" style="color:var(--a)">Pricing</a>ページを参照してください。</p>
+
+      <table>
+        <tr><th>Model ID</th><th>Provider</th><th>Context</th><th>Credits/1K Input</th><th>Credits/1K Output</th></tr>
+        <tr>
+          <td>nemotron-9b-jp</td>
+          <td>NVIDIA (RunPod)</td>
+          <td>8K</td>
+          <td style="color:var(--g)">0 (無料)</td>
+          <td style="color:var(--g)">0 (無料)</td>
+        </tr>
+        <tr>
+          <td>gpt-4o</td>
+          <td>OpenAI</td>
+          <td>128K</td>
+          <td>0.375</td>
+          <td>1.50</td>
+        </tr>
+        <tr>
+          <td>claude-sonnet-4-6</td>
+          <td>Anthropic</td>
+          <td>200K</td>
+          <td>0.375</td>
+          <td>1.50</td>
+        </tr>
+        <tr>
+          <td>gemini-2.5-flash</td>
+          <td>Google</td>
+          <td>1M</td>
+          <td>0.075</td>
+          <td>0.30</td>
+        </tr>
+        <tr>
+          <td>deepseek-chat</td>
+          <td>DeepSeek</td>
+          <td>64K</td>
+          <td>0.135</td>
+          <td>0.54</td>
+        </tr>
+        <tr>
+          <td>qwen3-32b</td>
+          <td>Alibaba (RunPod)</td>
+          <td>16K</td>
+          <td>0.18</td>
+          <td>0.72</td>
+        </tr>
+      </table>
+
+      <div class="note">
+        <strong>Note:</strong> <code class="inline-code">nemotron-9b-jp</code> は日本語特化モデルで無制限・無料で利用できます。全モデルの詳細スペックと最新料金は <a href="/pricing" style="color:var(--a)">/pricing</a> を参照してください。
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>&copy; 2026 株式会社イネブラ. <a href="/terms">Terms</a> | <a href="/privacy">Privacy</a> | <a href="/security">Security</a> | <a href="/sla">SLA</a> | <a href="/status">Status</a> | <a href="/about">About</a></footer>
+
+<script>
+function showTab(e, id) {
+  const group = e.target.closest('.section') || e.target.parentElement.parentElement;
+  group.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  group.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  e.target.classList.add('active');
+  document.getElementById(id).classList.add('active');
+}
+// Sidebar active state
+document.querySelectorAll('.sidebar a').forEach(a => {
+  a.addEventListener('click', () => {
+    document.querySelectorAll('.sidebar a').forEach(x => x.classList.remove('active'));
+    a.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

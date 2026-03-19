@@ -1,813 +1,393 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pricing - teai.io</title>
-  <!-- GA4: teai.io -->
+  <title>Pricing - teai.io LLM API Gateway</title>
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-QS0M5KL7YL"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-QS0M5KL7YL');</script>
-  <meta name="description" content="teai.io pricing plans. Free, Developer $19/mo, Team $49/mo. Developer-focused AI platform.">
+  <meta name="description" content="teai.io料金プラン。Free / Pro ¥4,350/月 / Business ¥14,800/月。OpenAI互換APIで全LLMにアクセス。">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
   <style>
     :root {
-      --bg: #0a0a0a;
-      --surface: #141414;
-      --border: #1e1e1e;
-      --text: #e5e5e5;
-      --muted: #777;
-      --accent: #10b981;
-      --accent-hover: #34d399;
-      --green: #22c55e;
+      --bg: #09090b; --surface: #18181b; --surface2: #27272a;
+      --border: #3f3f46; --text: #fafafa; --muted: #a1a1aa;
+      --accent: #10b981; --accent2: #34d399;
     }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * { margin:0; padding:0; box-sizing:border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Hiragino Sans', sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased;
     }
+    a { color: var(--accent2); text-decoration: none; }
     nav {
-      padding: 16px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid var(--border);
     }
-    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; text-decoration: none; color: var(--text); }
+    .logo { font-size: 20px; font-weight: 800; color: var(--text); text-decoration:none; }
     .logo span { color: var(--accent); }
-    .nav-links { display: flex; align-items: center; gap: 16px; }
-    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
-    .nav-links a:hover { color: var(--text); }
-    .lang-sw {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-      display: flex;
-    }
-    .lang-sw button {
-      background: none; border: none; color: var(--muted);
-      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
-    }
-    .lang-sw button.on { background: var(--accent); color: #fff; }
+    .nav-r { display:flex; gap:16px; align-items:center; }
+    .nav-r a { color: var(--muted); font-size:14px; font-weight:500; }
+    .nav-r a:hover { color: var(--text); }
+    .main { max-width:1100px; margin:0 auto; padding:60px 24px 80px; }
+    h1 { font-size:clamp(28px,4vw,40px); font-weight:800; letter-spacing:-1px; text-align:center; margin-bottom:12px; }
+    .subtitle { text-align:center; color:var(--muted); font-size:16px; margin-bottom:48px; max-width:600px; margin-left:auto; margin-right:auto; }
 
-    .main {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 40px 24px 80px;
+    .pricing-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; margin-bottom:64px; }
+    .plan {
+      background:var(--surface); border:1px solid var(--border); border-radius:12px;
+      padding:32px; display:flex; flex-direction:column; position:relative;
     }
-    .hero {
-      text-align: center;
-      margin-bottom: 48px;
+    .plan.featured { border-color:var(--accent); box-shadow:0 0 40px rgba(16,185,129,0.08); }
+    .plan.featured::before {
+      content:'Popular'; position:absolute; top:-10px; left:24px;
+      background:var(--accent); color:#fff; font-size:11px; font-weight:700; padding:2px 10px; border-radius:4px;
     }
-    .hero h1 {
-      font-size: 36px;
-      font-weight: 800;
-      letter-spacing: -1px;
-      margin-bottom: 12px;
+    .plan-name { font-size:13px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+    .plan-price { font-size:42px; font-weight:800; margin:12px 0 4px; }
+    .plan-price span { font-size:16px; font-weight:500; color:var(--muted); }
+    .plan-desc { font-size:14px; color:var(--muted); margin-bottom:24px; padding-bottom:24px; border-bottom:1px solid var(--border); }
+    .plan ul { list-style:none; flex:1; margin-bottom:24px; }
+    .plan li { padding:6px 0; font-size:14px; color:var(--muted); }
+    .plan li::before { content:''; color:var(--accent); margin-right:4px; }
+    .btn-plan {
+      display:block; text-align:center; padding:12px; border-radius:8px;
+      font-size:14px; font-weight:600; border:1px solid var(--border);
+      background:var(--surface2); color:var(--text); text-decoration:none;
     }
-    .hero p {
-      color: var(--muted);
-      font-size: 16px;
-      max-width: 560px;
-      margin: 0 auto;
-    }
+    .plan.featured .btn-plan { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn-plan:hover { opacity:0.9; }
 
-    .pricing-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 20px;
-      margin-bottom: 48px;
-    }
-    .plan-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px 24px;
-      display: flex;
-      flex-direction: column;
-      position: relative;
-    }
-    .plan-card.featured {
-      border-color: var(--accent);
-      box-shadow: 0 0 24px rgba(16,185,129,0.15);
-    }
-    .plan-badge {
-      position: absolute;
-      top: -12px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--accent);
-      color: #fff;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 4px 14px;
-      border-radius: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .plan-name {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-    .plan-desc {
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 20px;
-    }
-    .plan-price {
-      font-size: 42px;
-      font-weight: 800;
-      letter-spacing: -2px;
-      margin-bottom: 4px;
-    }
-    .plan-price .currency { font-size: 20px; font-weight: 600; }
-    .plan-price .period { font-size: 14px; font-weight: 400; color: var(--muted); }
-    .plan-features {
-      list-style: none;
-      margin: 24px 0;
-      flex: 1;
-    }
-    .plan-features li {
-      font-size: 14px;
-      padding: 6px 0;
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-    }
-    .plan-features li::before {
-      content: '';
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      min-width: 16px;
-      margin-top: 2px;
-      background: var(--green);
-      border-radius: 50%;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6.5 11.5L3 8l1-1 2.5 2.5L11 5l1 1-5.5 5.5z' fill='white'/%3E%3C/svg%3E");
-      background-size: 12px;
-      background-repeat: no-repeat;
-      background-position: center;
-    }
-    .plan-features li.disabled {
-      color: var(--muted);
-    }
-    .plan-features li.disabled::before {
-      background: var(--border);
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8h8' stroke='%23555' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
-      background-size: 12px;
-      background-repeat: no-repeat;
-      background-position: center;
-    }
-    .plan-cta {
-      display: block;
-      text-align: center;
-      padding: 14px;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 700;
-      text-decoration: none;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .plan-cta.primary {
-      background: var(--accent);
-      color: #fff;
-    }
-    .plan-cta.primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
-    .plan-cta.secondary {
-      background: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-    .plan-cta.secondary:hover { border-color: var(--accent); transform: translateY(-1px); }
+    h2 { font-size:24px; font-weight:800; margin-bottom:12px; letter-spacing:-0.5px; }
+    .section-desc { color:var(--muted); font-size:14px; margin-bottom:24px; }
 
-    /* Coupon */
-    .coupon-section {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 24px;
-      margin-bottom: 24px;
-      text-align: center;
+    .models-wrap {
+      overflow-x:auto; background:var(--surface); border:1px solid var(--border); border-radius:12px; margin-bottom:64px;
     }
-    .coupon-section h3 { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
-    .coupon-row {
-      display: flex;
-      gap: 8px;
-      max-width: 360px;
-      margin: 0 auto;
-    }
-    .coupon-row input {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      padding: 12px 16px;
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      outline: none;
-      text-align: center;
-    }
-    .coupon-row input:focus { border-color: var(--accent); }
-    .coupon-row input::placeholder { letter-spacing: 0; text-transform: none; font-weight: 400; color: var(--muted); }
-    .coupon-row button {
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      padding: 12px 20px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-    .coupon-row button:hover { background: var(--accent-hover); }
-    .coupon-msg {
-      font-size: 13px;
-      margin-top: 8px;
-      min-height: 20px;
-    }
-    .coupon-msg.success { color: var(--green); }
-    .coupon-msg.error { color: #ef4444; }
-
-    /* Guarantee */
-    .guarantee {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      padding: 20px;
-      margin-bottom: 40px;
-      background: rgba(34,197,94,0.06);
-      border: 1px solid rgba(34,197,94,0.15);
-      border-radius: 12px;
-    }
-    .guarantee svg { width: 28px; height: 28px; fill: var(--green); flex-shrink: 0; }
-    .guarantee-text { text-align: left; }
-    .guarantee-text strong { font-size: 14px; display: block; margin-bottom: 2px; }
-    .guarantee-text span { font-size: 12px; color: var(--muted); }
-
-    .faq { margin-bottom: 48px; }
-    .faq h2 { font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 24px; }
-    .faq-item {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 12px;
-    }
-    .faq-item h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
-    .faq-item p { font-size: 14px; color: var(--muted); line-height: 1.6; }
-
-    footer {
-      text-align: center;
-      padding: 24px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    footer a { color: var(--muted); text-decoration: none; }
-    footer a:hover { color: var(--text); }
-
-    /* Coupon active state — Developer plan highlight */
-    .plan-card.coupon-active {
-      border-color: #f59e0b;
-      box-shadow: 0 0 32px rgba(245,158,11,0.2);
-      transform: scale(1.03);
-      transition: all 0.4s ease;
-    }
-    .plan-card.coupon-active .plan-badge {
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-    }
-    .coupon-free-badge {
-      display: inline-block;
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      color: #fff;
-      font-size: 12px;
-      font-weight: 700;
-      padding: 4px 12px;
-      border-radius: 8px;
-      margin-top: 8px;
-      animation: badgePop 0.4s ease;
-    }
-    @keyframes badgePop {
-      0% { opacity: 0; transform: scale(0.8); }
-      100% { opacity: 1; transform: scale(1); }
-    }
-    .plan-price .original-price {
-      font-size: 18px;
-      color: var(--muted);
-      text-decoration: line-through;
-      font-weight: 400;
-      margin-right: 8px;
-    }
-    .plan-price .trial-note {
-      display: block;
-      font-size: 12px;
-      color: var(--muted);
-      font-weight: 400;
-      margin-top: 4px;
-      letter-spacing: 0;
-    }
-    .plan-cta.green {
-      background: var(--green);
-      color: #fff;
-    }
-    .plan-cta.green:hover {
-      background: #16a34a;
-      transform: translateY(-1px);
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th { text-align:left; padding:12px 16px; background:var(--surface2); color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--border); }
+    td { padding:10px 16px; border-bottom:1px solid rgba(63,63,70,0.5); white-space:nowrap; }
+    tr:last-child td { border-bottom:none; }
+    .model-name { font-weight:600; }
+    .badge { display:inline-block; padding:2px 8px; background:var(--surface2); border-radius:4px; font-size:11px; font-weight:600; color:var(--muted); }
+    .price { font-family:'SF Mono','Fira Code',monospace; font-size:13px; }
+    .free { color:var(--accent); font-weight:700; }
+    .provider-divider td {
+      background: var(--surface2); color: var(--muted); font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 16px;
+      border-bottom: 1px solid var(--border); border-top: 1px solid var(--border);
     }
 
-    @media (max-width: 768px) {
-      .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin-left: auto; margin-right: auto; }
-      .hero h1 { font-size: 28px; }
+    .sla-section { max-width:700px; margin:0 auto 64px; }
+    .sla-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:24px; margin-bottom:24px; }
+    .sla-card {
+      background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px;
     }
+    .sla-tier { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+    .sla-uptime { font-size:22px; font-weight:800; margin-bottom:4px; }
+    .sla-uptime.free-tier { color:var(--muted); font-size:16px; font-weight:600; }
+    .sla-uptime.pro-tier { color:var(--accent2); }
+    .sla-uptime.biz-tier { color:var(--accent); }
+    .sla-detail { font-size:13px; color:var(--muted); line-height:1.6; }
+    .sla-infra { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 20px; font-size:13px; color:var(--muted); line-height:1.8; }
+    .sla-infra strong { color:var(--text); }
+    @media (max-width:640px) { .sla-grid { grid-template-columns:1fr; } }
+
+    .faq { max-width:700px; margin:0 auto 64px; }
+    .faq-item { border-bottom:1px solid var(--border); }
+    .faq-q { padding:16px 0; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between; }
+    .faq-q::after { content:'+'; color:var(--muted); }
+    .faq-item.open .faq-q::after { content:'-'; }
+    .faq-a { display:none; padding:0 0 16px; color:var(--muted); font-size:14px; line-height:1.7; }
+    .faq-item.open .faq-a { display:block; }
+
+    footer { padding:40px 24px; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:13px; }
+
+    @media (max-width:768px) { .pricing-grid { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
-  <nav>
-    <a href="/" class="logo"><span>te</span>ai.io</a>
-    <div class="nav-links">
-      <a href="/" id="nav-home">Home</a>
-      <a href="/status">Status</a>
-      <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a>
-      <div class="lang-sw">
-        <button onclick="setLang('en')" id="l-en">EN</button>
-        <button onclick="setLang('ja')" id="l-ja">JA</button>
-      </div>
+<nav>
+  <a href="/" class="logo"><span>te</span>ai.io</a>
+  <div class="nav-r">
+    <a href="/pricing">Pricing</a>
+    <a href="/docs">Docs</a>
+    <a href="/security">Security</a>
+    <a href="/status">Status</a>
+    <a href="/about">About</a>
+  </div>
+</nav>
+
+<div class="main">
+  <h1>シンプルな料金体系</h1>
+  <p class="subtitle">モデル利用料はプロバイダー価格そのまま。プランに含まれるクレジットでお得にAPI利用可能。</p>
+
+  <div class="pricing-grid">
+    <div class="plan">
+      <div class="plan-name">Free</div>
+      <div class="plan-price">¥0<span>/月</span></div>
+      <div class="plan-desc">試してみたい開発者に</div>
+      <ul>
+        <li>100 credits (サインアップボーナス)</li>
+        <li>Nemotron 9B 無制限 (無料)</li>
+        <li>500 requests/day</li>
+        <li>SSE streaming</li>
+        <li>OpenAI互換API</li>
+        <li>コミュニティサポート</li>
+      </ul>
+      <a href="/register" class="btn-plan">無料で始める</a>
     </div>
-  </nav>
-
-  <div class="main">
-    <div class="hero">
-      <h1 id="t-title">Pricing</h1>
-      <p id="t-sub">Start free, scale as you build. Simple, transparent pricing for developers.</p>
+    <div class="plan featured">
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">¥4,350<span>/月</span></div>
+      <div class="plan-desc">本番プロダクションに</div>
+      <ul>
+        <li>30,000 credits/月</li>
+        <li>全45+モデルアクセス</li>
+        <li>7,200リクエスト/時</li>
+        <li>自動フォールバック</li>
+        <li>利用分析ダッシュボード</li>
+        <li>優先日本語サポート</li>
+        <li>Webhook通知</li>
+      </ul>
+      <a href="https://buy.stripe.com/5kQdR9cQr17IgEo9deefC3v" class="btn-plan">Pro を始める</a>
     </div>
-
-    <div class="pricing-grid">
-      <!-- Free -->
-      <div class="plan-card">
-        <div class="plan-name" id="p-free-name">Free</div>
-        <div class="plan-desc" id="p-free-desc">For personal projects & exploration</div>
-        <div class="plan-price"><span class="currency">$</span>0<span class="period" id="p-free-period">/mo</span></div>
-        <ul class="plan-features" id="p-free-features"></ul>
-        <a href="/" class="plan-cta secondary" id="p-free-cta">Get Started</a>
+    <div class="plan">
+      <div class="plan-name">Business</div>
+      <div class="plan-price">¥14,800<span>/月</span></div>
+      <div class="plan-desc">チーム・法人向け</div>
+      <ul>
+        <li>100,000 credits/月</li>
+        <li>全モデル + BYOK <small style='color:var(--muted);font-weight:400;'>(対応予定)</small></li>
+        <li>請求書払い / インボイス対応</li>
+        <li>チーム管理 / RBAC <small style='color:var(--muted);font-weight:400;'>(対応予定)</small></li>
+        <li>専任サポート (日本語)</li>
+        <li>SLA 99.9% 保証</li>
+        <li>コスト異常アラート <small style='color:var(--muted);font-weight:400;'>(対応予定)</small></li>
+        <li>カスタム契約</li>
+      </ul>
+      <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;font-size:12px;color:var(--muted);line-height:1.6;">
+        上記以外にも、ボリュームディスカウント・カスタムSLA・専用インフラ・オンプレミス導入など、法人様の要件に応じた個別対応が可能です。
       </div>
-
-      <!-- Developer -->
-      <div class="plan-card featured">
-        <div class="plan-badge" id="p-developer-badge">Most Popular</div>
-        <div class="plan-name" id="p-developer-name">Developer</div>
-        <div class="plan-desc" id="p-developer-desc">For serious development & production apps</div>
-        <div class="plan-price"><span class="currency">$</span>19<span class="period" id="p-developer-period">/mo</span></div>
-        <ul class="plan-features" id="p-developer-features"></ul>
-        <a href="#" class="plan-cta primary" id="p-developer-cta" data-plan="developer">Start Developer</a>
-      </div>
-
-      <!-- Team -->
-      <div class="plan-card">
-        <div class="plan-name" id="p-team-name">Team</div>
-        <div class="plan-desc" id="p-team-desc">For teams & high-volume workloads</div>
-        <div class="plan-price"><span class="currency">$</span>49<span class="period" id="p-team-period">/mo</span></div>
-        <ul class="plan-features" id="p-team-features"></ul>
-        <a href="#" class="plan-cta primary" id="p-team-cta" data-plan="team">Start Team</a>
-      </div>
+      <a href="mailto:info@enablerhq.com?subject=teai.io Business" class="btn-plan">お問い合わせ</a>
     </div>
-
-    <!-- Coupon -->
-    <div class="coupon-section">
-      <h3 id="t-coupon-title">Have a coupon code?</h3>
-      <div class="coupon-row">
-        <input type="text" id="coupon-input" placeholder="Enter code" maxlength="20" autocomplete="off">
-        <button onclick="applyCoupon()" id="coupon-btn">Apply</button>
-      </div>
-      <div class="coupon-msg" id="coupon-msg"></div>
-    </div>
-
-    <!-- Guarantee -->
-    <div class="guarantee">
-      <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
-      <div class="guarantee-text">
-        <strong id="t-guarantee-title">Money-back guarantee</strong>
-        <span id="t-guarantee-desc">Cancel anytime. Prorated refunds, no questions asked.</span>
-      </div>
-    </div>
-
-    <div class="faq" id="faq-section"></div>
   </div>
 
-  <footer>
-    <a href="/" id="nav-home2">Home</a> &middot;
-    <a href="/pricing">Pricing</a> &middot;
-    <a href="/status">Status</a> &middot;
-    <a href="https://github.com/yukihamada/nanobot" target="_blank">GitHub</a> &middot;
-    <a href="mailto:hello@teai.io">Contact</a> &middot;
-    teai.io &copy; 2025-2026
-  </footer>
-
-
+  <!-- Cost Calculator -->
+  <div style="max-width:700px;margin:40px auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;">
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:16px;text-align:center;">コスト計算ツール</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">モデル</label>
+        <select id="calc-model" onchange="calcCost()" style="width:100%;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;">
+          <option value="0">Nemotron 9B（無料）</option>
+          <option value="0.375">Gemini 2.5 Flash</option>
+          <option value="1.5" selected>GPT-4o</option>
+          <option value="1.875">Claude Sonnet 4.6</option>
+          <option value="3.75">Claude Opus 4.6</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">1日あたりのリクエスト数</label>
+        <input type="range" id="calc-reqs" min="10" max="5000" value="100" oninput="calcCost()" style="width:100%;margin-top:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);"><span>10</span><span id="calc-reqs-val">100</span><span>5,000</span></div>
+      </div>
+    </div>
+    <div id="calc-result" style="text-align:center;padding:16px;background:rgba(16,185,129,0.08);border-radius:8px;">
+      <p style="font-size:13px;color:var(--muted);">月額概算</p>
+      <p style="font-size:32px;font-weight:800;color:var(--accent);" id="calc-total">¥0</p>
+      <p style="font-size:12px;color:var(--muted);margin-top:4px;" id="calc-detail">1リクエストあたり約1,000トークン想定</p>
+    </div>
+  </div>
   <script>
-    // Region detection & pricing
-    const isJP = navigator.language.startsWith('ja') ||
-      Intl.DateTimeFormat().resolvedOptions().timeZone.startsWith('Asia/Tokyo');
-
-    const PRICING = {
-      jp: {
-        developer: { amount: 19, currency: '$', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
-        team: { amount: 49, currency: '$', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
-      },
-      intl: {
-        developer: { amount: 19, currency: '$', link: 'https://buy.stripe.com/3cIdR9dUv3fQ1JufBCefC3o' },
-        team: { amount: 49, currency: '$', link: 'https://buy.stripe.com/6oU9ATaIj6s2dsc9deefC3p' },
-      },
-    };
-
-    const region = isJP ? 'jp' : 'intl';
-    const PAYMENT_LINKS = {
-      developer: PRICING[region].developer.link,
-      team: PRICING[region].team.link,
-    };
-
-    // Apply region pricing to DOM after page load
-    function applyRegionPricing() {
-      // Both regions have the same pricing for teai.io, but keep the structure for future regional pricing
-      const devPrice = document.querySelector('.plan-card.featured .plan-price');
-      if (devPrice && !devPrice.classList.contains('coupon-modified')) {
-        devPrice.innerHTML = '<span class="currency">$</span>' + PRICING[region].developer.amount +
-          '<span class="period" id="p-developer-period">' +
-          (document.documentElement.lang === 'ja' ? '/月' : '/mo') + '</span>';
-      }
-      const teamCards = document.querySelectorAll('.plan-card:not(.featured)');
-      teamCards.forEach(card => {
-        const name = card.querySelector('.plan-name');
-        if (name && name.textContent === 'Team') {
-          const priceEl = card.querySelector('.plan-price');
-          if (priceEl && !priceEl.classList.contains('coupon-modified')) {
-            priceEl.innerHTML = '<span class="currency">$</span>' + PRICING[region].team.amount +
-              '<span class="period" id="p-team-period">' +
-              (document.documentElement.lang === 'ja' ? '/月' : '/mo') + '</span>';
-          }
-        }
-      });
+  function calcCost() {
+    const costPer1k = parseFloat(document.getElementById('calc-model').value);
+    const reqs = parseInt(document.getElementById('calc-reqs').value);
+    document.getElementById('calc-reqs-val').textContent = reqs.toLocaleString();
+    // Assume 1K input + 0.5K output per request, output costs 4x input
+    const costPerReq = (costPer1k * 1 + costPer1k * 4 * 0.5) / 1000;
+    const monthly = costPerReq * reqs * 30;
+    const yen = Math.round(monthly * 150); // approximate USD to JPY
+    if (costPer1k === 0) {
+      document.getElementById('calc-total').textContent = '¥0（無料）';
+      document.getElementById('calc-detail').textContent = 'Nemotron 9Bは完全無料・無制限';
+    } else {
+      document.getElementById('calc-total').textContent = '¥' + yen.toLocaleString();
+      document.getElementById('calc-detail').textContent = `${reqs.toLocaleString()}回/日 × 30日 = ${(reqs*30).toLocaleString()}回/月`;
     }
-
-    let activeCoupon = null;
-
-    function applyCoupon() {
-      const input = document.getElementById('coupon-input');
-      const msg = document.getElementById('coupon-msg');
-      const code = input.value.trim().toUpperCase();
-      if (!code) return;
-
-      // Validate coupon via API
-      fetch((location.hostname === 'localhost' ? 'http://localhost:3000' : '') + '/api/v1/coupon/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: code }),
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.valid) {
-          activeCoupon = data.stripe_promo_code || code;
-          msg.className = 'coupon-msg success';
-          const l = document.documentElement.lang || 'en';
-          msg.textContent = l === 'ja'
-            ? (data.description_ja || data.description || 'Coupon applied!')
-            : (data.description || 'Coupon applied!');
-          input.style.borderColor = 'var(--green)';
-
-          // UI enhancement: highlight Developer plan with coupon details
-          applyCouponUI(l, data);
-        } else {
-          activeCoupon = null;
-          msg.className = 'coupon-msg error';
-          const l = document.documentElement.lang || 'en';
-          msg.textContent = l === 'ja' ? 'Invalid coupon code' : 'Invalid coupon code';
-          input.style.borderColor = '#ef4444';
-          resetCouponUI();
-        }
-      })
-      .catch(() => {
-        msg.className = 'coupon-msg error';
-        msg.textContent = 'Error validating coupon';
-      });
-    }
-
-    document.getElementById('coupon-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') applyCoupon();
-    });
-
-    function applyCouponUI(lang, data) {
-      const devCard = document.querySelector('.plan-card.featured');
-      if (!devCard) return;
-
-      const grantCredits = data.grant_credits || 50000;
-      const grantDays = data.grant_days || 30;
-      const noCard = data.require_card === false;
-
-      // Add gold border + scale
-      devCard.classList.add('coupon-active');
-
-      // Update badge text
-      const badge = document.getElementById('p-developer-badge');
-      badge.textContent = lang === 'ja'
-        ? (grantDays >= 180 ? '6 months free' : grantDays + ' days free')
-        : (grantDays >= 180 ? '6 months free' : grantDays + ' days free');
-
-      // Update price display
-      const priceEl = devCard.querySelector('.plan-price');
-      priceEl.classList.add('coupon-modified');
-      priceEl.innerHTML = '<span class="original-price">$19</span><span class="currency">$</span>0<span class="period">' +
-        (lang === 'ja' ? '/月' : '/mo') + '</span>' +
-        '<span class="trial-note">' +
-        (lang === 'ja'
-          ? (noCard ? 'No card required. ' + grantDays + ' days free' : 'After ' + grantDays + ' days: $' + PRICING[region].developer.amount + '/mo. Cancel anytime.')
-          : (noCard ? 'No card required. ' + grantDays + ' days free' : 'After ' + grantDays + ' days: $' + PRICING[region].developer.amount + '/mo. Cancel anytime.')) +
-        '</span>';
-
-      // Add free badge
-      if (!devCard.querySelector('.coupon-free-badge')) {
-        const freeBadge = document.createElement('div');
-        freeBadge.className = 'coupon-free-badge';
-        freeBadge.textContent = lang === 'ja'
-          ? (noCard ? 'No card needed! ' + grantDays + ' days free' : grantDays + ' days completely free')
-          : (noCard ? 'No card needed! ' + grantDays + ' days free' : grantDays + ' days completely free');
-        priceEl.parentNode.insertBefore(freeBadge, priceEl.nextSibling);
-      }
-
-      // Update CTA button
-      const cta = document.getElementById('p-developer-cta');
-      if (noCard) {
-        cta.textContent = lang === 'ja' ? 'Start free now' : 'Start free now';
-        cta.classList.remove('primary');
-        cta.classList.add('green');
-        cta.dataset.nocard = 'true';
-      } else {
-        cta.textContent = lang === 'ja' ? 'Start free now' : 'Start free now';
-        cta.classList.remove('primary');
-        cta.classList.add('green');
-      }
-    }
-
-    function resetCouponUI() {
-      const devCard = document.querySelector('.plan-card.featured');
-      if (!devCard) return;
-
-      devCard.classList.remove('coupon-active');
-
-      // Restore badge
-      const l = document.documentElement.lang || 'en';
-      document.getElementById('p-developer-badge').textContent = T[l].badge;
-
-      // Restore price
-      const priceEl = devCard.querySelector('.plan-price');
-      priceEl.classList.remove('coupon-modified');
-      priceEl.innerHTML = '<span class="currency">$</span>19<span class="period" id="p-developer-period">' +
-        T[l].developer.period + '</span>';
-
-      // Remove free badge
-      const freeBadge = devCard.querySelector('.coupon-free-badge');
-      if (freeBadge) freeBadge.remove();
-
-      // Restore CTA
-      const cta = document.getElementById('p-developer-cta');
-      cta.textContent = T[l].developer.cta;
-      cta.classList.remove('green');
-      cta.classList.add('primary');
-    }
-
-    const T = {
-      en: {
-        title: 'Pricing',
-        sub: 'Start free, scale as you build. Simple, transparent pricing for developers.',
-        navHome: 'Home',
-        badge: 'Most Popular',
-        free: { name: 'Free', desc: 'For personal projects & exploration', cta: 'Get Started', period: '/mo' },
-        developer: { name: 'Developer', desc: 'For serious development & production apps', cta: 'Start Developer', period: '/mo' },
-        team: { name: 'Team', desc: 'For teams & high-volume workloads', cta: 'Start Team', period: '/mo' },
-        features: {
-          free: [
-            '1,000 credits/month',
-            '5 requests/min',
-            'GPT-4o-mini, Gemini Flash',
-            '100 agent runs/month',
-            'Web, REST API',
-            'Community support',
-          ],
-          developer: [
-            '50,000 credits/month',
-            '60 requests/min',
-            'GPT-4o-mini, Gemini Flash',
-            '+ GPT-4o, Claude Sonnet',
-            '5,000 agent runs/month',
-            'All channels + MCP tools',
-            'Priority support',
-            'Code generation models',
-          ],
-          team: [
-            '500,000 credits/month',
-            '200 requests/min',
-            'All models (+ Claude Opus)',
-            '50,000 agent runs/month',
-            'All channels + MCP tools',
-            'Priority support',
-            'Custom agents',
-            'Team collaboration (coming soon)',
-          ],
-        },
-        couponTitle: 'Have a coupon code?',
-        couponBtn: 'Apply',
-        couponPh: 'Enter code',
-        guaranteeTitle: 'Money-back guarantee',
-        guaranteeDesc: 'Cancel anytime. Prorated refunds, no questions asked.',
-        faqTitle: 'FAQ',
-        faqs: [
-          { q: 'What are credits?', a: 'Credits measure API usage. Different models cost different amounts. GPT-4o-mini: 1 credit/1K tokens. Claude Opus: 30 credits/1K tokens.' },
-          { q: 'Can I use the REST API on the Free plan?', a: 'Yes! The REST API is available on all plans. Free plan is limited to 5 req/min.' },
-          { q: 'What MCP tools are available?', a: 'Web search, web fetch, calculator, weather, file operations, shell execution, browser automation, and more.' },
-          { q: 'Do you offer annual billing?', a: 'Annual billing with 20% discount is coming soon. Contact us for early access.' },
-        ],
-      },
-      ja: {
-        title: 'Pricing',
-        sub: '無料で始めて、開発の成長に合わせてスケール。開発者向けのシンプルで透明な料金体系。',
-        navHome: 'Home',
-        badge: 'Most Popular',
-        free: { name: 'Free', desc: '個人プロジェクト・お試しに', cta: '今すぐ始める', period: '/月' },
-        developer: { name: 'Developer', desc: '本格開発・本番アプリに', cta: 'Developerを始める', period: '/月' },
-        team: { name: 'Team', desc: 'チーム・大規模ワークロードに', cta: 'Teamを始める', period: '/月' },
-        features: {
-          free: [
-            '1,000 クレジット/月',
-            '5 リクエスト/分',
-            'GPT-4o-mini, Gemini Flash',
-            '100 エージェント実行/月',
-            'Web, REST API',
-            'コミュニティサポート',
-          ],
-          developer: [
-            '50,000 クレジット/月',
-            '60 リクエスト/分',
-            'GPT-4o-mini, Gemini Flash',
-            '+ GPT-4o, Claude Sonnet',
-            '5,000 エージェント実行/月',
-            '全チャネル + MCPツール',
-            '優先サポート',
-            'コード生成モデル',
-          ],
-          team: [
-            '500,000 クレジット/月',
-            '200 リクエスト/分',
-            '全モデル (+ Claude Opus)',
-            '50,000 エージェント実行/月',
-            '全チャネル + MCPツール',
-            '優先サポート',
-            'カスタムエージェント',
-            'チームコラボレーション (coming soon)',
-          ],
-        },
-        couponTitle: 'クーポンコードをお持ちですか？',
-        couponBtn: '適用',
-        couponPh: 'コードを入力',
-        guaranteeTitle: '安心の返金保証',
-        guaranteeDesc: 'いつでもキャンセル可能。日割り計算で返金されます。',
-        faqTitle: 'よくある質問',
-        faqs: [
-          { q: 'クレジットとは何ですか？', a: 'クレジットはAPI利用量の単位です。モデルによってコストが異なります。GPT-4o-mini: 1クレジット/1Kトークン。Claude Opus: 30クレジット/1Kトークン。' },
-          { q: '無料プランでREST APIは使えますか？', a: 'はい！REST APIは全プランで利用可能です。無料プランは5リクエスト/分の制限があります。' },
-          { q: '利用可能なMCPツールは？', a: 'Web検索、Webフェッチ、計算機、天気、ファイル操作、シェル実行、ブラウザ自動化など多数のツールが利用可能です。' },
-          { q: '年払いはありますか？', a: '20%割引の年払いプランは近日提供予定です。先行アクセスについてはお問い合わせください。' },
-        ],
-      },
-    };
-
-    function renderFeatures(planKey, features) {
-      const el = document.getElementById('p-' + planKey + '-features');
-      el.innerHTML = '';
-      features.forEach(f => {
-        const li = document.createElement('li');
-        li.textContent = f;
-        el.appendChild(li);
-      });
-    }
-
-    function renderFaq(lang) {
-      const t = T[lang];
-      const section = document.getElementById('faq-section');
-      let html = '<h2>' + t.faqTitle + '</h2>';
-      t.faqs.forEach(faq => {
-        html += '<div class="faq-item"><h3>' + faq.q + '</h3><p>' + faq.a + '</p></div>';
-      });
-      section.innerHTML = html;
-    }
-
-    function setLang(l) {
-      document.documentElement.lang = l;
-      localStorage.setItem('nl', l);
-      document.getElementById('l-ja').className = l === 'ja' ? 'on' : '';
-      document.getElementById('l-en').className = l === 'en' ? 'on' : '';
-
-      const t = T[l];
-      document.getElementById('t-title').textContent = t.title;
-      document.getElementById('t-sub').textContent = t.sub;
-      document.getElementById('nav-home').textContent = t.navHome;
-      document.getElementById('nav-home2').textContent = t.navHome;
-      document.getElementById('p-developer-badge').textContent = t.badge;
-
-      ['free', 'developer', 'team'].forEach(p => {
-        document.getElementById('p-' + p + '-name').textContent = t[p].name;
-        document.getElementById('p-' + p + '-desc').textContent = t[p].desc;
-        document.getElementById('p-' + p + '-cta').textContent = t[p].cta;
-        document.getElementById('p-' + p + '-period').textContent = t[p].period;
-        renderFeatures(p, t.features[p]);
-      });
-
-      document.getElementById('t-coupon-title').textContent = t.couponTitle;
-      document.getElementById('coupon-btn').textContent = t.couponBtn;
-      document.getElementById('coupon-input').placeholder = t.couponPh;
-      document.getElementById('t-guarantee-title').textContent = t.guaranteeTitle;
-      document.getElementById('t-guarantee-desc').textContent = t.guaranteeDesc;
-      renderFaq(l);
-    }
-
-    // CTA clicks — apply coupon if active
-    document.querySelectorAll('[data-plan]').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.preventDefault();
-        const plan = this.dataset.plan;
-
-        // No-card coupon: redeem directly via API
-        if (this.dataset.nocard === 'true' && activeCoupon) {
-          const sid = localStorage.getItem('session_id') || '';
-          const token = localStorage.getItem('auth_token') || '';
-          const headers = { 'Content-Type': 'application/json' };
-          if (token) headers['Authorization'] = 'Bearer ' + token;
-
-          this.disabled = true;
-          const lang = document.documentElement.lang || 'en';
-          this.textContent = lang === 'ja' ? 'Applying...' : 'Applying...';
-
-          fetch('/api/v1/coupon/redeem', {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({ code: activeCoupon, session_id: sid }),
-          })
-          .then(r => r.json())
-          .then(data => {
-            if (data.success) {
-              const msg = document.getElementById('coupon-msg');
-              msg.className = 'coupon-msg success';
-              msg.textContent = lang === 'ja'
-                ? data.message_ja || 'Coupon redeemed!'
-                : data.message || 'Coupon redeemed!';
-              this.textContent = lang === 'ja' ? 'Done! Go to chat' : 'Done! Go to chat';
-              this.classList.add('green');
-              setTimeout(() => { window.location.href = '/'; }, 1500);
-            } else {
-              const msg = document.getElementById('coupon-msg');
-              msg.className = 'coupon-msg error';
-              msg.textContent = lang === 'ja'
-                ? (data.error_ja || data.error || 'Error occurred')
-                : (data.error || 'Error redeeming coupon');
-              this.disabled = false;
-              this.textContent = lang === 'ja' ? 'Start free now' : 'Start free now';
-            }
-          })
-          .catch(() => {
-            this.disabled = false;
-            this.textContent = lang === 'ja' ? 'Start free now' : 'Start free now';
-            alert('Error. Please try again.');
-          });
-          return;
-        }
-
-        // Normal Stripe flow
-        let link = PAYMENT_LINKS[plan];
-        if (link) {
-          if (activeCoupon) {
-            link += (link.includes('?') ? '&' : '?') + 'prefilled_promo_code=' + encodeURIComponent(activeCoupon);
-          }
-          window.location.href = link;
-        } else {
-          fetch('/api/v1/billing/checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ plan: plan, coupon: activeCoupon }),
-          })
-          .then(r => r.json())
-          .then(d => { if (d.checkout_url) window.location.href = d.checkout_url; })
-          .catch(() => alert('Error creating checkout. Please try again.'));
-        }
-      });
-    });
-
-    // Initialize language — default to English, respect saved preference
-    setLang(localStorage.getItem('nl') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
-    applyRegionPricing();
+  }
   </script>
+
+  <!-- Competitive Comparison -->
+  <div style="max-width:700px;margin:32px auto;text-align:center;">
+    <p style="font-size:13px;color:var(--muted);">
+      teai.ioのマークアップは<strong style="color:var(--accent)">5%</strong>のみ（OpenRouter: 5.5%）。
+      東京サーバーでレイテンシ<strong style="color:var(--accent)">100ms以下</strong>。
+      <a href="/blog" style="color:var(--accent2);">詳しい比較記事を読む →</a>
+    </p>
+  </div>
+
+  <!-- Cost Controls -->
+  <div style="max-width:700px;margin:0 auto 64px;">
+    <h2>コスト管理機能</h2>
+    <p class="section-desc">予期しない高額請求を防ぐための安全装置。</p>
+    <div style="display:grid;gap:16px;margin-top:24px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px;">クレジット残高による自動停止</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;">クレジット残高が0になるとAPIがHTTP 402を返し、それ以上の課金を自動防止します。プランごとに月間クレジットが付与され、超過利用時は自動停止されるため、想定外の高額請求を防げます。</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px;">コスト異常アラート</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;">直近7日間の平均を200%超過した場合にメール通知。Pro以上で利用可能。Business プランではSlack/Teams Webhook連携も対応。(対応予定)</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px;">請求書払い・インボイス対応</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;">Pro プラン以上で請求書払いに対応。適格請求書（インボイス）発行可能。<a href="mailto:info@enablerhq.com?subject=請求書払い" style="color:var(--accent2)">info@enablerhq.com</a> までご連絡ください。</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>モデル別料金</h2>
+  <p class="section-desc">各プロバイダーの公開価格に準拠。100万トークンあたりの参考料金（税別）。</p>
+  <div class="models-wrap">
+    <table>
+      <thead><tr><th>モデル</th><th>プロバイダー</th><th>入力 / 100万トークン</th><th>出力 / 100万トークン</th><th>コンテキスト</th></tr></thead>
+      <tbody>
+        <!-- RunPod (Self-hosted) -->
+        <tr class="provider-divider"><td colspan="5">RunPod — セルフホスト</td></tr>
+        <tr><td class="model-name">Nemotron 9B 日本語</td><td><span class="badge">teai.io</span></td><td class="price free">無料</td><td class="price free">無料</td><td>8K</td></tr>
+        <tr><td class="model-name">Futa 2B</td><td><span class="badge">RunPod</span></td><td class="price">¥3</td><td class="price">¥12</td><td>4K</td></tr>
+        <tr><td class="model-name">Kimi K2.5 (self)</td><td><span class="badge">RunPod</span></td><td class="price">¥22</td><td class="price">¥90</td><td>131K</td></tr>
+        <tr><td class="model-name">Qwen3-32B (self)</td><td><span class="badge">RunPod</span></td><td class="price">¥30</td><td class="price">¥90</td><td>16K</td></tr>
+        <tr><td class="model-name">Qwen3-Coder 480B (self)</td><td><span class="badge">RunPod</span></td><td class="price">¥30</td><td class="price">¥90</td><td>32K</td></tr>
+        <!-- DeepInfra -->
+        <tr class="provider-divider"><td colspan="5">DeepInfra</td></tr>
+        <tr><td class="model-name">Nemotron-Nano-9B-Japanese</td><td><span class="badge">DeepInfra</span></td><td class="price">¥6</td><td class="price">¥24</td><td>128K</td></tr>
+        <!-- OpenAI -->
+        <tr class="provider-divider"><td colspan="5">OpenAI</td></tr>
+        <tr><td class="model-name">GPT-4.1-nano</td><td><span class="badge">OpenAI</span></td><td class="price">¥15</td><td class="price">¥60</td><td>1M</td></tr>
+        <tr><td class="model-name">GPT-4o-mini</td><td><span class="badge">OpenAI</span></td><td class="price">¥22</td><td class="price">¥90</td><td>128K</td></tr>
+        <tr><td class="model-name">GPT-4.1-mini</td><td><span class="badge">OpenAI</span></td><td class="price">¥60</td><td class="price">¥240</td><td>1M</td></tr>
+        <tr><td class="model-name">O3-mini (推論)</td><td><span class="badge">OpenAI</span></td><td class="price">¥165</td><td class="price">¥660</td><td>200K</td></tr>
+        <tr><td class="model-name">O4-mini (推論)</td><td><span class="badge">OpenAI</span></td><td class="price">¥165</td><td class="price">¥660</td><td>200K</td></tr>
+        <tr><td class="model-name">GPT-4.1</td><td><span class="badge">OpenAI</span></td><td class="price">¥300</td><td class="price">¥1,200</td><td>1M</td></tr>
+        <tr><td class="model-name">GPT-4o</td><td><span class="badge">OpenAI</span></td><td class="price">¥375</td><td class="price">¥1,500</td><td>128K</td></tr>
+        <!-- Anthropic -->
+        <tr class="provider-divider"><td colspan="5">Anthropic</td></tr>
+        <tr><td class="model-name">Claude Haiku 4.5</td><td><span class="badge">Anthropic</span></td><td class="price">¥150</td><td class="price">¥750</td><td>200K</td></tr>
+        <tr><td class="model-name">Claude Sonnet 4.5</td><td><span class="badge">Anthropic</span></td><td class="price">¥450</td><td class="price">¥2,250</td><td>200K</td></tr>
+        <tr><td class="model-name">Claude Sonnet 4.6</td><td><span class="badge">Anthropic</span></td><td class="price">¥450</td><td class="price">¥2,250</td><td>200K</td></tr>
+        <tr><td class="model-name">Claude Opus 4.5</td><td><span class="badge">Anthropic</span></td><td class="price">¥750</td><td class="price">¥3,750</td><td>200K</td></tr>
+        <tr><td class="model-name">Claude Opus 4.6</td><td><span class="badge">Anthropic</span></td><td class="price">¥750</td><td class="price">¥3,750</td><td>200K</td></tr>
+        <!-- Google -->
+        <tr class="provider-divider"><td colspan="5">Google</td></tr>
+        <tr><td class="model-name">Gemini 2.0 Flash</td><td><span class="badge">Google</span></td><td class="price">¥15</td><td class="price">¥60</td><td>1M</td></tr>
+        <tr><td class="model-name">Gemini 2.5 Flash Lite</td><td><span class="badge">Google</span></td><td class="price">¥15</td><td class="price">¥60</td><td>1M</td></tr>
+        <tr><td class="model-name">Gemini 2.5 Flash</td><td><span class="badge">Google</span></td><td class="price">¥22</td><td class="price">¥90</td><td>1M</td></tr>
+        <tr><td class="model-name">Gemini 3 Flash Preview</td><td><span class="badge">Google</span></td><td class="price">¥22</td><td class="price">¥90</td><td>1M</td></tr>
+        <tr><td class="model-name">Gemini 2.5 Pro</td><td><span class="badge">Google</span></td><td class="price">¥187</td><td class="price">¥1,500</td><td>1M</td></tr>
+        <!-- Groq (Ultra-fast) -->
+        <tr class="provider-divider"><td colspan="5">Groq — 超高速推論</td></tr>
+        <tr><td class="model-name">Gemma2 9B</td><td><span class="badge">Groq</span></td><td class="price">¥30</td><td class="price">¥30</td><td>8K</td></tr>
+        <tr><td class="model-name">Llama 4 Scout 17B</td><td><span class="badge">Groq</span></td><td class="price">¥16</td><td class="price">¥51</td><td>131K</td></tr>
+        <tr><td class="model-name">QwQ-32B (Groq)</td><td><span class="badge">Groq</span></td><td class="price">¥43</td><td class="price">¥58</td><td>131K</td></tr>
+        <tr><td class="model-name">Llama 4 Maverick 17B</td><td><span class="badge">Groq</span></td><td class="price">¥30</td><td class="price">¥90</td><td>131K</td></tr>
+        <tr><td class="model-name">Llama 3.3 70B SpecDec</td><td><span class="badge">Groq</span></td><td class="price">¥88</td><td class="price">¥118</td><td>128K</td></tr>
+        <tr><td class="model-name">Mistral Saba 24B</td><td><span class="badge">Groq</span></td><td class="price">¥118</td><td class="price">¥118</td><td>32K</td></tr>
+        <!-- Moonshot -->
+        <tr class="provider-divider"><td colspan="5">Moonshot</td></tr>
+        <tr><td class="model-name">Kimi K2</td><td><span class="badge">Moonshot</span></td><td class="price">¥90</td><td class="price">¥360</td><td>131K</td></tr>
+        <tr><td class="model-name">Kimi K2.5</td><td><span class="badge">Moonshot</span></td><td class="price">¥150</td><td class="price">¥450</td><td>131K</td></tr>
+        <!-- DeepSeek -->
+        <tr class="provider-divider"><td colspan="5">DeepSeek</td></tr>
+        <tr><td class="model-name">DeepSeek Chat (V3)</td><td><span class="badge">DeepSeek</span></td><td class="price">¥42</td><td class="price">¥63</td><td>128K</td></tr>
+        <tr><td class="model-name">DeepSeek Reasoner (R1)</td><td><span class="badge">DeepSeek</span></td><td class="price">¥82</td><td class="price">¥328</td><td>128K</td></tr>
+        <!-- OpenRouter -->
+        <tr class="provider-divider"><td colspan="5">OpenRouter — マルチプロバイダー</td></tr>
+        <tr><td class="model-name">Phi-4</td><td><span class="badge">Microsoft</span></td><td class="price">¥10</td><td class="price">¥10</td><td>16K</td></tr>
+        <tr><td class="model-name">Qwen3-30B</td><td><span class="badge">Qwen</span></td><td class="price">¥10</td><td class="price">¥22</td><td>131K</td></tr>
+        <tr><td class="model-name">Qwen3-32B</td><td><span class="badge">Qwen</span></td><td class="price">¥15</td><td class="price">¥45</td><td>131K</td></tr>
+        <tr><td class="model-name">QwQ-32B</td><td><span class="badge">Qwen</span></td><td class="price">¥15</td><td class="price">¥45</td><td>131K</td></tr>
+        <tr><td class="model-name">Mistral Small 3.2</td><td><span class="badge">Mistral</span></td><td class="price">¥15</td><td class="price">¥45</td><td>131K</td></tr>
+        <tr><td class="model-name">Gemma 3 27B</td><td><span class="badge">Google</span></td><td class="price">¥15</td><td class="price">¥30</td><td>131K</td></tr>
+        <tr><td class="model-name">Llama 4 Scout (Meta)</td><td><span class="badge">Meta</span></td><td class="price">¥22</td><td class="price">¥90</td><td>512K</td></tr>
+        <tr><td class="model-name">Command R</td><td><span class="badge">Cohere</span></td><td class="price">¥22</td><td class="price">¥90</td><td>128K</td></tr>
+        <tr><td class="model-name">Qwen3-235B (MoE)</td><td><span class="badge">Qwen</span></td><td class="price">¥30</td><td class="price">¥90</td><td>131K</td></tr>
+        <tr><td class="model-name">Qwen3-Coder</td><td><span class="badge">Qwen</span></td><td class="price">¥30</td><td class="price">¥90</td><td>262K</td></tr>
+        <tr><td class="model-name">Llama 4 Maverick (Meta)</td><td><span class="badge">Meta</span></td><td class="price">¥37</td><td class="price">¥150</td><td>1M</td></tr>
+        <tr><td class="model-name">Codestral</td><td><span class="badge">Mistral</span></td><td class="price">¥45</td><td class="price">¥135</td><td>262K</td></tr>
+        <tr><td class="model-name">Grok 3 Mini</td><td><span class="badge">xAI</span></td><td class="price">¥45</td><td class="price">¥75</td><td>131K</td></tr>
+        <tr><td class="model-name">Nemotron 70B</td><td><span class="badge">NVIDIA</span></td><td class="price">¥52</td><td class="price">¥60</td><td>131K</td></tr>
+        <tr><td class="model-name">MiniMax M2.5</td><td><span class="badge">MiniMax</span></td><td class="price">¥75</td><td class="price">¥225</td><td>131K</td></tr>
+        <tr><td class="model-name">Z-AI GLM-5</td><td><span class="badge">Zhipu</span></td><td class="price">¥90</td><td class="price">¥360</td><td>204K</td></tr>
+        <tr><td class="model-name">Mistral Large</td><td><span class="badge">Mistral</span></td><td class="price">¥300</td><td class="price">¥900</td><td>131K</td></tr>
+        <tr><td class="model-name">Command R+</td><td><span class="badge">Cohere</span></td><td class="price">¥375</td><td class="price">¥1,500</td><td>128K</td></tr>
+        <tr><td class="model-name">Command A</td><td><span class="badge">Cohere</span></td><td class="price">¥375</td><td class="price">¥1,500</td><td>256K</td></tr>
+        <tr><td class="model-name">Grok 3</td><td><span class="badge">xAI</span></td><td class="price">¥450</td><td class="price">¥2,250</td><td>131K</td></tr>
+        <tr><td class="model-name">OpenRouter Auto</td><td><span class="badge">OpenRouter</span></td><td class="price">¥150</td><td class="price">¥450</td><td>131K</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="faq">
+    <h2>よくある質問</h2>
+    <div class="faq-item">
+      <div class="faq-q">他のAPIゲートウェイとの違いは？</div>
+      <div class="faq-a">teai.ioは東京サーバーで低レイテンシ、透明な料金体系、日本語サポート・請求書払い対応が特徴です。既存のOpenAI SDKコードをbase_url変更だけで移行できます。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">既存のOpenAI SDKコードはそのまま使える？</div>
+      <div class="faq-a">はい。Python、TypeScript、Go、Rust等のOpenAI公式SDKで base_url を https://api.teai.io/v1 に変更するだけです。LangChain、LlamaIndex等のフレームワークもそのまま動作します。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">無料プランの制限は？</div>
+      <div class="faq-a">サインアップ時に100クレジット付与。Nemotron 9B（日本語対応）は無制限で無料利用可能。有料モデルは1日500リクエストまで。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">請求書払いはできる？</div>
+      <div class="faq-a">Businessプラン（¥14,800/月〜）で請求書払い・インボイス対応しています。info@enablerhq.com までお問い合わせください。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">データはどこに保存される？</div>
+      <div class="faq-a">teai.ioはAPIプロキシであり、会話データを保存しません。リクエストは東京サーバーから各プロバイダーに直接転送されます。BYOKモードでは自分のAPIキーで直接接続も可能です。</div>
+    </div>
+  </div>
+
+  <div class="sla-section">
+    <h2>SLA &amp; 可用性</h2>
+    <p class="section-desc">プランごとの稼働率目標とサポート体制。インシデント発生時はメールで通知します。</p>
+    <div class="sla-grid">
+      <div class="sla-card">
+        <div class="sla-tier">Free</div>
+        <div class="sla-uptime free-tier">ベストエフォート</div>
+        <div class="sla-detail">SLAなし。可能な限り高可用性を維持しますが、保証はありません。コミュニティサポートのみ。</div>
+      </div>
+      <div class="sla-card">
+        <div class="sla-tier">Pro</div>
+        <div class="sla-uptime pro-tier">99.5%</div>
+        <div class="sla-detail">月間稼働率99.5%目標。計画メンテナンスを除く。インシデント時はメール通知。優先日本語サポート対応。</div>
+      </div>
+      <div class="sla-card">
+        <div class="sla-tier">Business</div>
+        <div class="sla-uptime biz-tier">99.9% SLA保証</div>
+        <div class="sla-detail">月間稼働率99.9%をSLAとして保証。専任サポート（日本語）、障害時の優先復旧、カスタム通知設定。</div>
+      </div>
+    </div>
+    <div class="sla-infra">
+      <strong>インフラ構成</strong>: AWS Lambda (東京 ap-northeast-1) &middot; マルチプロバイダー自動フェイルオーバー<br>
+      <strong>ステータスページ</strong>: <a href="/status">/status</a> でリアルタイム稼働状況を確認<br>
+      <strong>インシデント通知</strong>: 障害・メンテナンス情報はメールで事前通知<br>
+      <strong>計画メンテナンス</strong>: 原則として深夜帯（JST 02:00–05:00）に実施、事前告知あり
+    </div>
+  </div>
+</div>
+
+<footer>&copy; 2026 株式会社イネブラ. <a href="/terms">Terms</a> | <a href="/privacy">Privacy</a> | <a href="/security">Security</a> | <a href="/sla">SLA</a> | <a href="/status">Status</a> | <a href="/about">About</a></footer>
+
+<script>
+document.querySelectorAll('.faq-item').forEach(item => {
+  item.querySelector('.faq-q').addEventListener('click', () => item.classList.toggle('open'));
+});
+</script>
 </body>
 </html>

@@ -1,0 +1,21 @@
+{
+  "name": "Enabler AI",
+  "symbol": "ENAI",
+  "description": "ENAI v2 — EnablerDAOの統合ガバナンス＆ユーティリティトークン (Token-2022)。chatweb.ai・teai.io・Elio・EnablerDAOを繋ぐAI×ブロックチェーントークン。1 ENAI = 10 credits。DePINノード報酬・DAO投票・AIエージェント自律決済に利用。",
+  "image": "https://enablerdao.com/icon-512.svg",
+  "external_url": "https://enablerdao.com/token",
+  "attributes": [
+    { "trait_type": "Network", "value": "Solana" },
+    { "trait_type": "Standard", "value": "Token-2022" },
+    { "trait_type": "Decimals", "value": "6" },
+    { "trait_type": "Total Supply", "value": "1,000,000,000" },
+    { "trait_type": "Credits per ENAI", "value": "10" },
+    { "trait_type": "Use Cases", "value": "AI Credits, DePIN Rewards, DAO Governance, x402 Agent Payments" }
+  ],
+  "properties": {
+    "category": "utility",
+    "files": [
+      { "uri": "https://enablerdao.com/icon-512.svg", "type": "image/svg+xml" }
+    ]
+  }
+}

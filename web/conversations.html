@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-3YF25NMXG8"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-3YF25NMXG8');</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversations - chatweb.ai</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F4AC;</text></svg>">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif;background:#0a0a0a;color:#e0e0e0;min-height:100vh}
+.nav{display:flex;justify-content:space-between;align-items:center;padding:12px 24px;background:rgba(20,20,20,0.95);border-bottom:1px solid #222;position:sticky;top:0;z-index:100}
+.nav a{color:#999;text-decoration:none;font-size:14px;margin-left:16px;transition:color .2s}
+.nav a:hover,.nav a.active{color:#fff}
+.logo{font-size:18px;font-weight:700;color:#fff;text-decoration:none}
+.container{max-width:800px;margin:0 auto;padding:32px 16px 80px}
+h1{font-size:24px;font-weight:700;margin-bottom:8px}
+.subtitle{color:#888;font-size:14px;margin-bottom:24px}
+.toolbar{display:flex;gap:8px;margin-bottom:20px;align-items:center;flex-wrap:wrap}
+.btn{padding:8px 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn-primary{background:#4f8fff;color:#fff}
+.btn-primary:hover{background:#6fa0ff}
+.btn-danger{background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
+.btn-danger:hover{background:rgba(239,68,68,0.2)}
+.btn-ghost{background:transparent;color:#888;border:1px solid #333}
+.btn-ghost:hover{color:#fff;border-color:#555}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.search-box{flex:1;min-width:200px;position:relative}
+.search-box input{width:100%;padding:8px 12px 8px 32px;background:#141414;border:1px solid #333;border-radius:8px;color:#fff;font-size:13px;outline:none}
+.search-box input:focus{border-color:#4f8fff}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#666;font-size:14px;pointer-events:none}
+.conv-list{display:flex;flex-direction:column;gap:8px}
+.conv-card{background:#141414;border:1px solid #222;border-radius:10px;padding:16px;cursor:pointer;transition:all .2s;display:flex;align-items:flex-start;gap:12px}
+.conv-card:hover{border-color:#4f8fff;background:#1a1a1a}
+.conv-card.selected{border-color:#4f8fff;background:rgba(79,143,255,0.06)}
+.conv-icon{width:40px;height:40px;border-radius:10px;background:#1e1e1e;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.conv-body{flex:1;min-width:0}
+.conv-title{font-size:15px;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-preview{font-size:13px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+.conv-meta{display:flex;gap:8px;align-items:center;font-size:11px;color:#555}
+.msg-count{background:#1e1e1e;padding:2px 8px;border-radius:10px;border:1px solid #2a2a2a;color:#777}
+.conv-actions{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity .2s}
+.conv-card:hover .conv-actions{opacity:1}
+.action-btn{width:32px;height:32px;border-radius:6px;background:transparent;border:1px solid #333;color:#888;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .2s}
+.action-btn:hover{background:#222;color:#fff}
+.action-btn.red:hover{background:rgba(239,68,68,0.1);color:#ef4444;border-color:rgba(239,68,68,0.3)}
+.empty{text-align:center;padding:80px 20px;color:#555}
+.empty-icon{font-size:48px;margin-bottom:16px}
+.empty h2{font-size:18px;font-weight:600;color:#777;margin-bottom:8px}
+.empty p{font-size:14px;color:#555;margin-bottom:24px}
+.loading{text-align:center;padding:60px;color:#666;font-size:14px}
+.select-bar{background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:10px 16px;display:none;align-items:center;gap:12px;margin-bottom:12px;font-size:13px}
+.select-bar.show{display:flex}
+.select-count{color:#4f8fff;font-weight:600;flex:1}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:#141414;border:1px solid #333;border-radius:12px;padding:24px;max-width:480px;width:100%}
+.modal h3{font-size:16px;font-weight:700;margin-bottom:12px}
+.modal p{font-size:14px;color:#888;margin-bottom:20px;line-height:1.6}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+.share-url{width:100%;padding:10px 12px;background:#0a0a0a;border:1px solid #333;border-radius:8px;color:#fff;font-size:12px;font-family:monospace;margin-bottom:12px;outline:none;cursor:text}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#2a2a2a;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;transition:transform .3s;z-index:2000;border:1px solid #444}
+.toast.show{transform:translateX(-50%) translateY(0)}
+@media(max-width:600px){.conv-actions{opacity:1}.toolbar{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a href="/" class="logo">chatweb.ai</a>
+  <div>
+    <a href="/">Chat</a>
+    <a href="/conversations" class="active">Conversations</a>
+    <a href="/settings">Settings</a>
+  </div>
+</nav>
+<div class="container">
+  <h1>会話履歴</h1>
+  <p class="subtitle">過去のAIとの会話を管理・共有できます</p>
+
+  <div class="toolbar">
+    <div class="search-box">
+      <span class="search-icon">&#128269;</span>
+      <input type="text" id="searchInput" placeholder="会話を検索..." oninput="filterConvs()">
+    </div>
+    <button class="btn btn-primary" onclick="newConversation()">+ 新しい会話</button>
+    <button class="btn btn-ghost" onclick="loadConversations()">&#8635; 更新</button>
+  </div>
+
+  <div class="select-bar" id="selectBar">
+    <span class="select-count" id="selectCount">0件選択</span>
+    <button class="btn btn-danger" onclick="deleteSelected()">削除</button>
+    <button class="btn btn-ghost" onclick="clearSelection()">キャンセル</button>
+  </div>
+
+  <div id="convList" class="conv-list">
+    <div class="loading">読み込み中...</div>
+  </div>
+</div>
+
+<!-- Delete confirm modal -->
+<div class="modal-bg" id="deleteModal">
+  <div class="modal">
+    <h3>会話を削除</h3>
+    <p id="deleteModalText">この会話を削除しますか？この操作は元に戻せません。</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('deleteModal')">キャンセル</button>
+      <button class="btn btn-danger" id="deleteConfirmBtn" onclick="confirmDelete()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share modal -->
+<div class="modal-bg" id="shareModal">
+  <div class="modal">
+    <h3>会話を共有</h3>
+    <p>以下のURLで会話を共有できます。誰でも閲覧可能になります。</p>
+    <input type="text" id="shareUrlInput" class="share-url" readonly>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('shareModal')">閉じる</button>
+      <button class="btn btn-primary" onclick="copyShareUrl()">URLをコピー</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let allConvs = [];
+let selectedIds = new Set();
+let deleteTarget = null;
+const token = localStorage.getItem('authToken');
+
+function getSessionId() {
+  let sid = localStorage.getItem('webSessionId');
+  if (!sid) { sid = 'webchat:' + crypto.randomUUID().replace(/-/g,'').slice(0,32); localStorage.setItem('webSessionId', sid); }
+  return sid;
+}
+
+function showToast(msg, ms) {
+  ms = ms || 2500;
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, ms);
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function relativeTime(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  var diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return 'たった今';
+  if (diff < 3600) return Math.floor(diff/60) + '分前';
+  if (diff < 86400) return Math.floor(diff/3600) + '時間前';
+  if (diff < 604800) return Math.floor(diff/86400) + '日前';
+  return d.toLocaleDateString('ja-JP');
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function loadConversations() {
+  var list = document.getElementById('convList');
+  list.innerHTML = '<div class="loading">読み込み中...</div>';
+  if (!token) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">&#128274;</div><h2>ログインが必要です</h2><p>会話履歴を表示するにはログインしてください。</p><a href="/" class="btn btn-primary" style="margin-top:8px" onclick="localStorage.setItem(\'showAuth\',\'1\')">ログイン</a></div>';
+    return;
+  }
+  try {
+    var resp = await fetch('/api/v1/conversations', { headers: { 'Authorization': 'Bearer ' + token } });
+    var data = await resp.json();
+    allConvs = data.conversations || [];
+    renderConvs(allConvs);
+  } catch(e) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">&#9888;</div><h2>読み込みエラー</h2><p>会話履歴を取得できませんでした。</p></div>';
+  }
+}
+
+function filterConvs() {
+  var q = document.getElementById('searchInput').value.toLowerCase();
+  var filtered = q ? allConvs.filter(function(c){ return (c.title||'').toLowerCase().includes(q) || (c.preview||'').toLowerCase().includes(q); }) : allConvs;
+  renderConvs(filtered);
+}
+
+function renderConvs(convs) {
+  var list = document.getElementById('convList');
+  if (!convs.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">&#128172;</div><h2>会話がありません</h2><p>チャットを始めると、ここに会話が保存されます。</p><a href="/" class="btn btn-primary" style="margin-top:8px;text-decoration:none">チャットを始める</a></div>';
+    return;
+  }
+  list.innerHTML = '';
+  convs.forEach(function(c) {
+    var card = document.createElement('div');
+    card.className = 'conv-card' + (selectedIds.has(c.id) ? ' selected' : '');
+    card.dataset.id = c.id;
+    var meta = '<span>' + relativeTime(c.updated_at || c.created_at) + '</span>';
+    if (c.message_count) meta += '<span class="msg-count">' + c.message_count + 'メッセージ</span>';
+    card.innerHTML =
+      '<div class="conv-icon">&#128172;</div>' +
+      '<div class="conv-body">' +
+        '<div class="conv-title">' + esc(c.title || '無題の会話') + '</div>' +
+        '<div class="conv-preview">' + esc(c.preview || 'プレビューなし') + '</div>' +
+        '<div class="conv-meta">' + meta + '</div>' +
+      '</div>' +
+      '<div class="conv-actions">' +
+        '<button class="action-btn" title="続きから話す" onclick="continueConv(event,\'' + esc(c.session_id||'') + '\')">&#128172;</button>' +
+        '<button class="action-btn" title="共有" onclick="shareConv(event,\'' + esc(c.id) + '\')">&#128279;</button>' +
+        '<button class="action-btn red" title="削除" onclick="promptDelete(event,\'' + esc(c.id) + '\',\'' + esc(c.title||'この会話') + '\')">&#128465;</button>' +
+      '</div>';
+    card.addEventListener('click', function(e) {
+      if (e.target.closest('.conv-actions')) return;
+      toggleSelect(c.id, card);
+    });
+    list.appendChild(card);
+  });
+}
+
+function toggleSelect(id, card) {
+  if (selectedIds.has(id)) { selectedIds.delete(id); card.classList.remove('selected'); }
+  else { selectedIds.add(id); card.classList.add('selected'); }
+  updateSelectBar();
+}
+
+function updateSelectBar() {
+  var bar = document.getElementById('selectBar');
+  var n = selectedIds.size;
+  if (n > 0) { bar.classList.add('show'); document.getElementById('selectCount').textContent = n + '件選択'; }
+  else { bar.classList.remove('show'); }
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  document.querySelectorAll('.conv-card.selected').forEach(function(c){ c.classList.remove('selected'); });
+  updateSelectBar();
+}
+
+function promptDelete(e, id, title) {
+  e.stopPropagation();
+  deleteTarget = id;
+  document.getElementById('deleteModalText').textContent = '「' + title + '」を削除しますか？この操作は元に戻せません。';
+  document.getElementById('deleteModal').classList.add('open');
+}
+
+function deleteSelected() {
+  if (!selectedIds.size) return;
+  deleteTarget = Array.from(selectedIds);
+  document.getElementById('deleteModalText').textContent = selectedIds.size + '件の会話を削除しますか？';
+  document.getElementById('deleteModal').classList.add('open');
+}
+
+async function confirmDelete() {
+  var btn = document.getElementById('deleteConfirmBtn');
+  btn.disabled = true;
+  var ids = Array.isArray(deleteTarget) ? deleteTarget : [deleteTarget];
+  var ok = 0;
+  for (var i = 0; i < ids.length; i++) {
+    try {
+      var resp = await fetch('/api/v1/conversations/' + ids[i], { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+      var d = await resp.json();
+      if (d.ok !== false) ok++;
+    } catch(ex) {}
+  }
+  closeModal('deleteModal');
+  btn.disabled = false;
+  clearSelection();
+  showToast(ok + '件削除しました');
+  await loadConversations();
+}
+
+async function shareConv(e, id) {
+  e.stopPropagation();
+  try {
+    var resp = await fetch('/api/v1/conversations/' + id + '/share', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+    var data = await resp.json();
+    if (data.share_url) {
+      document.getElementById('shareUrlInput').value = data.share_url;
+      document.getElementById('shareModal').classList.add('open');
+    } else {
+      showToast('共有URLを取得できませんでした');
+    }
+  } catch(ex) { showToast('エラーが発生しました'); }
+}
+
+function copyShareUrl() {
+  navigator.clipboard.writeText(document.getElementById('shareUrlInput').value).then(function(){ showToast('URLをコピーしました'); });
+}
+
+function continueConv(e, sessionId) {
+  e.stopPropagation();
+  if (sessionId) { localStorage.setItem('webSessionId', sessionId); }
+  window.location.href = '/';
+}
+
+async function newConversation() {
+  if (!token) { window.location.href = '/'; return; }
+  var sid = getSessionId();
+  try {
+    await fetch('/api/v1/conversations/finalize', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sid })
+    });
+  } catch(ex) {}
+  var newSid = 'webchat:' + crypto.randomUUID().replace(/-/g,'').slice(0,32);
+  localStorage.setItem('webSessionId', newSid);
+  window.location.href = '/';
+}
+
+document.querySelectorAll('.modal-bg').forEach(function(bg) {
+  bg.addEventListener('click', function(e) { if (e.target === bg) bg.classList.remove('open'); });
+});
+
+loadConversations();
+</script>
+</body>
+</html>

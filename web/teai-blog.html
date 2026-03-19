@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog — teai.io | LLM API Gateway Tech Blog</title>
+  <meta name="description" content="teai.io公式ブログ。LLM API、AI開発、OpenAI互換Gateway、Rust、AWS Lambda等の技術記事。Official teai.io blog for AI developers.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <link rel="canonical" href="https://teai.io/blog">
+  <link rel="alternate" type="application/rss+xml" title="teai.io Blog RSS" href="/blog/rss.xml">
+  <meta property="og:title" content="Blog — teai.io">
+  <meta property="og:description" content="LLM API, AI development technical articles for developers.">
+  <meta property="og:url" content="https://teai.io/blog">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#10b981">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-QS0M5KL7YL"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-QS0M5KL7YL');</script>
+  <style>
+    :root {
+      --bg: #09090b; --surface: #18181b; --surface2: #27272a;
+      --border: #3f3f46; --text: #fafafa; --muted: #a1a1aa;
+      --accent: #10b981; --accent2: #34d399; --accent-dim: rgba(16,185,129,0.12);
+      --radius: 12px;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Nav */
+    nav {
+      position: fixed; top:0; left:0; right:0; z-index:100;
+      padding: 14px 24px;
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(9,9,11,0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { font-size: 20px; font-weight: 800; color: var(--text); text-decoration:none; }
+    .logo span { color: var(--accent); }
+    .nav-r { display: flex; align-items: center; gap: 16px; }
+    .nav-r a { color: var(--muted); font-size: 14px; }
+    .nav-r a:hover { color: var(--text); text-decoration: none; }
+    .nav-active { color: var(--accent2) !important; }
+    .btn-sm {
+      background: var(--accent); color: #fff; padding: 7px 14px;
+      border-radius: 8px; font-weight: 600; font-size: 13px;
+    }
+    .btn-sm:hover { background: var(--accent2); text-decoration: none; }
+
+    /* Layout */
+    .container { max-width: 960px; margin: 0 auto; padding: 100px 24px 60px; }
+
+    /* Header */
+    .blog-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 32px; flex-wrap: wrap; gap: 16px;
+    }
+    .blog-header h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; }
+    .blog-header p { color: var(--muted); font-size: 15px; margin-top: 4px; }
+    .header-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+    .lang-toggle {
+      display: flex; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden; font-size: 13px;
+    }
+    .lang-toggle button {
+      background: none; border: none; color: var(--muted); padding: 6px 12px;
+      cursor: pointer; font-size: 13px; font-family: inherit;
+    }
+    .lang-toggle button.active { background: var(--accent-dim); color: var(--accent2); }
+    .lang-toggle button:hover { color: var(--text); }
+    .icon-btn {
+      width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--muted); cursor: pointer; transition: all 0.2s;
+    }
+    .icon-btn:hover { color: var(--accent2); border-color: var(--accent); text-decoration: none; }
+    .icon-btn svg { width: 18px; height: 18px; }
+
+    /* Social bar */
+    .social-bar {
+      display: flex; gap: 8px; align-items: center;
+      padding: 12px 0; margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .social-bar a {
+      display: flex; align-items: center; gap: 6px;
+      color: var(--muted); font-size: 13px; padding: 5px 10px;
+      border-radius: 6px; transition: all 0.2s;
+    }
+    .social-bar a:hover { color: var(--text); background: var(--surface); text-decoration: none; }
+    .social-bar svg { width: 16px; height: 16px; }
+    .social-bar .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+
+    /* Tags filter */
+    .tags-filter {
+      display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 28px;
+    }
+    .tag-btn {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); font-size: 12px; font-weight: 500;
+      padding: 5px 12px; border-radius: 20px; cursor: pointer;
+      font-family: inherit; transition: all 0.2s;
+    }
+    .tag-btn:hover, .tag-btn.active {
+      background: var(--accent-dim); border-color: var(--accent);
+      color: var(--accent2);
+    }
+
+    /* Post cards */
+    .posts { display: flex; flex-direction: column; gap: 16px; }
+    .post-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .post-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .post-card a { text-decoration: none; display: block; }
+    .post-top {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px; flex-wrap: wrap; gap: 8px;
+    }
+    .post-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+    .post-tag {
+      background: var(--accent-dim); color: var(--accent2);
+      font-size: 11px; font-weight: 600; padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .post-meta-right {
+      display: flex; gap: 12px; align-items: center;
+      color: var(--muted); font-size: 12px;
+    }
+    .post-meta-right span { display: flex; align-items: center; gap: 4px; }
+    .post-title {
+      font-size: 20px; font-weight: 700; color: var(--text);
+      margin-bottom: 6px; line-height: 1.4;
+    }
+    .post-excerpt {
+      color: var(--muted); font-size: 14px; margin-bottom: 10px; line-height: 1.6;
+    }
+    .post-footer {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .post-source {
+      display: inline-flex; align-items: center; gap: 5px;
+      color: var(--muted); font-size: 12px;
+      background: var(--surface2); padding: 3px 8px; border-radius: 4px;
+    }
+    .share-btns { display: flex; gap: 6px; opacity: 0; transition: opacity 0.2s; }
+    .post-card:hover .share-btns { opacity: 1; }
+    .share-btn {
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      border-radius: 6px; color: var(--muted); background: var(--surface2);
+      transition: all 0.2s; cursor: pointer; border: none; font-family: inherit;
+    }
+    .share-btn:hover { color: var(--accent2); text-decoration: none; }
+    .share-btn svg { width: 14px; height: 14px; }
+
+    /* Newsletter */
+    .newsletter {
+      background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02));
+      border: 1px solid rgba(16,185,129,0.2);
+      border-radius: var(--radius); padding: 32px;
+      margin-top: 32px; text-align: center;
+    }
+    .newsletter h3 { font-size: 20px; margin-bottom: 6px; }
+    .newsletter p { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+    .newsletter-form { display: flex; gap: 8px; max-width: 420px; margin: 0 auto; }
+    .newsletter-form input {
+      flex: 1; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px; color: var(--text);
+      font-size: 14px; font-family: inherit; outline: none;
+    }
+    .newsletter-form input:focus { border-color: var(--accent); }
+    .newsletter-form input::placeholder { color: var(--muted); }
+    .newsletter-form button {
+      background: var(--accent); color: #fff; border: none;
+      padding: 10px 20px; border-radius: 8px; font-weight: 600;
+      font-size: 14px; cursor: pointer; font-family: inherit;
+      white-space: nowrap;
+    }
+    .newsletter-form button:hover { background: var(--accent2); }
+
+    /* CTA */
+    .cta-section {
+      text-align: center; padding: 48px 24px;
+      background: var(--surface); border-radius: var(--radius);
+      border: 1px solid var(--border); margin-top: 32px;
+    }
+    .cta-section h2 { font-size: 24px; margin-bottom: 8px; }
+    .cta-section p { color: var(--muted); margin-bottom: 20px; font-size: 14px; }
+    .btn-primary {
+      display: inline-block; background: var(--accent); color: #fff;
+      padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 15px;
+    }
+    .btn-primary:hover { background: var(--accent2); text-decoration: none; }
+
+    /* Footer */
+    footer {
+      text-align: center; padding: 32px 24px;
+      color: var(--muted); font-size: 12px;
+      border-top: 1px solid var(--border); margin-top: 48px;
+    }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--accent2); }
+
+    @media (max-width: 640px) {
+      .nav-r a:not(.btn-sm) { display: none; }
+      .blog-header { flex-direction: column; }
+      .blog-header h1 { font-size: 26px; }
+      .social-bar { flex-wrap: wrap; }
+      .newsletter-form { flex-direction: column; }
+      .post-title { font-size: 17px; }
+      .post-meta-right { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>te</span>ai.io</a>
+    <div class="nav-r">
+      <a href="/#features">Features</a>
+      <a href="/#pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/blog" class="nav-active">Blog</a>
+      <a href="/register" class="btn-sm">Get API Key</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <!-- Header -->
+    <div class="blog-header">
+      <div>
+        <h1>Blog</h1>
+        <p id="subtitle-ja">LLM API / AI / Architecture</p>
+      </div>
+      <div class="header-actions">
+        <div class="lang-toggle">
+          <button class="active" onclick="setLang('ja')">JA</button>
+          <button onclick="setLang('en')">EN</button>
+        </div>
+        <a href="/blog/rss.xml" class="icon-btn" title="RSS Feed">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- Social links -->
+    <div class="social-bar">
+      <a href="https://x.com/teai_io" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        @teai_io
+      </a>
+      <a href="https://github.com/enablerdao" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+      <span class="sep"></span>
+      <a href="https://zenn.dev/yukihamada" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M.264 23.771h4.984a.8.8 0 00.645-.352L19.614.874c.176-.293-.029-.645-.381-.645h-4.72a.627.627 0 00-.557.323L.03 23.125c-.176.293.029.646.234.646zm17.181-.352l6.479-10.408a.477.477 0 000-.498l-3.635-5.967a.36.36 0 00-.644 0l-6.48 10.408a.477.477 0 000 .498l3.636 5.967a.36.36 0 00.644 0z"/></svg>
+        Zenn
+      </a>
+      <a href="https://qiita.com/yukihamada" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2.4a9.6 9.6 0 110 19.2 9.6 9.6 0 010-19.2zm2.4 4.8a2.4 2.4 0 00-2.4 2.4v4.8a2.4 2.4 0 004.8 0V9.6a2.4 2.4 0 00-2.4-2.4zm-4.8 0a2.4 2.4 0 00-2.4 2.4v4.8a2.4 2.4 0 004.8 0V9.6a2.4 2.4 0 00-2.4-2.4z"/></svg>
+        Qiita
+      </a>
+    </div>
+
+    <!-- Tag filter -->
+    <div class="tags-filter">
+      <button class="tag-btn active" onclick="filterTag('all')">All</button>
+      <button class="tag-btn" onclick="filterTag('openai')">OpenAI</button>
+      <button class="tag-btn" onclick="filterTag('langchain')">LangChain</button>
+      <button class="tag-btn" onclick="filterTag('rust')">Rust</button>
+      <button class="tag-btn" onclick="filterTag('free')">Free</button>
+      <button class="tag-btn" onclick="filterTag('comparison')">Comparison</button>
+      <button class="tag-btn" onclick="filterTag('architecture')">Architecture</button>
+    </div>
+
+    <!-- Posts -->
+    <div class="posts" id="posts">
+
+      <article class="post-card" data-tags="openai,api,llm" data-lang="ja">
+        <a href="https://qiita.com/yukihamada/items/c3851dbe77f936e5ec34" target="_blank" rel="noopener">
+          <div class="post-top">
+            <div class="post-tags">
+              <span class="post-tag">OpenAI</span>
+              <span class="post-tag">LLM</span>
+              <span class="post-tag">API</span>
+            </div>
+            <div class="post-meta-right">
+              <span>8 min read</span>
+              <span>2026-03-18</span>
+            </div>
+          </div>
+          <h2 class="post-title">OpenAI APIより安くて速い？日本発LLM Gateway teai.ioを使ってみた</h2>
+          <p class="post-excerpt">base_urlを1行変えるだけで、GPT-4o、Claude、Gemini等45+モデルが使える。東京サーバーで低レイテンシ、5%マークアップのみ。</p>
+        </a>
+        <div class="post-footer">
+          <span class="post-source">Qiita</span>
+          <div class="share-btns">
+            <a class="share-btn" onclick="shareX('OpenAI APIより安くて速い？日本発LLM Gateway teai.io','https://qiita.com/yukihamada/items/c3851dbe77f936e5ec34')" title="Share on X">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </a>
+            <a class="share-btn" onclick="copyLink('https://qiita.com/yukihamada/items/c3851dbe77f936e5ec34')" title="Copy link">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </a>
+          </div>
+        </div>
+      </article>
+
+      <article class="post-card" data-tags="langchain,python,rag" data-lang="ja">
+        <a href="https://qiita.com/yukihamada/items/8b82ce343c03f58e1ee4" target="_blank" rel="noopener">
+          <div class="post-top">
+            <div class="post-tags">
+              <span class="post-tag">LangChain</span>
+              <span class="post-tag">Python</span>
+              <span class="post-tag">RAG</span>
+            </div>
+            <div class="post-meta-right">
+              <span>10 min read</span>
+              <span>2026-03-18</span>
+            </div>
+          </div>
+          <h2 class="post-title">LangChain x teai.io：1行変えるだけで45+モデルが使い放題になる方法</h2>
+          <p class="post-excerpt">LangChainのbase_urlを変更するだけで全モデルにアクセス。RAG、エージェント、ストリーミングの実践コード付き。</p>
+        </a>
+        <div class="post-footer">
+          <span class="post-source">Qiita</span>
+          <div class="share-btns">
+            <a class="share-btn" onclick="shareX('LangChain x teai.io：1行変えるだけで45+モデル','https://qiita.com/yukihamada/items/8b82ce343c03f58e1ee4')" title="Share on X">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </a>
+            <a class="share-btn" onclick="copyLink('https://qiita.com/yukihamada/items/8b82ce343c03f58e1ee4')" title="Copy link">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </a>
+          </div>
+        </div>
+      </article>
+
+      <article class="post-card" data-tags="free,nemotron,beginner" data-lang="ja">
+        <a href="https://qiita.com/yukihamada/items/72238836c8204a04a464" target="_blank" rel="noopener">
+          <div class="post-top">
+            <div class="post-tags">
+              <span class="post-tag">Free</span>
+              <span class="post-tag">Nemotron</span>
+            </div>
+            <div class="post-meta-right">
+              <span>7 min read</span>
+              <span>2026-03-18</span>
+            </div>
+          </div>
+          <h2 class="post-title">無料でLLM APIを使い倒す — Nemotron 9Bが無制限のteai.io入門</h2>
+          <p class="post-excerpt">NVIDIA Nemotron 9Bが完全無料・無制限。チャットボット、翻訳、コードレビューBot、日次レポート生成の実践コード。</p>
+        </a>
+        <div class="post-footer">
+          <span class="post-source">Qiita</span>
+          <div class="share-btns">
+            <a class="share-btn" onclick="shareX('無料でLLM APIを使い倒す — Nemotron 9B','https://qiita.com/yukihamada/items/72238836c8204a04a464')" title="Share on X">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </a>
+            <a class="share-btn" onclick="copyLink('https://qiita.com/yukihamada/items/72238836c8204a04a464')" title="Copy link">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </a>
+          </div>
+        </div>
+      </article>
+
+      <article class="post-card" data-tags="rust,architecture,lambda" data-lang="ja">
+        <a href="https://zenn.dev/yukihamada/articles/teai-llm-api-gateway-architecture" target="_blank" rel="noopener">
+          <div class="post-top">
+            <div class="post-tags">
+              <span class="post-tag">Rust</span>
+              <span class="post-tag">Architecture</span>
+              <span class="post-tag">Lambda</span>
+            </div>
+            <div class="post-meta-right">
+              <span>12 min read</span>
+              <span>2026-03-18</span>
+            </div>
+          </div>
+          <h2 class="post-title">日本発LLM API Gateway teai.ioのアーキテクチャを全公開</h2>
+          <p class="post-excerpt">Rust + AWS Lambda + Cloudflare Workersで構築したLLM Gatewayの技術的詳細。SSEストリーミング、プロバイダルーティング、フォールバックの実装を解説。</p>
+        </a>
+        <div class="post-footer">
+          <span class="post-source">Zenn</span>
+          <div class="share-btns">
+            <a class="share-btn" onclick="shareX('teai.ioのアーキテクチャを全公開','https://zenn.dev/yukihamada/articles/teai-llm-api-gateway-architecture')" title="Share on X">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </a>
+            <a class="share-btn" onclick="copyLink('https://zenn.dev/yukihamada/articles/teai-llm-api-gateway-architecture')" title="Copy link">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </a>
+          </div>
+        </div>
+      </article>
+
+      <article class="post-card" data-tags="comparison,openrouter" data-lang="ja">
+        <a href="https://zenn.dev/yukihamada/articles/teai-vs-openrouter-comparison" target="_blank" rel="noopener">
+          <div class="post-top">
+            <div class="post-tags">
+              <span class="post-tag">Comparison</span>
+              <span class="post-tag">OpenRouter</span>
+            </div>
+            <div class="post-meta-right">
+              <span>9 min read</span>
+              <span>2026-03-18</span>
+            </div>
+          </div>
+          <h2 class="post-title">OpenRouterとteai.ioを徹底比較 — 日本のAI開発者はどっちを選ぶべき？</h2>
+          <p class="post-excerpt">レイテンシ、コスト、モデル数、日本語対応、B2B対応を実測値で比較。東京リージョンでの500ms高速化、円建て請求の差を検証。</p>
+        </a>
+        <div class="post-footer">
+          <span class="post-source">Zenn</span>
+          <div class="share-btns">
+            <a class="share-btn" onclick="shareX('OpenRouterとteai.ioを徹底比較','https://zenn.dev/yukihamada/articles/teai-vs-openrouter-comparison')" title="Share on X">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </a>
+            <a class="share-btn" onclick="copyLink('https://zenn.dev/yukihamada/articles/teai-vs-openrouter-comparison')" title="Copy link">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </a>
+          </div>
+        </div>
+      </article>
+
+    </div>
+
+    <!-- Newsletter -->
+    <div class="newsletter">
+      <h3>Stay updated</h3>
+      <p>New articles, model updates, and developer tips. No spam.</p>
+      <form class="newsletter-form" onsubmit="subscribe(event)">
+        <input type="email" id="nl-email" placeholder="you@example.com" required>
+        <button type="submit" id="nl-btn">Subscribe</button>
+      </form>
+    </div>
+
+    <!-- CTA -->
+    <div class="cta-section">
+      <h2>Try teai.io free</h2>
+      <p>1,000 credits free. Nemotron 9B unlimited. No credit card.</p>
+      <a href="/register" class="btn-primary">Get Started</a>
+    </div>
+  </div>
+
+  <footer>
+    <p>&copy; 2026 Enabler Inc.</p>
+    <p style="margin-top:6px;">
+      <a href="/terms">Terms</a> &middot;
+      <a href="/security">Security</a> &middot;
+      <a href="/sla">SLA</a> &middot;
+      <a href="/about">About</a> &middot;
+      <a href="/status">Status</a>
+    </p>
+  </footer>
+
+  <script>
+    // Tag filter
+    function filterTag(tag) {
+      document.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      document.querySelectorAll('.post-card').forEach(card => {
+        if (tag === 'all' || card.dataset.tags.includes(tag)) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    // Language toggle
+    function setLang(lang) {
+      document.querySelectorAll('.lang-toggle button').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      // Future: toggle between JA/EN articles
+    }
+
+    // Share on X
+    function shareX(text, url) {
+      window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}&via=teai_io`, '_blank', 'width=550,height=420');
+    }
+
+    // Copy link
+    function copyLink(url) {
+      navigator.clipboard.writeText(url).then(() => {
+        const btn = event.target.closest('.share-btn');
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+        setTimeout(() => btn.innerHTML = orig, 1500);
+      });
+    }
+
+    // Newsletter subscribe
+    function subscribe(e) {
+      e.preventDefault();
+      const email = document.getElementById('nl-email').value;
+      const btn = document.getElementById('nl-btn');
+      btn.textContent = 'Subscribing...';
+      // POST to API
+      fetch('/api/v1/newsletter/subscribe', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email, source: 'blog'})
+      }).then(() => {
+        btn.textContent = 'Subscribed!';
+        btn.style.background = '#065f46';
+        document.getElementById('nl-email').value = '';
+      }).catch(() => {
+        btn.textContent = 'Subscribe';
+      });
+    }
+  </script>
+</body>
+</html>

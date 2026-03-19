@@ -52,9 +52,16 @@ h1{font-size:24px;font-weight:600;margin-bottom:8px}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#2a2a2a;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;transition:transform .3s ease;z-index:1000;border:1px solid #333}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .session-id{font-family:monospace;font-size:12px;color:#666;margin-top:4px}
+.dev-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.4);border-radius:20px;font-size:12px;color:#a78bfa;font-weight:600;margin-left:8px}
+.enai-stats{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
+.enai-stat{background:#0a0a0a;border:1px solid #333;border-radius:8px;padding:12px 16px;flex:1;min-width:120px;text-align:center}
+.enai-stat-val{font-size:24px;font-weight:700;color:#a78bfa}
+.enai-stat-label{font-size:11px;color:#666;margin-top:2px}
+.consent-box{background:#0d0d0d;border:1px solid #2a2a2a;border-radius:8px;padding:12px;font-size:12px;color:#888;margin:8px 0;line-height:1.6}
 @media(max-width:600px){
   .tools-grid{grid-template-columns:1fr}
   .container{padding:16px 12px 80px}
+  .enai-stats{flex-direction:column}
 }
 </style>
 </head>
@@ -63,6 +70,8 @@ h1{font-size:24px;font-weight:600;margin-bottom:8px}
   <a href="/" class="logo">chatweb.ai</a>
   <div>
     <a href="/">Chat</a>
+    <a href="/conversations">Conversations</a>
+    <a href="/keys">API Keys</a>
     <a href="/pricing">Pricing</a>
     <a href="/settings" class="active">Settings</a>
   </div>
@@ -187,6 +196,36 @@ h1{font-size:24px;font-weight:600;margin-bottom:8px}
     </div>
   </div>
 
+  <!-- Developer Mode / ENAI Rewards -->
+  <div class="section" id="dev-mode-section">
+    <h2><span class="icon">🛸</span> Developer Mode <span class="dev-badge" id="dev-mode-badge" style="display:none">ON</span></h2>
+    <p style="font-size:13px;color:#888;margin-bottom:12px">会話を学習データとして提供することでENAIトークンを獲得できます。chatweb.aiはOpenRouterのように使えるオープンなAIゲートウェイです。</p>
+    <div class="enai-stats" id="enai-stats">
+      <div class="enai-stat"><div class="enai-stat-val" id="enai-earned-val">--</div><div class="enai-stat-label">ENAI Earned</div></div>
+      <div class="enai-stat"><div class="enai-stat-val" id="training-count-val">--</div><div class="enai-stat-label">Conversations Contributed</div></div>
+    </div>
+    <div class="field">
+      <div class="tool-toggle" id="devModeToggle" onclick="toggleDevMode()">
+        <div class="check"></div>
+        <span class="tool-name">Developer Mode — Share conversations for training</span>
+      </div>
+      <div class="consent-box" id="dev-consent-box">
+        <strong>同意事項:</strong> 有効にすると、あなたとAIの会話が学習データとしてサーバーに保存されます（1年間保持）。個人情報は含まれないようご注意ください。会話1件につき1 ENAIトークンが付与されます。いつでも無効化できます。
+      </div>
+    </div>
+    <div class="field" id="wallet-field" style="display:none">
+      <label>Solana Wallet Address (for ENAI payout)</label>
+      <input type="text" id="solanaWallet" placeholder="Solana wallet address (e.g. DK29rBG...)">
+      <div class="hint">ENAIトークン（Solana SPL）の送付先アドレス。入力がない場合はポイントとして積立されます。</div>
+    </div>
+      <div class="field" id="enai-redeem-field" style="display:none;margin-top:4px">
+      <button class="btn-save" id="btnRedeem" onclick="redeemEnai()" style="width:auto;padding:10px 20px;font-size:13px;background:linear-gradient(135deg,#7c3aed,#4f8fff)">ENAIをクレジットに交換（1 ENAI = 10cr）</button>
+    </div>
+    <div class="field" id="apikey-section-hint" style="margin-top:8px">
+      <p style="font-size:12px;color:#666">API Keyを使えばchatweb.aiをOpenRouter代替として利用できます。<a href="/keys" style="color:#4f8fff;text-decoration:none">APIキー管理ページ</a>から発行できます。</p>
+    </div>
+  </div>
+
   <button class="btn-save" id="btnSave" data-i18n="save_btn">Save Settings</button>
 </div>
 <div class="toast" id="toast"></div>
@@ -207,6 +246,7 @@ const TOOLS = [
 let currentSettings = {};
 let enabledTools = new Set(TOOLS.map(t => t.id)); // all enabled by default
 let logEnabled = true;
+let devModeEnabled = false;
 
 function getSessionId() {
   let sid = localStorage.getItem('webSessionId');
@@ -249,6 +289,68 @@ function toggleLogSetting() {
   logEnabled = !logEnabled;
   const el = document.getElementById('logToggle');
   el.classList.toggle('active', logEnabled);
+}
+
+function toggleDevMode() {
+  devModeEnabled = !devModeEnabled;
+  const el = document.getElementById('devModeToggle');
+  el.classList.toggle('active', devModeEnabled);
+  document.getElementById('dev-mode-badge').style.display = devModeEnabled ? '' : 'none';
+  document.getElementById('wallet-field').style.display = devModeEnabled ? '' : 'none';
+}
+
+async function loadDevModeStats() {
+  try {
+    const token = localStorage.getItem('authToken');
+    if (!token) return;
+    const sid = getSessionId();
+    const resp = await fetch('/api/v1/dev-mode/stats?session_id=' + encodeURIComponent(sid), {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    document.getElementById('enai-earned-val').textContent = data.enai_earned ?? 0;
+    document.getElementById('training-count-val').textContent = data.training_count ?? 0;
+    if (data.dev_mode) {
+      devModeEnabled = true;
+      document.getElementById('devModeToggle').classList.add('active');
+      document.getElementById('dev-mode-badge').style.display = '';
+      document.getElementById('wallet-field').style.display = '';
+    }
+    if (data.solana_wallet) {
+      document.getElementById('solanaWallet').value = data.solana_wallet;
+    }
+    // Show redeem button if there are ENAI tokens to redeem
+    if ((data.enai_earned || 0) > 0) {
+      document.getElementById('enai-redeem-field').style.display = '';
+      document.getElementById('btnRedeem').textContent = 'ENAIをクレジットに交換（' + data.enai_earned + ' ENAI = ' + (data.enai_earned * 10) + ' cr）';
+    }
+  } catch (e) { /* silently ignore */ }
+}
+
+async function redeemEnai() {
+  const token = localStorage.getItem('authToken');
+  if (!token) { showToast('ログインが必要です'); return; }
+  const btn = document.getElementById('btnRedeem');
+  btn.disabled = true;
+  btn.textContent = '処理中...';
+  try {
+    const resp = await fetch('/api/v1/dev-mode/enai-redeem', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      showToast(data.enai_redeemed + ' ENAIを ' + data.credits_added + ' クレジットに交換しました！');
+      document.getElementById('enai-redeem-field').style.display = 'none';
+      document.getElementById('enai-earned-val').textContent = '0';
+    } else {
+      showToast('エラー: ' + (data.error || '不明'));
+    }
+  } catch (e) {
+    showToast('交換に失敗しました');
+  }
+  btn.disabled = false;
 }
 
 // Load settings from API
@@ -295,6 +397,7 @@ async function loadSettings() {
       }
     }
     renderTools();
+    loadDevModeStats();
   } catch (e) {
     console.error('Failed to load settings:', e);
     renderTools();
@@ -335,10 +438,18 @@ async function saveSettings() {
   }
   if (hasKeys) body.custom_api_keys = customKeys;
 
+  // Dev mode settings
+  body.dev_mode = devModeEnabled;
+  const walletVal = document.getElementById('solanaWallet').value.trim();
+  if (walletVal) body.solana_wallet = walletVal;
+
+  const authToken = localStorage.getItem('authToken');
+  const reqHeaders = { 'Content-Type': 'application/json' };
+  if (authToken) reqHeaders['Authorization'] = 'Bearer ' + authToken;
   try {
     const resp = await fetch('/api/v1/settings/' + encodeURIComponent(sid), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: reqHeaders,
       body: JSON.stringify(body),
     });
     const data = await resp.json();

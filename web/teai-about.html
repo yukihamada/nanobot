@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About - teai.io</title>
+  <meta name="description" content="teai.io — 開発者のためのAIインフラ。OpenAI互換APIで45+モデルを1つのエンドポイントで。日本語に最適化。">
+  <meta property="og:title" content="About teai.io">
+  <meta property="og:description" content="開発者のためのAIインフラ。OpenAI互換APIで45+モデルを1つのエンドポイントで。">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    :root { --bg:#0a0a0a; --surface:#141414; --border:#1e1e1e; --text:#e5e5e5; --muted:#777; --accent:#10b981; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }
+    .logo { font-size:18px; font-weight:700; text-decoration:none; color:var(--text); }
+    .logo span { color:var(--accent); }
+    .nav-links a { color:var(--muted); text-decoration:none; font-size:14px; margin-left:16px; }
+    .nav-links a:hover { color:var(--text); }
+    .main { max-width:760px; margin:0 auto; padding:40px 24px 80px; }
+
+    /* Hero */
+    .hero { text-align:center; margin-bottom:60px; padding:48px 0 0; }
+    .hero h1 { font-size:36px; font-weight:800; letter-spacing:-1px; margin-bottom:10px; }
+    .hero h1 span { color:var(--accent); }
+    .hero .sub { color:var(--muted); font-size:16px; margin-top:8px; }
+    .hero .tagline { margin-top:24px; font-size:15px; color:var(--text); line-height:1.7; }
+
+    /* Section */
+    .section { margin-bottom:48px; }
+    .section h2 { font-size:20px; font-weight:700; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+    .section p { color:var(--muted); font-size:14px; line-height:1.8; margin-bottom:10px; }
+
+    /* Feature cards */
+    .features { display:grid; gap:12px; margin-top:8px; }
+    .feature { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 20px; display:flex; gap:16px; align-items:flex-start; }
+    .feature-icon { font-size:22px; flex-shrink:0; margin-top:2px; }
+    .feature-title { font-size:14px; font-weight:600; color:var(--text); margin-bottom:4px; }
+    .feature-desc { font-size:13px; color:var(--muted); line-height:1.7; }
+    .feature-badge { display:inline-block; font-size:11px; font-weight:600; color:var(--accent); background:rgba(16,185,129,.12); border:1px solid rgba(16,185,129,.25); border-radius:4px; padding:1px 7px; margin-left:6px; vertical-align:middle; }
+
+    /* Code snippet */
+    .code-block { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 20px; margin-top:12px; }
+    .code-block .label { font-size:11px; color:var(--muted); margin-bottom:8px; letter-spacing:.04em; text-transform:uppercase; }
+    .code-block pre { font-family:'SF Mono','Fira Code',monospace; font-size:12px; color:var(--text); line-height:1.7; overflow-x:auto; }
+    .code-block .hl { color:var(--accent); }
+
+    /* Tech stack */
+    .stack { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .stack-item { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:6px 12px; font-size:12px; color:var(--muted); }
+    .stack-item strong { color:var(--text); }
+
+    /* Company */
+    .company-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; margin-top:12px; }
+    .company-card p { color:var(--muted); font-size:14px; line-height:1.8; margin-bottom:0; }
+    .company-card .contact { margin-top:14px; font-size:13px; color:var(--muted); }
+    .company-card .contact a { color:var(--accent); text-decoration:none; }
+
+    /* Links */
+    .links { display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; }
+    .link-btn { display:inline-flex; align-items:center; gap:6px; text-decoration:none; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 16px; font-size:13px; color:var(--text); transition:border-color .15s; }
+    .link-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .link-btn.primary { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; }
+    .link-btn.primary:hover { opacity:.9; color:#000; }
+
+    footer { text-align:center; padding:24px; color:var(--muted); font-size:12px; }
+    footer a { color:var(--accent); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>te</span>ai.io</a>
+    <div class="nav-links">
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/security">Security</a>
+      <a href="/status">Status</a>
+      <a href="/about">About</a>
+    </div>
+  </nav>
+
+  <div class="main">
+
+    <!-- Hero -->
+    <div class="hero">
+      <h1>About <span>teai.io</span></h1>
+      <p class="sub">teai.ioについて</p>
+      <p class="tagline">開発者のためのAIインフラを、シンプルに。</p>
+    </div>
+
+    <!-- Mission -->
+    <div class="section">
+      <h2>ミッション</h2>
+      <p>
+        teai.io は、開発者が複数のLLMプロバイダーを意識せずにAIを活用できる統合APIゲートウェイです。
+        OpenAI互換のエンドポイントを1つ用意するだけで、GPT-4o・Claude・Gemini・DeepSeek・Qwen3など
+        45以上のモデルを切り替え不要で使えます。
+      </p>
+      <p>
+        日本語に特化した最適化を施し、国内の開発者・スタートアップが世界クラスのAIを最小コストで
+        プロダクトに組み込めることを目指しています。
+      </p>
+    </div>
+
+    <!-- Why teai.io -->
+    <div class="section">
+      <h2>なぜ teai.io か</h2>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">🔌</div>
+          <div>
+            <div class="feature-title">OpenAI SDKそのまま使える <span class="feature-badge">1行変更</span></div>
+            <div class="feature-desc">
+              既存コードの <code style="color:var(--accent)">base_url</code> を <code style="color:var(--accent)">https://api.teai.io</code> に変えるだけ。
+              ライブラリの置き換え不要、移行コストゼロ。
+            </div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🗂️</div>
+          <div>
+            <div class="feature-title">45+モデル対応</div>
+            <div class="feature-desc">
+              GPT-4o、Claude Sonnet、Gemini 2.5、DeepSeek V3、Qwen3など主要モデルを網羅。
+              用途・コスト・速度に合わせてモデルを自在に選択。
+            </div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🇯🇵</div>
+          <div>
+            <div class="feature-title">日本語特化モデル Nemotron 9B <span class="feature-badge">無料</span></div>
+            <div class="feature-desc">
+              NVIDIA Nemotron Nano 9B v2 Japanese を無料枠として提供。
+              日本語タスクに最適化されたモデルをクレジット不要で利用可能。
+            </div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">⚡</div>
+          <div>
+            <div class="feature-title">自動フェイルオーバー</div>
+            <div class="feature-desc">
+              プロバイダー障害・レートリミット・タイムアウト発生時に次のモデルへ自動切替。
+              サーキットブレーカー + ラウンドロビンで高可用性を実現。
+            </div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🗼</div>
+          <div>
+            <div class="feature-title">東京リージョン</div>
+            <div class="feature-desc">
+              AWS ap-northeast-1（東京）にデプロイ済み。国内ユーザーへの低レイテンシを優先。
+              データは日本国内に保管。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Code example -->
+      <div class="code-block" style="margin-top:20px;">
+        <div class="label">移行サンプル (Python)</div>
+        <pre><span style="color:#777"># Before</span>
+client = OpenAI(api_key=<span class="hl">"sk-..."</span>)
+
+<span style="color:#777"># After — base_url を変えるだけ</span>
+client = OpenAI(
+    api_key=<span class="hl">"cw_your_teai_key"</span>,
+    base_url=<span class="hl">"https://api.teai.io"</span>,
+)</pre>
+      </div>
+    </div>
+
+    <!-- Tech Stack -->
+    <div class="section">
+      <h2>技術スタック</h2>
+      <p>信頼性・性能・低コストを両立するために、以下の技術スタックを採用しています。</p>
+      <div class="stack">
+        <div class="stack-item"><strong>Rust</strong> (axum 0.7) — コアAPI</div>
+        <div class="stack-item"><strong>AWS Lambda</strong> ARM64 — サーバーレス実行</div>
+        <div class="stack-item"><strong>API Gateway</strong> — エッジルーティング</div>
+        <div class="stack-item"><strong>DynamoDB</strong> — セッション・認証・課金</div>
+        <div class="stack-item"><strong>マルチプロバイダーLB</strong> — 自動フェイルオーバー</div>
+        <div class="stack-item"><strong>SSE Streaming</strong> — リアルタイム応答</div>
+      </div>
+      <p style="margin-top:14px;">
+        Rustによるゼロコスト抽象化でLambdaのコールドスタートを最小化。
+        Tokio非同期ランタイムで高並列なストリーミングリクエストを処理します。
+      </p>
+    </div>
+
+    <!-- Company -->
+    <div class="section">
+      <h2>運営会社</h2>
+      <div class="company-card">
+        <p>
+          teai.io は <strong style="color:var(--text)">株式会社イネブラ</strong> が開発・運営しています。
+          テクノロジーで人々をエンパワーする企業として、開発者コミュニティへの貢献を重視し、
+          AIインフラのコモディティ化を推進しています。
+        </p>
+        <table style="width:100%;margin-top:16px;font-size:14px;border-collapse:collapse;">
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:10px 0;color:var(--muted);width:120px;">商号</td>
+            <td style="padding:10px 0;color:var(--text);">株式会社イネブラ (Enabler Inc.)</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:10px 0;color:var(--muted);">代表者</td>
+            <td style="padding:10px 0;color:var(--text);">濱田 優貴</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:10px 0;color:var(--muted);">設立</td>
+            <td style="padding:10px 0;color:var(--text);">2024年</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:10px 0;color:var(--muted);">資本金</td>
+            <td style="padding:10px 0;color:var(--text);">100万円</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:10px 0;color:var(--muted);">所在地</td>
+            <td style="padding:10px 0;color:var(--text);">東京都</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:10px 0;color:var(--muted);">事業内容</td>
+            <td style="padding:10px 0;color:var(--text);">AI APIインフラ、LLMゲートウェイサービスの開発・運営</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 0;color:var(--muted);">URL</td>
+            <td style="padding:10px 0;"><a href="https://enablerhq.com" style="color:var(--accent);">enablerhq.com</a></td>
+          </tr>
+        </table>
+        <div class="contact" style="margin-top:16px;">
+          お問い合わせ: <a href="mailto:info@enablerhq.com">info@enablerhq.com</a><br>
+          セキュリティ: <a href="mailto:security@enablerhq.com">security@enablerhq.com</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Links -->
+    <div class="section">
+      <h2>リンク</h2>
+      <div class="links">
+        <a href="/" class="link-btn primary">今すぐ試す</a>
+        <a href="/docs" class="link-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          ドキュメント
+        </a>
+        <a href="/pricing" class="link-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          料金プラン
+        </a>
+        <a href="https://github.com/yukihamada/nanobot" target="_blank" rel="noopener" class="link-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>&copy; 2026 株式会社イネブラ. <a href="/terms">Terms</a> | <a href="/privacy">Privacy</a> | <a href="/security">Security</a> | <a href="/sla">SLA</a> | <a href="/status">Status</a> | <a href="/about">About</a></footer>
+</body>
+</html>

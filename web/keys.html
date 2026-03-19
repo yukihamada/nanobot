@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-3YF25NMXG8"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-3YF25NMXG8');</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Keys - chatweb.ai</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F511;</text></svg>">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif;background:#0a0a0a;color:#e0e0e0;min-height:100vh}
+.nav{display:flex;justify-content:space-between;align-items:center;padding:12px 24px;background:rgba(20,20,20,0.95);border-bottom:1px solid #222;position:sticky;top:0;z-index:100}
+.nav a{color:#999;text-decoration:none;font-size:14px;margin-left:16px;transition:color .2s}
+.nav a:hover,.nav a.active{color:#fff}
+.logo{font-size:18px;font-weight:700;color:#fff;text-decoration:none}
+.container{max-width:800px;margin:0 auto;padding:32px 16px 80px}
+h1{font-size:24px;font-weight:700;margin-bottom:8px}
+.subtitle{color:#888;font-size:14px;margin-bottom:32px}
+.section{background:#141414;border:1px solid #222;border-radius:12px;padding:24px;margin-bottom:24px}
+.section-title{font-size:16px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.section-desc{font-size:13px;color:#888;margin-bottom:20px}
+.btn{padding:8px 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn-primary{background:#4f8fff;color:#fff}
+.btn-primary:hover{background:#6fa0ff}
+.btn-sm{padding:6px 12px;font-size:12px}
+.btn-danger{background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
+.btn-danger:hover{background:rgba(239,68,68,0.2)}
+.btn-ghost{background:transparent;color:#888;border:1px solid #333}
+.btn-ghost:hover{color:#fff;border-color:#555}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.key-list{display:flex;flex-direction:column;gap:10px}
+.key-card{background:#0e0e0e;border:1px solid #2a2a2a;border-radius:10px;padding:16px;display:flex;align-items:center;gap:12px;transition:border-color .2s}
+.key-card:hover{border-color:#333}
+.key-icon{width:36px;height:36px;border-radius:8px;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.key-info{flex:1;min-width:0}
+.key-name{font-size:14px;font-weight:600;margin-bottom:3px}
+.key-prefix{font-size:12px;font-family:monospace;color:#4f8fff;background:rgba(79,143,255,0.08);padding:2px 8px;border-radius:4px;display:inline-block}
+.key-meta{font-size:11px;color:#555;margin-top:4px}
+.key-actions{display:flex;gap:6px;flex-shrink:0}
+.empty{text-align:center;padding:48px 20px;color:#555}
+.empty-icon{font-size:40px;margin-bottom:12px}
+.empty p{font-size:14px;color:#666;margin-bottom:20px}
+.new-key-form{display:none;background:#0e0e0e;border:1px solid #333;border-radius:10px;padding:20px;margin-bottom:16px}
+.new-key-form.show{display:block}
+.form-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.form-row input{flex:1;min-width:200px;padding:10px 12px;background:#0a0a0a;border:1px solid #333;border-radius:8px;color:#fff;font-size:14px;outline:none}
+.form-row input:focus{border-color:#4f8fff}
+.key-reveal{background:#0a0a0a;border:1px solid #22c55e;border-radius:10px;padding:16px;margin-bottom:16px;display:none}
+.key-reveal.show{display:block}
+.key-reveal h4{font-size:13px;font-weight:700;color:#22c55e;margin-bottom:8px}
+.key-reveal p{font-size:12px;color:#888;margin-bottom:12px}
+.key-value{font-family:monospace;font-size:13px;background:#0e0e0e;border:1px solid #333;border-radius:6px;padding:10px 12px;color:#22c55e;word-break:break-all;margin-bottom:10px;user-select:all}
+.docs-section{background:#0f0f1a;border:1px solid #2a2a3a;border-radius:10px;padding:20px}
+.docs-title{font-size:14px;font-weight:700;color:#818cf8;margin-bottom:12px}
+.code-block{background:#0a0a0a;border:1px solid #2a2a2a;border-radius:8px;padding:14px;font-size:12px;font-family:monospace;overflow-x:auto;margin-bottom:12px;line-height:1.7;position:relative}
+.code-block pre{color:#cdd6f4;white-space:pre}
+.code-block .comment{color:#6c7086}
+.code-block .string{color:#a6e3a1}
+.code-block .keyword{color:#cba6f7}
+.code-block .var{color:#89b4fa}
+.copy-btn{position:absolute;top:8px;right:8px;background:#1e1e2e;border:1px solid #313244;border-radius:6px;color:#cdd6f4;font-size:11px;padding:4px 8px;cursor:pointer;transition:all .2s}
+.copy-btn:hover{background:#313244}
+.tab-row{display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid #2a2a2a;padding-bottom:0}
+.tab{padding:8px 16px;font-size:13px;font-weight:600;color:#888;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;margin-bottom:-1px}
+.tab.active{color:#818cf8;border-bottom-color:#818cf8}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.credit-info{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.credit-card{background:#0a0a0a;border:1px solid #2a2a2a;border-radius:8px;padding:12px 16px;flex:1;min-width:120px}
+.credit-val{font-size:20px;font-weight:700;color:#4f8fff}
+.credit-label{font-size:11px;color:#555;margin-top:2px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#2a2a2a;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;transition:transform .3s;z-index:2000;border:1px solid #444}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:#141414;border:1px solid #333;border-radius:12px;padding:24px;max-width:400px;width:100%}
+.modal h3{font-size:16px;font-weight:700;margin-bottom:12px}
+.modal p{font-size:14px;color:#888;margin-bottom:20px;line-height:1.6}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+@media(max-width:600px){.form-row{flex-direction:column}.credit-info{flex-direction:column}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a href="/" class="logo">chatweb.ai</a>
+  <div>
+    <a href="/">Chat</a>
+    <a href="/conversations">Conversations</a>
+    <a href="/settings">Settings</a>
+    <a href="/keys" class="active">API Keys</a>
+  </div>
+</nav>
+<div class="container">
+  <h1>API Keys</h1>
+  <p class="subtitle">chatweb.ai をOpenRouter代替のAIゲートウェイとして利用できます。ベースURL: <code style="color:#4f8fff;background:#0f0f1a;padding:2px 6px;border-radius:4px">https://api.chatweb.ai</code></p>
+
+  <!-- Credit info -->
+  <div class="credit-info" id="creditInfo">
+    <div class="credit-card"><div class="credit-val" id="creditsVal">--</div><div class="credit-label">残りクレジット</div></div>
+    <div class="credit-card"><div class="credit-val" id="planVal">--</div><div class="credit-label">プラン</div></div>
+    <div class="credit-card"><div class="credit-val" id="keyCountVal">0</div><div class="credit-label">発行済みAPIキー</div></div>
+  </div>
+
+  <!-- Keys section -->
+  <div class="section">
+    <div class="section-title">&#128273; APIキー管理</div>
+    <div class="section-desc">APIキーを使ってプログラムからchatweb.aiを呼び出せます。キーは一度しか表示されません。</div>
+
+    <!-- New key reveal -->
+    <div class="key-reveal" id="keyReveal">
+      <h4>&#10003; APIキーが発行されました</h4>
+      <p>このキーは今後表示されません。今すぐコピーして安全な場所に保存してください。</p>
+      <div class="key-value" id="newKeyValue"></div>
+      <button class="btn btn-primary btn-sm" onclick="copyNewKey()">コピーする</button>
+      <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="closeReveal()">閉じる</button>
+    </div>
+
+    <!-- New key form -->
+    <div class="new-key-form" id="newKeyForm">
+      <div class="form-row">
+        <input type="text" id="newKeyName" placeholder="キー名（例: my-app, production）" maxlength="50">
+        <button class="btn btn-primary" onclick="createKey()">発行する</button>
+        <button class="btn btn-ghost" onclick="toggleForm(false)">キャンセル</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px">
+      <button class="btn btn-primary" id="showFormBtn" onclick="toggleForm(true)">+ 新しいAPIキーを発行</button>
+    </div>
+
+    <div id="keyList" class="key-list">
+      <div style="color:#666;font-size:14px;padding:20px 0;text-align:center">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- Docs section -->
+  <div class="section">
+    <div class="section-title">&#128196; 使い方</div>
+    <div class="section-desc">OpenAI互換API — 既存のOpenAI SDKやツールをそのまま使えます。</div>
+
+    <div class="tab-row">
+      <div class="tab active" onclick="switchTab('python')">Python</div>
+      <div class="tab" onclick="switchTab('node')">Node.js</div>
+      <div class="tab" onclick="switchTab('curl')">cURL</div>
+      <div class="tab" onclick="switchTab('openrouter')">OpenRouter比較</div>
+    </div>
+
+    <div class="tab-content active" id="tab-python">
+      <div class="code-block">
+        <button class="copy-btn" onclick="copyCode('python')">コピー</button>
+        <pre id="code-python"><span class="keyword">from</span> openai <span class="keyword">import</span> OpenAI
+
+client = OpenAI(
+    api_key=<span class="string">"cw_your_api_key_here"</span>,
+    base_url=<span class="string">"https://api.chatweb.ai/v1"</span>,
+)
+
+response = client.chat.completions.create(
+    model=<span class="string">"minimax/minimax-m2.5"</span>,  <span class="comment"># or any model</span>
+    messages=[{<span class="string">"role"</span>: <span class="string">"user"</span>, <span class="string">"content"</span>: <span class="string">"Hello!"</span>}]
+)
+<span class="keyword">print</span>(response.choices[0].message.content)</pre>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-node">
+      <div class="code-block">
+        <button class="copy-btn" onclick="copyCode('node')">コピー</button>
+        <pre id="code-node"><span class="keyword">import</span> OpenAI <span class="keyword">from</span> <span class="string">"openai"</span>;
+
+<span class="keyword">const</span> <span class="var">client</span> = <span class="keyword">new</span> OpenAI({
+  apiKey: <span class="string">"cw_your_api_key_here"</span>,
+  baseURL: <span class="string">"https://api.chatweb.ai/v1"</span>,
+});
+
+<span class="keyword">const</span> <span class="var">response</span> = <span class="keyword">await</span> client.chat.completions.create({
+  model: <span class="string">"minimax/minimax-m2.5"</span>,
+  messages: [{ role: <span class="string">"user"</span>, content: <span class="string">"Hello!"</span> }],
+});
+console.log(response.choices[0].message.content);</pre>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-curl">
+      <div class="code-block">
+        <button class="copy-btn" onclick="copyCode('curl')">コピー</button>
+        <pre id="code-curl">curl https://api.chatweb.ai/v1/chat/completions \
+  -H <span class="string">"Authorization: Bearer cw_your_api_key_here"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{
+    "model": "minimax/minimax-m2.5",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'</span></pre>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-openrouter">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div style="background:#0a0a0a;border:1px solid #2a2a2a;border-radius:8px;padding:14px">
+          <div style="font-size:12px;font-weight:700;color:#888;margin-bottom:8px">OpenRouter</div>
+          <div style="font-size:12px;font-family:monospace;color:#cdd6f4;line-height:1.8">base_url = "https://openrouter.ai/api/v1"<br>api_key = "sk-or-..."</div>
+        </div>
+        <div style="background:#0a0a0a;border:1px solid #4f8fff40;border-radius:8px;padding:14px">
+          <div style="font-size:12px;font-weight:700;color:#4f8fff;margin-bottom:8px">chatweb.ai</div>
+          <div style="font-size:12px;font-family:monospace;color:#cdd6f4;line-height:1.8">base_url = "https://api.chatweb.ai/v1"<br>api_key = "cw_..."</div>
+        </div>
+      </div>
+      <div style="font-size:13px;color:#888;line-height:1.7">
+        chatweb.aiはOpenRouter互換のAIゲートウェイです。同じモデル名・同じSDKでそのまま切り替えられます。
+        <br>Developer Modeを有効にすると会話がENAIトークン報酬に変わります。
+      </div>
+    </div>
+
+    <div style="margin-top:16px;padding:14px;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:8px;font-size:13px;color:#888;line-height:1.7">
+      <strong style="color:#e0e0e0">対応モデル:</strong> GET /v1/models で一覧取得できます。
+      minimax/minimax-m2.5, moonshotai/kimi-k2.5, openai/o4-mini, anthropic/claude-* など100+モデルに対応。
+      クレジット残高が足りない場合は HTTP 402 が返ります。
+    </div>
+  </div>
+</div>
+
+<!-- Delete confirm modal -->
+<div class="modal-bg" id="deleteModal">
+  <div class="modal">
+    <h3>APIキーを削除</h3>
+    <p id="deleteModalText">このAPIキーを削除しますか？削除すると、そのキーを使ったアクセスがすべて無効になります。</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-danger" id="deleteConfirmBtn" onclick="confirmDeleteKey()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const token = localStorage.getItem('authToken');
+let deleteTargetId = null;
+
+function showToast(msg, ms) {
+  ms = ms || 2500;
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, ms);
+}
+
+function closeModal() { document.getElementById('deleteModal').classList.remove('open'); }
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function relativeDate(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('ja-JP');
+}
+
+async function loadAccount() {
+  if (!token) return;
+  try {
+    var resp = await fetch('/api/v1/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+    var d = await resp.json();
+    if (d.credits_remaining !== undefined) document.getElementById('creditsVal').textContent = d.credits_remaining.toLocaleString();
+    if (d.plan) document.getElementById('planVal').textContent = d.plan.charAt(0).toUpperCase() + d.plan.slice(1);
+  } catch(e) {}
+}
+
+async function loadKeys() {
+  if (!token) {
+    document.getElementById('keyList').innerHTML = '<div class="empty"><div class="empty-icon">&#128274;</div><p>ログインするとAPIキーを管理できます。</p><a href="/" class="btn btn-primary" onclick="localStorage.setItem(\'showAuth\',\'1\')">ログイン</a></div>';
+    return;
+  }
+  try {
+    var resp = await fetch('/api/v1/apikeys', { headers: { 'Authorization': 'Bearer ' + token } });
+    var data = await resp.json();
+    var keys = data.api_keys || [];
+    document.getElementById('keyCountVal').textContent = keys.length;
+    renderKeys(keys);
+  } catch(e) {
+    document.getElementById('keyList').innerHTML = '<div style="color:#666;font-size:14px;padding:20px 0;text-align:center">読み込みエラー</div>';
+  }
+}
+
+function renderKeys(keys) {
+  var list = document.getElementById('keyList');
+  if (!keys.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">&#128273;</div><p>APIキーがありません。上のボタンから発行してください。</p></div>';
+    return;
+  }
+  list.innerHTML = '';
+  keys.forEach(function(k) {
+    var card = document.createElement('div');
+    card.className = 'key-card';
+    card.innerHTML =
+      '<div class="key-icon">&#128273;</div>' +
+      '<div class="key-info">' +
+        '<div class="key-name">' + esc(k.name || 'default') + '</div>' +
+        '<div class="key-prefix">' + esc(k.key_prefix || '') + '</div>' +
+        '<div class="key-meta">作成: ' + relativeDate(k.created_at) + '</div>' +
+      '</div>' +
+      '<div class="key-actions">' +
+        '<button class="btn btn-ghost btn-sm" onclick="promptDeleteKey(\'' + esc(k.id) + '\',\'' + esc(k.name||'default') + '\')">削除</button>' +
+      '</div>';
+    list.appendChild(card);
+  });
+}
+
+function toggleForm(show) {
+  document.getElementById('newKeyForm').classList.toggle('show', show);
+  document.getElementById('showFormBtn').style.display = show ? 'none' : '';
+  if (show) document.getElementById('newKeyName').focus();
+}
+
+async function createKey() {
+  var name = document.getElementById('newKeyName').value.trim() || 'default';
+  try {
+    var resp = await fetch('/api/v1/apikeys', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name })
+    });
+    var data = await resp.json();
+    if (data.api_key) {
+      toggleForm(false);
+      document.getElementById('newKeyName').value = '';
+      document.getElementById('newKeyValue').textContent = data.api_key;
+      document.getElementById('keyReveal').classList.add('show');
+      await loadKeys();
+    } else {
+      showToast('エラー: ' + (data.error || '不明'));
+    }
+  } catch(e) { showToast('発行に失敗しました'); }
+}
+
+function copyNewKey() {
+  var val = document.getElementById('newKeyValue').textContent;
+  navigator.clipboard.writeText(val).then(function(){ showToast('コピーしました'); });
+}
+
+function closeReveal() { document.getElementById('keyReveal').classList.remove('show'); }
+
+function promptDeleteKey(id, name) {
+  deleteTargetId = id;
+  document.getElementById('deleteModalText').textContent = '「' + name + '」を削除しますか？このキーを使ったアクセスがすべて無効になります。';
+  document.getElementById('deleteModal').classList.add('open');
+}
+
+async function confirmDeleteKey() {
+  var btn = document.getElementById('deleteConfirmBtn');
+  btn.disabled = true;
+  try {
+    var resp = await fetch('/api/v1/apikeys/' + deleteTargetId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+    var d = await resp.json();
+    if (d.ok !== false) { showToast('削除しました'); await loadKeys(); }
+    else showToast('削除に失敗しました');
+  } catch(e) { showToast('エラーが発生しました'); }
+  closeModal();
+  btn.disabled = false;
+}
+
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelector('.tab[onclick="switchTab(\'' + id + '\')"]').classList.add('active');
+  document.getElementById('tab-' + id).classList.add('active');
+}
+
+function copyCode(id) {
+  var code = document.getElementById('code-' + id).innerText;
+  navigator.clipboard.writeText(code).then(function(){ showToast('コードをコピーしました'); });
+}
+
+document.getElementById('newKeyName').addEventListener('keydown', function(e){ if (e.key === 'Enter') createKey(); });
+document.getElementById('deleteModal').addEventListener('click', function(e){ if (e.target === this) closeModal(); });
+
+loadAccount();
+loadKeys();
+</script>
+</body>
+</html>

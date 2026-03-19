@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Reference - teai.io</title>
+  <meta name="description" content="teai.io LLM API Gateway — 完全なAPIリファレンス。OpenAI互換エンドポイント、認証、エラーコード、SDK例。">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    :root{--bg:#09090b;--surface:#18181b;--surface2:#27272a;--border:#3f3f46;--text:#fafafa;--muted:#a1a1aa;--accent:#10b981;--accent2:#34d399;--code-bg:#0d1117;--green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--blue:#3b82f6;--purple:#a855f7}
+    *{margin:0;padding:0;box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI','Hiragino Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+
+    /* Nav */
+    nav{padding:14px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(9,9,11,.92);backdrop-filter:blur(12px);z-index:100}
+    .logo{font-size:18px;font-weight:700;text-decoration:none;color:var(--text)}.logo span{color:var(--accent)}
+    .logo-label{color:var(--muted);font-weight:400;font-size:14px;margin-left:8px}
+    .nav-r{display:flex;align-items:center;gap:20px}
+    .nav-r a{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;transition:color .15s}.nav-r a:hover{color:var(--text)}
+
+    /* Layout */
+    .layout{display:flex;max-width:1400px;margin:0 auto}
+    .sidebar{width:260px;min-width:260px;border-right:1px solid var(--border);padding:24px 16px;position:sticky;top:57px;height:calc(100vh - 57px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--surface2) transparent}
+    .sidebar::-webkit-scrollbar{width:4px}.sidebar::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:2px}
+    .sidebar h4{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:20px 0 8px;font-weight:600}
+    .sidebar h4:first-child{margin-top:0}
+    .sidebar a{display:block;color:var(--muted);text-decoration:none;font-size:13px;padding:5px 10px;border-radius:6px;transition:all .15s;border-left:2px solid transparent}
+    .sidebar a:hover{color:var(--text);background:var(--surface)}
+    .sidebar a.active{color:var(--accent);background:rgba(16,185,129,.08);border-left-color:var(--accent)}
+    .sidebar .method-tag{font-size:9px;font-weight:700;letter-spacing:.3px;padding:1px 4px;border-radius:3px;margin-right:4px;font-family:'SF Mono',Menlo,monospace;vertical-align:1px}
+    .sidebar .method-tag.get{background:rgba(34,197,94,.15);color:var(--green)}
+    .sidebar .method-tag.post{background:rgba(59,130,246,.15);color:var(--blue)}
+    .sidebar .method-tag.del{background:rgba(239,68,68,.15);color:var(--red)}
+
+    /* Content */
+    .content{flex:1;padding:40px 48px 100px;min-width:0;max-width:900px}
+    h1{font-size:36px;font-weight:800;letter-spacing:-.5px;margin-bottom:8px}
+    .subtitle{color:var(--muted);font-size:15px;margin-bottom:36px;line-height:1.7}
+    .section{margin-bottom:56px;scroll-margin-top:80px}
+    .section h2{font-size:24px;font-weight:700;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+    .section h3{font-size:17px;font-weight:600;margin:24px 0 10px;color:var(--text)}
+    .section h4{font-size:14px;font-weight:600;margin:16px 0 8px;color:var(--muted)}
+    .section p,.section li{color:#d4d4d8;font-size:14px;line-height:1.8;margin-bottom:8px}
+    .section ul,.section ol{padding-left:20px;margin-bottom:16px}
+
+    /* Base URL */
+    .base-url{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 20px;margin-bottom:28px;font-family:'SF Mono',Menlo,monospace;font-size:15px;color:var(--accent2);display:flex;justify-content:space-between;align-items:center}
+    .base-url button{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s}
+    .base-url button:hover{opacity:.85}
+    .base-url button:active{transform:scale(.97)}
+
+    /* Endpoint cards */
+    .endpoint{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;overflow:hidden}
+    .endpoint-header{padding:16px 20px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .15s}
+    .endpoint-header:hover{background:var(--surface2)}
+    .endpoint-body{padding:0 20px 20px;border-top:1px solid var(--border)}
+    .method{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.3px;padding:3px 8px;border-radius:4px;font-family:'SF Mono',Menlo,monospace;min-width:52px;text-align:center}
+    .method.get{background:rgba(34,197,94,.15);color:var(--green)}
+    .method.post{background:rgba(59,130,246,.15);color:var(--blue)}
+    .method.delete{background:rgba(239,68,68,.15);color:var(--red)}
+    .endpoint-path{font-family:'SF Mono',Menlo,monospace;font-size:14px;color:var(--text);font-weight:500}
+    .endpoint-desc{color:var(--muted);font-size:13px;margin-left:auto}
+
+    /* Badges */
+    .badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-left:8px;letter-spacing:.3px}
+    .badge-free{background:rgba(34,197,94,.12);color:var(--green)}
+    .badge-auth{background:rgba(245,158,11,.12);color:var(--yellow)}
+    .badge-admin{background:rgba(168,85,247,.12);color:var(--purple)}
+
+    /* Code */
+    pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:13px;line-height:1.65;margin:10px 0 16px;position:relative}
+    code{font-family:'SF Mono',Menlo,'Courier New',monospace}
+    .inline-code{background:var(--surface);border:1px solid var(--border);padding:2px 7px;border-radius:4px;font-size:13px;color:var(--accent2)}
+
+    /* Syntax colors */
+    .hl-key{color:#7dd3fc}.hl-str{color:#86efac}.hl-num{color:#fbbf24}.hl-bool{color:#c084fc}.hl-null{color:#a1a1aa}.hl-comment{color:#6b7280;font-style:italic}.hl-kw{color:#f472b6}.hl-fn{color:#93c5fd}.hl-type{color:#fbbf24}
+
+    /* Tables */
+    table{width:100%;border-collapse:collapse;margin:14px 0 20px;font-size:13px}
+    thead th{text-align:left;padding:10px 14px;border-bottom:2px solid var(--border);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+    td{padding:10px 14px;border-bottom:1px solid rgba(63,63,70,.5);color:#d4d4d8}
+    tr:hover td{background:rgba(255,255,255,.02)}
+    td:first-child{font-family:'SF Mono',Menlo,monospace;color:var(--accent2);font-weight:600;font-size:12px;white-space:nowrap}
+    td code{font-size:12px;background:var(--surface);padding:1px 5px;border-radius:3px}
+
+    /* Param table */
+    .param-table td:first-child{color:var(--text)}
+    .param-table .param-name{font-family:'SF Mono',Menlo,monospace;color:var(--accent2);font-weight:600}
+    .param-table .param-type{color:var(--yellow);font-size:11px;font-family:'SF Mono',Menlo,monospace}
+    .param-table .param-required{color:var(--red);font-size:10px;font-weight:700;margin-left:6px}
+    .param-table .param-optional{color:var(--muted);font-size:10px;font-weight:600;margin-left:6px}
+
+    /* Tabs */
+    .tabs{display:flex;gap:2px;margin-bottom:0;flex-wrap:wrap}
+    .tab-btn{background:var(--surface);border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;padding:8px 16px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;font-family:inherit}
+    .tab-btn:hover{color:var(--text)}
+    .tab-btn.active{background:var(--code-bg);color:var(--accent);border-color:var(--border)}
+    .tab-content{display:none}.tab-content.active{display:block}
+    .tab-content pre{border-radius:0 8px 8px 8px;margin-top:0;border-top-left-radius:0}
+
+    /* Notes */
+    .note{background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:14px 18px;font-size:13px;color:#d4d4d8;margin:16px 0;line-height:1.7}
+    .note strong{color:var(--accent)}
+    .warning{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:14px 18px;font-size:13px;color:#d4d4d8;margin:16px 0;line-height:1.7}
+    .warning strong{color:var(--yellow)}
+    .danger{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:14px 18px;font-size:13px;color:#d4d4d8;margin:16px 0;line-height:1.7}
+    .danger strong{color:var(--red)}
+
+    /* Divider */
+    .divider{border:none;border-top:1px solid var(--border);margin:40px 0}
+
+    /* Copy button */
+    .copy-btn{position:absolute;top:8px;right:8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:10px;color:var(--muted);cursor:pointer;opacity:0;transition:all .15s;font-family:inherit}
+    pre:hover .copy-btn{opacity:1}
+    .copy-btn:hover{color:var(--text);background:var(--surface)}
+
+    /* Footer */
+    footer{text-align:center;padding:32px 24px;color:var(--muted);font-size:12px;border-top:1px solid var(--border)}
+    footer a{color:var(--accent);text-decoration:none}
+    footer a:hover{text-decoration:underline}
+
+    /* Responsive */
+    @media(max-width:1024px){
+      .sidebar{width:220px;min-width:220px}
+      .content{padding:32px 28px 80px}
+    }
+    @media(max-width:768px){
+      .sidebar{display:none}
+      .content{padding:24px 16px 60px}
+      h1{font-size:28px}
+      .base-url{font-size:13px;flex-direction:column;gap:10px;align-items:flex-start}
+      .endpoint-header{flex-wrap:wrap}
+      .endpoint-desc{margin-left:0;margin-top:4px}
+      table{font-size:12px}
+      td,th{padding:8px 8px}
+      pre{font-size:12px;padding:12px}
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="logo"><span>te</span>ai.io <span class="logo-label">API Reference</span></a>
+  <div class="nav-r">
+    <a href="/pricing">Pricing</a>
+    <a href="/docs">Docs</a>
+    <a href="/security">Security</a>
+    <a href="/status">Status</a>
+    <a href="/about">About</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <h4>Overview</h4>
+  <a href="#introduction" class="active">Introduction</a>
+  <a href="#authentication">Authentication</a>
+  <a href="#base-url">Base URL</a>
+
+  <h4>Endpoints</h4>
+  <a href="#chat-completions"><span class="method-tag post">POST</span>/v1/chat/completions</a>
+  <a href="#list-models"><span class="method-tag get">GET</span>/v1/models</a>
+  <a href="#models-pricing"><span class="method-tag get">GET</span>/v1/models/pricing</a>
+  <a href="#create-apikey"><span class="method-tag post">POST</span>/api/v1/apikeys</a>
+  <a href="#list-apikeys"><span class="method-tag get">GET</span>/api/v1/apikeys</a>
+  <a href="#delete-apikey"><span class="method-tag del">DEL</span>/api/v1/apikeys/{id}</a>
+  <a href="#auth-me"><span class="method-tag get">GET</span>/api/v1/auth/me</a>
+
+  <h4>Guides</h4>
+  <a href="#streaming">Streaming (SSE)</a>
+  <a href="#tool-calling">Tool Calling</a>
+  <a href="#failover">Failover</a>
+  <a href="#model-versioning">Model Versioning</a>
+
+  <h4>Reference</h4>
+  <a href="#error-codes">Error Codes</a>
+  <a href="#rate-limits">Rate Limits</a>
+  <a href="#timeouts">Timeouts</a>
+
+  <h4>SDKs</h4>
+  <a href="#sdk-examples">SDK Examples</a>
+</aside>
+
+<!-- Main Content -->
+<main class="content">
+
+  <!-- Introduction -->
+  <section id="introduction" class="section">
+    <h1>API Reference</h1>
+    <p class="subtitle">
+      teai.io LLM API Gateway -- OpenAI互換のユニファイドAPIで、GPT-4o、Claude、Gemini、その他多数のモデルに単一エンドポイントからアクセスできます。既存のOpenAI SDKをそのまま使用可能です。
+    </p>
+  </section>
+
+  <!-- Base URL -->
+  <section id="base-url" class="section">
+    <h2>Base URL</h2>
+    <div class="base-url">
+      <span>https://api.teai.io</span>
+      <button onclick="navigator.clipboard.writeText('https://api.teai.io');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
+    </div>
+    <p>すべてのAPIリクエストはHTTPS経由で上記ベースURLに送信します。HTTPリクエストはHTTPSにリダイレクトされます。</p>
+  </section>
+
+  <!-- Authentication -->
+  <section id="authentication" class="section">
+    <h2>Authentication</h2>
+    <p>APIリクエストにはAPIキーが必要です。<code class="inline-code">Authorization</code> ヘッダーにBearerトークンとして渡します。</p>
+
+    <pre><code><span class="hl-key">Authorization</span>: Bearer <span class="hl-str">te_your_api_key_here</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+    <p>APIキーは <code class="inline-code">cw_</code> または <code class="inline-code">te_</code> で始まります。ダッシュボードまたは <a href="#create-apikey" style="color:var(--accent)">APIキー作成エンドポイント</a> から発行できます。</p>
+
+    <div class="warning">
+      <strong>セキュリティ</strong>: APIキーはサーバーサイドでのみ使用してください。クライアントサイドのコードにAPIキーを含めないでください。
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ================================================================ -->
+  <!-- POST /v1/chat/completions -->
+  <!-- ================================================================ -->
+  <section id="chat-completions" class="section">
+    <h2>Chat Completions</h2>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method post">POST</span>
+        <span class="endpoint-path">/v1/chat/completions</span>
+        <span class="badge badge-free">FREE</span>
+        <span class="endpoint-desc">メインエンドポイント -- チャット応答を生成</span>
+      </div>
+      <div class="endpoint-body">
+        <p style="margin-top:16px;color:#d4d4d8;font-size:14px;">指定したモデルでチャット応答を生成します。OpenAI Chat Completions APIと完全互換です。</p>
+
+        <h4>Request Body</h4>
+        <table class="param-table">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="param-name">model</span><span class="param-required">REQUIRED</span></td>
+              <td><span class="param-type">string</span></td>
+              <td>モデルID。例: <code>gpt-4o</code>, <code>claude-sonnet-4-6</code>, <code>gemini-2.5-pro</code>, <code>auto</code></td>
+            </tr>
+            <tr>
+              <td><span class="param-name">messages</span><span class="param-required">REQUIRED</span></td>
+              <td><span class="param-type">array</span></td>
+              <td>メッセージ配列。各要素に <code>role</code> (<code>system</code> | <code>user</code> | <code>assistant</code> | <code>tool</code>) と <code>content</code> (string) を含む</td>
+            </tr>
+            <tr>
+              <td><span class="param-name">stream</span><span class="param-optional">optional</span></td>
+              <td><span class="param-type">boolean</span></td>
+              <td>SSEストリーミングを有効化。デフォルト: <code>false</code></td>
+            </tr>
+            <tr>
+              <td><span class="param-name">temperature</span><span class="param-optional">optional</span></td>
+              <td><span class="param-type">number</span></td>
+              <td>サンプリング温度 (0-2)。デフォルト: <code>1.0</code>。低いほど決定的、高いほどランダム</td>
+            </tr>
+            <tr>
+              <td><span class="param-name">max_tokens</span><span class="param-optional">optional</span></td>
+              <td><span class="param-type">integer</span></td>
+              <td>生成する最大トークン数。デフォルトはモデル依存</td>
+            </tr>
+            <tr>
+              <td><span class="param-name">top_p</span><span class="param-optional">optional</span></td>
+              <td><span class="param-type">number</span></td>
+              <td>Nucleus sampling (0-1)。デフォルト: <code>1.0</code></td>
+            </tr>
+            <tr>
+              <td><span class="param-name">tools</span><span class="param-optional">optional</span></td>
+              <td><span class="param-type">array</span></td>
+              <td>利用可能なツール定義の配列。OpenAI function calling形式</td>
+            </tr>
+            <tr>
+              <td><span class="param-name">tool_choice</span><span class="param-optional">optional</span></td>
+              <td><span class="param-type">string</span></td>
+              <td>ツール呼び出し制御。<code>auto</code> | <code>required</code> | <code>none</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Request Example</h4>
+        <pre><code>{
+  <span class="hl-key">"model"</span>: <span class="hl-str">"gpt-4o"</span>,
+  <span class="hl-key">"messages"</span>: [
+    {
+      <span class="hl-key">"role"</span>: <span class="hl-str">"system"</span>,
+      <span class="hl-key">"content"</span>: <span class="hl-str">"You are a helpful assistant."</span>
+    },
+    {
+      <span class="hl-key">"role"</span>: <span class="hl-str">"user"</span>,
+      <span class="hl-key">"content"</span>: <span class="hl-str">"What is the capital of France?"</span>
+    }
+  ],
+  <span class="hl-key">"stream"</span>: <span class="hl-bool">false</span>,
+  <span class="hl-key">"temperature"</span>: <span class="hl-num">0.7</span>,
+  <span class="hl-key">"max_tokens"</span>: <span class="hl-num">1024</span>
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+        <h4>Response (non-streaming)</h4>
+        <pre><code>{
+  <span class="hl-key">"id"</span>: <span class="hl-str">"chatcmpl-abc123"</span>,
+  <span class="hl-key">"object"</span>: <span class="hl-str">"chat.completion"</span>,
+  <span class="hl-key">"created"</span>: <span class="hl-num">1710000000</span>,
+  <span class="hl-key">"model"</span>: <span class="hl-str">"gpt-4o"</span>,
+  <span class="hl-key">"choices"</span>: [
+    {
+      <span class="hl-key">"index"</span>: <span class="hl-num">0</span>,
+      <span class="hl-key">"message"</span>: {
+        <span class="hl-key">"role"</span>: <span class="hl-str">"assistant"</span>,
+        <span class="hl-key">"content"</span>: <span class="hl-str">"The capital of France is Paris."</span>
+      },
+      <span class="hl-key">"finish_reason"</span>: <span class="hl-str">"stop"</span>
+    }
+  ],
+  <span class="hl-key">"usage"</span>: {
+    <span class="hl-key">"prompt_tokens"</span>: <span class="hl-num">25</span>,
+    <span class="hl-key">"completion_tokens"</span>: <span class="hl-num">8</span>,
+    <span class="hl-key">"total_tokens"</span>: <span class="hl-num">33</span>
+  }
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- Streaming -->
+  <!-- ================================================================ -->
+  <section id="streaming" class="section">
+    <h2>Streaming (SSE)</h2>
+    <p><code class="inline-code">"stream": true</code> を指定すると、Server-Sent Events (SSE) 形式でレスポンスがストリーミングされます。各チャンクは <code class="inline-code">data:</code> プレフィックス付きのJSON行として送信されます。</p>
+
+    <h4>SSE Format</h4>
+    <pre><code><span class="hl-comment">// 各チャンク</span>
+data: {<span class="hl-key">"id"</span>:<span class="hl-str">"chatcmpl-abc123"</span>,<span class="hl-key">"object"</span>:<span class="hl-str">"chat.completion.chunk"</span>,<span class="hl-key">"choices"</span>:[{<span class="hl-key">"index"</span>:<span class="hl-num">0</span>,<span class="hl-key">"delta"</span>:{<span class="hl-key">"content"</span>:<span class="hl-str">"Hello"</span>},<span class="hl-key">"finish_reason"</span>:<span class="hl-null">null</span>}]}
+
+data: {<span class="hl-key">"id"</span>:<span class="hl-str">"chatcmpl-abc123"</span>,<span class="hl-key">"object"</span>:<span class="hl-str">"chat.completion.chunk"</span>,<span class="hl-key">"choices"</span>:[{<span class="hl-key">"index"</span>:<span class="hl-num">0</span>,<span class="hl-key">"delta"</span>:{<span class="hl-key">"content"</span>:<span class="hl-str">" world"</span>},<span class="hl-key">"finish_reason"</span>:<span class="hl-null">null</span>}]}
+
+<span class="hl-comment">// 終了シグナル</span>
+data: [DONE]</code></pre>
+
+    <div class="note">
+      <strong>Note:</strong> 最初のチャンクの <code>delta</code> には <code>role: "assistant"</code> が含まれます。後続のチャンクには <code>content</code> のみが含まれます。ストリーム終了時は <code>data: [DONE]</code> が送信されます。
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- Tool Calling -->
+  <!-- ================================================================ -->
+  <section id="tool-calling" class="section">
+    <h2>Tool Calling</h2>
+    <p>OpenAI function calling形式でツールを定義し、モデルにツール呼び出しを生成させることができます。</p>
+
+    <h4>Request with Tools</h4>
+    <pre><code>{
+  <span class="hl-key">"model"</span>: <span class="hl-str">"gpt-4o"</span>,
+  <span class="hl-key">"messages"</span>: [{<span class="hl-key">"role"</span>: <span class="hl-str">"user"</span>, <span class="hl-key">"content"</span>: <span class="hl-str">"What's the weather in Tokyo?"</span>}],
+  <span class="hl-key">"tools"</span>: [
+    {
+      <span class="hl-key">"type"</span>: <span class="hl-str">"function"</span>,
+      <span class="hl-key">"function"</span>: {
+        <span class="hl-key">"name"</span>: <span class="hl-str">"get_weather"</span>,
+        <span class="hl-key">"description"</span>: <span class="hl-str">"Get current weather for a location"</span>,
+        <span class="hl-key">"parameters"</span>: {
+          <span class="hl-key">"type"</span>: <span class="hl-str">"object"</span>,
+          <span class="hl-key">"properties"</span>: {
+            <span class="hl-key">"location"</span>: {<span class="hl-key">"type"</span>: <span class="hl-str">"string"</span>}
+          },
+          <span class="hl-key">"required"</span>: [<span class="hl-str">"location"</span>]
+        }
+      }
+    }
+  ],
+  <span class="hl-key">"tool_choice"</span>: <span class="hl-str">"auto"</span>
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+    <h4>Response with Tool Call</h4>
+    <pre><code>{
+  <span class="hl-key">"choices"</span>: [{
+    <span class="hl-key">"message"</span>: {
+      <span class="hl-key">"role"</span>: <span class="hl-str">"assistant"</span>,
+      <span class="hl-key">"content"</span>: <span class="hl-null">null</span>,
+      <span class="hl-key">"tool_calls"</span>: [{
+        <span class="hl-key">"id"</span>: <span class="hl-str">"call_abc123"</span>,
+        <span class="hl-key">"type"</span>: <span class="hl-str">"function"</span>,
+        <span class="hl-key">"function"</span>: {
+          <span class="hl-key">"name"</span>: <span class="hl-str">"get_weather"</span>,
+          <span class="hl-key">"arguments"</span>: <span class="hl-str">"{\"location\":\"Tokyo\"}"</span>
+        }
+      }]
+    },
+    <span class="hl-key">"finish_reason"</span>: <span class="hl-str">"tool_calls"</span>
+  }]
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ================================================================ -->
+  <!-- GET /v1/models -->
+  <!-- ================================================================ -->
+  <section id="list-models" class="section">
+    <h2>List Models</h2>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/v1/models</span>
+        <span class="badge badge-free">FREE</span>
+        <span class="endpoint-desc">利用可能モデル一覧を取得</span>
+      </div>
+      <div class="endpoint-body">
+        <p style="margin-top:16px;color:#d4d4d8;font-size:14px;">認証不要。現在利用可能なすべてのモデルとそのメタデータを返します。</p>
+
+        <h4>Response</h4>
+        <pre><code>{
+  <span class="hl-key">"object"</span>: <span class="hl-str">"list"</span>,
+  <span class="hl-key">"data"</span>: [
+    {
+      <span class="hl-key">"id"</span>: <span class="hl-str">"gpt-4o"</span>,
+      <span class="hl-key">"object"</span>: <span class="hl-str">"model"</span>,
+      <span class="hl-key">"created"</span>: <span class="hl-num">1710000000</span>,
+      <span class="hl-key">"owned_by"</span>: <span class="hl-str">"openai"</span>
+    },
+    {
+      <span class="hl-key">"id"</span>: <span class="hl-str">"claude-sonnet-4-6"</span>,
+      <span class="hl-key">"object"</span>: <span class="hl-str">"model"</span>,
+      <span class="hl-key">"created"</span>: <span class="hl-num">1710000000</span>,
+      <span class="hl-key">"owned_by"</span>: <span class="hl-str">"anthropic"</span>
+    },
+    {
+      <span class="hl-key">"id"</span>: <span class="hl-str">"gemini-2.5-pro"</span>,
+      <span class="hl-key">"object"</span>: <span class="hl-str">"model"</span>,
+      <span class="hl-key">"created"</span>: <span class="hl-num">1710000000</span>,
+      <span class="hl-key">"owned_by"</span>: <span class="hl-str">"google"</span>
+    }
+  ]
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- GET /v1/models/pricing -->
+  <!-- ================================================================ -->
+  <section id="models-pricing" class="section">
+    <h2>Models Pricing</h2>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/v1/models/pricing</span>
+        <span class="badge badge-free">FREE</span>
+        <span class="endpoint-desc">モデル別料金情報</span>
+      </div>
+      <div class="endpoint-body">
+        <p style="margin-top:16px;color:#d4d4d8;font-size:14px;">各モデルの入力・出力トークン単価を返します（USD / 1Mトークン）。</p>
+
+        <h4>Response</h4>
+        <pre><code>{
+  <span class="hl-key">"models"</span>: {
+    <span class="hl-key">"gpt-4o"</span>: {
+      <span class="hl-key">"input_per_1m"</span>: <span class="hl-num">2.50</span>,
+      <span class="hl-key">"output_per_1m"</span>: <span class="hl-num">10.00</span>
+    },
+    <span class="hl-key">"claude-sonnet-4-6"</span>: {
+      <span class="hl-key">"input_per_1m"</span>: <span class="hl-num">3.00</span>,
+      <span class="hl-key">"output_per_1m"</span>: <span class="hl-num">15.00</span>
+    },
+    <span class="hl-key">"gemini-2.5-pro"</span>: {
+      <span class="hl-key">"input_per_1m"</span>: <span class="hl-num">1.25</span>,
+      <span class="hl-key">"output_per_1m"</span>: <span class="hl-num">5.00</span>
+    }
+  }
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ================================================================ -->
+  <!-- API Keys -->
+  <!-- ================================================================ -->
+  <section id="create-apikey" class="section">
+    <h2>API Keys</h2>
+
+    <!-- POST /api/v1/apikeys -->
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method post">POST</span>
+        <span class="endpoint-path">/api/v1/apikeys</span>
+        <span class="badge badge-auth">AUTH</span>
+        <span class="endpoint-desc">APIキーを作成</span>
+      </div>
+      <div class="endpoint-body">
+        <p style="margin-top:16px;color:#d4d4d8;font-size:14px;">新しいAPIキーを作成します。キーは作成時のみ全文が返されます。</p>
+
+        <h4>Request Body</h4>
+        <table class="param-table">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="param-name">name</span><span class="param-optional">optional</span></td>
+              <td><span class="param-type">string</span></td>
+              <td>APIキーの名前（管理用）</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Response</h4>
+        <pre><code>{
+  <span class="hl-key">"id"</span>: <span class="hl-str">"key_abc123"</span>,
+  <span class="hl-key">"name"</span>: <span class="hl-str">"My API Key"</span>,
+  <span class="hl-key">"key"</span>: <span class="hl-str">"te_sk_live_xxxxxxxxxxxxxxxxxxxx"</span>,
+  <span class="hl-key">"created_at"</span>: <span class="hl-str">"2026-03-10T00:00:00Z"</span>
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+        <div class="danger">
+          <strong>Important:</strong> APIキーの全文はこのレスポンスでのみ返されます。安全な場所に保存してください。
+        </div>
+      </div>
+    </div>
+
+    <!-- GET /api/v1/apikeys -->
+    <div class="endpoint" id="list-apikeys">
+      <div class="endpoint-header">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/v1/apikeys</span>
+        <span class="badge badge-auth">AUTH</span>
+        <span class="endpoint-desc">APIキー一覧</span>
+      </div>
+      <div class="endpoint-body">
+        <p style="margin-top:16px;color:#d4d4d8;font-size:14px;">自分のAPIキー一覧を取得します。キーはマスクされた状態で返されます。</p>
+
+        <h4>Response</h4>
+        <pre><code>{
+  <span class="hl-key">"keys"</span>: [
+    {
+      <span class="hl-key">"id"</span>: <span class="hl-str">"key_abc123"</span>,
+      <span class="hl-key">"name"</span>: <span class="hl-str">"My API Key"</span>,
+      <span class="hl-key">"key_preview"</span>: <span class="hl-str">"te_sk_...xxxx"</span>,
+      <span class="hl-key">"created_at"</span>: <span class="hl-str">"2026-03-10T00:00:00Z"</span>,
+      <span class="hl-key">"last_used_at"</span>: <span class="hl-str">"2026-03-10T12:34:56Z"</span>
+    }
+  ]
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      </div>
+    </div>
+
+    <!-- DELETE /api/v1/apikeys/{id} -->
+    <div class="endpoint" id="delete-apikey">
+      <div class="endpoint-header">
+        <span class="method delete">DELETE</span>
+        <span class="endpoint-path">/api/v1/apikeys/{id}</span>
+        <span class="badge badge-auth">AUTH</span>
+        <span class="endpoint-desc">APIキーを削除</span>
+      </div>
+      <div class="endpoint-body">
+        <p style="margin-top:16px;color:#d4d4d8;font-size:14px;">指定したAPIキーを無効化・削除します。削除後は即座に認証に使用できなくなります。</p>
+
+        <h4>Path Parameters</h4>
+        <table class="param-table">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="param-name">id</span><span class="param-required">REQUIRED</span></td>
+              <td><span class="param-type">string</span></td>
+              <td>削除するAPIキーのID</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4>Response</h4>
+        <pre><code>{
+  <span class="hl-key">"deleted"</span>: <span class="hl-bool">true</span>,
+  <span class="hl-key">"id"</span>: <span class="hl-str">"key_abc123"</span>
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ================================================================ -->
+  <!-- GET /api/v1/auth/me -->
+  <!-- ================================================================ -->
+  <section id="auth-me" class="section">
+    <h2>Account Info</h2>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/v1/auth/me</span>
+        <span class="badge badge-auth">AUTH</span>
+        <span class="endpoint-desc">アカウント情報・クレジット残高</span>
+      </div>
+      <div class="endpoint-body">
+        <p style="margin-top:16px;color:#d4d4d8;font-size:14px;">認証済みユーザーのアカウント情報とクレジット残高を返します。</p>
+
+        <h4>Response</h4>
+        <pre><code>{
+  <span class="hl-key">"user_id"</span>: <span class="hl-str">"usr_abc123"</span>,
+  <span class="hl-key">"email"</span>: <span class="hl-str">"user@example.com"</span>,
+  <span class="hl-key">"plan"</span>: <span class="hl-str">"pro"</span>,
+  <span class="hl-key">"credits_remaining"</span>: <span class="hl-num">4250</span>,
+  <span class="hl-key">"created_at"</span>: <span class="hl-str">"2026-01-15T00:00:00Z"</span>
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ================================================================ -->
+  <!-- Error Codes -->
+  <!-- ================================================================ -->
+  <section id="error-codes" class="section">
+    <h2>Error Codes</h2>
+    <p>APIはエラー時に統一されたJSON形式でレスポンスを返します。</p>
+
+    <h4>Error Response Format</h4>
+    <pre><code>{
+  <span class="hl-key">"error"</span>: {
+    <span class="hl-key">"type"</span>: <span class="hl-str">"rate_limit_exceeded"</span>,
+    <span class="hl-key">"message"</span>: <span class="hl-str">"Rate limit exceeded. Retry after 30 seconds."</span>,
+    <span class="hl-key">"retry_after"</span>: <span class="hl-num">30</span>
+  }
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+    <h4>Error Code Reference</h4>
+    <table>
+      <thead>
+        <tr><th>HTTP</th><th>error.type</th><th>Description</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>400</td>
+          <td style="font-family:'SF Mono',Menlo,monospace;color:var(--accent2)">invalid_request</td>
+          <td>リクエスト形式不正</td>
+          <td>パラメータを確認</td>
+        </tr>
+        <tr>
+          <td>401</td>
+          <td style="font-family:'SF Mono',Menlo,monospace;color:var(--accent2)">authentication_error</td>
+          <td>APIキー無効</td>
+          <td>APIキーを確認・再発行</td>
+        </tr>
+        <tr>
+          <td>402</td>
+          <td style="font-family:'SF Mono',Menlo,monospace;color:var(--accent2)">insufficient_credits</td>
+          <td>クレジット残高不足</td>
+          <td>クレジットを追加購入</td>
+        </tr>
+        <tr>
+          <td>404</td>
+          <td style="font-family:'SF Mono',Menlo,monospace;color:var(--accent2)">model_not_found</td>
+          <td>指定モデルが存在しない</td>
+          <td><code>/v1/models</code> で確認</td>
+        </tr>
+        <tr>
+          <td>429</td>
+          <td style="font-family:'SF Mono',Menlo,monospace;color:var(--accent2)">rate_limit_exceeded</td>
+          <td>レート制限超過</td>
+          <td><code>Retry-After</code> ヘッダーに従う</td>
+        </tr>
+        <tr>
+          <td>500</td>
+          <td style="font-family:'SF Mono',Menlo,monospace;color:var(--accent2)">internal_error</td>
+          <td>サーバー内部エラー</td>
+          <td>リトライ（エクスポネンシャルバックオフ）</td>
+        </tr>
+        <tr>
+          <td>502</td>
+          <td style="font-family:'SF Mono',Menlo,monospace;color:var(--accent2)">upstream_error</td>
+          <td>上流プロバイダーエラー</td>
+          <td>別モデルを試す or リトライ</td>
+        </tr>
+        <tr>
+          <td>503</td>
+          <td style="font-family:'SF Mono',Menlo,monospace;color:var(--accent2)">service_unavailable</td>
+          <td>メンテナンス中</td>
+          <td>ステータスページを確認</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- Rate Limits -->
+  <!-- ================================================================ -->
+  <section id="rate-limits" class="section">
+    <h2>Rate Limits</h2>
+    <p>プランごとにレート制限が設定されています。制限超過時はエラーレスポンスが返されます。</p>
+
+    <h4>Plan Limits</h4>
+    <table>
+      <thead>
+        <tr><th>Plan</th><th>Requests/hour</th><th>Requests/day</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="color:var(--muted)">Guest (未認証)</td>
+          <td>30</td>
+          <td>30</td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted)">Free (認証済み)</td>
+          <td>120</td>
+          <td>500</td>
+        </tr>
+        <tr>
+          <td style="color:var(--accent)">Pro</td>
+          <td>120</td>
+          <td>30,000</td>
+        </tr>
+        <tr>
+          <td>Business</td>
+          <td>カスタム</td>
+          <td style="color:var(--accent)">無制限</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="margin-top:12px;font-size:13px;color:var(--muted);">レート制限超過時はJSONエラーレスポンスが返されます。適切な間隔をあけてリトライしてください。</p>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- Timeouts -->
+  <!-- ================================================================ -->
+  <section id="timeouts" class="section">
+    <h2>Timeouts</h2>
+    <p>クライアント実装時に考慮すべきタイムアウト値:</p>
+
+    <table>
+      <thead>
+        <tr><th>Type</th><th>Duration</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Connection</td>
+          <td>10 seconds</td>
+          <td>TCP接続確立のタイムアウト</td>
+        </tr>
+        <tr>
+          <td>Request (non-streaming)</td>
+          <td>60 seconds</td>
+          <td>非ストリーミングリクエストのレスポンスタイムアウト</td>
+        </tr>
+        <tr>
+          <td>Request (streaming)</td>
+          <td>120 seconds</td>
+          <td>ストリーミングリクエストの全体タイムアウト</td>
+        </tr>
+        <tr>
+          <td>Idle (SSE)</td>
+          <td>30 seconds</td>
+          <td>最後のチャンク送信からのアイドルタイムアウト</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <strong>Tip:</strong> ストリーミングモードでは、各チャンク受信時にタイムアウトをリセットする実装を推奨します。アイドルタイムアウトは最後のデータ送信からの経過時間に基づきます。
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- Model Versioning -->
+  <!-- ================================================================ -->
+  <section id="model-versioning" class="section">
+    <h2>Model Versioning</h2>
+    <p>モデルIDの解決ルールとバージョン管理ポリシーについて説明します。</p>
+
+    <table>
+      <thead>
+        <tr><th>Feature</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="white-space:normal">Latest alias</td>
+          <td>モデルID（例: <code>gpt-4o</code>）はプロバイダーの最新安定版を指す</td>
+        </tr>
+        <tr>
+          <td style="white-space:normal">Pinned version</td>
+          <td>特定バージョン固定: <code>gpt-4o-2024-08-06</code> のようにサフィックス付きIDで指定可能</td>
+        </tr>
+        <tr>
+          <td style="white-space:normal">Changelog</td>
+          <td>バージョン変更時は Changelog で事前告知</td>
+        </tr>
+        <tr>
+          <td style="white-space:normal">Deprecation</td>
+          <td>旧バージョンは最低90日間サポート</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="warning">
+      <strong>注意:</strong> 本番環境では、再現性を確保するために特定バージョンのモデルIDを使用することを推奨します。エイリアス（例: <code>gpt-4o</code>）は予告なくポイント先が変更される場合があります。
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- Failover -->
+  <!-- ================================================================ -->
+  <section id="failover" class="section">
+    <h2>Failover</h2>
+    <p>teai.ioは<code class="inline-code">LoadBalancedProvider</code>によるマルチプロバイダーアーキテクチャで高い可用性を実現しています。</p>
+
+    <h4>フェイルオーバー動作</h4>
+    <ul style="padding-left:20px;margin:12px 0;">
+      <li style="margin-bottom:8px;">モデルを指定した場合、そのモデルのプロバイダーに接続。障害時はティア内の次のモデルにフェイルオーバー</li>
+      <li style="margin-bottom:8px;">サーキットブレーカー + ラウンドロビンでプロバイダー障害を自動検知・迂回</li>
+      <li style="margin-bottom:8px;">Nemotron 9B（セルフホスト）が全プロバイダー障害時の最終フォールバック</li>
+    </ul>
+
+    <h4>レスポンスの model フィールド</h4>
+    <p>レスポンスボディの<code class="inline-code">model</code>フィールドに実際に使用されたモデル名が返されます。リクエストしたモデルと異なる場合、フェイルオーバーが発生したことを意味します。</p>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ================================================================ -->
+  <!-- SDK Examples -->
+  <!-- ================================================================ -->
+  <section id="sdk-examples" class="section">
+    <h2>SDK Examples</h2>
+    <p>teai.ioはOpenAI互換APIのため、既存のOpenAI SDKをそのまま使用できます。ベースURLを変更するだけで接続可能です。</p>
+
+    <div class="tabs" id="sdk-tabs">
+      <button class="tab-btn active" onclick="switchTab('sdk-tabs','sdk-python')">Python</button>
+      <button class="tab-btn" onclick="switchTab('sdk-tabs','sdk-node')">Node.js</button>
+      <button class="tab-btn" onclick="switchTab('sdk-tabs','sdk-go')">Go</button>
+      <button class="tab-btn" onclick="switchTab('sdk-tabs','sdk-java')">Java</button>
+      <button class="tab-btn" onclick="switchTab('sdk-tabs','sdk-curl')">curl</button>
+    </div>
+
+    <!-- Python -->
+    <div class="tab-content active" id="sdk-python">
+      <pre><code><span class="hl-kw">from</span> openai <span class="hl-kw">import</span> OpenAI
+
+client = OpenAI(
+    base_url=<span class="hl-str">"https://api.teai.io/v1"</span>,
+    api_key=<span class="hl-str">"te_xxx"</span>,
+)
+
+<span class="hl-comment"># Streaming example</span>
+resp = client.chat.completions.<span class="hl-fn">create</span>(
+    model=<span class="hl-str">"gpt-4o"</span>,
+    messages=[{<span class="hl-str">"role"</span>: <span class="hl-str">"user"</span>, <span class="hl-str">"content"</span>: <span class="hl-str">"Hello"</span>}],
+    stream=<span class="hl-bool">True</span>,
+)
+<span class="hl-kw">for</span> chunk <span class="hl-kw">in</span> resp:
+    <span class="hl-fn">print</span>(chunk.choices[<span class="hl-num">0</span>].delta.content <span class="hl-kw">or</span> <span class="hl-str">""</span>, end=<span class="hl-str">""</span>)</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+    </div>
+
+    <!-- Node.js -->
+    <div class="tab-content" id="sdk-node">
+      <pre><code><span class="hl-kw">import</span> OpenAI <span class="hl-kw">from</span> <span class="hl-str">'openai'</span>;
+
+<span class="hl-kw">const</span> client = <span class="hl-kw">new</span> <span class="hl-fn">OpenAI</span>({
+  baseURL: <span class="hl-str">'https://api.teai.io/v1'</span>,
+  apiKey: <span class="hl-str">'te_xxx'</span>,
+});
+
+<span class="hl-comment">// Streaming example</span>
+<span class="hl-kw">const</span> stream = <span class="hl-kw">await</span> client.chat.completions.<span class="hl-fn">create</span>({
+  model: <span class="hl-str">'claude-sonnet-4-6'</span>,
+  messages: [{ role: <span class="hl-str">'user'</span>, content: <span class="hl-str">'Hello'</span> }],
+  stream: <span class="hl-bool">true</span>,
+});
+
+<span class="hl-kw">for await</span> (<span class="hl-kw">const</span> chunk <span class="hl-kw">of</span> stream) {
+  process.stdout.<span class="hl-fn">write</span>(chunk.choices[<span class="hl-num">0</span>]?.delta?.content || <span class="hl-str">''</span>);
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+    </div>
+
+    <!-- Go -->
+    <div class="tab-content" id="sdk-go">
+      <pre><code><span class="hl-kw">package</span> main
+
+<span class="hl-kw">import</span> (
+    <span class="hl-str">"context"</span>
+    <span class="hl-str">"fmt"</span>
+    openai <span class="hl-str">"github.com/sashabaranov/go-openai"</span>
+)
+
+<span class="hl-kw">func</span> <span class="hl-fn">main</span>() {
+    config := openai.<span class="hl-fn">DefaultConfig</span>(<span class="hl-str">"te_xxx"</span>)
+    config.BaseURL = <span class="hl-str">"https://api.teai.io/v1"</span>
+    client := openai.<span class="hl-fn">NewClientWithConfig</span>(config)
+
+    resp, _ := client.<span class="hl-fn">CreateChatCompletion</span>(
+        context.<span class="hl-fn">Background</span>(),
+        openai.ChatCompletionRequest{
+            Model: <span class="hl-str">"gpt-4o"</span>,
+            Messages: []openai.ChatCompletionMessage{
+                {Role: <span class="hl-str">"user"</span>, Content: <span class="hl-str">"Hello"</span>},
+            },
+        },
+    )
+    fmt.<span class="hl-fn">Println</span>(resp.Choices[<span class="hl-num">0</span>].Message.Content)
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+    </div>
+
+    <!-- Java -->
+    <div class="tab-content" id="sdk-java">
+      <pre><code><span class="hl-comment">// Using OpenAI Java SDK with custom base URL</span>
+<span class="hl-type">OpenAIClient</span> client = <span class="hl-type">OpenAIOkHttpClient</span>.<span class="hl-fn">builder</span>()
+    .<span class="hl-fn">baseUrl</span>(<span class="hl-str">"https://api.teai.io/v1"</span>)
+    .<span class="hl-fn">apiKey</span>(<span class="hl-str">"te_xxx"</span>)
+    .<span class="hl-fn">build</span>();
+
+<span class="hl-type">ChatCompletionCreateParams</span> params = <span class="hl-type">ChatCompletionCreateParams</span>.<span class="hl-fn">builder</span>()
+    .<span class="hl-fn">model</span>(<span class="hl-str">"gpt-4o"</span>)
+    .<span class="hl-fn">addUserMessage</span>(<span class="hl-str">"Hello"</span>)
+    .<span class="hl-fn">build</span>();
+
+client.<span class="hl-fn">chat</span>().<span class="hl-fn">completions</span>().<span class="hl-fn">create</span>(params)
+    .<span class="hl-fn">choices</span>().<span class="hl-fn">forEach</span>(c ->
+        System.out.<span class="hl-fn">println</span>(c.<span class="hl-fn">message</span>().<span class="hl-fn">content</span>()));</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+    </div>
+
+    <!-- curl -->
+    <div class="tab-content" id="sdk-curl">
+      <pre><code><span class="hl-comment"># Non-streaming</span>
+curl https://api.teai.io/v1/chat/completions \
+  -H <span class="hl-str">"Authorization: Bearer te_xxx"</span> \
+  -H <span class="hl-str">"Content-Type: application/json"</span> \
+  -d <span class="hl-str">'{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'</span>
+
+<span class="hl-comment"># Streaming</span>
+curl https://api.teai.io/v1/chat/completions \
+  -H <span class="hl-str">"Authorization: Bearer te_xxx"</span> \
+  -H <span class="hl-str">"Content-Type: application/json"</span> \
+  -N \
+  -d <span class="hl-str">'{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": true
+  }'</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+    </div>
+
+  </section>
+
+</main>
+</div>
+
+<footer>
+&copy; 2026 株式会社イネブラ. <a href="/terms">Terms</a> | <a href="/privacy">Privacy</a> | <a href="/security">Security</a> | <a href="/sla">SLA</a> | <a href="/status">Status</a> | <a href="/about">About</a></footer>
+
+<script>
+// Tab switching
+function switchTab(tabGroupId, tabId) {
+  const group = document.getElementById(tabGroupId);
+  const parent = group.parentElement;
+
+  // Deactivate all tabs in group
+  group.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  // Find all tab-content siblings
+  let el = group.nextElementSibling;
+  while (el && el.classList.contains('tab-content')) {
+    el.classList.remove('active');
+    el = el.nextElementSibling;
+  }
+
+  // Activate clicked tab
+  const target = document.getElementById(tabId);
+  if (target) target.classList.add('active');
+
+  // Activate button
+  group.querySelectorAll('.tab-btn').forEach(btn => {
+    const btnTabId = btn.getAttribute('onclick').match(/'([^']+)'\)/)?.[1];
+    if (btnTabId === tabId) btn.classList.add('active');
+  });
+}
+
+// Copy code
+function copyCode(btn) {
+  const pre = btn.parentElement;
+  const code = pre.querySelector('code');
+  const text = code.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+
+// Sidebar active state on scroll
+const sections = document.querySelectorAll('.section[id]');
+const sidebarLinks = document.querySelectorAll('.sidebar a[href^="#"]');
+
+function updateActiveSidebar() {
+  let current = '';
+  sections.forEach(section => {
+    const top = section.offsetTop - 100;
+    if (window.scrollY >= top) current = section.id;
+  });
+
+  sidebarLinks.forEach(link => {
+    link.classList.remove('active');
+    if (link.getAttribute('href') === '#' + current) {
+      link.classList.add('active');
+    }
+  });
+}
+
+window.addEventListener('scroll', updateActiveSidebar, { passive: true });
+updateActiveSidebar();
+</script>
+
+</body>
+</html>

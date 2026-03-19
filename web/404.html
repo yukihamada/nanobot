@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>404 - Page Not Found</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    :root { --bg:#0a0a0a; --surface:#141414; --border:#1e1e1e; --text:#e5e5e5; --muted:#777; --accent:#10b981; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; flex-direction:column; }
+    nav { padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }
+    .logo { font-size:18px; font-weight:700; text-decoration:none; color:var(--text); }
+    .logo span { color:var(--accent); }
+    .nav-links a { color:var(--muted); text-decoration:none; font-size:14px; margin-left:16px; }
+    .nav-links a:hover { color:var(--text); }
+    .main { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 24px; text-align:center; }
+    .code { font-size:120px; font-weight:900; letter-spacing:-4px; color:var(--accent); opacity:0.3; line-height:1; }
+    h1 { font-size:24px; font-weight:700; margin:16px 0 8px; }
+    p { color:var(--muted); font-size:15px; margin-bottom:24px; }
+    .btn { display:inline-block; background:var(--accent); color:#fff; text-decoration:none; padding:10px 24px; border-radius:8px; font-size:14px; font-weight:600; transition:opacity .2s; }
+    .btn:hover { opacity:0.85; }
+    .links { margin-top:32px; display:flex; gap:24px; }
+    .links a { color:var(--muted); text-decoration:none; font-size:13px; }
+    .links a:hover { color:var(--accent); }
+    footer { text-align:center; padding:24px; color:var(--muted); font-size:12px; }
+    footer a { color:var(--accent); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>te</span>ai.io</a>
+    <div class="nav-links">
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+    </div>
+  </nav>
+  <div class="main">
+    <div class="code">404</div>
+    <h1>Page Not Found</h1>
+    <p>お探しのページは見つかりませんでした。</p>
+    <a href="/" class="btn">Home</a>
+    <div class="links">
+      <a href="/docs">API Docs</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+    </div>
+  </div>
+  <footer>&copy; 2026 株式会社イネブラ. <a href="/terms">Terms</a> | <a href="/privacy">Privacy</a></footer>
+</body>
+</html>

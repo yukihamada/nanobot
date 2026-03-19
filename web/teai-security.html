@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security & Compliance - teai.io</title>
+  <meta name="description" content="teai.io のセキュリティ・コンプライアンスへの取り組み。データ保護、暗号化、認証ロードマップ、脆弱性報告。">
+  <meta property="og:title" content="Security & Compliance - teai.io">
+  <meta property="og:description" content="teai.io のセキュリティとコンプライアンスへの取り組みをご紹介します。">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-weight='800' font-family='sans-serif' fill='white'%3Ete%3C/text%3E%3C/svg%3E">
+  <style>
+    :root { --bg:#0a0a0a; --surface:#141414; --border:#1e1e1e; --text:#e5e5e5; --muted:#777; --accent:#10b981; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    nav { padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }
+    .logo { font-size:18px; font-weight:700; text-decoration:none; color:var(--text); }
+    .logo span { color:var(--accent); }
+    .nav-links a { color:var(--muted); text-decoration:none; font-size:14px; margin-left:16px; }
+    .nav-links a:hover { color:var(--text); }
+    .main { max-width:760px; margin:0 auto; padding:40px 24px 80px; }
+
+    /* Hero */
+    .hero { text-align:center; margin-bottom:60px; padding:48px 0 0; }
+    .hero h1 { font-size:36px; font-weight:800; letter-spacing:-1px; margin-bottom:10px; }
+    .hero h1 span { color:var(--accent); }
+    .hero .sub { color:var(--muted); font-size:16px; margin-top:8px; }
+    .hero .tagline { margin-top:24px; font-size:15px; color:var(--text); line-height:1.7; }
+
+    /* Section */
+    .section { margin-bottom:48px; }
+    .section h2 { font-size:20px; font-weight:700; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+    .section p { color:var(--muted); font-size:14px; line-height:1.8; margin-bottom:10px; }
+    .section ul { padding-left:24px; margin-bottom:12px; }
+    .section li { color:var(--muted); font-size:14px; line-height:1.8; margin-bottom:4px; }
+
+    /* Feature cards */
+    .features { display:grid; gap:12px; margin-top:8px; }
+    .feature { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 20px; display:flex; gap:16px; align-items:flex-start; }
+    .feature-icon { font-size:22px; flex-shrink:0; margin-top:2px; }
+    .feature-title { font-size:14px; font-weight:600; color:var(--text); margin-bottom:4px; }
+    .feature-desc { font-size:13px; color:var(--muted); line-height:1.7; }
+
+    /* Certification roadmap */
+    .cert-grid { display:grid; gap:12px; margin-top:12px; }
+    .cert-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
+    .cert-info { flex:1; min-width:200px; }
+    .cert-name { font-size:15px; font-weight:700; color:var(--text); margin-bottom:4px; }
+    .cert-detail { font-size:13px; color:var(--muted); line-height:1.6; }
+    .cert-meta { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+    .cert-date { font-size:12px; color:var(--muted); white-space:nowrap; }
+    .badge { display:inline-block; font-size:11px; font-weight:600; border-radius:4px; padding:3px 10px; white-space:nowrap; }
+    .badge-yellow { color:#f59e0b; background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.25); }
+    .badge-blue { color:#3b82f6; background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.25); }
+    .badge-gray { color:#9ca3af; background:rgba(156,163,175,.12); border:1px solid rgba(156,163,175,.25); }
+
+    /* Encryption grid */
+    .enc-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-top:12px; }
+    .enc-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 20px; }
+    .enc-label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+    .enc-value { font-size:14px; font-weight:600; color:var(--text); margin-bottom:4px; }
+    .enc-desc { font-size:12px; color:var(--muted); line-height:1.6; }
+
+    /* Data flow */
+    .flow-box { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; margin-top:12px; }
+    .flow-box .label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:12px; }
+    .flow-steps { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+    .flow-step { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px 14px; font-size:12px; color:var(--text); text-align:center; }
+    .flow-arrow { color:var(--accent); font-size:16px; flex-shrink:0; }
+
+    /* Contact card */
+    .contact-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; margin-top:12px; text-align:center; }
+    .contact-card p { color:var(--muted); font-size:14px; line-height:1.8; margin-bottom:0; }
+    .contact-card a { color:var(--accent); text-decoration:none; font-weight:600; }
+    .contact-card a:hover { text-decoration:underline; }
+
+    /* Incident timeline */
+    .timeline { margin-top:12px; }
+    .timeline-item { display:flex; gap:16px; margin-bottom:16px; }
+    .timeline-marker { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
+    .timeline-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); margin-top:4px; }
+    .timeline-line { width:1px; flex:1; background:var(--border); margin-top:4px; }
+    .timeline-content { flex:1; }
+    .timeline-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:2px; }
+    .timeline-desc { font-size:12px; color:var(--muted); line-height:1.6; }
+
+    /* Note box */
+    .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:14px 18px; margin-top:12px; font-size:13px; color:var(--muted); line-height:1.7; }
+
+    footer { text-align:center; padding:24px; color:var(--muted); font-size:12px; }
+    footer a { color:var(--accent); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><span>te</span>ai.io</a>
+    <div class="nav-links">
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/security">Security</a>
+      <a href="/status">Status</a>
+      <a href="/about">About</a>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="hero">
+      <h1>Security & <span>Compliance</span></h1>
+      <div class="sub">セキュリティとコンプライアンスへの取り組み</div>
+      <div class="tagline">
+        teai.io は、お客様のデータとプライバシーを最優先に設計されています。<br>
+        エンタープライズグレードのセキュリティ基盤の上で、安心してAI APIをご利用いただけます。
+      </div>
+    </div>
+
+    <!-- 1. セキュリティ概要 -->
+    <div class="section">
+      <h2>セキュリティ概要</h2>
+      <p>
+        teai.io は AWS のセキュリティ基盤上に構築されており、通信の暗号化、アクセス制御、監査ログ、データの最小保持を基本原則としています。
+        APIゲートウェイとしてお客様のプロンプトやレスポンスを保存せず、メタデータのみを限定的に保持する設計です。
+      </p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">🛡️</div>
+          <div>
+            <div class="feature-title">プライバシー・バイ・デザイン</div>
+            <div class="feature-desc">プロンプト・レスポンスの非保存を基本原則とし、データの最小化を徹底しています。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🏗️</div>
+          <div>
+            <div class="feature-title">AWS セキュリティ基盤</div>
+            <div class="feature-desc">AWS Lambda、API Gateway、DynamoDB の堅牢なインフラストラクチャ上で運用。東京リージョンにデプロイ。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📋</div>
+          <div>
+            <div class="feature-title">継続的なセキュリティ改善</div>
+            <div class="feature-desc">第三者監査、脆弱性スキャン、認証取得を計画的に進めています。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. 認証・認定ロードマップ -->
+    <div class="section">
+      <h2>認証・認定ロードマップ</h2>
+      <p>エンタープライズ利用に向けたセキュリティ認証の取得を計画的に進めています。</p>
+      <div class="cert-grid">
+        <div class="cert-card">
+          <div class="cert-info">
+            <div class="cert-name">SOC 2 Type II</div>
+            <div class="cert-detail">サービス組織の内部統制に関する国際的な保証報告書。セキュリティ、可用性、処理のインテグリティを対象。</div>
+          </div>
+          <div class="cert-meta">
+            <span class="cert-date">2027年後半 取得目標</span>
+            <span class="badge badge-yellow">準備中</span>
+          </div>
+        </div>
+        <div class="cert-card">
+          <div class="cert-info">
+            <div class="cert-name">ISO 27001</div>
+            <div class="cert-detail">情報セキュリティマネジメントシステム（ISMS）の国際規格。リスク管理と継続的改善のフレームワーク。</div>
+          </div>
+          <div class="cert-meta">
+            <span class="cert-date">2027年Q1 取得予定</span>
+            <span class="badge badge-blue">計画中</span>
+          </div>
+        </div>
+        <div class="cert-card">
+          <div class="cert-info">
+            <div class="cert-name">ISMAP</div>
+            <div class="cert-detail">政府情報システムのためのセキュリティ評価制度。日本の公的機関でのクラウドサービス利用に必要。</div>
+          </div>
+          <div class="cert-meta">
+            <span class="cert-date">2027年Q2 以降</span>
+            <span class="badge badge-gray">検討中</span>
+          </div>
+        </div>
+      </div>
+      <div class="note">現在、第三者セキュリティ監査を実施中です。監査結果はお問い合わせいただいたエンタープライズのお客様に共有いたします。</div>
+    </div>
+
+    <!-- 3. データ処理 -->
+    <div class="section">
+      <h2>データ処理</h2>
+      <p>teai.io はAPIゲートウェイとして、お客様のデータを最小限にのみ取り扱います。</p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">🚫</div>
+          <div>
+            <div class="feature-title">プロンプト・レスポンスの非保存</div>
+            <div class="feature-desc">APIリクエストのプロンプト内容およびLLMからのレスポンスはサーバーに保存されません。リクエスト処理完了後、メモリから即座に解放されます。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📊</div>
+          <div>
+            <div class="feature-title">メタデータの限定保持</div>
+            <div class="feature-desc">リクエストのタイムスタンプ、使用モデル、トークン数、クレジット消費量などのメタデータのみを保持します。保持期間は90日間（TTL）で、自動的に削除されます。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔑</div>
+          <div>
+            <div class="feature-title">BYOK（Bring Your Own Key）<span style="font-size:11px;color:var(--muted);font-weight:400;">— 対応予定</span></div>
+            <div class="feature-desc">お客様自身のAPIキーを使用することで、LLMプロバイダーとの直接通信が可能になる予定です。teai.io はルーティングのみを担当し、データは直接プロバイダーへ送信されます。</div>
+          </div>
+        </div>
+      </div>
+      <div class="flow-box">
+        <div class="label">BYOK モードのデータフロー（対応予定）</div>
+        <div class="flow-steps">
+          <div class="flow-step">クライアント</div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-step" style="border-color:var(--accent);">teai.io<br><small style="color:var(--muted)">ルーティングのみ</small></div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-step">LLMプロバイダー<br><small style="color:var(--muted)">お客様のAPIキーで認証</small></div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-step">レスポンス<br><small style="color:var(--muted)">直接返却</small></div>
+        </div>
+      </div>
+      <div class="note">DPA（データ処理契約）テンプレートを提供可能です。ご希望の場合は <a href="mailto:info@enablerhq.com" style="color:var(--accent);text-decoration:none;">info@enablerhq.com</a> までお問い合わせください。</div>
+    </div>
+
+    <!-- 4. 暗号化 -->
+    <div class="section">
+      <h2>暗号化</h2>
+      <p>すべてのデータは転送中および保管時に暗号化されています。</p>
+      <div class="enc-grid">
+        <div class="enc-card">
+          <div class="enc-label">通信</div>
+          <div class="enc-value">TLS 1.2+</div>
+          <div class="enc-desc">すべてのAPI通信はTLS 1.2以上で暗号化。TLS 1.0/1.1は無効化済み。</div>
+        </div>
+        <div class="enc-card">
+          <div class="enc-label">APIキー</div>
+          <div class="enc-value">一方向ハッシュ</div>
+          <div class="enc-desc">APIキーは一方向ハッシュで保存。プレフィックス（cw_xxxx...）のみ可読状態で保持。</div>
+        </div>
+        <div class="enc-card">
+          <div class="enc-label">パスワード</div>
+          <div class="enc-value">HMAC-SHA256</div>
+          <div class="enc-desc">ユーザーパスワードはHMAC-SHA256でハッシュ化。平文は一切保存しません。</div>
+        </div>
+        <div class="enc-card">
+          <div class="enc-label">保管時暗号化</div>
+          <div class="enc-value">AES-256</div>
+          <div class="enc-desc">DynamoDB の保管時暗号化（AES-256）により、ディスク上のデータを保護。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. ネットワークセキュリティ -->
+    <div class="section">
+      <h2>ネットワークセキュリティ</h2>
+      <p>多層防御のアプローチにより、ネットワークレベルでのセキュリティを確保しています。</p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">☁️</div>
+          <div>
+            <div class="feature-title">AWS VPC</div>
+            <div class="feature-desc">バックエンドサービスはAWS VPC内で動作。インターネットから直接アクセスできない構成です。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🚪</div>
+          <div>
+            <div class="feature-title">API Gateway</div>
+            <div class="feature-desc">すべてのリクエストはAWS API Gatewayを経由。認証、レート制限、リクエスト検証を実施します。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📍</div>
+          <div>
+            <div class="feature-title">IPアドレス制限（Business プラン）</div>
+            <div class="feature-desc">許可リストによるIPアドレス制限を設定可能。特定のネットワークからのみAPIアクセスを許可します。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔗</div>
+          <div>
+            <div class="feature-title">Private Link <span style="font-size:11px;color:var(--muted);font-weight:400;">— 2026年Q4 対応予定</span></div>
+            <div class="feature-desc">AWS PrivateLinkによるプライベート接続をサポート予定。インターネットを経由せずにAPIにアクセス可能になります。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🛡️</div>
+          <div>
+            <div class="feature-title">WAF</div>
+            <div class="feature-desc">AWS WAFによる不正リクエストフィルタリング。SQLインジェクション、XSS、不正なペイロードを検知・ブロックします。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. アクセス制御 -->
+    <div class="section">
+      <h2>アクセス制御</h2>
+      <p>適切な認証・認可メカニズムにより、不正アクセスを防止します。</p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">🔐</div>
+          <div>
+            <div class="feature-title">APIキー認証</div>
+            <div class="feature-desc"><code style="color:var(--accent);">cw_</code> プレフィックス付きAPIキーによる認証。キーはアカウントごとに発行・管理され、即座に無効化が可能です。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">⚡</div>
+          <div>
+            <div class="feature-title">レート制限</div>
+            <div class="feature-desc">DynamoDBアトミックカウンターによるレート制限を実装。DDoS攻撃やAPIの不正利用を防止します。プラン別に制限値をカスタマイズ可能。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📝</div>
+          <div>
+            <div class="feature-title">監査ログ</div>
+            <div class="feature-desc">すべてのAPI操作の監査ログを90日間保持。アクセス元IP、タイムスタンプ、操作内容を記録します。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. インシデント対応 -->
+    <div class="section">
+      <h2>インシデント対応</h2>
+      <p>セキュリティインシデントの早期検知と迅速な対応体制を整備しています。</p>
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-marker">
+            <div class="timeline-dot"></div>
+            <div class="timeline-line"></div>
+          </div>
+          <div class="timeline-content">
+            <div class="timeline-title">検知</div>
+            <div class="timeline-desc">CloudWatch メトリクスおよびアラームによる24時間365日の自動監視。異常なアクセスパターンやエラー率の急増を即座に検知します。</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker">
+            <div class="timeline-dot"></div>
+            <div class="timeline-line"></div>
+          </div>
+          <div class="timeline-content">
+            <div class="timeline-title">初動対応 — 30分以内</div>
+            <div class="timeline-desc">インシデント検知後30分以内にセキュリティチームが初動対応を開始。影響範囲の特定と封じ込めを実施します。</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker">
+            <div class="timeline-dot"></div>
+            <div class="timeline-line"></div>
+          </div>
+          <div class="timeline-content">
+            <div class="timeline-title">状況報告 — 2時間以内</div>
+            <div class="timeline-desc">インシデント発生から2時間以内に、影響を受ける可能性のあるユーザーに対して初回の状況報告を行います。</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker">
+            <div class="timeline-dot"></div>
+            <div class="timeline-line"></div>
+          </div>
+          <div class="timeline-content">
+            <div class="timeline-title">通知</div>
+            <div class="timeline-desc">メールにより全有料ユーザーに通知。インシデントの概要、影響範囲、推奨されるアクションを明記します。</div>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-marker">
+            <div class="timeline-dot" style="background:var(--muted);"></div>
+          </div>
+          <div class="timeline-content">
+            <div class="timeline-title">ポストモーテム — 48時間以内</div>
+            <div class="timeline-desc">インシデント完了後48時間以内にポストモーテム（事後報告書）を公開。根本原因、対応内容、再発防止策を詳述します。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7.5 DR/BCP -->
+    <div class="section">
+      <h2>災害復旧・事業継続（DR/BCP）</h2>
+      <p>サービスの継続性を確保するための対策を講じています。</p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">🌐</div>
+          <div>
+            <div class="feature-title">マルチプロバイダーアーキテクチャ</div>
+            <div class="feature-desc">特定のLLMプロバイダーに依存しない設計。プロバイダー障害時は自動的に代替プロバイダーへフェイルオーバーします。サーキットブレーカーにより障害が伝播しない構成です。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">☁️</div>
+          <div>
+            <div class="feature-title">AWS マネージドサービス</div>
+            <div class="feature-desc">Lambda（サーバーレス）、DynamoDB（マルチAZ自動レプリケーション）、API Gateway を活用。AWS の高可用性インフラにより、単一障害点を排除しています。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔄</div>
+          <div>
+            <div class="feature-title">RTO / RPO</div>
+            <div class="feature-desc">RTO（目標復旧時間）: 1時間以内。RPO（目標復旧時点）: DynamoDB のポイントインタイムリカバリにより、過去35日間の任意の時点に復元可能です。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📋</div>
+          <div>
+            <div class="feature-title">BCP（事業継続計画）</div>
+            <div class="feature-desc">インフラ障害、プロバイダー停止、自然災害等のシナリオに対応した事業継続計画を策定しています。定期的な見直しと訓練を実施しています。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. 脆弱性報告 -->
+    <div class="section">
+      <h2>脆弱性報告</h2>
+      <p>teai.io のセキュリティ向上にご協力いただける方からの報告を歓迎します。</p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">🔍</div>
+          <div>
+            <div class="feature-title">責任ある開示プログラム</div>
+            <div class="feature-desc">
+              セキュリティ上の脆弱性を発見された場合は、以下のプロセスで報告をお願いします。<br><br>
+              1. <strong style="color:var(--text);">報告</strong>: <a href="mailto:security@enablerhq.com" style="color:var(--accent);text-decoration:none;">security@enablerhq.com</a> に脆弱性の詳細をお送りください。<br>
+              2. <strong style="color:var(--text);">確認</strong>: 2営業日以内に受領確認をお送りします。<br>
+              3. <strong style="color:var(--text);">調査</strong>: 報告内容を調査し、影響範囲を評価します。<br>
+              4. <strong style="color:var(--text);">修正</strong>: 脆弱性を修正し、報告者に結果を通知します。<br>
+              5. <strong style="color:var(--text);">公開</strong>: 修正完了後、必要に応じてセキュリティアドバイザリを公開します。
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note">脆弱性が修正されるまで、公開をお控えいただくようお願いいたします。報告者のプライバシーは保護されます。</div>
+    </div>
+
+    <!-- 9. コンプライアンス -->
+    <div class="section">
+      <h2>コンプライアンス</h2>
+      <p>日本国内法および国際的な規制への準拠を維持しています。</p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">🇯🇵</div>
+          <div>
+            <div class="feature-title">個人情報保護法（APPI）</div>
+            <div class="feature-desc">日本の個人情報保護法に準拠したデータ取り扱いを実施。個人データの取得、利用、第三者提供について適切な管理体制を維持しています。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🇪🇺</div>
+          <div>
+            <div class="feature-title">GDPR 対応</div>
+            <div class="feature-desc">EU域内のお客様向けにDPA（Data Processing Agreement）を提供可能。データ処理の透明性と個人の権利を保護します。</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📡</div>
+          <div>
+            <div class="feature-title">電気通信事業法</div>
+            <div class="feature-desc">電気通信事業法に基づく届出を実施。通信の秘密保護および利用者情報の適切な取り扱いを遵守しています。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 10. お問い合わせ -->
+    <div class="section">
+      <h2>お問い合わせ</h2>
+      <p>セキュリティに関するご質問、脆弱性の報告、DPAのリクエストなどは下記までご連絡ください。</p>
+      <div class="contact-card">
+        <p style="font-size:16px;margin-bottom:12px;">
+          <strong style="color:var(--text);">セキュリティチーム</strong>
+        </p>
+        <p>
+          <a href="mailto:security@enablerhq.com">security@enablerhq.com</a>
+        </p>
+        <p style="margin-top:12px;font-size:13px;">
+          脆弱性報告 / セキュリティ評価 / DPA・NDA リクエスト / コンプライアンスに関するご質問
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>&copy; 2026 株式会社イネブラ. <a href="/terms">Terms</a> | <a href="/privacy">Privacy</a> | <a href="/security">Security</a> | <a href="/sla">SLA</a> | <a href="/status">Status</a> | <a href="/about">About</a></footer>
+</body>
+</html>
