@@ -24,3 +24,4 @@ firebase-debug.log
 .vscode/
 .idea/
 *.iml
+.wrangler/
