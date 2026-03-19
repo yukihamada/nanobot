@@ -1,3 +1,4 @@
+pub mod a2a;
 pub mod cron;
 pub mod heartbeat;
 pub mod gateway;
@@ -20,3 +21,5 @@ pub mod tags;
 
 #[cfg(feature = "stripe")]
 pub mod stripe;
+
+pub mod solana;

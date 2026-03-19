@@ -10,9 +10,11 @@ default = ["file-backend"]
 file-backend = []
 http-api = ["axum", "axum-server", "ipnet", "rustls", "tower", "tower-http", "hmac", "sha2", "hex"]
 dynamodb-backend = ["sha2", "aws-config", "aws-sdk-dynamodb", "aws-sdk-polly", "aws-sdk-connect", "aws-sdk-s3", "aws-sdk-route53"]
+libsql-backend = ["libsql"]
 stripe = ["async-stripe"]
 lambda = ["lambda_http"]
 saas = ["dynamodb-backend", "stripe", "lambda", "http-api"]
+fly = ["libsql-backend", "stripe", "http-api"]
 local-fallback = ["candle-core", "candle-transformers", "candle-nn", "tokenizers", "hf-hub"]
 
 [dependencies]
@@ -94,6 +96,9 @@ async-stripe = { version = "0.39", features = ["runtime-tokio-hyper-rustls"], op
 
 # Lambda (optional)
 lambda_http = { version = "0.13", optional = true }
+
+# libSQL / SQLite (optional)
+libsql = { version = "0.6", optional = true }
 
 # Async stream for SSE
 async-stream = "0.3"

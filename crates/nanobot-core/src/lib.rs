@@ -2,6 +2,7 @@ pub mod error;
 pub mod types;
 pub mod config;
 pub mod bus;
+pub mod db;
 pub mod session;
 pub mod memory;
 pub mod skills;
