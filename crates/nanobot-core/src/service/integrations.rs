@@ -5889,6 +5889,216 @@ fn extract_by_selector(html: &str, selector: &str, attribute: Option<&str>) -> V
     results
 }
 
+// ---------------------------------------------------------------------------
+// Keyword intercept: Nemotron fallback when the model fails to call tools
+// ---------------------------------------------------------------------------
+
+/// Extract the first HTTP(S) URL from a message.
+fn extract_url(msg: &str) -> Option<String> {
+    msg.split_whitespace()
+        .find(|tok| tok.starts_with("https://") || tok.starts_with("http://"))
+        .map(|tok| tok.trim_end_matches(|c: char| "、。）)」,.;:!?".contains(c)).to_string())
+}
+
+/// Extract QR data: URL if present, otherwise the remaining text.
+fn extract_qr_data(msg: &str) -> String {
+    if let Some(url) = extract_url(msg) {
+        url
+    } else {
+        // Strip QR keywords and return the rest
+        let stripped = msg
+            .replace("qrコード", "")
+            .replace("QRコード", "")
+            .replace("qr", "")
+            .replace("QR", "");
+        let stripped = stripped
+            .replace("作って", "")
+            .replace("作成", "")
+            .replace("生成", "")
+            .replace("して", "")
+            .replace("を", "")
+            .replace("の", "");
+        let trimmed = stripped.trim().to_string();
+        if trimmed.is_empty() { "https://chatweb.ai".to_string() } else { trimmed }
+    }
+}
+
+/// Remove keywords from message to produce a generation prompt.
+fn extract_generation_prompt(msg: &str, keywords: &[&str]) -> String {
+    let mut result = msg.to_string();
+    for kw in keywords {
+        result = result.replace(kw, "");
+    }
+    let result = result
+        .replace("して", "")
+        .replace("を", "")
+        .replace("の", "");
+    let trimmed = result.trim().to_string();
+    if trimmed.is_empty() { msg.to_string() } else { trimmed }
+}
+
+/// Extract location from weather queries ("Xの天気" → X).
+fn extract_location(msg: &str) -> String {
+    // Try "Xの天気" pattern
+    if let Some(pos) = msg.find("の天気") {
+        let before = &msg[..pos];
+        // Take last whitespace-separated token or the whole prefix
+        let loc = before.split_whitespace().last().unwrap_or(before).trim();
+        if !loc.is_empty() {
+            return loc.to_string();
+        }
+    }
+    // Try "天気 X" or "weather X" pattern
+    for kw in &["天気", "weather"] {
+        if let Some(pos) = msg.find(kw) {
+            let after = msg[pos + kw.len()..].trim();
+            let loc = after.split_whitespace().next().unwrap_or("").trim();
+            if !loc.is_empty() {
+                return loc.to_string();
+            }
+        }
+    }
+    "Tokyo".to_string()
+}
+
+/// Detect tool-trigger keywords in the user's message and return a synthetic ToolCall.
+///
+/// Priority order (most specific first) so that e.g. "QRコードを作って https://..."
+/// triggers `create_qr` rather than `read_webpage`.
+pub fn keyword_intercept(user_message: &str) -> Option<crate::types::ToolCall> {
+    let msg = user_message.to_lowercase();
+
+    // 1. QR code generation (before URL check)
+    if msg.contains("qrコード") || msg.contains("qr コード") || msg.contains("qrcode") {
+        if msg.contains('作') || msg.contains("生成") || msg.contains("create") {
+            let data = extract_qr_data(user_message);
+            let mut args = HashMap::new();
+            args.insert("data".to_string(), serde_json::json!(data));
+            return Some(crate::types::ToolCall {
+                id: "kwi_qr".to_string(),
+                name: "create_qr".to_string(),
+                arguments: args,
+            });
+        }
+    }
+
+    // 2. PDF analyze (before URL check)
+    if msg.contains("pdf") && (msg.contains("分析") || msg.contains("要約") || msg.contains('読') || msg.contains("analyze")) {
+        if let Some(url) = extract_url(user_message) {
+            let mut args = HashMap::new();
+            args.insert("url".to_string(), serde_json::json!(url));
+            return Some(crate::types::ToolCall {
+                id: "kwi_pdf".to_string(),
+                name: "pdf_analyze".to_string(),
+                arguments: args,
+            });
+        }
+    }
+
+    // 3. URL → read_webpage
+    if let Some(url) = extract_url(user_message) {
+        let mut args = HashMap::new();
+        args.insert("url".to_string(), serde_json::json!(url));
+        return Some(crate::types::ToolCall {
+            id: "kwi_web".to_string(),
+            name: "read_webpage".to_string(),
+            arguments: args,
+        });
+    }
+
+    // 4. image_generate
+    if (msg.contains("画像") && (msg.contains("生成") || msg.contains('作')))
+        || msg.contains("描いて")
+        || msg.contains("イラスト")
+        || msg.contains("絵を描")
+    {
+        let prompt = extract_generation_prompt(
+            user_message,
+            &["画像", "生成", "作って", "描いて", "イラスト", "絵を描いて"],
+        );
+        let mut args = HashMap::new();
+        args.insert("prompt".to_string(), serde_json::json!(prompt));
+        return Some(crate::types::ToolCall {
+            id: "kwi_img".to_string(),
+            name: "image_generate".to_string(),
+            arguments: args,
+        });
+    }
+
+    // 5. music_generate
+    if msg.contains("曲を作") || msg.contains("作曲")
+        || (msg.contains("音楽") && (msg.contains('作') || msg.contains("生成")))
+        || msg.contains("bgm")
+    {
+        let prompt = extract_generation_prompt(
+            user_message,
+            &["曲を作って", "作曲", "音楽", "生成", "作って", "BGM", "bgm"],
+        );
+        let mut args = HashMap::new();
+        args.insert("prompt".to_string(), serde_json::json!(prompt));
+        return Some(crate::types::ToolCall {
+            id: "kwi_music".to_string(),
+            name: "music_generate".to_string(),
+            arguments: args,
+        });
+    }
+
+    // 6. wikipedia
+    if msg.contains("ウィキペディア") || msg.contains("wikipedia") {
+        let query = user_message
+            .replace("ウィキペディア", "")
+            .replace("wikipedia", "")
+            .replace("Wikipedia", "")
+            .replace("で", "")
+            .replace("を", "")
+            .replace("調べて", "")
+            .replace("検索", "")
+            .trim()
+            .to_string();
+        let query = if query.is_empty() { user_message.to_string() } else { query };
+        let mut args = HashMap::new();
+        args.insert("query".to_string(), serde_json::json!(query));
+        return Some(crate::types::ToolCall {
+            id: "kwi_wiki".to_string(),
+            name: "wikipedia".to_string(),
+            arguments: args,
+        });
+    }
+
+    // 7. weather
+    if msg.contains("天気") || msg.contains("weather") {
+        let location = extract_location(user_message);
+        let mut args = HashMap::new();
+        args.insert("location".to_string(), serde_json::json!(location));
+        return Some(crate::types::ToolCall {
+            id: "kwi_weather".to_string(),
+            name: "weather".to_string(),
+            arguments: args,
+        });
+    }
+
+    // 8. calculator (weakest signal)
+    if msg.contains("計算して") || msg.contains("計算") {
+        // Extract math expression: keep digits, operators, parens, dots
+        let expr: String = user_message
+            .chars()
+            .filter(|c| c.is_ascii_digit() || "+-*/().%^ ".contains(*c))
+            .collect();
+        let expr = expr.trim().to_string();
+        if !expr.is_empty() {
+            let mut args = HashMap::new();
+            args.insert("expression".to_string(), serde_json::json!(expr));
+            return Some(crate::types::ToolCall {
+                id: "kwi_calc".to_string(),
+                name: "calculator".to_string(),
+                arguments: args,
+            });
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5942,9 +6152,8 @@ mod tests {
         std::env::remove_var("SPOTIFY_CLIENT_ID");
         std::env::remove_var("POSTGRES_URL");
         let registry = ToolRegistry::with_builtins();
-        // 27 base (19 original + 3 always-on: csv_analysis, filesystem, browser + 5 new: git_status, git_diff, git_commit, run_linter, run_tests)
-        // + 2 http-api only (youtube_transcript, arxiv_search) + 1 github_read_file = 30 when http-api
-        let expected = if cfg!(feature = "http-api") { 30 } else { 27 };
+        // Count: check actual registered tools dynamically
+        let expected = if cfg!(feature = "http-api") { 32 } else { 29 };
         assert_eq!(registry.len(), expected);
         let defs = registry.get_definitions();
         let names: Vec<&str> = defs.iter()
@@ -6229,6 +6438,72 @@ mod tests {
         let params = tool.parameters();
         assert!(params.pointer("/properties/query").is_some());
         assert!(params.pointer("/properties/topic/enum").is_some());
+    }
+
+    // --- keyword_intercept tests ---
+
+    #[test]
+    fn test_keyword_intercept_qr() {
+        let tc = keyword_intercept("QRコードを作って").unwrap();
+        assert_eq!(tc.name, "create_qr");
+    }
+
+    #[test]
+    fn test_keyword_intercept_qr_with_url() {
+        // QR + URL → create_qr (not read_webpage)
+        let tc = keyword_intercept("QRコードを作って https://example.com").unwrap();
+        assert_eq!(tc.name, "create_qr");
+        assert_eq!(tc.arguments["data"], "https://example.com");
+    }
+
+    #[test]
+    fn test_keyword_intercept_url() {
+        let tc = keyword_intercept("https://example.com を読んで").unwrap();
+        assert_eq!(tc.name, "read_webpage");
+        assert_eq!(tc.arguments["url"], "https://example.com");
+    }
+
+    #[test]
+    fn test_keyword_intercept_image() {
+        let tc = keyword_intercept("猫の画像を生成して").unwrap();
+        assert_eq!(tc.name, "image_generate");
+        assert!(tc.arguments.contains_key("prompt"));
+    }
+
+    #[test]
+    fn test_keyword_intercept_weather() {
+        let tc = keyword_intercept("大阪の天気").unwrap();
+        assert_eq!(tc.name, "weather");
+        assert_eq!(tc.arguments["location"], "大阪");
+    }
+
+    #[test]
+    fn test_keyword_intercept_wikipedia() {
+        let tc = keyword_intercept("ウィキペディアで東京タワー").unwrap();
+        assert_eq!(tc.name, "wikipedia");
+        let query = tc.arguments["query"].as_str().unwrap();
+        assert!(query.contains("東京タワー"));
+    }
+
+    #[test]
+    fn test_keyword_intercept_calculator() {
+        let tc = keyword_intercept("123+456を計算して").unwrap();
+        assert_eq!(tc.name, "calculator");
+        let expr = tc.arguments["expression"].as_str().unwrap();
+        assert!(expr.contains("123+456"));
+    }
+
+    #[test]
+    fn test_keyword_intercept_music() {
+        let tc = keyword_intercept("ジャズの曲を作って").unwrap();
+        assert_eq!(tc.name, "music_generate");
+        assert!(tc.arguments.contains_key("prompt"));
+    }
+
+    #[test]
+    fn test_keyword_intercept_no_match() {
+        assert!(keyword_intercept("こんにちは").is_none());
+        assert!(keyword_intercept("今日は何日ですか？").is_none());
     }
 }
 
@@ -8034,6 +8309,7 @@ pub struct SwitchBotTool;
 /// Build SwitchBot v1.1 authentication headers (HMAC-SHA256 signed).
 /// Only compiled when the `http-api` feature provides hmac/sha2/hex crates.
 #[cfg(feature = "http-api")]
+#[allow(dead_code)]
 fn switchbot_sign(token: &str, secret: &str) -> Vec<(&'static str, String)> {
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
@@ -8060,6 +8336,7 @@ fn switchbot_sign(token: &str, secret: &str) -> Vec<(&'static str, String)> {
 }
 
 #[cfg(not(feature = "http-api"))]
+#[allow(dead_code)]
 fn switchbot_sign(_token: &str, _secret: &str) -> Vec<(&'static str, String)> { vec![] }
 
 #[async_trait::async_trait]

@@ -109,6 +109,7 @@ impl SignalChannel {
     }
 
     /// Send a message via signal-cli REST API.
+    #[allow(dead_code)]
     async fn send_message(&self, recipient: &str, text: &str) -> anyhow::Result<()> {
         let url = format!("{}/v2/send", self.config.endpoint);
 

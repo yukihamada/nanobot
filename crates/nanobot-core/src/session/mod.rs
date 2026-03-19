@@ -19,6 +19,7 @@ pub struct SessionMessage {
 }
 
 /// Session metadata stored as the first line of JSONL.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SessionMetadata {
     #[serde(rename = "_type")]

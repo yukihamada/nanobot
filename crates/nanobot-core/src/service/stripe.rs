@@ -37,13 +37,28 @@ pub struct WebhookResult {
 
 /// Map a Stripe price ID to a Plan.
 pub fn price_to_plan(price_id: &str) -> Option<Plan> {
-    // These would be configured per environment
-    if price_id.contains("starter") {
+    // Check env vars first (allows runtime configuration)
+    let starter_price = std::env::var("STRIPE_PRICE_STARTER").unwrap_or_default();
+    let pro_price = std::env::var("STRIPE_PRICE_PRO").unwrap_or_default();
+    let enterprise_price = std::env::var("STRIPE_PRICE_BUSINESS").unwrap_or_default();
+
+    if (!starter_price.is_empty() && price_id == starter_price) || price_id == "price_1Sy5ncDqLakc8NxkXJ1CdfIs" {
+        Some(Plan::Starter)
+    } else if (!pro_price.is_empty() && price_id == pro_price)
+        || price_id == "price_1Sy5ndDqLakc8NxkI40BhY1c"      // USD $29/mo (legacy)
+        || price_id == "price_1T9JzrDqLakc8Nxkf71RKH0N"       // USD $29/mo
+        || price_id == "price_1T9ew9DqLakc8NxkhQFqg0Bl"        // JPY ¥4,350/mo
+    {
+        Some(Plan::Pro)
+    } else if (!enterprise_price.is_empty() && price_id == enterprise_price)
+        || price_id == "price_1T9JzrDqLakc8Nxk2nScnXYW"       // USD $99/mo
+        || price_id == "price_1T9ew9DqLakc8NxkjqJnPUhx"        // JPY ¥14,800/mo
+    {
+        Some(Plan::Business)
+    } else if price_id.contains("starter") {
         Some(Plan::Starter)
     } else if price_id.contains("pro") {
         Some(Plan::Pro)
-    } else if price_id.contains("enterprise") {
-        Some(Plan::Enterprise)
     } else {
         None
     }
@@ -205,7 +220,7 @@ mod tests {
     fn test_price_to_plan() {
         assert_eq!(price_to_plan("price_starter_monthly"), Some(Plan::Starter));
         assert_eq!(price_to_plan("price_pro_monthly"), Some(Plan::Pro));
-        assert_eq!(price_to_plan("price_enterprise_annual"), Some(Plan::Enterprise));
+        assert_eq!(price_to_plan("price_business_annual"), Some(Plan::Business));
         assert_eq!(price_to_plan("price_unknown"), None);
     }
 

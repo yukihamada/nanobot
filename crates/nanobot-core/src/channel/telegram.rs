@@ -99,6 +99,7 @@ impl TelegramChannel {
             .unwrap_or_default())
     }
 
+    #[allow(dead_code)]
     async fn send_message(&self, chat_id: &str, text: &str) -> anyhow::Result<()> {
         Self::send_message_static(&self.client, &self.config.token, chat_id, text).await
     }

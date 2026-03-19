@@ -77,6 +77,8 @@ impl DynamoSessionStore {
         let updated_at = session.updated_at.to_rfc3339();
         let ttl = (chrono::Utc::now().timestamp() + 30 * 24 * 3600).to_string();
 
+        // Fire-and-forget: do NOT call .join() — blocking a Tokio worker thread prevents
+        // the SSE stream from terminating (body.collect().await never completes in lambda_http).
         let _ = std::thread::spawn(move || {
             rt.block_on(async {
                 let result = client
@@ -95,8 +97,7 @@ impl DynamoSessionStore {
                     warn!("DynamoDB put_item error: {}", e);
                 }
             })
-        })
-        .join();
+        });
     }
 }
 

@@ -17,7 +17,7 @@ pub enum Plan {
     Free,
     Starter,
     Pro,
-    Enterprise,
+    Business,
 }
 
 impl Plan {
@@ -26,7 +26,7 @@ impl Plan {
             Plan::Free => 5,
             Plan::Starter => 30,
             Plan::Pro => 120,
-            Plan::Enterprise => 600,
+            Plan::Business => 600,
         }
     }
 
@@ -35,16 +35,16 @@ impl Plan {
             Plan::Free => 100,
             Plan::Starter => 2_000,
             Plan::Pro => 20_000,
-            Plan::Enterprise => u32::MAX,
+            Plan::Business => u32::MAX,
         }
     }
 
     pub fn monthly_credits(&self) -> i64 {
         match self {
             Plan::Free => 100,
-            Plan::Starter => 25_000,
-            Plan::Pro => 300_000,
-            Plan::Enterprise => i64::MAX,
+            Plan::Starter => 5_000,
+            Plan::Pro => 30_000,
+            Plan::Business => 100_000,
         }
     }
 
@@ -52,7 +52,7 @@ impl Plan {
         match self {
             Plan::Free => &["gpt-4o-mini", "gemini-flash"],
             Plan::Starter => &["gpt-4o-mini", "gemini-flash", "gpt-4o", "claude-sonnet"],
-            Plan::Pro | Plan::Enterprise => &[
+            Plan::Pro | Plan::Business => &[
                 "gpt-4o-mini",
                 "gemini-flash",
                 "gpt-4o",
@@ -67,7 +67,7 @@ impl Plan {
         match self {
             Plan::Free => 1,
             Plan::Starter => 3,
-            Plan::Pro | Plan::Enterprise => 5,
+            Plan::Pro | Plan::Business => 5,
         }
     }
 
@@ -79,7 +79,7 @@ impl Plan {
                 "translate", "wikipedia", "datetime", "create_qr", "news_search",
                 "image_generate",
             ]),
-            _ => None, // Starter, Pro, Enterprise: all tools
+            _ => None, // Starter, Pro, Business: all tools
         }
     }
 
@@ -89,7 +89,7 @@ impl Plan {
     }
 
     /// Whether browser automation tools are available.
-    /// Free=no, Starter=limited (3 sessions/day), Pro/Enterprise=unlimited
+    /// Free=no, Starter=limited (3 sessions/day), Pro/Business=unlimited
     pub fn has_browser(&self) -> bool {
         !matches!(self, Plan::Free)
     }
@@ -100,7 +100,7 @@ impl Plan {
             Plan::Free => 0,
             Plan::Starter => 3,
             Plan::Pro => 50,
-            Plan::Enterprise => u32::MAX,
+            Plan::Business => u32::MAX,
         }
     }
 }
@@ -111,7 +111,7 @@ impl std::fmt::Display for Plan {
             Plan::Free => write!(f, "free"),
             Plan::Starter => write!(f, "starter"),
             Plan::Pro => write!(f, "pro"),
-            Plan::Enterprise => write!(f, "enterprise"),
+            Plan::Business => write!(f, "business"),
         }
     }
 }
@@ -124,7 +124,7 @@ impl std::str::FromStr for Plan {
             "free" => Ok(Plan::Free),
             "starter" => Ok(Plan::Starter),
             "pro" => Ok(Plan::Pro),
-            "enterprise" => Ok(Plan::Enterprise),
+            "business" => Ok(Plan::Business),
             _ => Err(format!("Unknown plan: {s}")),
         }
     }
@@ -196,7 +196,7 @@ mod tests {
         assert_eq!("free".parse::<Plan>().unwrap(), Plan::Free);
         assert_eq!("starter".parse::<Plan>().unwrap(), Plan::Starter);
         assert_eq!("pro".parse::<Plan>().unwrap(), Plan::Pro);
-        assert_eq!("enterprise".parse::<Plan>().unwrap(), Plan::Enterprise);
+        assert_eq!("business".parse::<Plan>().unwrap(), Plan::Business);
         assert!("invalid".parse::<Plan>().is_err());
     }
 
@@ -205,7 +205,7 @@ mod tests {
         assert_eq!(Plan::Free.to_string(), "free");
         assert_eq!(Plan::Starter.to_string(), "starter");
         assert_eq!(Plan::Pro.to_string(), "pro");
-        assert_eq!(Plan::Enterprise.to_string(), "enterprise");
+        assert_eq!(Plan::Business.to_string(), "business");
     }
 
     #[test]
@@ -213,14 +213,14 @@ mod tests {
         assert_eq!(Plan::Free.rate_limit_per_min(), 5);
         assert_eq!(Plan::Starter.rate_limit_per_min(), 30);
         assert_eq!(Plan::Pro.rate_limit_per_min(), 120);
-        assert_eq!(Plan::Enterprise.rate_limit_per_min(), 600);
+        assert_eq!(Plan::Business.rate_limit_per_min(), 600);
     }
 
     #[test]
     fn test_plan_monthly_credits() {
         assert_eq!(Plan::Free.monthly_credits(), 100);
-        assert_eq!(Plan::Starter.monthly_credits(), 25_000);
-        assert_eq!(Plan::Pro.monthly_credits(), 300_000);
+        assert_eq!(Plan::Starter.monthly_credits(), 5_000);
+        assert_eq!(Plan::Pro.monthly_credits(), 30_000);
     }
 
     #[test]

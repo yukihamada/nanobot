@@ -36,6 +36,7 @@ use crate::session::store::SessionStore;
 use crate::types::Message;
 #[cfg(feature = "stripe")]
 use crate::service::stripe::{process_webhook_event, verify_webhook_signature};
+use crate::service::a2a;
 
 #[cfg(feature = "dynamodb-backend")]
 use aws_sdk_dynamodb::types::AttributeValue;
@@ -1395,6 +1396,270 @@ fn spawn_consolidate_memory(
 }
 
 // ---------------------------------------------------------------------------
+// libSQL-aware wrapper helpers (check state.db first, fall back to DynamoDB)
+// ---------------------------------------------------------------------------
+
+/// Read memory context using DbBackend (libSQL path).
+#[cfg(feature = "libsql-backend")]
+async fn read_memory_context_db(
+    db: &Arc<dyn crate::db::DbBackend>,
+    user_id: &str,
+) -> String {
+    let mut parts = Vec::new();
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let yesterday = (chrono::Utc::now() - chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+    let yest_kind = format!("daily:{}", yesterday);
+    let today_kind = format!("daily:{}", today);
+
+    let (lt, yest, today_mem) = tokio::join!(
+        db.get_memory(user_id, "long_term"),
+        db.get_memory(user_id, &yest_kind),
+        db.get_memory(user_id, &today_kind),
+    );
+
+    if let Ok(Some(c)) = lt { if !c.is_empty() { parts.push(format!("## ユーザーの長期記憶\n{}", c)); } }
+    if let Ok(Some(c)) = yest { if !c.is_empty() { parts.push(format!("## 昨日のメモ ({})\n{}", yesterday, c)); } }
+    if let Ok(Some(c)) = today_mem { if !c.is_empty() { parts.push(format!("## 今日のメモ\n{}", c)); } }
+
+    parts.join("\n\n")
+}
+
+/// Load user's installed skills for prompt injection using DbBackend (libSQL path).
+#[cfg(feature = "libsql-backend")]
+async fn load_user_skills_for_prompt_db(
+    db: &Arc<dyn crate::db::DbBackend>,
+    user_id: &str,
+) -> String {
+    let skills = match db.list_installed_skills(user_id).await {
+        Ok(s) => s,
+        Err(_) => return String::new(),
+    };
+
+    let mut parts = Vec::new();
+    let mut total_len = 0usize;
+    const MAX_CHARS: usize = 1500;
+
+    for installed in skills.iter().take(5) {
+        if total_len >= MAX_CHARS { break; }
+        let (name, content) = if let Some(bundled) = crate::skills::get_bundled_skill(&installed.skill_id) {
+            (bundled.name.to_string(), bundled.content.to_string())
+        } else {
+            match db.get_skill(&installed.skill_id).await {
+                Ok(Some(s)) => (s.name, String::new()),
+                _ => continue,
+            }
+        };
+        if content.is_empty() && name.is_empty() { continue; }
+        let block = if content.is_empty() {
+            format!("- {}", name)
+        } else {
+            let remaining = MAX_CHARS.saturating_sub(total_len);
+            let truncated = if content.len() > remaining {
+                let mut end = remaining;
+                while end > 0 && !content.is_char_boundary(end) { end -= 1; }
+                &content[..end]
+            } else {
+                &content
+            };
+            format!("### {}\n{}", name, truncated)
+        };
+        total_len += block.len();
+        parts.push(block);
+    }
+
+    if parts.is_empty() { return String::new(); }
+    format!("\n\n## インストール済みスキル\n{}", parts.join("\n\n"))
+}
+
+/// Load user's installed webhook-type skill tools using DbBackend (libSQL path).
+#[cfg(feature = "libsql-backend")]
+async fn load_user_webhook_tools_db(
+    db: &Arc<dyn crate::db::DbBackend>,
+    user_id: &str,
+) -> Vec<WebhookSkillDef> {
+    let skills = match db.list_installed_skills(user_id).await {
+        Ok(s) => s,
+        Err(_) => return vec![],
+    };
+
+    let mut tools = Vec::new();
+    for installed in skills {
+        let webhook_url = match installed.webhook_url {
+            Some(ref u) if !u.is_empty() => u.clone(),
+            _ => continue,
+        };
+        let skill = match db.get_skill(&installed.skill_id).await {
+            Ok(Some(s)) if s.skill_type == "tool" => s,
+            _ => continue,
+        };
+        let parameters_schema: serde_json::Value = installed.params_json.as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_else(|| serde_json::json!({ "type": "object", "properties": {} }));
+        tools.push(WebhookSkillDef {
+            name: skill.name,
+            description: skill.description.unwrap_or_default(),
+            webhook_url,
+            parameters_schema,
+        });
+    }
+    tools
+}
+
+/// Deduct credits using state (checks state.db first, falls back to DynamoDB).
+#[cfg(feature = "dynamodb-backend")]
+async fn deduct_credits_via_state(
+    state: &AppState,
+    user_id: &str,
+    model: &str,
+    input_tokens: u32,
+    output_tokens: u32,
+) -> (i64, Option<i64>) {
+    let credits = crate::service::auth::calculate_credits(model, input_tokens, output_tokens) as i64;
+    if credits == 0 { return (0, None); }
+
+    #[cfg(feature = "libsql-backend")]
+    if let Some(ref db) = state.db {
+        return match db.deduct_credits(user_id, credits).await {
+            Ok((deducted, remaining)) => (deducted, remaining),
+            Err(e) => {
+                tracing::warn!("deduct_credits_via_state (libSQL) failed for {}: {}", user_id, e);
+                (0, Some(0))
+            }
+        };
+    }
+
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        deduct_credits(dynamo, table, user_id, model, input_tokens, output_tokens).await
+    } else {
+        (0, None)
+    }
+}
+
+/// Check rate limit using state (checks state.db first, falls back to DynamoDB).
+#[cfg(feature = "dynamodb-backend")]
+async fn check_rate_limit_via_state(
+    state: &AppState,
+    key: &str,
+    max_per_minute: i64,
+) -> bool {
+    #[cfg(feature = "libsql-backend")]
+    if let Some(ref db) = state.db {
+        return match db.check_rate_limit(key, 60, max_per_minute).await {
+            Ok(r) => !r.exceeded,
+            Err(_) => true, // fail-open
+        };
+    }
+
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        check_rate_limit(dynamo, table, key, max_per_minute).await
+    } else {
+        true
+    }
+}
+
+/// Check hourly rate limit using state (checks state.db first, falls back to DynamoDB).
+#[cfg(feature = "dynamodb-backend")]
+async fn check_rate_limit_hourly_via_state(
+    state: &AppState,
+    key: &str,
+    max_per_hour: i64,
+) -> bool {
+    #[cfg(feature = "libsql-backend")]
+    if let Some(ref db) = state.db {
+        return match db.check_rate_limit(key, 3600, max_per_hour).await {
+            Ok(r) => !r.exceeded,
+            Err(_) => true, // fail-open
+        };
+    }
+
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        check_rate_limit_hourly(dynamo, table, key, max_per_hour).await
+    } else {
+        true
+    }
+}
+
+/// Save memory using state (checks state.db first, falls back to DynamoDB).
+#[cfg(feature = "dynamodb-backend")]
+async fn save_memory_via_state(
+    state: &AppState,
+    user_id: &str,
+    memory_type: &str, // "long_term" or "daily"
+    content: &str,
+) {
+    #[cfg(feature = "libsql-backend")]
+    if let Some(ref db) = state.db {
+        let kind = if memory_type == "daily" {
+            let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+            format!("daily:{}", today)
+        } else {
+            "long_term".to_string()
+        };
+        if let Err(e) = db.set_memory(user_id, &kind, content).await {
+            tracing::warn!("save_memory_via_state (libSQL) failed for {}: {}", user_id, e);
+        }
+        return;
+    }
+
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        save_memory(dynamo, table, user_id, memory_type, content).await;
+    }
+}
+
+/// Append daily memory using DbBackend directly (for use in tokio::spawn contexts).
+#[cfg(feature = "libsql-backend")]
+async fn append_daily_memory_via_state_db(
+    db: &Arc<dyn crate::db::DbBackend>,
+    user_id: &str,
+    content: &str,
+) -> usize {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let kind = format!("daily:{}", today);
+    let existing = db.get_memory(user_id, &kind).await.ok().flatten().unwrap_or_default();
+    let entry_count = existing.matches("\n- Q:").count() + 1;
+    let new_content = if existing.is_empty() {
+        format!("# {}\n\n{}", today, content)
+    } else {
+        format!("{}\n\n{}", existing, content)
+    };
+    if let Err(e) = db.set_memory(user_id, &kind, &new_content).await {
+        tracing::warn!("append_daily_memory_via_state_db (libSQL) failed for {}: {}", user_id, e);
+    }
+    entry_count
+}
+
+/// Append daily memory using state (checks state.db first, falls back to DynamoDB).
+#[cfg(feature = "dynamodb-backend")]
+async fn append_daily_memory_via_state(
+    state: &AppState,
+    user_id: &str,
+    content: &str,
+) -> usize {
+    #[cfg(feature = "libsql-backend")]
+    if let Some(ref db) = state.db {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let kind = format!("daily:{}", today);
+        let existing = db.get_memory(user_id, &kind).await.ok().flatten().unwrap_or_default();
+        let entry_count = existing.matches("\n- Q:").count() + 1;
+        let new_content = if existing.is_empty() {
+            format!("# {}\n\n{}", today, content)
+        } else {
+            format!("{}\n\n{}", existing, content)
+        };
+        if let Err(e) = db.set_memory(user_id, &kind, &new_content).await {
+            tracing::warn!("append_daily_memory_via_state (libSQL) failed for {}: {}", user_id, e);
+        }
+        return entry_count;
+    }
+
+    if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        append_daily_memory(dynamo, table, user_id, content).await
+    } else {
+        0
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Channel-linking helpers (LINE / Telegram / Web session unification)
 // ---------------------------------------------------------------------------
 
@@ -1534,8 +1799,49 @@ async fn get_or_create_user_cached(
         }
     }
 
-    // Cache miss - fetch from DynamoDB
     tracing::debug!("Cache MISS for user: {}", user_id);
+
+    // libSQL path
+    if let Some(ref db) = state.db {
+        let profile = match db.get_or_create_user(user_id).await {
+            Ok(p) => UserProfile {
+                user_id: p.user_id,
+                display_name: p.display_name,
+                plan: p.plan,
+                credits_remaining: p.credits_remaining,
+                credits_used: p.credits_used,
+                channels: p.channels,
+                stripe_customer_id: p.stripe_customer_id,
+                email: p.email,
+                created_at: p.created_at,
+                dev_mode: false,
+                solana_wallet: None,
+            },
+            Err(e) => {
+                tracing::error!("get_or_create_user_cached (libSQL) failed for {}: {}", user_id, e);
+                UserProfile {
+                    user_id: user_id.to_string(),
+                    display_name: None,
+                    plan: PLAN_FREE.to_string(),
+                    credits_remaining: 0,
+                    credits_used: 0,
+                    channels: vec![],
+                    stripe_customer_id: None,
+                    email: None,
+                    created_at: chrono::Utc::now().to_rfc3339(),
+                    dev_mode: false,
+                    solana_wallet: None,
+                }
+            }
+        };
+        state.user_profile_cache.insert(
+            user_id.to_string(),
+            CachedUserProfile::new(profile.clone(), 900),
+        );
+        return profile;
+    }
+
+    // Cache miss - fetch from DynamoDB
     let dynamo = state.dynamo_client.as_ref().unwrap();
     let config_table = state.config_table.as_ref().unwrap();
     let profile = get_or_create_user(dynamo, config_table, user_id).await;
@@ -1799,6 +2105,22 @@ async fn auth_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Opti
         .map(|s| s.trim_start_matches("Bearer ").to_string())
         .unwrap_or_default();
     if token.is_empty() { return None; }
+
+    // libSQL path: resolve auth token or API key via DbBackend
+    if let Some(ref db) = state.db {
+        if token.starts_with("cw_") || token.starts_with("te_") {
+            // API key: hash and look up
+            let hashed = hash_api_key(&token);
+            if let Ok(Some(uid)) = db.lookup_api_key(&hashed).await {
+                return Some(uid);
+            }
+        } else {
+            if let Ok(Some(uid)) = db.resolve_auth_token(&token).await {
+                return Some(uid);
+            }
+        }
+        return None;
+    }
 
     // Check if this is an API key (cw_ or te_ prefix) or regular auth token
     let (pk, sk) = if token.starts_with("cw_") || token.starts_with("te_") {
@@ -3428,6 +3750,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/security", get(handle_security))
         .route("/sla", get(handle_sla))
         .route("/changelog", get(handle_changelog))
+        .route("/blog", get(handle_blog))
         .route("/api-reference", get(handle_api_reference))
         .route("/register", get(handle_register))
         // Contact form submission
@@ -3713,26 +4036,24 @@ async fn handle_chat(
     // Rate limiting: 60 requests per hour per session (anonymous users)
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            let rate_key = format!("chat:{}", &req.session_id);
-            if !check_rate_limit_hourly(dynamo, table, &rate_key, 120).await {
-                tracing::warn!("Rate limit exceeded for session: {}", &req.session_id);
-                return Json(ChatResponse {
-                    response: ERR_RATE_LIMIT.to_string(),
-                    session_id: req.session_id,
-                    agent: None,
-                    tools_used: None,
-                    credits_used: None,
-                    credits_remaining: None,
-                    model_used: None,
-                    models_consulted: None,
-                    action: None,
-                    input_tokens: None,
-                    output_tokens: None,
-                    estimated_cost_usd: None,
-                    mode: None,
-                });
-            }
+        let rate_key = format!("chat:{}", &req.session_id);
+        if !check_rate_limit_hourly_via_state(&state, &rate_key, 120).await {
+            tracing::warn!("Rate limit exceeded for session: {}", &req.session_id);
+            return Json(ChatResponse {
+                response: ERR_RATE_LIMIT.to_string(),
+                session_id: req.session_id,
+                agent: None,
+                tools_used: None,
+                credits_used: None,
+                credits_remaining: None,
+                model_used: None,
+                models_consulted: None,
+                action: None,
+                input_tokens: None,
+                output_tokens: None,
+                estimated_cost_usd: None,
+                mode: None,
+            });
         }
     }
 
@@ -3964,7 +4285,14 @@ async fn handle_chat(
     // Phase B: Parallel initialization — fetch user (cached), memory, settings, installed skills, and webhook tools concurrently
     #[cfg(feature = "dynamodb-backend")]
     let (cached_user, parallel_memory, parallel_settings, parallel_skills, parallel_webhook_tools) = {
-        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        if let Some(ref db) = state.db {
+            // libSQL path
+            let user = get_or_create_user_cached(&*state, &session_key).await;
+            let memory = read_memory_context_db(db, &session_key).await;
+            let skills = load_user_skills_for_prompt_db(db, &session_key).await;
+            let webhook_tools = load_user_webhook_tools_db(db, &session_key).await;
+            (Some(user), memory, None::<UserSettings>, skills, webhook_tools)
+        } else if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Fetch user with cache (separate from tokio::join! to use state)
             let user = get_or_create_user_cached(&*state, &session_key).await;
             let (memory, settings, skills, webhook_tools) = tokio::join!(
@@ -4451,6 +4779,10 @@ async fn handle_chat(
             .collect();
         // Append user's installed webhook-type skill tools
         filtered.extend(parallel_webhook_tools.iter().map(|w| w.to_tool_def()));
+        // Append StayFlow A2A tools (all authenticated users, when configured)
+        if a2a::is_stayflow_configured() {
+            filtered.extend(a2a::stayflow_tool_definitions());
+        }
         filtered
     } else {
         vec![]
@@ -4498,15 +4830,13 @@ async fn handle_chat(
                     let mut last_remaining: Option<i64> = None;
                     #[cfg(feature = "dynamodb-backend")]
                     {
-                        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-                            for (m, input_t, output_t) in &all_usage {
-                                let (credits, remaining) = deduct_credits(dynamo, table, &session_key, m, *input_t, *output_t).await;
-                                total_credits += credits;
-                                if remaining.is_some() { last_remaining = remaining; }
-                            }
-                            // Invalidate cache after credit deduction
-                            state.user_profile_cache.remove(&session_key);
+                        for (m, input_t, output_t) in &all_usage {
+                            let (credits, remaining) = deduct_credits_via_state(&state, &session_key, m, *input_t, *output_t).await;
+                            total_credits += credits;
+                            if remaining.is_some() { last_remaining = remaining; }
                         }
+                        // Invalidate cache after credit deduction
+                        state.user_profile_cache.remove(&session_key);
                     }
 
                     // Save to session
@@ -4760,7 +5090,9 @@ async fn handle_chat(
                     }
                     async move {
                         info!("Tool call [iter {}]: {} args={:?}", iteration, name, args);
-                        let raw_result = if let Some(url) = webhook_url {
+                        let raw_result = if name.starts_with(a2a::STAYFLOW_TOOL_PREFIX) {
+                            a2a::execute_stayflow_tool(&name, &args).await
+                        } else if let Some(url) = webhook_url {
                             call_webhook(&url, &name, &args).await
                         } else {
                             registry.execute(&name, &args).await
@@ -4859,17 +5191,15 @@ async fn handle_chat(
                         total_output_tokens += resp.usage.completion_tokens;
                         #[cfg(feature = "dynamodb-backend")]
                         {
-                            if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-                                let (credits, remaining) = deduct_credits(dynamo, table, &session_key, &model,
-                                    resp.usage.prompt_tokens, resp.usage.completion_tokens).await;
-                                total_credits_used += credits;
-                                if remaining.is_some() { last_remaining_credits = remaining; }
-                                // Break early if credits exhausted
-                                if remaining == Some(0) {
-                                    current = resp;
-                                    tracing::info!("Credits exhausted for user {}, breaking tool loop at iteration {}", session_key, iteration);
-                                    break;
-                                }
+                            let (credits, remaining) = deduct_credits_via_state(&state, &session_key, &model,
+                                resp.usage.prompt_tokens, resp.usage.completion_tokens).await;
+                            total_credits_used += credits;
+                            if remaining.is_some() { last_remaining_credits = remaining; }
+                            // Break early if credits exhausted
+                            if remaining == Some(0) {
+                                current = resp;
+                                tracing::info!("Credits exhausted for user {}, breaking tool loop at iteration {}", session_key, iteration);
+                                break;
                             }
                         }
                         current = resp;
@@ -4966,20 +5296,41 @@ async fn handle_chat(
     // Auto-save to daily memory log + trigger consolidation (fire-and-forget)
     #[cfg(feature = "dynamodb-backend")]
     {
+        let sk = session_key.clone();
+        let user_msg = req.message.clone();
+        let bot_msg = response_text.clone();
+        let provider_for_mem = state.get_lb_provider().or_else(|| state.provider.clone());
+        let summary = format!("- Q: {} → A: {}",
+            if user_msg.len() > 80 { let mut i = 80; while i > 0 && !user_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &user_msg[..i]) } else { user_msg },
+            if bot_msg.len() > 120 { let mut i = 120; while i > 0 && !bot_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &bot_msg[..i]) } else { bot_msg },
+        );
+        #[cfg(feature = "libsql-backend")]
+        if let Some(ref db) = state.db {
+            let db = db.clone();
+            let summary_c = summary.clone();
+            let sk_c = sk.clone();
+            tokio::spawn(async move {
+                let entry_count = append_daily_memory_via_state_db(&db, &sk_c, &summary_c).await;
+                let _ = entry_count; // consolidation skipped for libSQL path for now
+            });
+        } else if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+            let dynamo = dynamo.clone();
+            let table = table.clone();
+            tokio::spawn(async move {
+                let entry_count = append_daily_memory(&dynamo, &table, &sk, &summary).await;
+                if entry_count > 0 && entry_count % 10 == 0 {
+                    if let Some(provider) = provider_for_mem {
+                        spawn_consolidate_memory(dynamo, table, sk, provider);
+                    }
+                }
+            });
+        }
+        #[cfg(not(feature = "libsql-backend"))]
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let dynamo = dynamo.clone();
             let table = table.clone();
-            let sk = session_key.clone();
-            let user_msg = req.message.clone();
-            let bot_msg = response_text.clone();
-            let provider_for_mem = state.get_lb_provider().or_else(|| state.provider.clone());
             tokio::spawn(async move {
-                let summary = format!("- Q: {} → A: {}",
-                    if user_msg.len() > 80 { let mut i = 80; while i > 0 && !user_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &user_msg[..i]) } else { user_msg },
-                    if bot_msg.len() > 120 { let mut i = 120; while i > 0 && !bot_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &bot_msg[..i]) } else { bot_msg },
-                );
                 let entry_count = append_daily_memory(&dynamo, &table, &sk, &summary).await;
-                // Consolidate into long-term memory every 10 entries
                 if entry_count > 0 && entry_count % 10 == 0 {
                     if let Some(provider) = provider_for_mem {
                         spawn_consolidate_memory(dynamo, table, sk, provider);
@@ -7080,17 +7431,15 @@ async fn handle_chat_stream(
     // Rate limiting: 60 requests per hour per session
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            let rate_key = format!("chat:{}", &req.session_id);
-            if !check_rate_limit_hourly(dynamo, table, &rate_key, 120).await {
-                tracing::warn!("Rate limit exceeded for session (stream): {}", &req.session_id);
-                let err_stream = stream::once(async {
-                    Ok::<_, Infallible>(Event::default().data(
-                        serde_json::json!({"type":"error","content":"Rate limit exceeded. Please try again in 1 hour."}).to_string()
-                    ))
-                });
-                return Sse::new(err_stream).into_response();
-            }
+        let rate_key = format!("chat:{}", &req.session_id);
+        if !check_rate_limit_hourly_via_state(&state, &rate_key, 120).await {
+            tracing::warn!("Rate limit exceeded for session (stream): {}", &req.session_id);
+            let err_stream = stream::once(async {
+                Ok::<_, Infallible>(Event::default().data(
+                    serde_json::json!({"type":"error","content":"Rate limit exceeded. Please try again in 1 hour."}).to_string()
+                ))
+            });
+            return Sse::new(err_stream).into_response();
         }
     }
 
@@ -7129,7 +7478,14 @@ async fn handle_chat_stream(
     // Parallel initialization: fetch user (cached) + settings + skills + webhook tools concurrently
     #[cfg(feature = "dynamodb-backend")]
     let (stream_user, stream_memory, stream_settings, stream_skills, stream_webhook_tools) = {
-        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
+        if let Some(ref db) = state.db {
+            // libSQL path
+            let user = get_or_create_user_cached(&*state, &session_key).await;
+            let memory = read_memory_context_db(db, &session_key).await;
+            let skills = load_user_skills_for_prompt_db(db, &session_key).await;
+            let webhook_tools = load_user_webhook_tools_db(db, &session_key).await;
+            (Some(user), memory, None::<UserSettings>, skills, webhook_tools)
+        } else if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             // Fetch user with cache (separate from tokio::join! to use state)
             let user = get_or_create_user_cached(&*state, &session_key).await;
             let (memory, settings, skills, webhook_tools) = tokio::join!(
@@ -7530,6 +7886,10 @@ async fn handle_chat_stream(
             .collect();
         // Append user's installed webhook-type skill tools
         defs.extend(stream_webhook_tools.iter().map(|w| w.to_tool_def()));
+        // Append StayFlow A2A tools (all authenticated users, when configured)
+        if a2a::is_stayflow_configured() {
+            defs.extend(a2a::stayflow_tool_definitions());
+        }
         defs
     } else {
         vec![]
@@ -7735,7 +8095,9 @@ async fn handle_chat_stream(
                         }
                         async move {
                             let t0 = std::time::Instant::now();
-                            let raw_result = if let Some(url) = webhook_url {
+                            let raw_result = if name.starts_with(a2a::STAYFLOW_TOOL_PREFIX) {
+                                a2a::execute_stayflow_tool(&name, &args).await
+                            } else if let Some(url) = webhook_url {
                                 call_webhook(&url, &name, &args).await
                             } else {
                                 registry.execute(&name, &args).await
@@ -7984,18 +8346,39 @@ async fn handle_chat_stream(
                 // Auto-save to daily memory log + trigger consolidation (fire-and-forget)
                 #[cfg(feature = "dynamodb-backend")]
                 {
+                    let sk = session_key_clone.clone();
+                    let user_msg = req_message.clone();
+                    let bot_msg = response_text.clone();
+                    let provider_for_mem = state_clone.get_lb_provider().or_else(|| state_clone.provider.clone());
+                    let summary = format!("- Q: {} → A: {}",
+                        if user_msg.len() > 80 { let mut i = 80; while i > 0 && !user_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &user_msg[..i]) } else { user_msg },
+                        if bot_msg.len() > 120 { let mut i = 120; while i > 0 && !bot_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &bot_msg[..i]) } else { bot_msg },
+                    );
+                    #[cfg(feature = "libsql-backend")]
+                    if let Some(ref db) = state_clone.db {
+                        let db = db.clone();
+                        let summary_c = summary.clone();
+                        let sk_c = sk.clone();
+                        tokio::spawn(async move {
+                            let _ = append_daily_memory_via_state_db(&db, &sk_c, &summary_c).await;
+                        });
+                    } else if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
+                        let dynamo = dynamo.clone();
+                        let table = table.clone();
+                        tokio::spawn(async move {
+                            let entry_count = append_daily_memory(&dynamo, &table, &sk, &summary).await;
+                            if entry_count > 0 && entry_count % 10 == 0 {
+                                if let Some(provider) = provider_for_mem {
+                                    spawn_consolidate_memory(dynamo, table, sk, provider);
+                                }
+                            }
+                        });
+                    }
+                    #[cfg(not(feature = "libsql-backend"))]
                     if let (Some(dynamo), Some(table)) = (&state_clone.dynamo_client, &state_clone.config_table) {
                         let dynamo = dynamo.clone();
                         let table = table.clone();
-                        let sk = session_key_clone.clone();
-                        let user_msg = req_message.clone();
-                        let bot_msg = response_text.clone();
-                        let provider_for_mem = state_clone.get_lb_provider().or_else(|| state_clone.provider.clone());
                         tokio::spawn(async move {
-                            let summary = format!("- Q: {} → A: {}",
-                                if user_msg.len() > 80 { let mut i = 80; while i > 0 && !user_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &user_msg[..i]) } else { user_msg },
-                                if bot_msg.len() > 120 { let mut i = 120; while i > 0 && !bot_msg.is_char_boundary(i) { i -= 1; } format!("{}...", &bot_msg[..i]) } else { bot_msg },
-                            );
                             let entry_count = append_daily_memory(&dynamo, &table, &sk, &summary).await;
                             if entry_count > 0 && entry_count % 10 == 0 {
                                 if let Some(provider) = provider_for_mem {
@@ -12296,6 +12679,11 @@ async fn handle_changelog() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/teai-changelog.html"))
 }
 
+/// GET /blog — Blog page
+async fn handle_blog() -> impl IntoResponse {
+    axum::response::Html(include_str!("../../../../web/teai-blog.html"))
+}
+
 /// GET /api-reference — Full API reference page
 async fn handle_api_reference() -> impl IntoResponse {
     axum::response::Html(include_str!("../../../../web/teai-api-reference.html"))
@@ -15049,14 +15437,28 @@ async fn handle_robots_txt() -> impl IntoResponse {
 
 async fn handle_sitemap_xml(headers: axum::http::HeaderMap) -> impl IntoResponse {
     let host = effective_host(&headers);
-    let base = if host.contains("teai.io") { "https://teai.io" } else { "https://chatweb.ai" };
+    let is_teai = host.contains("teai.io");
+    let base = if is_teai { "https://teai.io" } else { "https://chatweb.ai" };
     let today = chrono::Utc::now().format("%Y-%m-%d");
+    let extra_urls = if is_teai {
+        format!(
+            "\n  <url><loc>{base}/landing</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>\
+             \n  <url><loc>{base}/blog</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\
+             \n  <url><loc>{base}/docs</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>\
+             \n  <url><loc>{base}/api-reference</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>\
+             \n  <url><loc>{base}/about</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>\
+             \n  <url><loc>{base}/register</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>\
+             \n  <url><loc>{base}/security</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>"
+        )
+    } else {
+        String::new()
+    };
     let xml = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>{base}/</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>{base}/pricing</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>{base}/skill</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>{base}/skill</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>{extra_urls}
 </urlset>"#
     );
     (
@@ -16983,11 +17385,12 @@ async fn handle_auth_register(
 
     #[cfg(feature = "dynamodb-backend")]
     {
+        // Rate limit: 3 registrations per minute per email (works with both libSQL and DynamoDB)
+        if !check_rate_limit_via_state(&state, &format!("register:{}", email), 3).await {
+            return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Too many requests. Please try again later." })));
+        }
+
         if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            // Rate limit: 3 registrations per minute per email
-            if !check_rate_limit(dynamo, table, &format!("register:{}", email), 3).await {
-                return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Too many requests. Please try again later." })));
-            }
 
             let email_pk = format!("EMAIL#{}", email);
 
@@ -17213,12 +17616,12 @@ async fn handle_auth_login(
 
     #[cfg(feature = "dynamodb-backend")]
     {
-        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-            // Rate limit: 5 login attempts per minute per email
-            if !check_rate_limit(dynamo, table, &format!("login:{}", email), 5).await {
-                return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Too many requests. Please try again later." })));
-            }
+        // Rate limit: 5 login attempts per minute per email
+        if !check_rate_limit_via_state(&state, &format!("login:{}", email), 5).await {
+            return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Too many requests. Please try again later." })));
+        }
 
+        if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
             let email_pk = format!("EMAIL#{}", email);
 
             // Lookup credentials

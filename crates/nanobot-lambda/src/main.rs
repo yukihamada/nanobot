@@ -5,6 +5,7 @@ use lambda_http::{run, Error};
 use tracing::{info, warn};
 
 use nanobot_core::config;
+use nanobot_core::db::{DbBackend, LibSqlBackend};
 use nanobot_core::service::http::{create_router, AppState};
 use nanobot_core::session::dynamo_store::DynamoSessionStore;
 
@@ -84,6 +85,22 @@ async fn main() -> Result<(), Error> {
     let mut app_state = AppState::with_provider(cfg, Box::new(session_store));
     app_state.dynamo_client = Some(dynamo_client);
     app_state.config_table = Some(config_table);
+
+    // Turso / libSQL backend (optional, takes priority over DynamoDB when set).
+    // Set DATABASE_URL (and optionally DATABASE_TOKEN) to enable.
+    if let Ok(db_url) = std::env::var("DATABASE_URL") {
+        let db_token = std::env::var("DATABASE_TOKEN").ok();
+        match LibSqlBackend::new(&db_url, db_token.as_deref()).await {
+            Ok(db) => {
+                if let Err(e) = db.run_migrations().await {
+                    warn!("DB migration warning: {}", e);
+                }
+                app_state.db = Some(Arc::new(db));
+                info!("Turso DB connected: {}", db_url);
+            }
+            Err(e) => warn!("Turso DB init failed: {}. Using DynamoDB.", e),
+        }
+    }
 
     // Load MCP tools from environment
     let mcp_tools = nanobot_core::mcp::client::load_mcp_tools_from_env().await;
