@@ -581,7 +581,9 @@ impl LlmProvider for OpenAiCompatProvider {
                             if let Some(text) = delta.get("content").and_then(|v| v.as_str()) {
                                 if think_done {
                                     content.push_str(text);
-                                    let _ = chunk_tx.send(text.to_string());
+                                    if !text.is_empty() {
+                                        let _ = chunk_tx.send(text.to_string());
+                                    }
                                 } else {
                                     // Buffer until we find </think>
                                     think_buf.push_str(text);

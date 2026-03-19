@@ -23,7 +23,7 @@ pub struct ModelPricing {
 ///   - credit_rate() in auth.rs
 ///   - Frontend tier labels, cost displays, calculators
 pub const PRICING_TABLE: &[ModelPricing] = &[
-    // OpenAI
+    // ── OpenAI ──
     ModelPricing { model: "gpt-4o",          provider: "openai",    input_per_1m: 2.50,  output_per_1m: 10.00, context_window: 128_000,   credits_in_1k: 5,  credits_out_1k: 15 },
     ModelPricing { model: "gpt-4o-mini",     provider: "openai",    input_per_1m: 0.15,  output_per_1m: 0.60,  context_window: 128_000,   credits_in_1k: 1,  credits_out_1k: 3 },
     ModelPricing { model: "gpt-4.1",         provider: "openai",    input_per_1m: 2.00,  output_per_1m: 8.00,  context_window: 1_048_576, credits_in_1k: 5,  credits_out_1k: 15 },
@@ -31,31 +31,71 @@ pub const PRICING_TABLE: &[ModelPricing] = &[
     ModelPricing { model: "gpt-4.1-nano",    provider: "openai",    input_per_1m: 0.10,  output_per_1m: 0.40,  context_window: 1_048_576, credits_in_1k: 1,  credits_out_1k: 3 },
     ModelPricing { model: "o3-mini",         provider: "openai",    input_per_1m: 1.10,  output_per_1m: 4.40,  context_window: 200_000,   credits_in_1k: 2,  credits_out_1k: 8 },
     ModelPricing { model: "o4-mini",         provider: "openai",    input_per_1m: 1.10,  output_per_1m: 4.40,  context_window: 200_000,   credits_in_1k: 2,  credits_out_1k: 8 },
-    // Anthropic
+    // ── Anthropic ──
     ModelPricing { model: "claude-sonnet-4-5-20250929", provider: "anthropic", input_per_1m: 3.00,  output_per_1m: 15.00, context_window: 200_000, credits_in_1k: 6,  credits_out_1k: 18 },
     ModelPricing { model: "claude-sonnet-4-6",          provider: "anthropic", input_per_1m: 3.00,  output_per_1m: 15.00, context_window: 200_000, credits_in_1k: 6,  credits_out_1k: 18 },
     ModelPricing { model: "claude-haiku-4-5-20251001",  provider: "anthropic", input_per_1m: 1.00,  output_per_1m: 5.00,  context_window: 200_000, credits_in_1k: 2,  credits_out_1k: 8 },
     ModelPricing { model: "claude-opus-4-5",   provider: "anthropic", input_per_1m: 5.00,  output_per_1m: 25.00, context_window: 200_000, credits_in_1k: 10, credits_out_1k: 38 },
     ModelPricing { model: "claude-opus-4-6",   provider: "anthropic", input_per_1m: 5.00,  output_per_1m: 25.00, context_window: 200_000, credits_in_1k: 10, credits_out_1k: 38 },
-    // Google
+    // ── Google ──
     ModelPricing { model: "gemini-2.5-flash",      provider: "google", input_per_1m: 0.15, output_per_1m: 0.60, context_window: 1_048_576, credits_in_1k: 1, credits_out_1k: 3 },
     ModelPricing { model: "gemini-2.5-flash-lite",  provider: "google", input_per_1m: 0.10, output_per_1m: 0.40, context_window: 1_048_576, credits_in_1k: 1, credits_out_1k: 3 },
     ModelPricing { model: "gemini-2.5-pro",         provider: "google", input_per_1m: 1.25, output_per_1m: 10.00, context_window: 1_048_576, credits_in_1k: 3, credits_out_1k: 15 },
     ModelPricing { model: "gemini-2.0-flash",       provider: "google", input_per_1m: 0.10, output_per_1m: 0.40, context_window: 1_048_576, credits_in_1k: 1, credits_out_1k: 3 },
     ModelPricing { model: "google/gemini-3-flash-preview", provider: "google", input_per_1m: 0.15, output_per_1m: 0.60, context_window: 1_048_576, credits_in_1k: 1, credits_out_1k: 3 },
-    // Groq (fast inference)
-    ModelPricing { model: "llama-3.3-70b-specdec", provider: "groq",  input_per_1m: 0.59, output_per_1m: 0.79, context_window: 128_000, credits_in_1k: 1, credits_out_1k: 2 },
-    // Kimi / Moonshot
+    // ── Groq (ultra-fast inference) ──
+    ModelPricing { model: "llama-3.3-70b-specdec",  provider: "groq",  input_per_1m: 0.59, output_per_1m: 0.79, context_window: 128_000, credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "llama-4-scout-17b-16e",  provider: "groq",  input_per_1m: 0.11, output_per_1m: 0.34, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
+    ModelPricing { model: "llama-4-maverick-17b-128e", provider: "groq", input_per_1m: 0.20, output_per_1m: 0.60, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "gemma2-9b-it",           provider: "groq",  input_per_1m: 0.20, output_per_1m: 0.20, context_window: 8_192,   credits_in_1k: 1, credits_out_1k: 1 },
+    ModelPricing { model: "mistral-saba-24b",       provider: "groq",  input_per_1m: 0.79, output_per_1m: 0.79, context_window: 32_768,  credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "qwen-qwq-32b",           provider: "groq",  input_per_1m: 0.29, output_per_1m: 0.39, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
+    // ── Kimi / Moonshot ──
     ModelPricing { model: "kimi-k2-0711",     provider: "moonshot",  input_per_1m: 0.60, output_per_1m: 2.40, context_window: 131_072, credits_in_1k: 3, credits_out_1k: 9 },
     ModelPricing { model: "moonshotai/kimi-k2.5", provider: "openrouter", input_per_1m: 1.00, output_per_1m: 3.00, context_window: 131_072, credits_in_1k: 3, credits_out_1k: 9 },
-    // DeepSeek
+    // ── DeepSeek ──
     ModelPricing { model: "deepseek-chat",      provider: "deepseek",    input_per_1m: 0.28, output_per_1m: 0.42, context_window: 128_000, credits_in_1k: 1, credits_out_1k: 1 },
     ModelPricing { model: "deepseek-reasoner",  provider: "deepseek",    input_per_1m: 0.55, output_per_1m: 2.19, context_window: 128_000, credits_in_1k: 1, credits_out_1k: 4 },
-    // OpenRouter
+    // ── OpenRouter (日本語対応モデル多数) ──
+    ModelPricing { model: "openrouter/auto",      provider: "openrouter", input_per_1m: 1.00, output_per_1m: 3.00, context_window: 131_072, credits_in_1k: 3, credits_out_1k: 9 },
     ModelPricing { model: "minimax/minimax-m2.5", provider: "openrouter", input_per_1m: 0.50, output_per_1m: 1.50, context_window: 131_072, credits_in_1k: 2, credits_out_1k: 6 },
     ModelPricing { model: "z-ai/glm-5",          provider: "openrouter", input_per_1m: 0.60, output_per_1m: 2.40, context_window: 204_800, credits_in_1k: 3, credits_out_1k: 9 },
-    // DeepInfra
+    // Meta Llama (via OpenRouter — 日本語対応)
+    ModelPricing { model: "meta-llama/llama-4-scout",   provider: "openrouter", input_per_1m: 0.15, output_per_1m: 0.60, context_window: 512_000, credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "meta-llama/llama-4-maverick", provider: "openrouter", input_per_1m: 0.25, output_per_1m: 1.00, context_window: 1_048_576, credits_in_1k: 1, credits_out_1k: 3 },
+    // Qwen (via OpenRouter — 日本語・中国語に強い)
+    ModelPricing { model: "qwen/qwen3-235b-a22b",       provider: "openrouter", input_per_1m: 0.20, output_per_1m: 0.60, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "qwen/qwen3-30b-a3b",         provider: "openrouter", input_per_1m: 0.07, output_per_1m: 0.15, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
+    ModelPricing { model: "qwen/qwen3-32b",             provider: "openrouter", input_per_1m: 0.10, output_per_1m: 0.30, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
+    ModelPricing { model: "qwen/qwq-32b",               provider: "openrouter", input_per_1m: 0.10, output_per_1m: 0.30, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
+    ModelPricing { model: "qwen/qwen3-coder",            provider: "openrouter", input_per_1m: 0.20, output_per_1m: 0.60, context_window: 262_144, credits_in_1k: 1, credits_out_1k: 2 },
+    // Mistral (via OpenRouter — 日本語対応)
+    ModelPricing { model: "mistralai/mistral-large",     provider: "openrouter", input_per_1m: 2.00, output_per_1m: 6.00, context_window: 131_072, credits_in_1k: 4, credits_out_1k: 12 },
+    ModelPricing { model: "mistralai/mistral-small-3.2", provider: "openrouter", input_per_1m: 0.10, output_per_1m: 0.30, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
+    ModelPricing { model: "mistralai/codestral",         provider: "openrouter", input_per_1m: 0.30, output_per_1m: 0.90, context_window: 262_144, credits_in_1k: 1, credits_out_1k: 3 },
+    // Cohere (via OpenRouter — 日本語特化学習済み)
+    ModelPricing { model: "cohere/command-r-plus",       provider: "openrouter", input_per_1m: 2.50, output_per_1m: 10.00, context_window: 128_000, credits_in_1k: 5, credits_out_1k: 15 },
+    ModelPricing { model: "cohere/command-r",            provider: "openrouter", input_per_1m: 0.15, output_per_1m: 0.60,  context_window: 128_000, credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "cohere/command-a",            provider: "openrouter", input_per_1m: 2.50, output_per_1m: 10.00, context_window: 256_000, credits_in_1k: 5, credits_out_1k: 15 },
+    // NVIDIA (via OpenRouter)
+    ModelPricing { model: "nvidia/llama-3.1-nemotron-70b", provider: "openrouter", input_per_1m: 0.35, output_per_1m: 0.40, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
+    // xAI (via OpenRouter)
+    ModelPricing { model: "x-ai/grok-3-mini",    provider: "openrouter", input_per_1m: 0.30, output_per_1m: 0.50, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "x-ai/grok-3",         provider: "openrouter", input_per_1m: 3.00, output_per_1m: 15.00, context_window: 131_072, credits_in_1k: 6, credits_out_1k: 18 },
+    // Microsoft Phi (via OpenRouter — 軽量日本語)
+    ModelPricing { model: "microsoft/phi-4",      provider: "openrouter", input_per_1m: 0.07, output_per_1m: 0.07, context_window: 16_384, credits_in_1k: 1, credits_out_1k: 1 },
+    // Google Gemma (via OpenRouter — 日本語対応)
+    ModelPricing { model: "google/gemma-3-27b-it", provider: "openrouter", input_per_1m: 0.10, output_per_1m: 0.20, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
+    // ── DeepInfra ──
     ModelPricing { model: "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese", provider: "deepinfra", input_per_1m: 0.04, output_per_1m: 0.16, context_window: 128_000, credits_in_1k: 1, credits_out_1k: 1 },
+    ModelPricing { model: "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5", provider: "deepinfra", input_per_1m: 0.10, output_per_1m: 0.40, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B", provider: "deepinfra", input_per_1m: 0.20, output_per_1m: 0.65, context_window: 1_048_576, credits_in_1k: 1, credits_out_1k: 3 },
+    // ── RunPod GPU Pods (self-hosted vLLM, 無料/格安) ──
+    ModelPricing { model: "nemotron-9b-jp",   provider: "runpod", input_per_1m: 0.00, output_per_1m: 0.00, context_window: 8_192,   credits_in_1k: 0, credits_out_1k: 0 },
+    ModelPricing { model: "qwen3-32b",        provider: "runpod", input_per_1m: 0.20, output_per_1m: 0.60, context_window: 16_384,  credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "kimi-k2.5",        provider: "runpod", input_per_1m: 0.15, output_per_1m: 0.60, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "qwen3-coder-480b", provider: "runpod", input_per_1m: 0.20, output_per_1m: 0.60, context_window: 32_768,  credits_in_1k: 1, credits_out_1k: 2 },
+    ModelPricing { model: "futa-2b",          provider: "runpod", input_per_1m: 0.02, output_per_1m: 0.08, context_window: 4_096,   credits_in_1k: 1, credits_out_1k: 1 },
 ];
 
 /// Media generation pricing (per unit).

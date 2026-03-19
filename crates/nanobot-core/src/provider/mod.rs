@@ -232,6 +232,8 @@ impl LoadBalancedProvider {
                     default.contains("gemini")
                 } else if model_lower.contains("kimi") || model_lower.contains("moonshot") {
                     default.contains("kimi") || default.contains("moonshot")
+                } else if model_lower.contains("qwen3-coder") {
+                    default.contains("qwen3-coder")
                 } else if model_lower.contains("qwen") {
                     default.contains("qwen")
                 } else if model_lower.contains("llama") || model_lower.contains("mixtral") || model_lower.contains("groq") {
@@ -298,11 +300,11 @@ impl LoadBalancedProvider {
         let mut providers: Vec<Arc<dyn LlmProvider>> = Vec::new();
 
         // OpenRouter keys (PRIMARY — most reliable, access to all major models)
-        // Chain: minimax-m2.5 (cost-perf) → gemini-2.5-flash (fast+cheap)
+        // Chain: openrouter/auto (auto-select best model) → gemini-2.5-flash (fast+cheap)
         for key in Self::read_keys("OPENROUTER_API_KEY") {
-            // MiniMax M2.5 — primary ($0.50/$1.50 per 1M, best cost-perf)
+            // OpenRouter Auto — primary (auto-selects best model for the query)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "minimax/minimax-m2.5".to_string(),
+                key.clone(), Some("https://openrouter.ai/api/v1".to_string()), "openrouter/auto".to_string(),
             )));
             // Gemini 2.5 Flash — fallback ($0.30/$2.50 per 1M, fast+cheap)
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
@@ -338,6 +340,13 @@ impl LoadBalancedProvider {
             )));
         }
 
+        // MiniMax keys (native API — OpenAI-compatible)
+        for key in Self::read_keys("MINIMAX_API_KEY") {
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key, Some("https://api.minimax.io/v1".to_string()), "MiniMax-M1".to_string(),
+            )));
+        }
+
         // DeepSeek keys
         for key in Self::read_keys("DEEPSEEK_API_KEY") {
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
@@ -348,9 +357,21 @@ impl LoadBalancedProvider {
         // DeepInfra (Nemotron Japanese / affordable models)
         for key in Self::read_keys("DEEPINFRA_API_KEY") {
             providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                key,
+                key.clone(),
                 Some("https://api.deepinfra.com/v1/openai".to_string()),
                 "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese".to_string(),
+            )));
+            // Nemotron Super 49B — high-quality reasoning model
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key.clone(),
+                Some("https://api.deepinfra.com/v1/openai".to_string()),
+                "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5".to_string(),
+            )));
+            // Nemotron 3 Super 120B — MoE, agentic reasoning, 1M context
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                key.clone(),
+                Some("https://api.deepinfra.com/v1/openai".to_string()),
+                "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B".to_string(),
             )));
         }
 
@@ -362,6 +383,50 @@ impl LoadBalancedProvider {
                 String::new(), // no auth required for direct GPU Pod
                 Some(api_base),
                 "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese".to_string(),
+            )));
+        }
+
+        // Qwen3-32B (RunPod GPU Pod — direct vLLM endpoint)
+        // Supports multiple pods: QWEN3_POD_URL, QWEN3_POD_URL_2, etc.
+        for pod_url in Self::read_keys("QWEN3_POD_URL") {
+            let api_base = format!("{}/v1", pod_url.trim_end_matches('/'));
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                String::new(), // no auth required for direct GPU Pod
+                Some(api_base),
+                "qwen3-32b".to_string(),
+            )));
+        }
+
+        // Kimi K2.5 (RunPod GPU Pod — direct vLLM endpoint)
+        // Supports multiple pods: KIMI_POD_URL, KIMI_POD_URL_2, etc.
+        for pod_url in Self::read_keys("KIMI_POD_URL") {
+            let api_base = format!("{}/v1", pod_url.trim_end_matches('/'));
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                String::new(), // no auth required for direct GPU Pod
+                Some(api_base),
+                "kimi-k2.5".to_string(),
+            )));
+        }
+
+        // Qwen3 Coder 480B (RunPod GPU Pod — direct vLLM endpoint)
+        // Supports multiple pods: QWEN3_CODER_POD_URL, QWEN3_CODER_POD_URL_2, etc.
+        for pod_url in Self::read_keys("QWEN3_CODER_POD_URL") {
+            let api_base = format!("{}/v1", pod_url.trim_end_matches('/'));
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                String::new(), // no auth required for direct GPU Pod
+                Some(api_base),
+                "qwen3-coder-480b".to_string(),
+            )));
+        }
+
+        // Futa-2B (Japanese fine-tuned Qwen3.5-2B on RunPod GPU Pod)
+        // Supports multiple pods: FUTA_POD_URL, FUTA_POD_URL_2, etc.
+        for pod_url in Self::read_keys("FUTA_POD_URL") {
+            let api_base = format!("{}/v1", pod_url.trim_end_matches('/'));
+            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
+                String::new(), // no auth required for direct GPU Pod
+                Some(api_base),
+                "futa-2b".to_string(),
             )));
         }
 
@@ -436,10 +501,15 @@ impl LoadBalancedProvider {
         let prov_is_qwen = prov_default.contains("qwen");
         let prov_is_minimax = prov_default.contains("minimax");
         let prov_is_glm = prov_default.contains("glm") || prov_default.contains("z-ai");
-        let req_is_runpod = req_lower.contains("nemotron") || req_lower.contains("nvidia/nvidia");
-        let prov_is_runpod = prov_default.contains("nemotron") || prov_default.contains("nvidia/nvidia") || prov_default.contains("runpod");
+        let req_is_runpod = req_lower.contains("nemotron") || req_lower.contains("nvidia/nvidia") || req_lower == "qwen3-32b" || req_lower == "kimi-k2.5" || req_lower == "qwen3-coder-480b";
+        let prov_is_runpod = prov_default.contains("nemotron") || prov_default.contains("nvidia/nvidia") || prov_default.contains("runpod") || prov_default == "qwen3-32b" || prov_default == "kimi-k2.5" || prov_default == "qwen3-coder-480b";
         let prov_is_openrouter = prov_default.contains("openrouter");
         let prov_is_gpt = !prov_is_claude && !prov_is_gemini && !prov_is_groq && !prov_is_deepseek && !prov_is_kimi && !prov_is_qwen && !prov_is_minimax && !prov_is_glm && !prov_is_openrouter && !prov_is_runpod;
+
+        // MiniMax native API always uses provider default (MiniMax-M1)
+        if req_is_minimax && prov_is_minimax {
+            return provider.default_model().to_string();
+        }
 
         // RunPod-specific models (Nemotron) must not be sent to non-RunPod providers
         if req_is_runpod && prov_is_runpod {
@@ -458,7 +528,6 @@ impl LoadBalancedProvider {
             || (req_is_deepseek && prov_is_deepseek)
             || (req_is_kimi && prov_is_kimi)
             || (req_is_qwen && prov_is_qwen)
-            || (req_is_minimax && prov_is_minimax)
             || (req_is_glm && prov_is_glm)
         {
             return requested_model.to_string();
@@ -828,30 +897,44 @@ impl LoadBalancedProvider {
     /// Get a specific provider for a single-model tier request.
     /// Returns (provider, model_name) or None if not found.
     pub fn get_tier_model(&self, tier: &str) -> Option<(Arc<dyn LlmProvider>, String)> {
-        // Each tier has a fallback chain: primary → secondary → tertiary
+        self.get_tier_models(tier).into_iter().next()
+    }
+
+    /// Get all matching providers for a tier, ordered by priority.
+    /// Used for fallback chains in chat/race tier mode.
+    pub fn get_tier_models(&self, tier: &str) -> Vec<(Arc<dyn LlmProvider>, String)> {
         let candidates: &[&str] = match tier {
-            "economy"  => &["nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese", "gemini-2.5-flash", "deepseek-chat", "llama-3.3-70b-specdec"],
-            "normal"   => &["nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese", "minimax/minimax-m2.5", "google/gemini-2.5-flash", "gpt-4o", "deepseek-chat"],
+            "economy"  => &["deepseek-chat", "llama-3.3-70b-specdec", "gemini-2.5-flash", "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese"],
+            "normal"   => &["qwen3-32b", "kimi-k2.5", "deepseek-chat", "google/gemini-2.5-flash", "gpt-4o"],
             "powerful" => &["claude-opus-4-6", "gpt-4o", "gemini-2.5-pro", "claude-sonnet-4-6"],
-            _ => return None,
+            _ => return vec![],
         };
+        let mut result = Vec::new();
+        let mut seen = std::collections::HashSet::new();
         for candidate in candidates {
             let target_lower = candidate.to_lowercase();
             // Exact match first
             for (i, p) in self.providers.iter().enumerate() {
-                if p.default_model().to_lowercase() == target_lower {
-                    return Some((self.providers[i].clone(), candidate.to_string()));
+                if p.default_model().to_lowercase() == target_lower && !seen.contains(&i) {
+                    seen.insert(i);
+                    result.push((self.providers[i].clone(), candidate.to_string()));
+                    break;
                 }
+            }
+            if seen.contains(&candidates.iter().position(|c| *c == *candidate).unwrap_or(999)) {
+                continue;
             }
             // Partial match
             for (i, p) in self.providers.iter().enumerate() {
                 let d = p.default_model().to_lowercase();
-                if target_lower.contains(&d) || d.contains(&target_lower) {
-                    return Some((self.providers[i].clone(), candidate.to_string()));
+                if (target_lower.contains(&d) || d.contains(&target_lower)) && !seen.contains(&i) {
+                    seen.insert(i);
+                    result.push((self.providers[i].clone(), candidate.to_string()));
+                    break;
                 }
             }
         }
-        None
+        result
     }
 }
 
