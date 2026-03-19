@@ -3,7 +3,22 @@
 ## プロジェクト概要
 chatweb.ai — 日本発、音声中心のマルチチャネルAIアシスタント
 日本を愛し、人を愛し、みんなに勇気と元気と幸せをもたらすAGI。
-Rust (axum) + AWS Lambda + DynamoDB + API Gateway
+Rust (axum) + Fly.io + SQLite/libsql
+
+## ⚠️ Lambda は削除済み（2026-03-19）
+- `nanobot-prod` Lambda関数は削除済み。**Fly.ioのみが本番**。
+- API Gateway、DynamoDB連携は停止。リポジトリのLambdaコード (`crates/nanobot-lambda/`) は残置。
+- 間違えてLambdaにデプロイしないこと。
+
+## デプロイ環境
+
+| 環境 | アプリ名 | ドメイン | バックエンド | デフォルトモデル |
+|------|---------|---------|------------|----------------|
+| **Fly.io** | `chatweb-ai` | chatweb-ai.fly.dev | SQLite (libsql) | `meta-llama/llama-4-maverick` |
+
+- **Fly.io**: nrt リージョン。`crates/nanobot-fly/` がエントリポイント。
+- **共通コア**: `crates/nanobot-core/` — チャット、ツール、A2A、認証ロジック
+- **モデル切替**: `fly secrets set NANOBOT_MODEL=... -a chatweb-ai`
 
 ## ビジョン
 - **Voice-first**: 音声で話しかけ、音声で即応答。Push-to-talk体験。
@@ -11,13 +26,16 @@ Rust (axum) + AWS Lambda + DynamoDB + API Gateway
 - **爆速**: SSEストリーミング、並列ツール実行、最賢モデル自動選択。
 - **長期記憶**: OpenClaw風のデイリーログ + 長期記憶をDynamoDBで管理。
 - **マルチチャネル**: Web, LINE, Telegram, Facebook, Discord, Slack, Teams
+- **A2A (Agent-to-Agent)**: StayFlow等の外部エージェントとJSON-RPC 2.0で連携
 
 ## アーキテクチャ
 ```
-ユーザー → API Gateway (chatweb.ai / api.chatweb.ai)
-         → AWS Lambda (nanobot-prod, ARM64, ap-northeast-1)  ← 関数名はnanobot-prod
-         → DynamoDB (セッション、ユーザー、設定、メモリ)
-         → LLM (OpenRouter primary + Anthropic/OpenAI fallback) ← LoadBalancedProvider
+ユーザー → chatweb-ai.fly.dev (Fly.io, nrt)
+         → crates/nanobot-fly/ (axum)
+         → SQLite/libsql
+         → LLM (Llama 4 Maverick via Groq + Anthropic fallback)
+         → A2A → StayFlow Agent (stayflow-ssr.fly.dev/a2a, JSON-RPC 2.0)
+                → アカウント作成/物件登録/予約管理/売上確認
 ```
 
 ## ディレクトリ構成
@@ -42,20 +60,23 @@ infra/
   deploy-fast.sh          — 高速デプロイスクリプト（本番: LAMBDA_FUNCTION_NAME=nanobot-prod）
 ```
 
-## LLMモデル構成（2026-02現在）
+## LLMモデル構成（2026-03現在）
 
-### Webチャンネルデフォルト（Normalティア）
-| 優先順 | モデル | ルート |
-|--------|--------|--------|
-| 1st | `minimax/minimax-m2.5` | OpenRouter |
-| 2nd | `moonshotai/kimi-k2.5` | OpenRouter |
-| 3rd (fail) | `openai/o4-mini` | OpenRouter |
-| 4th (fail) | `claude-sonnet-4-6` | Anthropic native |
+### デフォルトモデル (NANOBOT_MODEL)
+| 環境 | モデル | プロバイダー | tool calling |
+|------|--------|------------|-------------|
+| **Fly.io** | `meta-llama/llama-4-maverick` | Groq | ◎ 対応 |
+| **Lambda** | `minimax/minimax-m2.5` | OpenRouter | △ 不安定 |
 
-### ティア定義（`get_tier_model`）
-- **economy**: gemini-2.5-flash → deepseek-chat → qwen3-32b
-- **normal**: minimax-m2.5 → kimi-k2.5 → o4-mini → claude-sonnet-4-6 ← **デフォルト**
-- **powerful**: claude-sonnet-4-6 → gpt-4o → gemini-2.5-pro
+### ティア定義（`get_tier_model` in provider/mod.rs）
+- **economy**: deepseek-chat → llama-3.3-70b → gemini-2.5-flash → Nemotron-9B
+- **normal**: qwen3-32b → kimi-k2.5 → deepseek-chat → gemini-2.5-flash → gpt-4o
+- **powerful**: claude-opus-4-6 → gpt-4o → gemini-2.5-pro → claude-sonnet-4-6
+
+### 重要: tool callingとモデル選択
+- A2Aツール（StayFlow連携等）はtool calling対応モデルが必須
+- Llama 4 Maverick (Groq) は高速かつtool calling完全対応
+- Nemotron-9B はtool callingに非対応 → キーワードインターセプトでフォールバック
 
 ### 重要バグ修正（2026-02）
 **`provider/openai_compat.rs` の `normalize_model`**:
@@ -163,14 +184,23 @@ const AB = { assign(testId, variants), variant(testId), track(event, props) }
 ## 主要な制約・注意事項
 
 ### デプロイ
-- **Lambda関数名**: `nanobot-prod`（`nanobot`ではない）
-- **エイリアス**: `live` → 最新バージョン
-- **ビルド番号**: `b{N}` = gitコミット数（`git rev-list --count HEAD`）。Lambdaバージョン番号(v7等)とは別物
-- 高速デプロイ:
+- **⚠️ Lambdaは削除済み。`deploy-fast.sh` は使わない。**
+- **Fly.ioのみ**:
   ```
-  LAMBDA_FUNCTION_NAME=nanobot-prod ./infra/deploy-fast.sh
-  LAMBDA_FUNCTION_NAME=nanobot-prod ./infra/deploy-fast.sh --skip-build  # コード変更なしの場合
+  fly deploy -a chatweb-ai --remote-only
   ```
+- **アプリ名**: `chatweb-ai`
+- **リージョン**: nrt (Tokyo)
+- **コードベース**: `crates/nanobot-fly/` (SQLite/libsql バックエンド)
+- **Dockerfile**: `Dockerfile.fly`
+
+### A2A (Agent-to-Agent) 連携
+- **コード**: `crates/nanobot-core/src/service/a2a.rs`
+- **接続先**: StayFlow (`stayflow-ssr.fly.dev/a2a`)
+- **環境変数**: `STAYFLOW_A2A_URL`, `STAYFLOW_A2A_KEY` (Lambda env + Fly secrets)
+- **ツール**: `stayflow_create_account`, `stayflow_add_property`, `stayflow_add_reservation`, `stayflow_properties`, `stayflow_reservations`, `stayflow_occupancy`, `stayflow_revenue`
+- **アクセス**: 認証済み全ユーザー（env変数が設定されている場合のみ有効）
+- **プロトコル**: JSON-RPC 2.0, Bearer token認証
 
 ### ビルド
 - `include_str!()` でHTMLをバイナリに埋め込み → **HTML変更後は必ずリビルド**

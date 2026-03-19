@@ -1,5 +1,15 @@
 # Lessons Learned
 
+## 2026-03-02: Qwen3-32B vLLM on RunPod — GPU VRAM requirements
+- Qwen3-32B-AWQ model weights = ~16 GB. RTX A5000 (24GB) leaves only ~5.6GB for KV cache
+- KV cache per token for Qwen3-32B ≈ 0.25 MB/token. A5000 only supports ~4096 context window
+- Lambda system prompt = 4789 input tokens — exceeds A5000's 4096 limit → 400 "context too long" error
+- **FIX**: Use RTX A6000 (48GB) or larger. A6000 at $0.49/hr supports 16K context with max_num_seqs=4
+- **DO NOT** use A5000 (24GB) for Qwen3-32B with more than 4096 context — OOM crash loop
+- vLLM crash symptoms: uptime cycling -10 to +17s, cpu=0-14%, 502 on HTTP — means OOM restart loop
+- `vllm/vllm-openai:latest-x86_64` image works for Qwen3-32B-AWQ + `chat_template_kwargs: {enable_thinking: false}`
+- Empty content + 0 tokens in Lambda response = provider returned 400 error, all fallbacks also failed
+
 ## 2026-02-24: Deploy with musl target
 - Build target is `aarch64-unknown-linux-musl` (NOT gnu). Always use musl for Lambda.
 - LTO fat linking takes 5-13 minutes. Subsequent builds are faster due to crate caching.
@@ -44,6 +54,13 @@
 - **問題**: 複数の `deploy-fast.sh` を同時に起動するとビルドが競合してKILL 9される
 - **教訓**: デプロイ前に `ps aux | grep deploy-fast` でアクティブなプロセスを確認
 - **対策**: 前のデプロイが完了してから次のデプロイを開始する
+- **追加**: 他のClaude Codeセッションが残したデプロイプロセスも同じく問題になる。セッション開始時に全`deploy-fast.sh`プロセスを確認・kill
+
+## sccacheキャッシュ無効化とE0282 (2026-03-01)
+- **問題**: 強制kill後に再コンパイルすると `E0282: type annotations needed for Option<_>` が出ることがある
+- **原因**: sccacheのキャッシュが無効化され、以前は型推論が成功していたコードが失敗する
+- **修正**: `let mut last_key: Option<HashMap<String, AttributeValue>> = None;` のように型注釈を追加
+- **場所**: `http.rs` の DynamoDB scan パジネーションループ
 
 ## date_time vs datetime ツール名不一致 (2026-03-01)
 - **バグ**: `auth.rs:allowed_tools()` と `tool_permissions.rs` で `"date_time"` を使用

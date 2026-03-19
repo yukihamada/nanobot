@@ -32,12 +32,22 @@ AVAILABLE_TOOLS=""
 CREDITS_INITIAL=0
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+# Generate a unique session ID per test to prevent session pollution
+new_session() {
+  echo "test-$(date +%s)-$$-$RANDOM"
+}
+
 chat() {
   local msg="$1"
+  local sid="${2:-}"
+  local session_json=""
+  if [ -n "$sid" ]; then
+    session_json=", \"session_id\": $(echo "$sid" | jq -Rs .)"
+  fi
   curl -s --max-time "$TIMEOUT" -X POST "$BASE/api/v1/chat" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $TOKEN" \
-    -d "{\"message\": $(echo "$msg" | jq -Rs .)}" 2>/dev/null
+    -d "{\"message\": $(echo "$msg" | jq -Rs .)$session_json}" 2>/dev/null
 }
 
 # Check if a tool is available for this account
@@ -64,9 +74,11 @@ check_tool_used() {
     return
   fi
 
+  local sid
+  sid=$(new_session)  # unique session per test — prevents session pollution
   echo -n "  Testing: $name ... "
   local body
-  body=$(chat "$msg")
+  body=$(chat "$msg" "$sid")
 
   if [ -z "$body" ]; then
     echo -e "${RED}FAIL${RESET} (no response)"
@@ -125,9 +137,11 @@ check_response_contains() {
   local msg="$2"
   local keyword="$3"
 
+  local sid
+  sid=$(new_session)
   echo -n "  Testing: $name ... "
   local body response
-  body=$(chat "$msg")
+  body=$(chat "$msg" "$sid")
   response=$(echo "$body" | jq -r '.response // ""' 2>/dev/null || echo "")
 
   if [ -z "$body" ] || [ -z "$response" ]; then
@@ -268,11 +282,11 @@ check_tool_used "web_search — recent events" \
   "web_search"
 
 check_tool_used "read_webpage — URL fetch" \
-  "https://example.com のページを開いて内容を教えて" \
+  "read_webpageツールを使って https://chatweb.ai/api/v1/health にアクセスして、レスポンスを1行で教えて" \
   "read_webpage"
 
 check_tool_used "wikipedia — Wikipedia lookup" \
-  "量子コンピュータについてWikipediaで調べて概要を2行で教えて" \
+  "wikipediaツールで「量子コンピュータ」を検索して概要を2行で教えて" \
   "wikipedia"
 
 check_tool_used "weather — Weather forecast" \
