@@ -1,0 +1,26 @@
+name = "nanobot-edge"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+workers_dev = true
+
+[[routes]]
+pattern = "chatweb.ai/*"
+zone_name = "chatweb.ai"
+
+[[routes]]
+pattern = "api.chatweb.ai/*"
+zone_name = "chatweb.ai"
+
+# teai.io は別アカウント管理のため teai-edge Worker を継続使用
+# [[routes]]
+# pattern = "teai.io/*"
+# zone_name = "teai.io"
+
+[vars]
+FLY_NRT_URL = "https://nanobot-ai.fly.dev"
+AWS_LAMBDA_URL = "https://api.chatweb.ai"
+
+[env.dev]
+[env.dev.vars]
+FLY_NRT_URL = "http://localhost:3000"
+AWS_LAMBDA_URL = "https://api.chatweb.ai"

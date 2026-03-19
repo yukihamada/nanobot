@@ -1,5 +1,6 @@
 # Build outputs
 /target
+/dist
 *.zip
 bootstrap
 lambda-bootstrap

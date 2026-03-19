@@ -1,5 +1,11 @@
 [workspace]
-members = ["crates/nanobot-core", "crates/nanobot-lambda"]
+members = [
+    "crates/nanobot-core",
+    "crates/nanobot-lambda",
+    "crates/nanobot-fly",
+    "crates/chatweb-app",
+    "crates/chatweb-frontend",
+]
 resolver = "2"
 
 [package]

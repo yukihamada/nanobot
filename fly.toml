@@ -1,14 +1,26 @@
-app = "nanobot-ai"
+app = "chatweb-ai"
 primary_region = "nrt"
 
 [build]
+  dockerfile = "Dockerfile.fly"
 
 [http_service]
   internal_port = 3000
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  # SQLite is single-writer: keep exactly one machine running to avoid write contention.
+  # Scale up by switching DATABASE_URL to Turso (libsql://) when multi-region is needed.
+  min_machines_running = 1
+
+[mounts]
+  source = "synapse_data"
+  destination = "/data"
+
+[env]
+  DATABASE_URL = "/data/nanobot.db"
+  DATA_DIR = "/data"
+  PORT = "3000"
 
 [vm]
   memory = "256mb"

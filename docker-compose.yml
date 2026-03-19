@@ -1,0 +1,46 @@
+services:
+  nanobot:
+    build:
+      context: .
+      dockerfile: Dockerfile.fly
+    image: yukihamada/nanobot:latest
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      # SQLite local file (default)
+      DATABASE_URL: /data/nanobot.db
+      DATA_DIR: /data
+      # Switch to Turso for multi-region:
+      # DATABASE_URL: libsql://your-db.turso.io
+      # DATABASE_TOKEN: <turso-auth-token>
+
+      # LLM API keys — set these in a .env file (never commit secrets)
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+
+      # Optional
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      ADMIN_SESSION_KEYS: ${ADMIN_SESSION_KEYS:-}
+      LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET:-}
+      LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+
+    volumes:
+      - nanobot_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  nanobot_data:
+    driver: local
