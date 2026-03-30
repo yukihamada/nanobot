@@ -8,7 +8,7 @@ use tracing::info;
 
 use nanobot_core::config;
 use nanobot_core::db::{DbBackend, LibSqlBackend};
-use nanobot_core::service::http::{create_router, AppState};
+use nanobot_core::service::http::{create_router, spawn_sokora_tasks, AppState};
 use nanobot_core::session::file_store::FileSessionStore;
 
 /// Known API key env var names. On startup we load these from the DB config store
@@ -107,6 +107,13 @@ async fn main() -> anyhow::Result<()> {
     info!("Total tools registered: {}", app_state.tool_registry.len());
 
     let state = Arc::new(app_state);
+
+    // Spawn Sokora background tasks: load persisted nodes + health-check loop
+    if let Some(db) = state.db.clone() {
+        spawn_sokora_tasks(db);
+        info!("Sokora DePIN background tasks started");
+    }
+
     let mut router = create_router(state);
 
     // ---------------------------------------------------------------------------

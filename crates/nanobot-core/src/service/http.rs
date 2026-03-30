@@ -507,8 +507,9 @@ impl AppState {
         #[cfg(feature = "http-api")]
         {
             let improve_prov = lb_provider.clone().or_else(|| provider.clone());
-            if let Some(p) = improve_prov {
-                tool_registry.add_improve_tool(p);
+            if let Some(ref p) = improve_prov {
+                tool_registry.add_improve_tool(p.clone());
+                tool_registry.add_multi_agent_tool(p.clone());
             }
         }
 
@@ -1536,7 +1537,7 @@ async fn deduct_credits_via_state(
 }
 
 /// Check rate limit using state (checks state.db first, falls back to DynamoDB).
-#[cfg(feature = "dynamodb-backend")]
+#[cfg(any(feature = "dynamodb-backend", feature = "libsql-backend"))]
 async fn check_rate_limit_via_state(
     state: &AppState,
     key: &str,
@@ -1550,11 +1551,12 @@ async fn check_rate_limit_via_state(
         };
     }
 
+    #[cfg(feature = "dynamodb-backend")]
     if let (Some(dynamo), Some(table)) = (state.dynamo_client.as_ref(), state.config_table.as_ref()) {
-        check_rate_limit(dynamo, table, key, max_per_minute).await
-    } else {
-        true
+        return check_rate_limit(dynamo, table, key, max_per_minute).await;
     }
+
+    true
 }
 
 /// Check hourly rate limit using state (checks state.db first, falls back to DynamoDB).
@@ -2662,7 +2664,7 @@ const AGENTS: &[AgentProfile] = &[
              - 推測と事実を明確に区別する。",
         tools_enabled: true,
         icon: "search",
-        preferred_model: Some("moonshotai/kimi-k2.5"),
+        preferred_model: Some("google/gemini-2.5-flash"),
         estimated_seconds: 30,
         max_chars_pc: 400,
         max_chars_mobile: 120,
@@ -2743,6 +2745,33 @@ const AGENTS: &[AgentProfile] = &[
         estimated_seconds: 10,
         max_chars_pc: 400,
         max_chars_mobile: 120,
+        max_chars_voice: 60,
+    },
+    AgentProfile {
+        id: "multi_agent",
+        name: "Multi-Agent",
+        description: "Parallel research with multiple AI subagents working simultaneously",
+        system_prompt: "あなたは ChatWeb のマルチエージェント・オーケストレーターです。\n\
+             複数のAIサブエージェントを並列に動かし、包括的な調査・分析を行います。\n\n\
+             ## SOUL\n\
+             - 司令塔として全体を俯瞰。各サブエージェントに的確なタスクを割り振る。\n\
+             - 複数の視点を統合し、偏りのない結論を導く。\n\n\
+             ## 行動規範\n\
+             - ユーザーの質問を分析し、2〜5個のサブタスクに分解する。\n\
+             - `multi_agent` ツールを必ず呼び出してサブエージェントを並列実行する。\n\
+             - 各サブエージェントの結果を統合し、矛盾があれば指摘する。\n\
+             - 情報源を明示し、信頼度を評価する。\n\
+             - 最終的に簡潔で分かりやすいレポートにまとめる。\n\n\
+             ## 使い方の例\n\
+             - 「A社とB社を比較して」→ 各社を別エージェントで調査\n\
+             - 「最新のAIトレンド」→ 技術・ビジネス・規制の3軸で並列調査\n\
+             - 「旅行プラン」→ 交通・宿泊・観光を並列検索",
+        tools_enabled: true,
+        icon: "agents",
+        preferred_model: Some("google/gemini-2.5-flash"),
+        estimated_seconds: 45,
+        max_chars_pc: 600,
+        max_chars_mobile: 200,
         max_chars_voice: 60,
     },
 ];
@@ -3120,6 +3149,9 @@ const TOOL_GROUPS: &[(&[&str], &[&str])] = &[
      &["run_linter"]),
     (&["テスト", "test"],
      &["run_tests"]),
+    // Multi-agent / subagent / parallel research
+    (&["エージェント", "agent", "並列", "parallel", "調査", "リサーチ", "research", "比較", "compar", "マルチ", "multi", "分析して", "analyze"],
+     &["multi_agent"]),
 ];
 
 /// Select relevant tools based on user message content.
@@ -3198,6 +3230,53 @@ pub struct WorkerResultRequest {
 #[derive(Debug, Deserialize)]
 pub struct WorkerHeartbeatRequest {
     pub worker_id: String,
+}
+
+// ---------------------------------------------------------------------------
+// Sokora DePIN Node Registration
+// ---------------------------------------------------------------------------
+
+/// Sokora node registration request.
+#[derive(Debug, Deserialize)]
+struct SokoraRegisterRequest {
+    node_id: String,
+    api_key: String,
+    tunnel_url: String,
+    ram_gb: u64,
+    models: Vec<String>,
+    version: String,
+}
+
+/// Stored Sokora node info.
+#[derive(Debug, Clone, Serialize)]
+struct SokoraNodeInfo {
+    node_id: String,
+    tunnel_url: String,
+    ram_gb: u64,
+    models: Vec<String>,
+    version: String,
+    last_seen: String,
+}
+
+/// In-memory store for Sokora nodes: node_id → SokoraNodeInfo
+static SOKORA_NODES: Lazy<dashmap::DashMap<String, SokoraNodeInfo>> =
+    Lazy::new(dashmap::DashMap::new);
+
+/// Per-node concurrent request counter for rate limiting
+static SOKORA_CONCURRENT: Lazy<dashmap::DashMap<String, AtomicU32>> =
+    Lazy::new(dashmap::DashMap::new);
+
+/// Sticky session map: session_token → node_id (for multi-turn conversation affinity)
+static SOKORA_SESSIONS: Lazy<dashmap::DashMap<String, String>> =
+    Lazy::new(dashmap::DashMap::new);
+
+/// SSRF guard: only allow well-known tunnel providers over HTTPS.
+fn is_safe_tunnel_url(url: &str) -> bool {
+    if !url.starts_with("https://") {
+        return false;
+    }
+    let allowed = ["trycloudflare.com", "ngrok.io", "ngrok-free.app", "loca.lt"];
+    allowed.iter().any(|d| url.contains(d))
 }
 
 /// Request body for the chat endpoint.
@@ -3336,6 +3415,8 @@ pub struct VerifyRequest {
     pub code: String,
     pub session_id: Option<String>,
     pub referral_code: Option<String>,
+    /// Optional password — included when verifying a registration (not passwordless).
+    pub password: Option<String>,
 }
 
 /// Google OAuth callback query parameters.
@@ -3564,6 +3645,85 @@ pub struct HealthResponse {
     pub timestamp: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub providers: Option<u32>,
+}
+
+/// Spawn background tasks for the Sokora DePIN node registry.
+///
+/// 1. Load persisted nodes from DB into the in-memory SOKORA_NODES map.
+/// 2. Run a periodic health-check loop: ping each node every 5 minutes,
+///    remove nodes not seen in 90 minutes from both memory and DB.
+pub fn spawn_sokora_tasks(db: Arc<dyn crate::db::DbBackend>) {
+    // --- Load nodes from DB on startup ---
+    let db2 = db.clone();
+    tokio::spawn(async move {
+        match db2.list_sokora_nodes().await {
+            Ok(nodes) => {
+                let count = nodes.len();
+                for record in nodes {
+                    let models: Vec<String> = serde_json::from_str(&record.models_json)
+                        .unwrap_or_default();
+                    let node = SokoraNodeInfo {
+                        node_id: record.node_id.clone(),
+                        tunnel_url: record.tunnel_url,
+                        ram_gb: record.ram_gb,
+                        models,
+                        version: record.version,
+                        last_seen: record.last_seen,
+                    };
+                    SOKORA_NODES.insert(record.node_id, node);
+                }
+                info!("Sokora: loaded {} nodes from DB", count);
+            }
+            Err(e) => tracing::warn!("Sokora: failed to load nodes from DB: {}", e),
+        }
+    });
+
+    // --- Background health-check loop ---
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // 5 min
+        loop {
+            interval.tick().await;
+
+            let now = chrono::Utc::now();
+            let stale_cutoff_mins: i64 = 90;
+
+            // Evict stale nodes from in-memory map
+            let stale_ids: Vec<String> = SOKORA_NODES
+                .iter()
+                .filter_map(|entry| {
+                    let node = entry.value();
+                    let last_seen = chrono::DateTime::parse_from_rfc3339(&node.last_seen)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or(chrono::DateTime::UNIX_EPOCH.with_timezone(&chrono::Utc));
+                    if (now - last_seen).num_minutes() >= stale_cutoff_mins {
+                        Some(node.node_id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            for id in &stale_ids {
+                SOKORA_NODES.remove(id);
+                SOKORA_CONCURRENT.remove(id);
+                SOKORA_SESSIONS.retain(|_, v| v != id);
+            }
+
+            if !stale_ids.is_empty() {
+                info!("Sokora health-check: evicted {} stale nodes from memory", stale_ids.len());
+            }
+
+            // Clean up DB (nodes older than 90 minutes)
+            if let Err(e) = db.delete_stale_sokora_nodes(stale_cutoff_mins * 60).await {
+                tracing::warn!("Sokora health-check: DB cleanup failed: {}", e);
+            }
+
+            info!(
+                "Sokora health-check: {} nodes online",
+                SOKORA_NODES.len()
+            );
+        }
+    });
 }
 
 /// Create the axum Router with all API routes.
@@ -3820,6 +3980,15 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // DePIN Node Rewards
         .route("/api/v1/depin/report", post(handle_depin_report))
         .route("/api/v1/depin/stats", get(handle_depin_stats))
+        // Sokora DePIN Node Registry
+        .route("/api/v1/nodes/register", post(handle_sokora_register))
+        .route("/api/v1/nodes", get(handle_sokora_nodes))
+        .route("/api/v1/nodes/chat", post(handle_sokora_chat_any))
+        .route("/api/v1/nodes/{node_id}/chat", post(handle_sokora_chat))
+        .route("/api/v1/nodes/{node_id}/stats", get(handle_sokora_node_stats))
+        // Koe Device OTA
+        .route("/api/v1/device/firmware", get(handle_device_firmware))
+        .route("/api/v1/device/firmware/upload", post(handle_device_firmware_upload))
         // Agent wallet
         .route("/api/v1/agent/wallet", get(handle_agent_wallet))
         // A/B test
@@ -4759,7 +4928,11 @@ async fn handle_chat(
         { false }
     };
     // Dynamic tool selection: only send tools relevant to the user's message
-    let relevant_tool_names = select_relevant_tools(&clean_message, &history_messages);
+    let mut relevant_tool_names = select_relevant_tools(&clean_message, &history_messages);
+    // Force-include multi_agent tool when multi_agent agent is selected
+    if agent.id == "multi_agent" {
+        relevant_tool_names.insert("multi_agent");
+    }
     let tools = if agent.tools_enabled {
         let all_tools = state.tool_registry.get_definitions();
         let mut filtered: Vec<serde_json::Value> = all_tools.into_iter()
@@ -7857,7 +8030,7 @@ async fn handle_chat_stream(
             "web_search".to_string(), "read_webpage".to_string(),
             "calculator".to_string(), "datetime".to_string(),
             "code_execute".to_string(), "image_generate".to_string(),
-            "improve_project".to_string(),
+            "improve_project".to_string(), "multi_agent".to_string(),
             "github_read_file".to_string(),
             "github_create_or_update_file".to_string(),
             "github_create_pr".to_string(),
@@ -7866,7 +8039,10 @@ async fn handle_chat_stream(
         user_settings.as_ref().and_then(|s| s.enabled_tools.clone())
     };
     // Dynamic tool selection for streaming path
-    let stream_relevant_tools = select_relevant_tools(&clean_message, &stream_history);
+    let mut stream_relevant_tools = select_relevant_tools(&clean_message, &stream_history);
+    if agent.id == "multi_agent" {
+        stream_relevant_tools.insert("multi_agent");
+    }
     let tools: Vec<serde_json::Value> = if agent.tools_enabled {
         let all_defs = state.tool_registry.get_definitions();
         let mut defs: Vec<serde_json::Value> = all_defs.into_iter()
@@ -12459,20 +12635,19 @@ async fn handle_integrations(
 
 /// GET / — Root landing page (host-based routing)
 async fn handle_root(headers: axum::http::HeaderMap) -> impl IntoResponse {
-    // When STATIC_DIR is set (Fly.io deployment with WASM frontend),
-    // serve the WASM index.html instead of the legacy embedded HTML.
-    if let Ok(static_dir) = std::env::var("STATIC_DIR") {
-        let index_path = std::path::Path::new(&static_dir).join("index.html");
-        if let Ok(html) = std::fs::read_to_string(&index_path) {
-            return (
-                [
-                    (axum::http::header::CACHE_CONTROL, "no-store, must-revalidate"),
-                    (axum::http::header::PRAGMA, "no-cache"),
-                ],
-                axum::response::Html(std::borrow::Cow::<'static, str>::Owned(html)),
-            );
-        }
-    }
+    // NOTE: WASM SPA disabled — using embedded index.html which has
+    // agent-select, multi-agent support, and all latest UI features.
+    // To re-enable WASM: uncomment STATIC_DIR check below.
+    // if let Ok(static_dir) = std::env::var("STATIC_DIR") {
+    //     let index_path = std::path::Path::new(&static_dir).join("index.html");
+    //     if let Ok(html) = std::fs::read_to_string(&index_path) {
+    //         return (
+    //             [(axum::http::header::CACHE_CONTROL, "no-store, must-revalidate"),
+    //              (axum::http::header::PRAGMA, "no-cache")],
+    //             axum::response::Html(std::borrow::Cow::<'static, str>::Owned(html)),
+    //         );
+    //     }
+    // }
 
     let host = effective_host(&headers);
 
@@ -15226,6 +15401,79 @@ async fn handle_depin_stats(State(state): State<Arc<AppState>>) -> impl IntoResp
     .into_response()
 }
 
+// ─── Koe Device OTA ──────────────────────────────────────────────────────
+
+/// GET /api/v1/device/firmware?device_id=xxx&version=xxx
+/// 204 = 最新、200 = バイナリストリーム
+async fn handle_device_firmware(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "/data".to_string());
+    let version_path = format!("{}/koe-firmware/version.txt", data_dir);
+    let bin_path     = format!("{}/koe-firmware/latest.bin",   data_dir);
+
+    let latest = match std::fs::read_to_string(&version_path) {
+        Ok(v) => v.trim().to_string(),
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    let current = params.get("version").map(|s| s.as_str()).unwrap_or("");
+    if current == latest {
+        return StatusCode::NO_CONTENT.into_response();
+    }
+
+    let firmware = match std::fs::read(&bin_path) {
+        Ok(d) => d,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    let device_id = params.get("device_id").map(|s| s.as_str()).unwrap_or("unknown");
+    info!("OTA: sending v{} to {} (was v{})", latest, device_id, current);
+
+    (
+        StatusCode::OK,
+        [
+            ("content-type",       "application/octet-stream"),
+            ("x-firmware-version", latest.as_str()),
+        ],
+        firmware,
+    ).into_response()
+}
+
+/// POST /api/v1/device/firmware/upload?version=0.7.0&token=ADMIN_TOKEN
+/// Body: raw .bin binary
+async fn handle_device_firmware_upload(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+    body: axum::body::Bytes,
+) -> impl IntoResponse {
+    // Admin token 認証
+    let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
+    let admin_keys = std::env::var("ADMIN_SESSION_KEYS").unwrap_or_default();
+    let authorized = admin_keys.split(',').any(|k| k.trim() == token);
+    if !authorized {
+        return (StatusCode::UNAUTHORIZED, "Invalid token").into_response();
+    }
+
+    let version = match params.get("version") {
+        Some(v) => v.trim().to_string(),
+        None => return (StatusCode::BAD_REQUEST, "version required").into_response(),
+    };
+    if body.is_empty() {
+        return (StatusCode::BAD_REQUEST, "Empty binary").into_response();
+    }
+
+    let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "/data".to_string());
+    let dir = format!("{}/koe-firmware", data_dir);
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, format!("mkdir: {}", e)).into_response();
+    }
+    if let Err(e) = std::fs::write(format!("{}/latest.bin",   dir), &body)    { return (StatusCode::INTERNAL_SERVER_ERROR, format!("write bin: {}", e)).into_response(); }
+    if let Err(e) = std::fs::write(format!("{}/version.txt",  dir), &version) { return (StatusCode::INTERNAL_SERVER_ERROR, format!("write ver: {}", e)).into_response(); }
+
+    info!("OTA: uploaded firmware v{} ({} bytes)", version, body.len());
+    (StatusCode::OK, format!("v{} ({} bytes) uploaded", version, body.len())).into_response()
+}
+
 // ─── Agent Wallet (x402 micropayments) ───────────────────────────────────
 
 /// GET /api/v1/agent/wallet — Get agent wallet balance for authenticated user
@@ -17604,7 +17852,89 @@ async fn handle_auth_register(
         }
     }
 
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+    // DbBackend path (libsql / Fly.io)
+    if let Some(ref db) = state.db {
+        // Rate limit: 3 registrations per minute per email
+        if !check_rate_limit_via_state(&state, &format!("register:{}", email), 3).await {
+            return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Too many requests. Please try again later." })));
+        }
+
+        // Check if email already registered
+        if let Ok(Some(_)) = db.get_email_credential(&email).await {
+            return (StatusCode::CONFLICT, Json(serde_json::json!({ "error": "Email already registered" })));
+        }
+
+        let salt = uuid::Uuid::new_v4().to_string();
+        let password_hash = hash_password(&req.password, &salt);
+        // Store as "salt$hash" so login can reconstruct
+        let combined_hash = format!("{}${}", salt, password_hash);
+
+        let resend_api_key = std::env::var("RESEND_API_KEY").ok().filter(|k| !k.is_empty());
+        if let Some(ref api_key) = resend_api_key {
+            // Generate 6-digit verification code
+            let uuid_bytes = uuid::Uuid::new_v4();
+            let num = u32::from_le_bytes([uuid_bytes.as_bytes()[0], uuid_bytes.as_bytes()[1], uuid_bytes.as_bytes()[2], uuid_bytes.as_bytes()[3]]);
+            let code = format!("{:06}", num % 1_000_000);
+
+            // Store verification data via channel_map
+            let _ = db.set_channel_map(&format!("verify:{}", email), &code).await;
+            let _ = db.set_channel_map(&format!("verify_pw:{}", email), &combined_hash).await;
+            let _ = db.set_channel_map(&format!("verify_type:{}", email), "register").await;
+            if let Some(ref name) = req.name {
+                let trimmed = name.trim();
+                if !trimmed.is_empty() {
+                    let _ = db.set_channel_map(&format!("verify_name:{}", email), trimmed).await;
+                }
+            }
+            if let Some(ref ref_code) = req.referral_code {
+                let trimmed = ref_code.trim().to_uppercase();
+                if !trimmed.is_empty() {
+                    let _ = db.set_channel_map(&format!("verify_ref:{}", email), &trimmed).await;
+                }
+            }
+
+            match send_verification_email(&email, &code, api_key).await {
+                Ok(()) => {
+                    tracing::info!("Registration verification email sent to {}", email);
+                    return (StatusCode::OK, Json(serde_json::json!({
+                        "ok": true,
+                        "pending_verification": true,
+                        "message": "認証コードをメールに送信しました。"
+                    })));
+                }
+                Err(e) => {
+                    tracing::error!("Failed to send verification email for register: {}", e);
+                    // Fall through to instant registration
+                }
+            }
+        }
+
+        // Fallback: instant registration (no RESEND_API_KEY or email send failed)
+        let user_id = format!("user:{}", uuid::Uuid::new_v4());
+        let _ = db.get_or_create_user(&user_id).await;
+        let display_name = req.name
+            .as_ref()
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| email.clone());
+        let _ = db.update_user_display_name(&user_id, &display_name).await;
+        let _ = db.set_email_credential(&user_id, &email, &combined_hash).await;
+        let _ = db.set_channel_map(&format!("email:{}", email), &user_id).await;
+
+        let auth_token = uuid::Uuid::new_v4().to_string();
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(30);
+        let _ = db.create_auth_token(&auth_token, &user_id, Some(&expires_at.to_rfc3339())).await;
+
+        return (StatusCode::OK, Json(serde_json::json!({
+            "ok": true,
+            "token": auth_token,
+            "user_id": user_id,
+            "email": email,
+            "display_name": display_name,
+        })));
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Database not configured" })))
 }
 
 /// POST /api/v1/auth/login — Email login
@@ -17695,7 +18025,46 @@ async fn handle_auth_login(
         }
     }
 
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "DynamoDB not configured" })))
+    // DbBackend path (libsql / Fly.io)
+    if let Some(ref db) = state.db {
+        if !check_rate_limit_via_state(&state, &format!("login:{}", email), 5).await {
+            return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({ "error": "Too many requests. Please try again later." })));
+        }
+
+        if let Ok(Some((user_id, stored_hash))) = db.get_email_credential(&email).await {
+            // Parse "salt$hash" format
+            if let Some((salt, expected_hash)) = stored_hash.split_once('$') {
+                let computed_hash = hash_password(&req.password, salt);
+                if computed_hash != expected_hash {
+                    return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid email or password" })));
+                }
+            } else {
+                return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid email or password" })));
+            }
+
+            // Link session if provided
+            if let Some(ref sid) = req.session_id {
+                if !sid.is_empty() {
+                    let _ = db.set_channel_map(&format!("link:{}", sid), &user_id).await;
+                }
+            }
+
+            let auth_token = uuid::Uuid::new_v4().to_string();
+            let expires_at = chrono::Utc::now() + chrono::Duration::days(30);
+            let _ = db.create_auth_token(&auth_token, &user_id, Some(&expires_at.to_rfc3339())).await;
+
+            return (StatusCode::OK, Json(serde_json::json!({
+                "ok": true,
+                "token": auth_token,
+                "user_id": user_id,
+                "email": email,
+            })));
+        }
+
+        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({ "error": "Invalid email or password" })));
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": "Database not configured" })))
 }
 
 /// Get branded email sender based on host context.
@@ -18234,7 +18603,7 @@ async fn handle_auth_verify(
         // Look up stored code via channel_map
         let verify_key = format!("verify:{}", email);
         let stored_code = match db.get_channel_map(&verify_key).await {
-            Ok(Some(c)) => c,
+            Ok(Some(c)) if !c.is_empty() => c,
             _ => {
                 return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
                     "error": "認証コードが見つかりません。もう一度メールアドレスを入力してください。"
@@ -18251,8 +18620,23 @@ async fn handle_auth_verify(
         // Delete used code
         let _ = db.set_channel_map(&verify_key, "").await;
 
+        // Check if this is a register-with-password flow
+        let stored_pw = db.get_channel_map(&format!("verify_pw:{}", email)).await.ok().flatten()
+            .filter(|s| !s.is_empty());
+        let stored_name = db.get_channel_map(&format!("verify_name:{}", email)).await.ok().flatten()
+            .filter(|s| !s.is_empty());
+        let _stored_ref = db.get_channel_map(&format!("verify_ref:{}", email)).await.ok().flatten()
+            .filter(|s| !s.is_empty());
+
+        // Clean up verification metadata
+        let _ = db.set_channel_map(&format!("verify_pw:{}", email), "").await;
+        let _ = db.set_channel_map(&format!("verify_type:{}", email), "").await;
+        let _ = db.set_channel_map(&format!("verify_name:{}", email), "").await;
+        let _ = db.set_channel_map(&format!("verify_ref:{}", email), "").await;
+
+        let display_name = stored_name.unwrap_or_else(|| email.clone());
+
         // Get or create user
-        let display_name = email.clone();
         let user_id = if let Ok(Some(profile)) = db.find_user_by_email(&email).await {
             profile.user_id
         } else {
@@ -18260,6 +18644,12 @@ async fn handle_auth_verify(
             let _ = db.get_or_create_user(&uid).await;
             let _ = db.update_user_display_name(&uid, &display_name).await;
             let _ = db.set_channel_map(&format!("email:{}", email), &uid).await;
+
+            // If password hash was stored during registration, save credentials
+            if let Some(ref combined_hash) = stored_pw {
+                let _ = db.set_email_credential(&uid, &email, combined_hash).await;
+            }
+
             uid
         };
 
@@ -25476,6 +25866,571 @@ async fn handle_nature_remo(Json(body): Json<serde_json::Value>) -> impl IntoRes
     use crate::service::integrations::{Tool, NatureRemoTool};
     let params = match json_to_params(body) { Ok(p) => p, Err(e) => return e };
     Json(serde_json::json!({ "result": NatureRemoTool.execute(params).await })).into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Sokora DePIN Node Registry handlers
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/nodes/register — Register a Sokora DePIN node.
+async fn handle_sokora_register(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SokoraRegisterRequest>,
+) -> impl IntoResponse {
+    if req.node_id.is_empty() || req.tunnel_url.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "node_id and tunnel_url are required" })),
+        )
+            .into_response();
+    }
+
+    // SSRF guard: only allow HTTPS tunnel URLs from known providers
+    if !is_safe_tunnel_url(&req.tunnel_url) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "tunnel_url must be an https:// URL from a supported tunnel provider (trycloudflare.com, ngrok.io, ngrok-free.app, loca.lt)"
+            })),
+        )
+            .into_response();
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let node = SokoraNodeInfo {
+        node_id: req.node_id.clone(),
+        tunnel_url: req.tunnel_url.clone(),
+        ram_gb: req.ram_gb,
+        models: req.models.clone(),
+        version: req.version.clone(),
+        last_seen: now.clone(),
+    };
+
+    // Log without api_key (api_key stays in struct but we never log it)
+    info!(
+        "Sokora node registered: id={}, ram={}GB, models={:?}, version={}",
+        req.node_id, req.ram_gb, req.models, req.version
+    );
+
+    // Persist to DB (fire-and-forget — don't fail registration if DB is slow)
+    if let Some(db) = &state.db {
+        let db = db.clone();
+        let record = crate::db::SokoraNodeRecord {
+            node_id: req.node_id.clone(),
+            tunnel_url: req.tunnel_url.clone(),
+            ram_gb: req.ram_gb,
+            models_json: serde_json::to_string(&req.models).unwrap_or_else(|_| "[]".to_string()),
+            version: req.version.clone(),
+            last_seen: now.clone(),
+            tokens_processed: 0,
+            requests_served: 0,
+            created_at: now.clone(),
+        };
+        tokio::spawn(async move {
+            if let Err(e) = db.upsert_sokora_node(&record).await {
+                tracing::warn!("Failed to persist Sokora node to DB: {}", e);
+            }
+        });
+    }
+
+    SOKORA_NODES.insert(req.node_id.clone(), node);
+
+    (
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "status": "registered",
+            "node_id": req.node_id,
+            "message": "Node registered successfully"
+        })),
+    )
+        .into_response()
+}
+
+/// GET /api/v1/nodes — List all registered Sokora DePIN nodes.
+async fn handle_sokora_nodes(
+    State(_state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let now = chrono::Utc::now();
+    let nodes: Vec<serde_json::Value> = SOKORA_NODES
+        .iter()
+        .map(|entry| {
+            let node = entry.value();
+            let last_seen = chrono::DateTime::parse_from_rfc3339(&node.last_seen)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or(chrono::DateTime::UNIX_EPOCH.with_timezone(&chrono::Utc));
+            let idle_minutes = (now - last_seen).num_minutes();
+            let online = idle_minutes < 60;
+            serde_json::json!({
+                "node_id": node.node_id,
+                "tunnel_url": node.tunnel_url,
+                "ram_gb": node.ram_gb,
+                "models": node.models,
+                "last_seen": node.last_seen,
+                "online": online,
+                "idle_minutes": idle_minutes,
+            })
+        })
+        .collect();
+
+    Json(serde_json::json!({ "nodes": nodes })).into_response()
+}
+
+/// GET /api/v1/nodes/:node_id/stats — Per-node reward stats.
+async fn handle_sokora_node_stats(
+    State(state): State<Arc<AppState>>,
+    Path(node_id): Path<String>,
+) -> impl IntoResponse {
+    // Return in-memory status + DB lifetime stats
+    let online = SOKORA_NODES.get(&node_id).map(|n| {
+        let last_seen = chrono::DateTime::parse_from_rfc3339(&n.last_seen)
+            .map(|dt| (chrono::Utc::now() - dt.with_timezone(&chrono::Utc)).num_minutes())
+            .unwrap_or(9999);
+        serde_json::json!({ "online": last_seen < 60, "idle_minutes": last_seen })
+    });
+
+    if let Some(db) = &state.db {
+        match db.list_sokora_nodes().await {
+            Ok(nodes) => {
+                if let Some(rec) = nodes.iter().find(|r| r.node_id == node_id) {
+                    return Json(serde_json::json!({
+                        "node_id": node_id,
+                        "tokens_processed": rec.tokens_processed,
+                        "requests_served": rec.requests_served,
+                        "live": online,
+                    })).into_response();
+                }
+            }
+            Err(e) => tracing::warn!("node_stats: DB error: {}", e),
+        }
+    }
+
+    Json(serde_json::json!({
+        "node_id": node_id,
+        "live": online,
+        "tokens_processed": 0,
+        "requests_served": 0,
+    })).into_response()
+}
+
+/// POST /api/v1/nodes/:node_id/chat — Proxy inference request to a registered Sokora node.
+///
+/// api_key resolution order (header preferred to avoid body logging):
+///   1. `Authorization: Bearer {api_key}` header
+///   2. `api_key` field in request body (backward-compatible)
+async fn handle_sokora_chat(
+    Path(node_id): Path<String>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // 1. Look up node
+    let node = match SOKORA_NODES.get(&node_id) {
+        Some(n) => n.clone(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "Node not found", "node_id": node_id })),
+            )
+                .into_response();
+        }
+    };
+
+    // 2. Online check (last_seen within 60 minutes)
+    let last_seen = chrono::DateTime::parse_from_rfc3339(&node.last_seen)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or(chrono::DateTime::UNIX_EPOCH.with_timezone(&chrono::Utc));
+    let idle_minutes = (chrono::Utc::now() - last_seen).num_minutes();
+    if idle_minutes >= 60 {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "Node is offline",
+                "node_id": node_id,
+                "last_seen": node.last_seen,
+                "idle_minutes": idle_minutes,
+            })),
+        )
+            .into_response();
+    }
+
+    // 3. Rate limit: max 10 concurrent requests per node
+    const MAX_CONCURRENT: u32 = 10;
+    {
+        SOKORA_CONCURRENT
+            .entry(node_id.clone())
+            .or_insert_with(|| AtomicU32::new(0));
+    }
+    let current = SOKORA_CONCURRENT
+        .get(&node_id)
+        .map(|v| v.value().fetch_add(1, Ordering::SeqCst))
+        .unwrap_or(0);
+    if current >= MAX_CONCURRENT {
+        if let Some(v) = SOKORA_CONCURRENT.get(&node_id) {
+            v.value().fetch_sub(1, Ordering::SeqCst);
+        }
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({
+                "error": "Too many concurrent requests to this node",
+                "node_id": node_id,
+                "max_concurrent": MAX_CONCURRENT,
+            })),
+        )
+            .into_response();
+    }
+    // Decrement counter when this function returns
+    struct ConcurrencyGuard(String);
+    impl Drop for ConcurrencyGuard {
+        fn drop(&mut self) {
+            if let Some(v) = SOKORA_CONCURRENT.get(&self.0) {
+                v.value().fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+    }
+    let _guard = ConcurrencyGuard(node_id.clone());
+
+    // 4. Resolve api_key: header preferred over body (avoids logging secrets)
+    let header_key = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|s| s.to_string());
+
+    let api_key = if let Some(k) = header_key {
+        k
+    } else {
+        body.get("api_key")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+
+    // Strip api_key from forwarded body to avoid logging it downstream
+    let mut forwarded = body.clone();
+    if let Some(obj) = forwarded.as_object_mut() {
+        obj.remove("api_key");
+    }
+
+    let target_url = format!("{}/v1/messages", node.tunnel_url.trim_end_matches('/'));
+    let tunnel_hint = node.tunnel_url.chars().take(20).collect::<String>();
+
+    // 5. Forward to tunnel with 120s timeout (MLX inference can take 60-90s for large models)
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_default();
+
+    let mut req = client
+        .post(&target_url)
+        .header("Content-Type", "application/json");
+
+    if !api_key.is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", api_key));
+    }
+
+    match req.json(&forwarded).send().await {
+        Ok(resp) => {
+            let status = StatusCode::from_u16(resp.status().as_u16())
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            match resp.bytes().await {
+                Ok(bytes) => {
+                    match serde_json::from_slice::<serde_json::Value>(&bytes) {
+                        Ok(json) => (status, Json(json)).into_response(),
+                        Err(e) => {
+                            let body_preview: String = String::from_utf8_lossy(&bytes[..bytes.len().min(200)]).to_string();
+                            warn!("Sokora proxy: failed to parse response from node {}: {} — body: {}", node_id, e, body_preview);
+                            (
+                                StatusCode::BAD_GATEWAY,
+                                Json(serde_json::json!({
+                                    "error": "Invalid response from node",
+                                    "tunnel_url_hint": tunnel_hint,
+                                    "body_preview": body_preview,
+                                })),
+                            )
+                                .into_response()
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Sokora proxy: failed to read response body from node {}: {}", node_id, e);
+                    (
+                        StatusCode::BAD_GATEWAY,
+                        Json(serde_json::json!({
+                            "error": "Failed to read node response",
+                            "tunnel_url_hint": tunnel_hint,
+                        })),
+                    )
+                        .into_response()
+                }
+            }
+        }
+        Err(e) => {
+            warn!("Sokora proxy: request to node {} failed: {}", node_id, e);
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({
+                    "error": "Node unreachable",
+                    "detail": e.to_string(),
+                    "tunnel_url_hint": tunnel_hint,
+                })),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Determine task tier from model name:
+/// - "light": haiku, 4b, 9b, fast → prefer low-RAM node (M2 Air)
+/// - "heavy": sonnet, opus, 122b, 35b, deepseek → prefer high-RAM node (M5 Max)
+/// - "vision": any request with images → prefer node with vision models
+fn sokora_task_tier(model: &str, has_images: bool) -> &'static str {
+    if has_images { return "vision"; }
+    let m = model.to_lowercase();
+    if m.contains("haiku") || m.contains("4b") || m.contains("9b") || m.contains("fast") || m.contains("mini") {
+        "light"
+    } else if m.contains("sonnet") || m.contains("opus") || m.contains("122b") || m.contains("35b")
+        || m.contains("deepseek") || m.contains("14b") || m.contains("claude-3") {
+        "heavy"
+    } else {
+        "heavy" // default to high-quality
+    }
+}
+
+/// POST /api/v1/nodes/chat — Smart routing across Sokora nodes.
+///
+/// Routing priority:
+///   X-Sokora-Session header → sticky node (same node for multi-turn)
+///   vision  → node with vision model (VL-8B/VL-4B), fallback to any
+///   light   → lowest-RAM available node first (M2 Air for quick tasks)
+///   heavy   → highest-RAM node first (M5 Max for quality tasks)
+/// Secondary sort: fewer concurrent requests (load balancing)
+/// Falls back to next node if the selected one fails.
+async fn handle_sokora_chat_any(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let now = chrono::Utc::now();
+
+    // Check for sticky session header — route to same node for multi-turn conversations
+    let session_token = headers
+        .get("x-sokora-session")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    if let Some(ref tok) = session_token {
+        if let Some(sticky_id) = SOKORA_SESSIONS.get(tok) {
+            let sticky_node_id = sticky_id.value().clone();
+            drop(sticky_id);
+            // Verify the sticky node is still online
+            if let Some(n) = SOKORA_NODES.get(&sticky_node_id) {
+                let last_seen = chrono::DateTime::parse_from_rfc3339(&n.last_seen)
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .unwrap_or(chrono::DateTime::UNIX_EPOCH.with_timezone(&chrono::Utc));
+                if (now - last_seen).num_minutes() < 60 {
+                    info!("Sokora sticky session: routing to {}", sticky_node_id);
+                    // Use the single sticky node (drop and re-collect for simplicity)
+                    let candidates = vec![n.clone()];
+                    drop(n);
+                    // Fall through to the forwarding loop below with this single candidate
+                    // (reuse the rest of the function by setting candidates directly)
+                    let api_key = headers
+                        .get(axum::http::header::AUTHORIZATION)
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|v| v.strip_prefix("Bearer "))
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| {
+                            body.get("api_key")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string()
+                        });
+                    let mut forwarded = body.clone();
+                    if let Some(obj) = forwarded.as_object_mut() { obj.remove("api_key"); }
+                    let client = reqwest::Client::builder()
+                        .timeout(std::time::Duration::from_secs(120))
+                        .build()
+                        .unwrap_or_default();
+                    for node in &candidates {
+                        let target_url = format!("{}/v1/messages", node.tunnel_url.trim_end_matches('/'));
+                        let mut req = client.post(&target_url).header("Content-Type", "application/json");
+                        if !api_key.is_empty() { req = req.header("Authorization", format!("Bearer {}", api_key)); }
+                        if let Ok(resp) = req.json(&forwarded).send().await {
+                            let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+                            if let Ok(bytes) = resp.bytes().await {
+                                if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                                    // Track reward stats (fire-and-forget)
+                                    let output_tokens = json.get("usage").and_then(|u| u.get("output_tokens")).and_then(|t| t.as_i64()).unwrap_or(0);
+                                    if let Some(db) = &state.db {
+                                        let db = db.clone();
+                                        let nid = node.node_id.clone();
+                                        tokio::spawn(async move { let _ = db.increment_sokora_node_stats(&nid, output_tokens).await; });
+                                    }
+                                    return (status, Json(json)).into_response();
+                                }
+                            }
+                        }
+                        // Sticky node failed — clear session and fall through to normal routing
+                        SOKORA_SESSIONS.remove(tok);
+                    }
+                }
+            }
+        }
+    }
+
+    // Collect online nodes (seen within last 60 min)
+    let mut candidates: Vec<SokoraNodeInfo> = SOKORA_NODES
+        .iter()
+        .filter_map(|entry| {
+            let node = entry.value().clone();
+            let last_seen = chrono::DateTime::parse_from_rfc3339(&node.last_seen)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or(chrono::DateTime::UNIX_EPOCH.with_timezone(&chrono::Utc));
+            if (now - last_seen).num_minutes() < 60 {
+                Some(node)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": "No online nodes available" })),
+        )
+            .into_response();
+    }
+
+    // Determine task tier from requested model + image presence
+    let model = body.get("model").and_then(|v| v.as_str()).unwrap_or("");
+    let has_images = body.get("messages")
+        .and_then(|m| m.as_array())
+        .map(|msgs| msgs.iter().any(|msg| {
+            msg.get("content")
+                .and_then(|c| c.as_array())
+                .map(|parts| parts.iter().any(|p| {
+                    p.get("type").and_then(|t| t.as_str()) == Some("image")
+                }))
+                .unwrap_or(false)
+        }))
+        .unwrap_or(false);
+
+    let tier = sokora_task_tier(model, has_images);
+    info!("Sokora routing: model={} tier={} nodes={}", model, tier, candidates.len());
+
+    // Smart sort based on tier
+    candidates.sort_by(|a, b| {
+        // Vision: prefer nodes that have a vision model
+        if tier == "vision" {
+            let a_has_vl = a.models.iter().any(|m| m.contains("VL") || m.contains("vl"));
+            let b_has_vl = b.models.iter().any(|m| m.contains("VL") || m.contains("vl"));
+            if a_has_vl != b_has_vl {
+                return if b_has_vl { std::cmp::Ordering::Greater } else { std::cmp::Ordering::Less };
+            }
+        }
+
+        // Light tasks → prefer low-RAM (M2 Air), Heavy → prefer high-RAM (M5 Max)
+        let ram_ord = if tier == "light" {
+            a.ram_gb.cmp(&b.ram_gb) // ascending: small RAM first
+        } else {
+            b.ram_gb.cmp(&a.ram_gb) // descending: large RAM first
+        };
+
+        // Secondary: fewer concurrent requests → less loaded node
+        let a_concurrent = SOKORA_CONCURRENT.get(&a.node_id).map(|v| v.load(std::sync::atomic::Ordering::Relaxed)).unwrap_or(0);
+        let b_concurrent = SOKORA_CONCURRENT.get(&b.node_id).map(|v| v.load(std::sync::atomic::Ordering::Relaxed)).unwrap_or(0);
+        let load_ord = a_concurrent.cmp(&b_concurrent);
+
+        ram_ord.then(load_ord)
+    });
+
+    // api_key from header (preferred) or body
+    let header_key = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|s| s.to_string());
+
+    let api_key = if let Some(k) = header_key {
+        k
+    } else {
+        body.get("api_key")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+
+    let mut forwarded = body.clone();
+    if let Some(obj) = forwarded.as_object_mut() {
+        obj.remove("api_key");
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_default();
+
+    for node in candidates {
+        let target_url = format!("{}/v1/messages", node.tunnel_url.trim_end_matches('/'));
+
+        let mut req = client
+            .post(&target_url)
+            .header("Content-Type", "application/json");
+
+        if !api_key.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", api_key));
+        }
+
+        match req.json(&forwarded).send().await {
+            Ok(resp) => {
+                let status = StatusCode::from_u16(resp.status().as_u16())
+                    .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+                match resp.bytes().await {
+                    Ok(bytes) => {
+                        match serde_json::from_slice::<serde_json::Value>(&bytes) {
+                            Ok(json) => {
+                                // Sticky session: record which node handled this session
+                                if let Some(ref tok) = session_token {
+                                    SOKORA_SESSIONS.insert(tok.clone(), node.node_id.clone());
+                                }
+                                // Reward tracking: increment node stats (fire-and-forget)
+                                let output_tokens = json.get("usage")
+                                    .and_then(|u| u.get("output_tokens"))
+                                    .and_then(|t| t.as_i64())
+                                    .unwrap_or(0);
+                                if let Some(db) = &state.db {
+                                    let db = db.clone();
+                                    let nid = node.node_id.clone();
+                                    tokio::spawn(async move {
+                                        let _ = db.increment_sokora_node_stats(&nid, output_tokens).await;
+                                    });
+                                }
+                                return (status, Json(json)).into_response();
+                            }
+                            Err(e) => {
+                                warn!("Sokora any: bad response from {}: {}", node.node_id, e);
+                                // try next node
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Sokora any: failed to read body from {}: {}", node.node_id, e);
+                        // try next node
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Sokora any: node {} unreachable ({}), trying next", node.node_id, e);
+                // fallback to next node
+            }
+        }
+    }
+
+    (
+        StatusCode::BAD_GATEWAY,
+        Json(serde_json::json!({ "error": "All available nodes failed to respond" })),
+    )
+        .into_response()
 }
 
 #[cfg(test)]

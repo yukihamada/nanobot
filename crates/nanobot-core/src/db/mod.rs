@@ -10,7 +10,7 @@ pub mod libsql;
 
 pub use backend::{
     AbEvent, ApiKeyRecord, AuditEntry, CouponRecord, DbBackend, HourlyStats, InstalledSkill,
-    ProviderMetric, RateLimitResult, SharedConversation, SkillRecord, UserProfile,
+    ProviderMetric, RateLimitResult, SharedConversation, SkillRecord, SokoraNodeRecord, UserProfile,
 };
 
 #[cfg(feature = "libsql-backend")]

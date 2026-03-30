@@ -16,7 +16,7 @@ use uuid::Uuid;
 use super::backend::{
     AbEvent, ApiKeyRecord, AuditEntry, CouponRecord, DbBackend, HourlyStats,
     InstalledSkill, ProviderMetric, RateLimitResult, SharedConversation, SkillRecord,
-    UserProfile,
+    SokoraNodeRecord, UserProfile,
 };
 
 static SCHEMA_SQL: &str = include_str!("schema.sql");
@@ -1258,6 +1258,98 @@ impl DbBackend for LibSqlBackend {
             result.push((row.get(0)?, row.get(1)?, row.get(2)?));
         }
         Ok(result)
+    }
+
+    // -----------------------------------------------------------------------
+    // Sokora DePIN node registry
+    // -----------------------------------------------------------------------
+
+    async fn upsert_sokora_node(&self, node: &SokoraNodeRecord) -> anyhow::Result<()> {
+        let conn = self.conn().await?;
+        let now = now_rfc3339();
+        conn.execute(
+            "INSERT INTO sokora_nodes \
+             (node_id, tunnel_url, ram_gb, models_json, version, last_seen, \
+              tokens_processed, requests_served, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 0, ?7) \
+             ON CONFLICT (node_id) DO UPDATE SET \
+               tunnel_url       = excluded.tunnel_url, \
+               ram_gb           = excluded.ram_gb, \
+               models_json      = excluded.models_json, \
+               version          = excluded.version, \
+               last_seen        = excluded.last_seen",
+            libsql::params![
+                node.node_id.as_str(),
+                node.tunnel_url.as_str(),
+                node.ram_gb as i64,
+                node.models_json.as_str(),
+                node.version.as_str(),
+                node.last_seen.as_str(),
+                now.as_str()
+            ],
+        )
+        .await
+        .context("upsert_sokora_node")?;
+        Ok(())
+    }
+
+    async fn list_sokora_nodes(&self) -> anyhow::Result<Vec<SokoraNodeRecord>> {
+        let conn = self.conn().await?;
+        let mut rows = conn
+            .query(
+                "SELECT node_id, tunnel_url, ram_gb, models_json, version, last_seen, \
+                 tokens_processed, requests_served, created_at FROM sokora_nodes",
+                libsql::params![],
+            )
+            .await
+            .context("list_sokora_nodes")?;
+        let mut result = Vec::new();
+        while let Some(row) = rows.next().await? {
+            let ram: i64 = row.get(2)?;
+            result.push(SokoraNodeRecord {
+                node_id: row.get(0)?,
+                tunnel_url: row.get(1)?,
+                ram_gb: ram as u64,
+                models_json: row.get(3)?,
+                version: row.get(4)?,
+                last_seen: row.get(5)?,
+                tokens_processed: row.get(6)?,
+                requests_served: row.get(7)?,
+                created_at: row.get(8)?,
+            });
+        }
+        Ok(result)
+    }
+
+    async fn delete_stale_sokora_nodes(&self, stale_secs: i64) -> anyhow::Result<u64> {
+        let conn = self.conn().await?;
+        let cutoff = (Utc::now() - chrono::Duration::seconds(stale_secs)).to_rfc3339();
+        let rows_changed = conn
+            .execute(
+                "DELETE FROM sokora_nodes WHERE last_seen < ?1",
+                libsql::params![cutoff.as_str()],
+            )
+            .await
+            .context("delete_stale_sokora_nodes")?;
+        Ok(rows_changed)
+    }
+
+    async fn increment_sokora_node_stats(
+        &self,
+        node_id: &str,
+        tokens: i64,
+    ) -> anyhow::Result<()> {
+        let conn = self.conn().await?;
+        conn.execute(
+            "UPDATE sokora_nodes \
+             SET tokens_processed = tokens_processed + ?1, \
+                 requests_served  = requests_served  + 1 \
+             WHERE node_id = ?2",
+            libsql::params![tokens, node_id],
+        )
+        .await
+        .context("increment_sokora_node_stats")?;
+        Ok(())
     }
 
     // -----------------------------------------------------------------------

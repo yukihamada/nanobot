@@ -459,9 +459,44 @@ pub trait DbBackend: Send + Sync {
     ) -> anyhow::Result<Vec<(String, String, String)>>; // (endpoint, auth, p256dh)
 
     // -----------------------------------------------------------------------
+    // Sokora DePIN node registry
+    // -----------------------------------------------------------------------
+
+    /// Upsert a Sokora node (register or refresh last_seen).
+    async fn upsert_sokora_node(&self, node: &SokoraNodeRecord) -> anyhow::Result<()>;
+
+    /// Load all nodes (for in-memory warm-up on startup).
+    async fn list_sokora_nodes(&self) -> anyhow::Result<Vec<SokoraNodeRecord>>;
+
+    /// Remove nodes not seen for more than `stale_secs` seconds.
+    async fn delete_stale_sokora_nodes(&self, stale_secs: i64) -> anyhow::Result<u64>;
+
+    /// Increment token/request counters for a node (fire-and-forget reward tracking).
+    async fn increment_sokora_node_stats(
+        &self,
+        node_id: &str,
+        tokens: i64,
+    ) -> anyhow::Result<()>;
+
+    // -----------------------------------------------------------------------
     // Migrations (run once on startup)
     // -----------------------------------------------------------------------
 
     /// Run schema migrations. No-op for DynamoDB; applies SQL for libSQL.
     async fn run_migrations(&self) -> anyhow::Result<()>;
+}
+
+/// A Sokora DePIN node record persisted in the database.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SokoraNodeRecord {
+    pub node_id: String,
+    pub tunnel_url: String,
+    pub ram_gb: u64,
+    /// JSON-encoded list of model names.
+    pub models_json: String,
+    pub version: String,
+    pub last_seen: String,
+    pub tokens_processed: i64,
+    pub requests_served: i64,
+    pub created_at: String,
 }

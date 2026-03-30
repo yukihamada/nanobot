@@ -238,3 +238,23 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     created_at  TEXT    NOT NULL,
     PRIMARY KEY (user_id, endpoint)
 );
+
+-- ---------------------------------------------------------------------------
+-- Sokora DePIN node registry (persistent across restarts)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sokora_nodes (
+    node_id         TEXT    PRIMARY KEY,
+    tunnel_url      TEXT    NOT NULL,
+    ram_gb          INTEGER NOT NULL DEFAULT 0,
+    models_json     TEXT    NOT NULL DEFAULT '[]',
+    version         TEXT    NOT NULL DEFAULT '',
+    last_seen       TEXT    NOT NULL,
+    -- Provider auth (hashed api_key so we can verify on health check)
+    api_key_hash    TEXT,
+    -- Reward tracking
+    tokens_processed INTEGER NOT NULL DEFAULT 0,
+    requests_served  INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sokora_nodes_last_seen ON sokora_nodes (last_seen);
