@@ -1,0 +1,34 @@
+name: Claude Code Agent
+
+on:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [labeled, assigned]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'issues' && github.event.label.name == 'claude')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build prompt from issue
+        id: prompt
+        run: |
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            echo "prompt=イシュー #${{ github.event.issue.number }} を実装してください。\nタイトル: ${{ github.event.issue.title }}\n内容:\n${{ github.event.issue.body }}\n\n手順:\n1. feature/${{ github.event.issue.number }}-$(echo '${{ github.event.issue.title }}' | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | head -c 40) ブランチを作成\n2. CLAUDE.md のガイドラインに従って実装\n3. テストがあれば実行して確認\n4. PRを作成してイシュー #${{ github.event.issue.number }} をリンク" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ steps.prompt.outputs.prompt }}
+          claude_args: "--max-turns 20"
