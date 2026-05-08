@@ -22,7 +22,10 @@
   <meta name="twitter:image" content="https://chatweb.ai/og.svg">
   <!-- GA4: chatweb.ai -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-3YF25NMXG8"></script>
-  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-3YF25NMXG8');</script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-3YF25NMXG8');
+  // gtag('config','AW-PLACEHOLDER'); // TODO: enable Google Ads after account setup
+  window.CHATWEB_TRACK = function(name, params){ if(window.gtag){ gtag('event', name, params||{}); } };
+  </script>
   <link rel="canonical" href="https://chatweb.ai/">
   <link rel="alternate" hreflang="ja" href="https://chatweb.ai/">
   <link rel="alternate" hreflang="en" href="https://chatweb.ai/?lang=en">
