@@ -33,7 +33,7 @@ jobs:
           cd target/${{ matrix.target }}/release
           tar czf nanobot-${{ matrix.target }}.tar.gz nanobot
           shasum -a 256 nanobot-${{ matrix.target }}.tar.gz > nanobot-${{ matrix.target }}.tar.gz.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: nanobot-${{ matrix.target }}
           path: |
@@ -52,7 +52,7 @@ jobs:
           cd target/x86_64-unknown-linux-gnu/release
           tar czf nanobot-x86_64-unknown-linux-gnu.tar.gz nanobot
           shasum -a 256 nanobot-x86_64-unknown-linux-gnu.tar.gz > nanobot-x86_64-unknown-linux-gnu.tar.gz.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: nanobot-x86_64-unknown-linux-gnu
           path: |
@@ -80,7 +80,7 @@ jobs:
           cd target/aarch64-unknown-linux-gnu/release
           tar czf nanobot-aarch64-unknown-linux-gnu.tar.gz nanobot
           shasum -a 256 nanobot-aarch64-unknown-linux-gnu.tar.gz > nanobot-aarch64-unknown-linux-gnu.tar.gz.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: nanobot-aarch64-unknown-linux-gnu
           path: |
