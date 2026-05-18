@@ -1,6 +1,6 @@
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
-transformers==4.40.0
+transformers==5.0.0rc3
 accelerate==0.27.0
 torch==2.1.0
 torchaudio==2.1.0
