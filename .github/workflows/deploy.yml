@@ -21,7 +21,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run sccache-cache (optional)
-        uses: mozilla-actions/sccache-action@v0.0.3
+        uses: mozilla-actions/sccache-action@v0.0.10
         continue-on-error: true
       - name: Setup sccache if available
         run: |
@@ -46,7 +46,7 @@ jobs:
 
       # sccache でコンパイルキャッシュを強化 (オプショナル)
       - name: Run sccache-cache (optional)
-        uses: mozilla-actions/sccache-action@v0.0.3
+        uses: mozilla-actions/sccache-action@v0.0.10
         continue-on-error: true
 
       - name: Setup sccache if available
