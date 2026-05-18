@@ -18,7 +18,7 @@ jobs:
       (github.event_name == 'issues' && github.event.label.name == 'claude')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build prompt from issue
         id: prompt
