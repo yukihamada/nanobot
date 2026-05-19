@@ -3500,12 +3500,53 @@ pub struct PartnerVerifySubscriptionRequest {
     pub original_transaction_id: Option<String>,
 }
 
+/// Generate a fresh, isolated session id for each request that does not
+/// supply one.
+///
+/// SECURITY (closes #43): previously this returned the constant
+/// `"api:default"`, which meant every anonymous `/api/v1/chat` caller shared
+/// a single server-side session — leaking conversation history, tool-call
+/// state and KV memory across unrelated users. Returning a per-call UUID
+/// ensures each request starts with an empty, isolated context unless the
+/// client explicitly opts in to a stable session by supplying `session_id`.
 fn default_session_id() -> String {
-    "api:default".to_string()
+    format!("api:{}", uuid::Uuid::new_v4())
 }
 
 fn default_channel() -> String {
     "api".to_string()
+}
+
+/// Static allowlist of origins accepted by the CORS layer.
+///
+/// SECURITY (closes #42): the previous implementation reflected the request
+/// `Origin` header into `Access-Control-Allow-Origin`, which let any
+/// third-party site (e.g. `https://attacker.example.com`) be treated as a
+/// trusted same-origin by the browser. This function returns a *finite*
+/// list of origins; only release-build production hosts are included by
+/// default, with `localhost:3000` added in debug builds for local dev.
+///
+/// Update this list (NOT the call site) when adding a new trusted host.
+fn cors_allowed_origins() -> Vec<http::HeaderValue> {
+    let mut origins: Vec<http::HeaderValue> = vec![
+        "https://chatweb.ai".parse().unwrap(),
+        "https://api.chatweb.ai".parse().unwrap(),
+        "https://teai.io".parse().unwrap(),
+        "https://api.teai.io".parse().unwrap(),
+        "https://wisbee.ai".parse().unwrap(),
+        "https://www.wisbee.ai".parse().unwrap(),
+        "https://api.wisbee.ai".parse().unwrap(),
+    ];
+    // Localhost dev only — compile-time gated so it can NEVER appear in
+    // release builds. We intentionally do NOT consult any runtime env var
+    // (e.g. BASE_URL) here: an attacker who can influence the process env
+    // must not be able to expand the allowlist.
+    if cfg!(debug_assertions) {
+        origins.push("http://localhost:3000".parse().unwrap());
+        origins.push("http://localhost:8080".parse().unwrap());
+        origins.push("http://127.0.0.1:3000".parse().unwrap());
+    }
+    origins
 }
 
 /// Response body for the chat endpoint.
@@ -4036,28 +4077,18 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         ))
         .layer(
             CorsLayer::new()
-                .allow_origin(AllowOrigin::list({
-                    let mut origins: Vec<http::HeaderValue> = vec![
-                        "https://chatweb.ai".parse().unwrap(),
-                        "https://api.chatweb.ai".parse().unwrap(),
-                        "https://teai.io".parse().unwrap(),
-                        "https://api.teai.io".parse().unwrap(),
-                        "https://wisbee.ai".parse().unwrap(),
-                        "https://www.wisbee.ai".parse().unwrap(),
-                        "https://api.wisbee.ai".parse().unwrap(),
-                    ];
-                    // Add custom BASE_URL to CORS if set (only in debug mode for security)
-                    if cfg!(debug_assertions) {
-                        if let Ok(base) = std::env::var("BASE_URL") {
-                            if let Ok(v) = base.parse() { origins.push(v); }
-                        }
-                    }
-                    // Localhost only in debug builds (compile-time check)
-                    if cfg!(debug_assertions) {
-                        origins.push("http://localhost:3000".parse().unwrap());
-                    }
-                    origins
-                }))
+                // SECURITY (closes #42): use a *static* allowlist of trusted
+                // origins instead of reflecting the request `Origin` header.
+                // Reflecting `Origin` is strictly worse than `*`: it lets
+                // *any* third-party site (e.g. attacker.example.com) treat
+                // the API as same-origin from the browser, which would
+                // immediately become a CSRF/exfiltration vector the moment
+                // cookie- or token-based auth is added.
+                //
+                // NEVER replace this with `AllowOrigin::mirror_request()`,
+                // `AllowOrigin::predicate(|_,_| true)`, or anything that
+                // echoes `req.headers().get("origin")` into the response.
+                .allow_origin(AllowOrigin::list(cors_allowed_origins()))
                 .allow_methods([
                     http::Method::GET,
                     http::Method::POST,
@@ -26716,7 +26747,17 @@ mod agent_routing_tests {
         let json = r#"{"message": "test"}"#;
         let req: ChatRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.message, "test");
-        assert_eq!(req.session_id, "api:default");
+        // session_id must be per-request isolated (closes #43): "api:<uuid>"
+        assert!(req.session_id.starts_with("api:"),
+            "default session_id must start with 'api:', got {}", req.session_id);
+        assert_ne!(req.session_id, "api:default",
+            "default session_id must NOT be the shared 'api:default' (regression of #43)");
+        assert!(req.session_id.len() > "api:".len() + 16,
+            "default session_id should embed a UUID, got {}", req.session_id);
+        // Two consecutive deserializations must produce DIFFERENT session ids
+        let req2: ChatRequest = serde_json::from_str(json).unwrap();
+        assert_ne!(req.session_id, req2.session_id,
+            "default session_id must be unique per request (regression of #43)");
         assert_eq!(req.channel, "api");
         assert_eq!(req.multi_model, false);
         assert_eq!(req.device, None);
@@ -27270,11 +27311,79 @@ mod agent_routing_tests {
 
     #[test]
     fn test_default_session_id() {
-        assert_eq!(default_session_id(), "api:default");
+        // Closes #43: every call must return a unique, isolated session id
+        // of the form "api:<uuid>" so anonymous callers don't share state.
+        let a = default_session_id();
+        let b = default_session_id();
+        assert_ne!(a, "api:default",
+            "default_session_id must not return the shared 'api:default' (regression of #43)");
+        assert_ne!(a, b,
+            "default_session_id must return a fresh id per call (regression of #43)");
+        assert!(a.starts_with("api:"), "expected 'api:' prefix, got {}", a);
+        // UUID v4 string is 36 chars → total length 4 + 36 = 40
+        assert_eq!(a.len(), 40, "expected 'api:<uuid-v4>' (40 chars), got {} ({} chars)", a, a.len());
+        // session_id must also pass the validate_session_id() gate so the
+        // chat handler accepts it without raising ERR_INVALID_SESSION.
+        assert!(validate_session_id(&a), "default session id must be a valid session id, got {}", a);
     }
 
     #[test]
     fn test_default_channel() {
         assert_eq!(default_channel(), "api");
+    }
+
+    // -----------------------------------------------------------------------
+    // CORS allowlist (closes #42)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_cors_allowlist_contains_production_origins() {
+        let origins = cors_allowed_origins();
+        let strs: Vec<String> = origins.iter()
+            .map(|h| h.to_str().unwrap().to_string())
+            .collect();
+        // Required production origins
+        for required in [
+            "https://chatweb.ai",
+            "https://api.chatweb.ai",
+            "https://teai.io",
+            "https://api.teai.io",
+        ] {
+            assert!(strs.iter().any(|s| s == required),
+                "CORS allowlist missing required origin {}; got {:?}", required, strs);
+        }
+    }
+
+    #[test]
+    fn test_cors_allowlist_rejects_arbitrary_origin() {
+        // Closes #42: an attacker-controlled origin must NEVER appear in the
+        // allowlist (and `AllowOrigin::list` does NOT reflect on miss).
+        let origins = cors_allowed_origins();
+        let strs: Vec<String> = origins.iter()
+            .map(|h| h.to_str().unwrap().to_string())
+            .collect();
+        for forbidden in [
+            "https://attacker.example.com",
+            "https://evil.com",
+            "null",
+            "*",
+        ] {
+            assert!(!strs.iter().any(|s| s == forbidden),
+                "CORS allowlist must NOT include attacker origin {} (regression of #42); got {:?}",
+                forbidden, strs);
+        }
+    }
+
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn test_cors_allowlist_release_excludes_localhost() {
+        // In release builds, NO localhost / 127.0.0.1 / loopback origin must
+        // be present. Production must never accept dev origins.
+        let origins = cors_allowed_origins();
+        for h in &origins {
+            let s = h.to_str().unwrap();
+            assert!(!s.contains("localhost"), "release CORS allowlist contains localhost: {}", s);
+            assert!(!s.contains("127.0.0.1"), "release CORS allowlist contains 127.0.0.1: {}", s);
+        }
     }
 }
