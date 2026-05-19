@@ -50,9 +50,11 @@ impl AnthropicProvider {
                     system_prompt = msg.content.clone();
                 }
                 Role::User => {
+                    let text = msg.content.as_deref().unwrap_or("");
+                    let text = if text.trim().is_empty() { "." } else { text };
                     converted.push(json!({
                         "role": "user",
-                        "content": msg.content.as_deref().unwrap_or(""),
+                        "content": text,
                     }));
                 }
                 Role::Assistant => {
@@ -99,7 +101,8 @@ impl AnthropicProvider {
                     }
 
                     if content_blocks.is_empty() {
-                        assistant_msg["content"] = json!("");
+                        // Anthropic requires non-whitespace text; use placeholder
+                        assistant_msg["content"] = json!([{"type": "text", "text": "."}]);
                     } else {
                         assistant_msg["content"] = json!(content_blocks);
                     }

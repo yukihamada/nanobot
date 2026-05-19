@@ -69,6 +69,14 @@ pub const PRICING_TABLE: &[ModelPricing] = &[
     ModelPricing { model: "qwen/qwen3-32b",             provider: "openrouter", input_per_1m: 0.10, output_per_1m: 0.30, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
     ModelPricing { model: "qwen/qwq-32b",               provider: "openrouter", input_per_1m: 0.10, output_per_1m: 0.30, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
     ModelPricing { model: "qwen/qwen3-coder",            provider: "openrouter", input_per_1m: 0.20, output_per_1m: 0.60, context_window: 262_144, credits_in_1k: 1, credits_out_1k: 2 },
+    // Qwen 3.5 (via OpenRouter — マルチモーダル・ネイティブエージェント)
+    ModelPricing { model: "qwen/qwen3.5-9b",              provider: "openrouter", input_per_1m: 0.05, output_per_1m: 0.15, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
+    ModelPricing { model: "qwen/qwen3.5-27b",             provider: "openrouter", input_per_1m: 0.20, output_per_1m: 1.56, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 3 },
+    ModelPricing { model: "qwen/qwen3.5-35b-a3b",         provider: "openrouter", input_per_1m: 0.16, output_per_1m: 1.30, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 3 },
+    ModelPricing { model: "qwen/qwen3.5-122b-a10b",       provider: "openrouter", input_per_1m: 0.26, output_per_1m: 2.08, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 4 },
+    ModelPricing { model: "qwen/qwen3.5-397b-a17b",       provider: "openrouter", input_per_1m: 0.39, output_per_1m: 2.34, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 4 },
+    ModelPricing { model: "qwen/qwen3.5-plus-02-15",      provider: "openrouter", input_per_1m: 0.26, output_per_1m: 1.56, context_window: 1_048_576, credits_in_1k: 1, credits_out_1k: 3 },
+    ModelPricing { model: "qwen/qwen3.5-flash-02-23",     provider: "openrouter", input_per_1m: 0.07, output_per_1m: 0.26, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
     // Mistral (via OpenRouter — 日本語対応)
     ModelPricing { model: "mistralai/mistral-large",     provider: "openrouter", input_per_1m: 2.00, output_per_1m: 6.00, context_window: 131_072, credits_in_1k: 4, credits_out_1k: 12 },
     ModelPricing { model: "mistralai/mistral-small-3.2", provider: "openrouter", input_per_1m: 0.10, output_per_1m: 0.30, context_window: 131_072, credits_in_1k: 1, credits_out_1k: 1 },
