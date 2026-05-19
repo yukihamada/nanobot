@@ -208,6 +208,13 @@ impl ToolRegistry {
         self.tools.push(Box::new(ImproveProjectTool { provider }));
     }
 
+    /// Add the `multi_agent` tool for parallel subagent execution (SaaS-safe).
+    #[cfg(feature = "http-api")]
+    pub fn add_multi_agent_tool(&mut self, provider: Arc<dyn crate::provider::LlmProvider>) {
+        tracing::info!("Registering multi_agent tool");
+        self.tools.push(Box::new(MultiAgentTool { provider }));
+    }
+
     /// Register multiple tools at once.
     pub fn register_all(&mut self, tools: Vec<Box<dyn Tool>>) {
         self.tools.extend(tools);
@@ -1263,6 +1270,192 @@ fn improve_extract_pr_url(text: &str) -> Option<String> {
         }
     }
     None
+}
+
+// ---------------------------------------------------------------------------
+// Multi-agent tool: spawns parallel subagents for complex tasks (SaaS-safe)
+// ---------------------------------------------------------------------------
+
+/// Multi-agent tool that spawns parallel inner agent loops using only safe tools
+/// (web_search, read_webpage). Suitable for SaaS mode.
+#[cfg(feature = "http-api")]
+pub struct MultiAgentTool {
+    pub provider: Arc<dyn crate::provider::LlmProvider>,
+}
+
+#[cfg(feature = "http-api")]
+#[async_trait]
+impl Tool for MultiAgentTool {
+    fn name(&self) -> &str { "multi_agent" }
+
+    fn description(&self) -> &str {
+        "Spawn multiple AI subagents to work on subtasks in parallel. \
+         Each subagent can search the web and fetch web pages independently. \
+         Use this for complex research, comparisons, or tasks that benefit from parallel execution. \
+         Returns combined results from all subagents."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": { "type": "string", "description": "Short label for this subtask" },
+                            "task": { "type": "string", "description": "The task description for the subagent" }
+                        },
+                        "required": ["label", "task"]
+                    },
+                    "description": "Array of subtasks to run in parallel (max 5)",
+                    "minItems": 1,
+                    "maxItems": 5
+                }
+            },
+            "required": ["tasks"]
+        })
+    }
+
+    async fn execute(&self, params: HashMap<String, serde_json::Value>) -> String {
+        let tasks = match params.get("tasks").and_then(|v| v.as_array()) {
+            Some(arr) => arr.clone(),
+            None => return "Error: 'tasks' array is required".to_string(),
+        };
+
+        if tasks.is_empty() {
+            return "Error: at least one task is required".to_string();
+        }
+
+        let tasks: Vec<(String, String)> = tasks.iter()
+            .take(5)
+            .filter_map(|t| {
+                let label = t.get("label").and_then(|v| v.as_str()).unwrap_or("task").to_string();
+                let task = t.get("task").and_then(|v| v.as_str())?.to_string();
+                Some((label, task))
+            })
+            .collect();
+
+        if tasks.is_empty() {
+            return "Error: no valid tasks found".to_string();
+        }
+
+        run_multi_agent(&self.provider, &tasks).await
+    }
+}
+
+#[cfg(feature = "http-api")]
+async fn run_multi_agent(
+    provider: &Arc<dyn crate::provider::LlmProvider>,
+    tasks: &[(String, String)],
+) -> String {
+    use crate::types::Message;
+
+    let safe_tools: Vec<serde_json::Value> = vec![
+        WebSearchTool.to_openai_definition(),
+        WebFetchTool.to_openai_definition(),
+    ];
+
+    let model = provider.default_model();
+    let max_tokens = 4096u32;
+    let temperature = 0.5f64;
+    let max_iterations = 6usize;
+
+    // Run all subagents in parallel
+    let handles: Vec<_> = tasks.iter().map(|(label, task)| {
+        let provider = provider.clone();
+        let safe_tools = safe_tools.clone();
+        let label = label.clone();
+        let task = task.clone();
+        let model = model.to_string();
+
+        tokio::spawn(async move {
+            let system_prompt = format!(
+                "You are a focused research subagent. Complete the following task concisely.\n\
+                 You have access to web_search and read_webpage tools.\n\
+                 Be thorough but concise. Provide factual findings.\n\n\
+                 Task: {task}"
+            );
+
+            let mut conversation = vec![
+                Message::system(&system_prompt),
+                Message::user(&task),
+            ];
+
+            for iteration in 0..max_iterations {
+                let tools_slice = if iteration < max_iterations - 1 {
+                    Some(safe_tools.as_slice())
+                } else {
+                    None
+                };
+
+                match provider.chat(&conversation, tools_slice, &model, max_tokens, temperature).await {
+                    Ok(resp) => {
+                        if resp.has_tool_calls() {
+                            let tc_json: Vec<serde_json::Value> = resp.tool_calls.iter().map(|tc| {
+                                serde_json::json!({
+                                    "id": tc.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tc.name,
+                                        "arguments": serde_json::to_string(&tc.arguments).unwrap_or_default(),
+                                    }
+                                })
+                            }).collect();
+                            conversation.push(Message::assistant_with_tool_calls(resp.content.clone(), tc_json));
+
+                            for tc in &resp.tool_calls {
+                                tracing::debug!("multi_agent[{}]: tool '{}' iter={}", label, tc.name, iteration + 1);
+                                let args_val = serde_json::to_value(&tc.arguments).unwrap_or_default();
+                                let args: HashMap<String, serde_json::Value> = args_val.as_object()
+                                    .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                                    .unwrap_or_default();
+                                let raw_result = match tc.name.as_str() {
+                                    "web_search" => WebSearchTool.execute(args).await,
+                                    "read_webpage" => WebFetchTool.execute(args).await,
+                                    _ => format!("[multi_agent] tool not available: {}", tc.name),
+                                };
+                                let result = if raw_result.len() > 3000 {
+                                    let truncated: String = raw_result.chars().take(3000).collect();
+                                    format!("{}...\n[Truncated]", truncated)
+                                } else {
+                                    raw_result
+                                };
+                                conversation.push(Message::tool_result(&tc.id, &tc.name, &result));
+                            }
+                        } else {
+                            let content = resp.content.unwrap_or_else(|| "No result.".to_string());
+                            return (label, content);
+                        }
+                    }
+                    Err(e) => {
+                        return (label, format!("Error: {e}"));
+                    }
+                }
+            }
+
+            (label, "Subagent reached max iterations without final response.".to_string())
+        })
+    }).collect();
+
+    // Collect results
+    let mut results = Vec::new();
+    for handle in handles {
+        match handle.await {
+            Ok((label, result)) => {
+                results.push(format!("## {}\n{}", label, result));
+            }
+            Err(e) => {
+                results.push(format!("## Error\nSubagent panicked: {e}"));
+            }
+        }
+    }
+
+    format!(
+        "# マルチエージェント結果\n\n{}\n\n---\n上記の結果を統合して、ユーザーに分かりやすくまとめてください。",
+        results.join("\n\n")
+    )
 }
 
 /// Available integration types.

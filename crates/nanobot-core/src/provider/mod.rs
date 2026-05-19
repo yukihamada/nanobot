@@ -375,73 +375,8 @@ impl LoadBalancedProvider {
             )));
         }
 
-        // Nemotron (Japanese LLM on RunPod GPU Pod — direct vLLM endpoint, priority)
-        // Supports multiple pods: NEMOTRON_POD_URL, NEMOTRON_POD_URL_2, NEMOTRON_POD_URL_3, etc.
-        for pod_url in Self::read_keys("NEMOTRON_POD_URL") {
-            let api_base = format!("{}/v1", pod_url.trim_end_matches('/'));
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                String::new(), // no auth required for direct GPU Pod
-                Some(api_base),
-                "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese".to_string(),
-            )));
-        }
-
-        // Qwen3-32B (RunPod GPU Pod — direct vLLM endpoint)
-        // Supports multiple pods: QWEN3_POD_URL, QWEN3_POD_URL_2, etc.
-        for pod_url in Self::read_keys("QWEN3_POD_URL") {
-            let api_base = format!("{}/v1", pod_url.trim_end_matches('/'));
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                String::new(), // no auth required for direct GPU Pod
-                Some(api_base),
-                "qwen3-32b".to_string(),
-            )));
-        }
-
-        // Kimi K2.5 (RunPod GPU Pod — direct vLLM endpoint)
-        // Supports multiple pods: KIMI_POD_URL, KIMI_POD_URL_2, etc.
-        for pod_url in Self::read_keys("KIMI_POD_URL") {
-            let api_base = format!("{}/v1", pod_url.trim_end_matches('/'));
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                String::new(), // no auth required for direct GPU Pod
-                Some(api_base),
-                "kimi-k2.5".to_string(),
-            )));
-        }
-
-        // Qwen3 Coder 480B (RunPod GPU Pod — direct vLLM endpoint)
-        // Supports multiple pods: QWEN3_CODER_POD_URL, QWEN3_CODER_POD_URL_2, etc.
-        for pod_url in Self::read_keys("QWEN3_CODER_POD_URL") {
-            let api_base = format!("{}/v1", pod_url.trim_end_matches('/'));
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                String::new(), // no auth required for direct GPU Pod
-                Some(api_base),
-                "qwen3-coder-480b".to_string(),
-            )));
-        }
-
-        // Futa-2B (Japanese fine-tuned Qwen3.5-2B on RunPod GPU Pod)
-        // Supports multiple pods: FUTA_POD_URL, FUTA_POD_URL_2, etc.
-        for pod_url in Self::read_keys("FUTA_POD_URL") {
-            let api_base = format!("{}/v1", pod_url.trim_end_matches('/'));
-            providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                String::new(), // no auth required for direct GPU Pod
-                Some(api_base),
-                "futa-2b".to_string(),
-            )));
-        }
-
-        // Nemotron (Japanese LLM on RunPod Serverless — fallback)
-        if let Ok(nemotron_ep) = std::env::var("NEMOTRON_ENDPOINT_ID") {
-            let api_key = std::env::var("RUNPOD_API_KEY").unwrap_or_default();
-            if !api_key.is_empty() && !nemotron_ep.is_empty() {
-                let api_base = format!("https://api.runpod.ai/v2/{}/openai/v1", nemotron_ep);
-                providers.push(Arc::new(openai_compat::OpenAiCompatProvider::new(
-                    api_key,
-                    Some(api_base),
-                    "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese".to_string(),
-                )));
-            }
-        }
+        // RunPod GPU Pods removed (2026-03-20) — all pods EXITED, causing 404 errors
+        // and unnecessary fallback latency. Re-add when pods are restarted.
 
         if providers.is_empty() {
             None
@@ -501,8 +436,9 @@ impl LoadBalancedProvider {
         let prov_is_qwen = prov_default.contains("qwen");
         let prov_is_minimax = prov_default.contains("minimax");
         let prov_is_glm = prov_default.contains("glm") || prov_default.contains("z-ai");
-        let req_is_runpod = req_lower.contains("nemotron") || req_lower.contains("nvidia/nvidia") || req_lower == "qwen3-32b" || req_lower == "kimi-k2.5" || req_lower == "qwen3-coder-480b";
-        let prov_is_runpod = prov_default.contains("nemotron") || prov_default.contains("nvidia/nvidia") || prov_default.contains("runpod") || prov_default == "qwen3-32b" || prov_default == "kimi-k2.5" || prov_default == "qwen3-coder-480b";
+        // RunPod pods removed (2026-03-20) — all EXITED
+        let req_is_runpod = false;
+        let prov_is_runpod = false;
         let prov_is_openrouter = prov_default.contains("openrouter");
         let prov_is_gpt = !prov_is_claude && !prov_is_gemini && !prov_is_groq && !prov_is_deepseek && !prov_is_kimi && !prov_is_qwen && !prov_is_minimax && !prov_is_glm && !prov_is_openrouter && !prov_is_runpod;
 
@@ -904,8 +840,8 @@ impl LoadBalancedProvider {
     /// Used for fallback chains in chat/race tier mode.
     pub fn get_tier_models(&self, tier: &str) -> Vec<(Arc<dyn LlmProvider>, String)> {
         let candidates: &[&str] = match tier {
-            "economy"  => &["deepseek-chat", "llama-3.3-70b-specdec", "gemini-2.5-flash", "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese"],
-            "normal"   => &["qwen3-32b", "kimi-k2.5", "deepseek-chat", "google/gemini-2.5-flash", "gpt-4o"],
+            "economy"  => &["deepseek-chat", "llama-3.3-70b-specdec", "gemini-2.5-flash", "qwen/qwen3.5-9b", "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese"],
+            "normal"   => &["qwen/qwen3.5-397b-a17b", "qwen3-32b", "kimi-k2.5", "deepseek-chat", "google/gemini-2.5-flash", "gpt-4o"],
             "powerful" => &["claude-opus-4-6", "gpt-4o", "gemini-2.5-pro", "claude-sonnet-4-6"],
             _ => return vec![],
         };

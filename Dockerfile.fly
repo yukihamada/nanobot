@@ -33,11 +33,12 @@ COPY crates/ crates/
 COPY src/ src/
 COPY web/ web/
 
-# Build the Fly.io entry point (libsql-backend + http-api + stripe)
+# Build the Fly.io entry point (libsql-backend + http-api + stripe + local-fallback)
 RUN cargo build --release \
     --bin nanobot-fly \
     -p nanobot-fly \
-    --no-default-features
+    --no-default-features \
+    --features local-fallback
 
 # Stage 3: Runtime (must match glibc from rust:latest = Debian trixie)
 FROM debian:trixie-slim
